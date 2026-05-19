@@ -24,27 +24,13 @@ import type { Message } from "@cove/shared";
  * Reference: openclaw/src/plugin-sdk/channel-core.ts (ChannelPlugin interface)
  */
 
-/** Scene-to-channel mapping from the README scene table. */
+/** Scene-to-channel mapping. Only core Phase 1 scenes are mapped here;
+ *  additional scenes are added as features unlock. */
 const SCENE_CHANNEL_MAP: Record<string, string> = {
   "home": "kagura-dm",
   "garden": "garden",
-  "school": "study",
   "workshop": "github-contribution",
-  "counting-house": "finance",
-  "trading-hall": "finance",
-  "market": "shopping",
   "post-office": "kagura-mail",
-  "harbor": "lobster-post",
-  "art-studio": "kagura-canvas",
-  "writing-desk": "kagura-profile",
-  "lab": "evolution",
-  "garage": "toolchain",
-  "track": "coros",
-  "file-cabinet": "family-care",
-  "storefront": "gtm",
-  "teahouse": "agent-collab",
-  "arcade": "agent-memes",
-  "broadcast-tower": "crosspost",
 };
 
 export class CoveChannelAdapter {

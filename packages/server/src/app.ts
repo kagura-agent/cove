@@ -21,7 +21,9 @@ export function createApp(
 ): Hono {
   const app = new Hono();
 
-  // Auth middleware for /api/v10/* routes (skip health check)
+  // Discord-compatible API routes use /api/v10/* path prefix.
+  // This mirrors Discord's URL versioning so that standard Discord
+  // client libraries (discord.js, etc.) can connect without modification.
   if (config?.botToken) {
     app.use("/api/v10/*", async (c, next) => {
       const auth = c.req.header("Authorization");

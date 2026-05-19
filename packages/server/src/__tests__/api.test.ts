@@ -19,11 +19,11 @@ describe("Cove API — Discord-compatible", () => {
   // ─── Channels ───────────────────────────────────────────────────────────
 
   describe("GET /api/v10/guilds/cove/channels", () => {
-    it("returns all 19 channels in Discord format", async () => {
+    it("returns all seeded channels in Discord format", async () => {
       const res = await app.request("/api/v10/guilds/cove/channels");
       expect(res.status).toBe(200);
       const channels: DiscordChannel[] = await res.json();
-      expect(channels).toHaveLength(19);
+      expect(channels).toHaveLength(4);
     });
 
     it("each channel has Discord-required fields", async () => {
