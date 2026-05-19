@@ -1,0 +1,11 @@
+{
+  "name": "cove",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -F @cove/server dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test"
+  },
+  "packageManager": "pnpm@10.11.0"
+}

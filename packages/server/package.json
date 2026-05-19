@@ -1,0 +1,25 @@
+{
+  "name": "@cove/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "@hono/node-server": "^1.14.0",
+    "better-sqlite3": "^11.8.0",
+    "ws": "^8.18.0",
+    "@cove/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.8.0"
+  }
+}
