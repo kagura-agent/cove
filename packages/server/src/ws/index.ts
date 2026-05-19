@@ -1,37 +1,77 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import type { WSEvent } from "@cove/shared";
+import { randomUUID } from "node:crypto";
+import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 
-/** Map of sceneId → set of subscribed WebSocket clients */
-const subscriptions = new Map<string, Set<WebSocket>>();
+/** Set of identified (authenticated) WebSocket clients. */
+const identifiedClients = new Set<WebSocket>();
+
+/** Heartbeat interval in milliseconds (Discord default-ish). */
+const HEARTBEAT_INTERVAL = 41250;
 
 /**
- * Set up WebSocket server on the given HTTP server.
- * Clients send JSON messages to subscribe/unsubscribe to scene updates.
+ * Set up Discord-compatible Gateway WebSocket server.
+ *
+ * Protocol:
+ * 1. Client connects → server sends HELLO (op 10) with heartbeat_interval
+ * 2. Client sends IDENTIFY (op 2) with token → server sends DISPATCH READY (op 0)
+ * 3. Client sends HEARTBEAT (op 1) → server responds HEARTBEAT_ACK (op 11)
+ * 4. Server broadcasts DISPATCH events (MESSAGE_CREATE, CHANNEL_UPDATE) to identified clients
  */
-export function setupWebSocket(server: HttpServer): void {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+export function setupGateway(server: HttpServer): void {
+  const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
-    const clientScenes = new Set<string>();
+    // Send HELLO
+    const hello: GatewayPayload = {
+      op: GatewayOpcode.HELLO,
+      d: { heartbeat_interval: HEARTBEAT_INTERVAL },
+      s: null,
+      t: null,
+    };
+    ws.send(JSON.stringify(hello));
 
     ws.on("message", (raw) => {
       try {
-        const event = JSON.parse(raw.toString()) as WSEvent;
+        const payload = JSON.parse(raw.toString()) as GatewayPayload;
 
-        if (event.type === "subscribe") {
-          const { sceneId } = event.payload;
-          clientScenes.add(sceneId);
-          if (!subscriptions.has(sceneId)) {
-            subscriptions.set(sceneId, new Set());
+        switch (payload.op) {
+          case GatewayOpcode.IDENTIFY: {
+            const data = payload.d as { token?: string } | null;
+            const token = data?.token ?? "anonymous";
+
+            identifiedClients.add(ws);
+
+            // Send READY dispatch
+            const ready: GatewayPayload = {
+              op: GatewayOpcode.DISPATCH,
+              s: 1,
+              t: "READY",
+              d: {
+                v: 10,
+                user: { id: token, username: token, bot: true },
+                guilds: [{ id: "cove" }],
+                session_id: randomUUID(),
+              },
+            };
+            ws.send(JSON.stringify(ready));
+            break;
           }
-          subscriptions.get(sceneId)!.add(ws);
-        }
 
-        if (event.type === "unsubscribe") {
-          const { sceneId } = event.payload;
-          clientScenes.delete(sceneId);
-          subscriptions.get(sceneId)?.delete(ws);
+          case GatewayOpcode.HEARTBEAT: {
+            const ack: GatewayPayload = {
+              op: GatewayOpcode.HEARTBEAT_ACK,
+              d: null,
+              s: null,
+              t: null,
+            };
+            ws.send(JSON.stringify(ack));
+            break;
+          }
+
+          default:
+            // Ignore unknown opcodes
+            break;
         }
       } catch {
         // Ignore malformed messages
@@ -39,26 +79,18 @@ export function setupWebSocket(server: HttpServer): void {
     });
 
     ws.on("close", () => {
-      // Clean up all subscriptions for this client
-      for (const sceneId of clientScenes) {
-        subscriptions.get(sceneId)?.delete(ws);
-        if (subscriptions.get(sceneId)?.size === 0) {
-          subscriptions.delete(sceneId);
-        }
-      }
+      identifiedClients.delete(ws);
     });
   });
 }
 
 /**
- * Broadcast an event to all WebSocket clients subscribed to a scene.
+ * Broadcast a Gateway event to all identified clients.
+ * The event should already be a full GatewayPayload (op 0 DISPATCH).
  */
-export function broadcastToScene(sceneId: string, event: unknown): void {
-  const clients = subscriptions.get(sceneId);
-  if (!clients) return;
-
+export function broadcastGatewayEvent(event: unknown): void {
   const data = JSON.stringify(event);
-  for (const ws of clients) {
+  for (const ws of identifiedClients) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(data);
     }
