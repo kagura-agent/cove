@@ -1,0 +1,17 @@
+{
+  "name": "@cove/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "phaser": "^3.88.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0",
+    "typescript": "^5.8.0"
+  }
+}
