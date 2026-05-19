@@ -3,7 +3,7 @@ import { initDb, seedScenes } from "./db/schema.js";
 import { createApp } from "./app.js";
 import { setupGateway, broadcastGatewayEvent } from "./ws/index.js";
 
-const PORT = parseInt(process.env["PORT"] ?? "3000", 10);
+const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
 const DB_PATH = process.env["DB_PATH"] ?? "cove.db";
 const BOT_TOKEN = process.env["COVE_BOT_TOKEN"];
 
