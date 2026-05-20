@@ -152,6 +152,20 @@ function renderChannels() {
       } catch (err) { console.error("delete channel:", err); }
     });
 
+    // Long press to show delete button on mobile
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    btn.addEventListener("touchstart", () => {
+      longPressTimer = setTimeout(() => {
+        delBtn.classList.toggle("visible");
+      }, 600);
+    });
+    btn.addEventListener("touchend", () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+    });
+    btn.addEventListener("touchmove", () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+    });
+
     item.appendChild(btn);
     item.appendChild(delBtn);
     channelList.appendChild(item);
