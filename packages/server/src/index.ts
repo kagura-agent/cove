@@ -28,5 +28,5 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
 });
 
 // Attach Gateway WebSocket server
-setupGateway(server);
+setupGateway(server as any);
 console.log("🏝️  Gateway WebSocket ready on /gateway");

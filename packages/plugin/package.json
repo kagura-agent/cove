@@ -6,7 +6,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "openclaw": {
-    "extensions": ["./src/index.ts"],
+    "extensions": [
+      "./src/index.ts"
+    ],
     "channel": {
       "id": "cove",
       "label": "Cove",
@@ -15,7 +17,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:openclaw --external:ws"
   },
   "dependencies": {
     "@cove/shared": "workspace:*",
@@ -23,7 +26,8 @@
   },
   "devDependencies": {
     "@types/ws": "^8.18.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "esbuild": "^0.25.0"
   },
   "peerDependencies": {
     "openclaw": ">=2026.3.0"

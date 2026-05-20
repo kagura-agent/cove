@@ -7,7 +7,6 @@
 
 import {
   createChatChannelPlugin,
-  createChannelPluginBase,
 } from "openclaw/plugin-sdk/channel-core";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import type { CoveAccount } from "./types.js";
@@ -49,21 +48,39 @@ function resolveAccount(
 }
 
 export const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
-  base: createChannelPluginBase({
+  base: {
     id: "cove",
+    meta: {
+      id: "cove",
+      label: "Cove",
+      selectionLabel: "Cove",
+      docsPath: "/docs/channels/cove",
+      blurb: "Connect OpenClaw to the Cove mirror world",
+    },
+    capabilities: {
+      chatTypes: ["direct", "group"],
+    },
+    config: {
+      listAccountIds: (_cfg: OpenClawConfig) => ["default"],
+      resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) =>
+        resolveAccount(cfg, accountId),
+    },
     setup: {
-      resolveAccount,
-      inspectAccount(cfg: OpenClawConfig) {
-        const section = (cfg.channels as Record<string, any>)?.["cove"];
-        const token = section?.token ?? process.env["COVE_BOT_TOKEN"];
-        return {
-          enabled: Boolean(token),
-          configured: Boolean(token),
-          tokenStatus: token ? "available" : "missing",
-        };
+      applyAccountConfig: (params: {
+        cfg: OpenClawConfig;
+        accountId: string;
+        input: Record<string, unknown>;
+      }) => {
+        // Apply input fields to config
+        const cfg = structuredClone(params.cfg) as any;
+        if (!cfg.channels) cfg.channels = {};
+        if (!cfg.channels.cove) cfg.channels.cove = {};
+        if (params.input.token) cfg.channels.cove.token = params.input.token;
+        if (params.input.baseUrl) cfg.channels.cove.baseUrl = params.input.baseUrl;
+        return cfg as OpenClawConfig;
       },
     },
-  }),
+  },
 
   // DM security: who can message the bot
   security: {
@@ -80,10 +97,16 @@ export const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
 
   // Outbound: send messages to Cove via REST API
   outbound: {
+    base: {
+      deliveryMode: "direct" as const,
+    },
     attachedResults: {
-      sendText: async (params: { to: string; text: string; account: CoveAccount }) => {
-        const client = getRestClient(params.account.baseUrl, params.account.token);
-        const result = await client.sendMessage(params.to, params.text);
+      channel: "cove",
+      sendText: async (ctx) => {
+        // Resolve the account from config to get REST client credentials
+        const account = resolveAccount(ctx.cfg);
+        const client = getRestClient(account.baseUrl, account.token);
+        const result = await client.sendMessage(ctx.to, ctx.text);
         return { messageId: result.id };
       },
     },
