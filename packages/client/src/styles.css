@@ -368,6 +368,13 @@ html {
 
 /* ── Mobile ── */
 @media (max-width: 640px) {
+  #app {
+    flex-direction: column;
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
   #mobile-header { display: flex; }
 
   #sidebar {
@@ -377,6 +384,7 @@ html {
     bottom: 0;
     width: 80%;
     max-width: 300px;
+    min-width: 0;
     transition: left 0.25s ease;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
   }
@@ -391,12 +399,42 @@ html {
 
   #chat-header { display: none; }
 
-  #messages { padding: 12px; }
+  #chat-area {
+    width: 100vw;
+    max-width: 100vw;
+    min-width: 0;
+    overflow-x: hidden;
+  }
 
-  .msg { max-width: 80%; }
+  #messages {
+    padding: 12px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 
-  #chat-area { width: 100%; max-width: 100vw; overflow-x: hidden; }
+  .msg {
+    max-width: 80%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
 
-  #message-form { padding: 8px 12px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
-  #message-input { padding: 10px 14px; font-size: 16px; /* prevent zoom on iOS */ }
+  #message-form {
+    padding: 8px 12px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  #message-input {
+    padding: 10px 14px;
+    font-size: 16px; /* prevent zoom on iOS */
+    min-width: 0;
+  }
+
+  #send-btn {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
 }
