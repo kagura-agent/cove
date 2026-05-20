@@ -3700,7 +3700,7 @@ var CoveRestClient = class {
   async sendMessage(channelId, content, author) {
     return this.request("POST", `/api/v10/channels/${channelId}/messages`, {
       content,
-      ...author ?? { userId: "kagura", username: "Kagura \u{1F338}" }
+      ...author ?? { userId: process.env["COVE_AGENT_ID"] ?? "ruantang", username: process.env["COVE_AGENT_NAME"] ?? "\u8F6F\u7CD6 \u{1F43E}" }
     });
   }
   /** GET /api/v10/channels/:id/messages — fetch recent messages. */
