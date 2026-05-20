@@ -35,6 +35,7 @@ export interface DiscordMessage {
   content: string;
   author: DiscordUser;
   timestamp: string; // ISO 8601
+  edited_timestamp?: string | null;
   type: number; // 0 = DEFAULT
 }
 
