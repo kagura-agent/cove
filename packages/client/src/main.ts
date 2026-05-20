@@ -161,6 +161,19 @@ async function selectChannel(id: string) {
   messageInput.focus();
 }
 
+// ── Clear messages ──
+
+async function clearMessages() {
+  if (!activeChannelId) return;
+  if (!confirm("Clear all messages in this channel?")) return;
+  try {
+    await api(`/api/v10/channels/${activeChannelId}/messages`, { method: "DELETE" });
+    await loadMessages(activeChannelId);
+  } catch (err) {
+    console.error("clear:", err);
+  }
+}
+
 // ── Messages ──
 
 async function loadMessages(channelId: string) {
@@ -360,6 +373,10 @@ sidebarToggle.addEventListener("click", () => {
 });
 
 sidebarOverlay.addEventListener("click", closeSidebar);
+
+// Clear buttons
+document.getElementById("clear-btn")?.addEventListener("click", clearMessages);
+document.getElementById("clear-btn-mobile")?.addEventListener("click", clearMessages);
 
 // ── Utilities ──
 

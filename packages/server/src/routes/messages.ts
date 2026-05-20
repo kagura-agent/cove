@@ -105,5 +105,18 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     return c.json(message, 201);
   });
 
+  /** DELETE /api/v10/channels/:id/messages — clear all messages in a channel. */
+  app.delete("/api/v10/channels/:id/messages", (c) => {
+    const channelId = c.req.param("id");
+    const result = db.prepare("DELETE FROM messages WHERE scene_id = ?").run(channelId);
+    return c.json({ deleted: result.changes });
+  });
+
+  /** DELETE /api/v10/messages — clear ALL messages across all channels. */
+  app.delete("/api/v10/messages", (c) => {
+    const result = db.prepare("DELETE FROM messages").run();
+    return c.json({ deleted: result.changes });
+  });
+
   return app;
 }

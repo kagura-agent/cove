@@ -15,7 +15,8 @@
     <!-- Mobile header (hidden on desktop) -->
     <header id="mobile-header">
       <button id="sidebar-toggle" aria-label="Toggle channels">☰</button>
-      <h1 id="mobile-title">Cove 🏝️</h1>
+      <h1 id="mobile-title" style="flex:1">Cove 🏝️</h1>
+      <button id="clear-btn-mobile" title="Clear messages" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px 8px;">🗑️</button>
     </header>
 
     <!-- Sidebar -->
@@ -36,10 +37,11 @@
     <main id="chat-area">
       <div id="chat-header">
         <span id="channel-icon">🏝️</span>
-        <div>
+        <div style="flex:1">
           <h2 id="channel-name">Welcome</h2>
           <p id="channel-topic">Pick a scene to start chatting</p>
         </div>
+        <button id="clear-btn" title="Clear messages" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:6px 8px;border-radius:8px;" onclick="">🗑️</button>
       </div>
 
       <div id="messages">
