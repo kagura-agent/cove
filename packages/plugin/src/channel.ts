@@ -138,11 +138,27 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
+          // Override agent routing to target ruantang (or env override)
+          const targetAgent = process.env["COVE_AGENT_ID"] ?? "ruantang";
+          const originalRouting = channelRuntime.routing;
+          const patchedRuntime = {
+            channel: {
+              ...channelRuntime,
+              routing: {
+                ...originalRouting,
+                resolveAgentRoute: (params: any) => {
+                  const route = originalRouting.resolveAgentRoute(params);
+                  return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
+                },
+              },
+            },
+          };
+
           // Route as group/channel — each scene gets its own OpenClaw session
           // Session key will be like: agent:kagura:cove:channel:home
           await dispatchInboundDirectDmWithRuntime({
             cfg,
-            runtime: { channel: channelRuntime },
+            runtime: patchedRuntime as any,
             channel: "cove",
             channelLabel: "Cove",
             accountId: ctx.accountId,

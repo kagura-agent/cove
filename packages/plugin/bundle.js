@@ -3995,9 +3995,23 @@ var coveChannelPlugin = {
         try {
           const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
+          const targetAgent = process.env["COVE_AGENT_ID"] ?? "ruantang";
+          const originalRouting = channelRuntime.routing;
+          const patchedRuntime = {
+            channel: {
+              ...channelRuntime,
+              routing: {
+                ...originalRouting,
+                resolveAgentRoute: (params) => {
+                  const route = originalRouting.resolveAgentRoute(params);
+                  return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
+                }
+              }
+            }
+          };
           await dispatchInboundDirectDmWithRuntime({
             cfg,
-            runtime: { channel: channelRuntime },
+            runtime: patchedRuntime,
             channel: "cove",
             channelLabel: "Cove",
             accountId: ctx.accountId,
