@@ -73,8 +73,11 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    const body = await c.req.json<{ content: string }>();
-    const author = extractAuthor(c.req.header("Authorization"));
+    const body = await c.req.json<{ content: string; userId?: string; username?: string }>();
+    // Prefer body userId/username (browser client), fall back to Authorization header (game server)
+    const author = body.userId
+      ? { id: body.userId, username: body.username || body.userId, bot: false }
+      : extractAuthor(c.req.header("Authorization"));
     const now = Date.now();
     const id = randomUUID();
 
