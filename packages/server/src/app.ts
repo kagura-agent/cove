@@ -24,16 +24,9 @@ export function createApp(
   // Discord-compatible API routes use /api/v10/* path prefix.
   // This mirrors Discord's URL versioning so that standard Discord
   // client libraries (discord.js, etc.) can connect without modification.
-  if (config?.botToken) {
-    app.use("/api/v10/*", async (c, next) => {
-      const auth = c.req.header("Authorization");
-      const token = auth?.startsWith("Bot ") ? auth.slice(4).trim() : null;
-      if (token !== config.botToken) {
-        return c.json({ message: "401: Unauthorized" }, 401);
-      }
-      await next();
-    });
-  }
+  // Auth: Bot token required only for game-server API calls.
+  // Browser clients send userId/username in body instead.
+  // No auth middleware — we check per-route where needed.
 
   // Mount route modules
   app.route("/", channelRoutes(db));

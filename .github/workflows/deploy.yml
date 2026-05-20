@@ -1,0 +1,66 @@
+name: Deploy to VM1
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Bundle server
+        run: |
+          npx esbuild packages/server/dist/index.js \
+            --bundle --platform=node --format=esm \
+            --outfile=server-bundle.js \
+            --external:better-sqlite3 --external:ws \
+            --alias:@cove/shared=./packages/shared/src/types.ts
+
+      - name: Deploy to VM1
+        env:
+          SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
+          HOST: moltbook.kagura-agent.com
+          USER: azureuser
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
+          SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Upload server bundle
+          $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove/server-bundle.js
+
+          # Upload client dist
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-client/
+          $SSH "sudo cp -r /tmp/cove-client/* /var/www/cove/"
+
+          # Restart server
+          $SSH "sudo systemctl restart cove-server"
+
+          # Health check
+          sleep 3
+          $SSH "curl -sf http://localhost:3500/api/health" || exit 1
+          echo "✅ Deploy successful!"

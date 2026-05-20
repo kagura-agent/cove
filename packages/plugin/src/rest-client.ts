@@ -59,8 +59,11 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:id/messages — send a message. */
-  async sendMessage(channelId: string, content: string): Promise<DiscordMessage> {
-    return this.request("POST", `/api/v10/channels/${channelId}/messages`, { content });
+  async sendMessage(channelId: string, content: string, author?: { userId: string; username: string }): Promise<DiscordMessage> {
+    return this.request("POST", `/api/v10/channels/${channelId}/messages`, {
+      content,
+      ...(author ?? { userId: "kagura", username: "Kagura 🌸" }),
+    });
   }
 
   /** GET /api/v10/channels/:id/messages — fetch recent messages. */

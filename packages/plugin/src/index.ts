@@ -9,7 +9,7 @@ import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
 import { coveChannelPlugin } from "./channel.js";
 
-const entry = defineChannelPluginEntry({
+const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEntry({
   id: "cove",
   name: "Cove",
   description: "Connect OpenClaw to the Cove mirror world",

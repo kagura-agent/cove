@@ -15,7 +15,7 @@ console.log("🏝️  Database initialized and seeded");
 // Create Hono app with broadcast wired up
 const app = createApp(db, broadcastGatewayEvent, {
   botToken: BOT_TOKEN,
-  gatewayUrl: `ws://localhost:${PORT}/gateway`,
+  gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
 });
 
 if (BOT_TOKEN) {

@@ -1,9 +1,12 @@
 /**
  * Cove channel plugin definition.
+ *
+ * Each Cove scene (home, garden, beach, etc.) maps to a separate OpenClaw
+ * session, just like Discord channels. Messages in different scenes go to
+ * different agent sessions.
  */
 
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
-import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
 import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
@@ -55,7 +58,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     blurb: "Mirror world channel",
   },
   capabilities: {
-    chatTypes: ["direct"],
+    // Support both channel (scene) and direct messages
+    chatTypes: ["direct", "channel"],
   },
   config: {
     listAccountIds: () => ["default"],
@@ -79,14 +83,12 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   outbound: {
     deliveryMode: "direct",
     sendText: async (ctx) => {
-      console.log("[COVE OUTBOUND] sendText called, to:", ctx.to, "text length:", ctx.text?.length);
       const cfg = ctx.cfg;
       const account = resolveAccount(cfg);
       const client = getRestClient(account.baseUrl, account.token);
       const channelId = ctx.to ?? "home";
       const text = ctx.text ?? "";
       const result = await client.sendMessage(channelId, text);
-      console.log("[COVE OUTBOUND] message sent, id:", result.id);
       return { channel: "cove", messageId: result.id };
     },
   },
@@ -97,12 +99,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const log = ctx.log;
       const channelRuntime = (ctx as any).channelRuntime;
 
-      log?.info?.(`cove: channelRuntime available: ${!!channelRuntime}`);
-      if (channelRuntime) {
-        log?.info?.(`cove: channelRuntime keys: ${Object.keys(channelRuntime).join(", ")}`);
-        if (channelRuntime.reply) {
-          log?.info?.(`cove: channelRuntime.reply keys: ${Object.keys(channelRuntime.reply).join(", ")}`);
-        }
+      if (!channelRuntime) {
+        log?.warn?.("cove: channelRuntime not available — AI features disabled");
+        return;
       }
 
       const wsUrl = account.baseUrl.replace(/^http/, "ws") + "/gateway";
@@ -114,7 +113,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       gatewayClient.on("ready", (user) => {
-        log?.info?.(`cove: connected to gateway as ${user.username} (${user.id})`);
+        log?.info?.(`cove: connected as ${user.username} (${user.id})`);
         ctx.setStatus({
           accountId: ctx.accountId,
           connected: true,
@@ -125,78 +124,62 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       gatewayClient.on("messageCreate", async (message) => {
+        // Skip own messages and bot messages
         if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) return;
         if (message.author.bot) return;
 
-        log?.info?.(`cove: inbound message from ${message.author.username} in ${message.channel_id}`);
+        const channelId = message.channel_id;
+        const senderId = message.author.id;
+        const senderName = message.author.username;
+
+        log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
 
         try {
           const restClient = getRestClient(account.baseUrl, account.token);
+          const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
-          if (channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher) {
-            // Use the full runtime pipeline - this handles routing, session, and delivery
-            log?.info?.("cove: using channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher");
-
-            const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
-
-            await dispatchInboundDirectDmWithRuntime({
-              cfg,
-              runtime: { channel: channelRuntime },
-              channel: "cove",
-              channelLabel: "Cove",
-              accountId: ctx.accountId,
-              peer: { kind: "direct", id: message.author.id },
-              senderId: message.author.id,
-              senderAddress: message.author.id,
-              recipientAddress: message.channel_id,
-              conversationLabel: message.author.username,
-              rawBody: message.content,
-              messageId: message.id ?? `cove-${Date.now()}`,
-              timestamp: Date.now(),
-              deliver: async (payload) => {
-                const text = payload.text ?? "";
-                log?.info?.(`cove: delivering reply (${text.length} chars) to ${message.channel_id}`);
-                if (text) {
-                  await restClient.sendMessage(message.channel_id, text);
-                  log?.info?.("cove: reply delivered successfully");
-                }
-              },
-              onRecordError: (err) => {
-                log?.error?.(`cove: record error: ${err}`);
-              },
-              onDispatchError: (err, info) => {
-                log?.error?.(`cove: dispatch error (${info.kind}): ${err}`);
-              },
-            });
-          } else {
-            // Fallback: use dispatchInboundMessageWithDispatcher
-            log?.info?.("cove: channelRuntime not available, using fallback dispatcher");
-            const { dispatchInboundMessageWithDispatcher } = await import("openclaw/plugin-sdk/reply-runtime");
-
-            const msgCtx: MsgContext = {
-              Body: message.content,
-              From: message.author.id,
-              To: message.channel_id,
-              SessionKey: `agent:kagura:cove:direct:${message.author.id}`,
-              AccountId: ctx.accountId,
-              InboundEventKind: "user_request",
-            };
-
-            await dispatchInboundMessageWithDispatcher({
-              ctx: msgCtx,
-              cfg,
-              dispatcherOptions: {
-                deliver: async (payload) => {
-                  const text = (payload as any).text ?? "";
-                  if (text) {
-                    await restClient.sendMessage(message.channel_id, text);
-                  }
-                },
-              },
-            });
-          }
+          // Route as group/channel — each scene gets its own OpenClaw session
+          // Session key will be like: agent:kagura:cove:channel:home
+          await dispatchInboundDirectDmWithRuntime({
+            cfg,
+            runtime: { channel: channelRuntime },
+            channel: "cove",
+            channelLabel: "Cove",
+            accountId: ctx.accountId,
+            // Group peer = channel-based session (like Discord channels)
+            peer: { kind: "group" as any, id: channelId },
+            senderId,
+            senderAddress: senderId,
+            recipientAddress: channelId,
+            conversationLabel: `#${channelId}`,
+            rawBody: message.content,
+            bodyForAgent: message.content,
+            messageId: message.id ?? `cove-${Date.now()}`,
+            timestamp: Date.now(),
+            provider: "cove",
+            surface: "cove",
+            extraContext: {
+              ChatType: "channel",
+              SenderId: senderId,
+              SenderName: senderName,
+              ChannelId: channelId,
+            },
+            deliver: async (payload) => {
+              const text = payload.text ?? "";
+              if (text) {
+                log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+                await restClient.sendMessage(channelId, text);
+              }
+            },
+            onRecordError: (err) => {
+              log?.error?.(`cove: record error in [${channelId}]: ${err}`);
+            },
+            onDispatchError: (err, info) => {
+              log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
+            },
+          });
         } catch (err: any) {
-          log?.error?.(`cove: dispatch error: ${err.message}\n${err.stack}`);
+          log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
         }
       });
 
@@ -205,7 +188,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       gatewayClient.on("close", () => {
-        log?.info?.("cove: gateway connection closed, will reconnect...");
+        log?.info?.("cove: gateway disconnected, will reconnect...");
       });
 
       ctx.abortSignal.addEventListener("abort", () => {
