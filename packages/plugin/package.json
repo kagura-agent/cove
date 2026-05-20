@@ -1,0 +1,36 @@
+{
+  "name": "openclaw-cove",
+  "version": "0.1.0",
+  "description": "OpenClaw channel plugin for Cove mirror world",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "channel": {
+      "id": "cove",
+      "label": "Cove",
+      "blurb": "Connect OpenClaw to the Cove mirror world."
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cove/shared": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.8.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  }
+}

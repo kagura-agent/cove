@@ -1,0 +1,41 @@
+{
+  "id": "cove",
+  "kind": "channel",
+  "channels": ["cove"],
+  "name": "Cove",
+  "description": "Connect OpenClaw to the Cove mirror world",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "cove": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": { "type": "string" },
+          "baseUrl": { "type": "string", "default": "http://localhost:3400" },
+          "guildId": { "type": "string", "default": "cove" },
+          "allowFrom": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "uiHints": {
+        "token": {
+          "label": "Bot token (COVE_BOT_TOKEN)",
+          "sensitive": true
+        },
+        "baseUrl": {
+          "label": "Cove server base URL"
+        }
+      }
+    }
+  }
+}
