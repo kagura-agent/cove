@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Rebuild better-sqlite3
+        run: cd node_modules/better-sqlite3 && npx --yes prebuild-install || npx --yes node-gyp rebuild
+
       - name: Build shared
         run: pnpm -r --filter @cove/shared build
 
