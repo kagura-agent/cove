@@ -5,26 +5,27 @@
  * client, and bridges inbound messages from Cove to OpenClaw.
  */
 
+import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
-import { coveChannelPlugin, resolveAccount, getRestClient } from "./channel.js";
+import { coveChannelPlugin, resolveAccount } from "./channel.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 
 let gatewayClient: CoveGatewayClient | null = null;
 
-export default defineChannelPluginEntry({
+const entry: { id: string; name: string; description: string; configSchema: any; register: (api: any) => void; channelPlugin: any; setChannelRuntime?: any } = defineChannelPluginEntry({
   id: "cove",
   name: "Cove",
   description: "Connect OpenClaw to the Cove mirror world",
-  plugin: coveChannelPlugin,
+  plugin: coveChannelPlugin as ChannelPlugin,
 
   registerFull(api) {
     // Start Gateway connection when the channel activates
-    const cfg = api.getConfig();
+    const cfg = api.config;
     let account;
     try {
       account = resolveAccount(cfg);
     } catch {
-      api.log?.("cove: no token configured, skipping gateway connection");
+      api.logger.info("cove: no token configured, skipping gateway connection");
       return;
     }
 
@@ -36,7 +37,7 @@ export default defineChannelPluginEntry({
     });
 
     gatewayClient.on("ready", (user) => {
-      api.log?.(`cove: connected to gateway as ${user.username} (${user.id})`);
+      api.logger.info(`cove: connected to gateway as ${user.username} (${user.id})`);
     });
 
     gatewayClient.on("messageCreate", (message) => {
@@ -50,33 +51,35 @@ export default defineChannelPluginEntry({
         return;
       }
 
-      // Dispatch inbound message to OpenClaw
-      api.dispatchInbound?.({
-        channel: "cove",
-        conversationId: message.channel_id,
-        senderId: message.author.id,
-        senderName: message.author.username,
-        text: message.content,
-        messageId: message.id,
-        timestamp: message.timestamp,
-      });
+      // Inbound messages are handled by the channel gateway adapter.
+      // When using defineChannelPluginEntry, the gateway startAccount
+      // pattern handles dispatching. For now, log inbound messages.
+      api.logger.info(
+        `cove: inbound message from ${message.author.username} in ${message.channel_id}`,
+      );
     });
 
     gatewayClient.on("error", (err) => {
-      api.log?.(`cove: gateway error: ${err.message}`);
+      api.logger.error(`cove: gateway error: ${err.message}`);
     });
 
     gatewayClient.on("close", () => {
-      api.log?.("cove: gateway connection closed, will reconnect...");
+      api.logger.info("cove: gateway connection closed, will reconnect...");
     });
 
     gatewayClient.connect();
-    api.log?.(`cove: connecting to gateway at ${wsUrl}`);
+    api.logger.info(`cove: connecting to gateway at ${wsUrl}`);
 
     // Register cleanup on shutdown
-    api.onShutdown?.(() => {
-      gatewayClient?.destroy();
-      gatewayClient = null;
+    api.lifecycle.registerRuntimeLifecycle({
+      id: "cove-gateway-cleanup",
+      description: "Clean up Cove gateway WebSocket connection",
+      cleanup: () => {
+        gatewayClient?.destroy();
+        gatewayClient = null;
+      },
     });
   },
 });
+
+export default entry;
