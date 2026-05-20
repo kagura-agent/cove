@@ -126,16 +126,54 @@ function getChannelIcon(ch: Channel): string {
 function renderChannels() {
   channelList.innerHTML = "";
   for (const ch of channels) {
+    const item = document.createElement("div");
+    item.className = "channel-item" + (ch.id === activeChannelId ? " active" : "");
+    item.dataset.id = ch.id;
+
     const btn = document.createElement("button");
     btn.className = "channel-btn" + (ch.id === activeChannelId ? " active" : "");
-    btn.dataset.id = ch.id;
     btn.innerHTML = `
       <span class="channel-icon">${getChannelIcon(ch)}</span>
       <span class="channel-name">${escapeHtml(ch.name)}</span>
     `;
     btn.addEventListener("click", () => selectChannel(ch.id));
-    channelList.appendChild(btn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "channel-delete";
+    delBtn.textContent = "×";
+    delBtn.title = "Delete channel";
+    delBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete #${ch.name}? All messages will be lost.`)) return;
+      try {
+        await api(`/api/v10/channels/${ch.id}`, { method: "DELETE" });
+        if (activeChannelId === ch.id) activeChannelId = null;
+        await loadChannels();
+      } catch (err) { console.error("delete channel:", err); }
+    });
+
+    item.appendChild(btn);
+    item.appendChild(delBtn);
+    channelList.appendChild(item);
   }
+
+  // Add channel button
+  const addBtn = document.createElement("button");
+  addBtn.className = "channel-btn channel-add";
+  addBtn.innerHTML = `<span class="channel-icon">➕</span><span class="channel-name">New channel</span>`;
+  addBtn.addEventListener("click", async () => {
+    const name = prompt("Channel name:");
+    if (!name?.trim()) return;
+    const icon = prompt("Emoji icon (optional):", "🏝️") || "🏝️";
+    try {
+      await api("/api/v10/guilds/cove/channels", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim(), icon }),
+      });
+      await loadChannels();
+    } catch (err) { console.error("create channel:", err); }
+  });
+  channelList.appendChild(addBtn);
 }
 
 // ── Select channel ──

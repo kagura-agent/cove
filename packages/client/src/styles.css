@@ -78,6 +78,49 @@ html {
   padding: 10px 8px;
 }
 
+.channel-item {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.channel-item .channel-btn {
+  flex: 1;
+}
+
+.channel-delete {
+  display: none;
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.channel-item:hover .channel-delete {
+  display: block;
+}
+
+.channel-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.channel-add {
+  opacity: 0.5;
+  border: 1px dashed var(--border) !important;
+  margin-top: 8px;
+}
+
+.channel-add:hover {
+  opacity: 1;
+}
+
 .channel-btn {
   display: flex;
   align-items: center;

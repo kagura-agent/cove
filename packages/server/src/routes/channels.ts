@@ -102,5 +102,49 @@ export function channelRoutes(db: Database.Database): Hono {
     return c.json(entry);
   });
 
+  /** POST /api/v10/guilds/:guildId/channels — create a new scene/channel. */
+  app.post("/api/v10/guilds/:guildId/channels", async (c) => {
+    const guildId = c.req.param("guildId");
+    if (guildId !== GUILD_ID) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+
+    const body = await c.req.json<{ name: string; icon?: string; topic?: string }>();
+    const name = body.name?.trim();
+    if (!name) {
+      return c.json({ message: "Name is required" }, 400);
+    }
+
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+    // Check if already exists
+    const existing = db.prepare("SELECT id FROM scenes WHERE id = ?").get(id);
+    if (existing) {
+      return c.json({ message: "Channel already exists", code: 10013 }, 409);
+    }
+
+    db.prepare(
+      "INSERT INTO scenes (id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, name, body.icon ?? "🏝️", "outdoor", id, body.topic ?? "", 0, 0);
+
+    const count = (db.prepare("SELECT COUNT(*) as c FROM scenes").get() as any).c;
+    const row = db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow;
+    return c.json(toDiscordChannel(row, count - 1), 201);
+  });
+
+  /** DELETE /api/v10/channels/:id — delete a scene/channel and its messages. */
+  app.delete("/api/v10/channels/:id", (c) => {
+    const id = c.req.param("id");
+    const row = db.prepare("SELECT id FROM scenes WHERE id = ?").get(id);
+    if (!row) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+
+    db.prepare("DELETE FROM messages WHERE scene_id = ?").run(id);
+    db.prepare("DELETE FROM scene_state WHERE scene_id = ?").run(id);
+    db.prepare("DELETE FROM scenes WHERE id = ?").run(id);
+    return c.json({ deleted: true });
+  });
+
   return app;
 }
