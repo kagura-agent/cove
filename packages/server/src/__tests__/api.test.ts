@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createApp } from "../app.js";
 import { initDb, seedScenes } from "../db/schema.js";
 import type Database from "better-sqlite3";
-import type { DiscordChannel, DiscordMessage, SceneState } from "@cove/shared";
+import type { DiscordChannel, DiscordMessage, SceneState, CoveAgent, CoveGuildMember } from "@cove/shared";
 
 describe("Cove API — Discord-compatible", () => {
   let db: Database.Database;
@@ -523,6 +523,237 @@ describe("Cove API — Discord-compatible", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── Users (Bot Users) ───────────────────────────────────────────────
+
+  describe("User CRUD (Discord-compatible)", () => {
+    it("POST /users creates a bot user", async () => {
+      const res = await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "kagura",
+          username: "Kagura",
+          avatar: "🌸",
+          bio: "AI assistant",
+          backend: "openclaw",
+          backend_config: { agentId: "kagura", endpoint: "ws://localhost:3000" },
+        }),
+      });
+      expect(res.status).toBe(201);
+      const user: CoveAgent = await res.json();
+      expect(user.id).toBe("kagura");
+      expect(user.username).toBe("Kagura");
+      expect(user.avatar).toBe("🌸");
+      expect(user.bot).toBe(true);
+      expect(user.backend).toBe("openclaw");
+      expect(user.backend_config).toEqual({ agentId: "kagura", endpoint: "ws://localhost:3000" });
+    });
+
+    it("POST auto-generates ID from username", async () => {
+      const res = await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "Test Bot" }),
+      });
+      expect(res.status).toBe(201);
+      const user: CoveAgent = await res.json();
+      expect(user.id).toBe("test-bot");
+    });
+
+    it("POST returns 409 for duplicate ID", async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "dup", username: "First" }),
+      });
+      const res = await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "dup", username: "Second" }),
+      });
+      expect(res.status).toBe(409);
+    });
+
+    it("GET /users/:id returns a user", async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "solo", username: "Solo" }),
+      });
+
+      const res = await app.request("/api/v10/users/solo");
+      expect(res.status).toBe(200);
+      const user: CoveAgent = await res.json();
+      expect(user.id).toBe("solo");
+      expect(user.bot).toBe(true);
+    });
+
+    it("GET /users/:id returns 404 for unknown", async () => {
+      const res = await app.request("/api/v10/users/nonexistent");
+      expect(res.status).toBe(404);
+    });
+
+    it("PATCH updates user fields", async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "patchme", username: "Original" }),
+      });
+
+      const res = await app.request("/api/v10/users/patchme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "Updated", bio: "New bio" }),
+      });
+      expect(res.status).toBe(200);
+      const user: CoveAgent = await res.json();
+      expect(user.username).toBe("Updated");
+      expect(user.bio).toBe("New bio");
+    });
+
+    it("PATCH switches backend", async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "switchme", username: "Switch", backend: "openclaw" }),
+      });
+
+      const res = await app.request("/api/v10/users/switchme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backend: "hermes", backend_config: { url: "http://hermes:8000" } }),
+      });
+      expect(res.status).toBe(200);
+      const user: CoveAgent = await res.json();
+      expect(user.backend).toBe("hermes");
+      expect(user.backend_config).toEqual({ url: "http://hermes:8000" });
+    });
+
+    it("DELETE removes a user", async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "deleteme", username: "Delete" }),
+      });
+
+      const res = await app.request("/api/v10/users/deleteme", { method: "DELETE" });
+      expect(res.status).toBe(204);
+
+      const getRes = await app.request("/api/v10/users/deleteme");
+      expect(getRes.status).toBe(404);
+    });
+  });
+
+  // ─── Guild Members (Discord-compatible) ─────────────────────────────
+
+  describe("Guild Members (Discord-compatible)", () => {
+    beforeEach(async () => {
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "bot-a", username: "Bot A" }),
+      });
+      await app.request("/api/v10/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "bot-b", username: "Bot B" }),
+      });
+    });
+
+    it("PUT adds user to guild", async () => {
+      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(201);
+      const member: CoveGuildMember = await res.json();
+      expect(member.user.id).toBe("bot-a");
+      expect(member.user.username).toBe("Bot A");
+      expect(member.roles).toEqual([]);
+      expect(member.joined_at).toBeTruthy();
+    });
+
+    it("PUT with nick and roles", async () => {
+      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nick: "Gardener Bot", roles: ["gardener"] }),
+      });
+      expect(res.status).toBe(201);
+      const member: CoveGuildMember = await res.json();
+      expect(member.nick).toBe("Gardener Bot");
+      expect(member.roles).toEqual(["gardener"]);
+    });
+
+    it("PUT returns existing member for duplicate", async () => {
+      await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("GET lists guild members", async () => {
+      await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await app.request("/api/v10/guilds/cove/members/bot-b", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const res = await app.request("/api/v10/guilds/cove/members");
+      expect(res.status).toBe(200);
+      const members: CoveGuildMember[] = await res.json();
+      expect(members).toHaveLength(2);
+      expect(members[0].user.bot).toBe(true);
+    });
+
+    it("GET returns 404 for unknown guild", async () => {
+      const res = await app.request("/api/v10/guilds/unknown/members");
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE removes member from guild", async () => {
+      await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const res = await app.request("/api/v10/guilds/cove/members/bot-a", { method: "DELETE" });
+      expect(res.status).toBe(204);
+
+      const listRes = await app.request("/api/v10/guilds/cove/members");
+      const members: CoveGuildMember[] = await listRes.json();
+      expect(members).toHaveLength(0);
+    });
+
+    it("deleting user cascades to guild membership", async () => {
+      await app.request("/api/v10/guilds/cove/members/bot-a", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      await app.request("/api/v10/users/bot-a", { method: "DELETE" });
+
+      const listRes = await app.request("/api/v10/guilds/cove/members");
+      const members: CoveGuildMember[] = await listRes.json();
+      expect(members).toHaveLength(0);
     });
   });
 
