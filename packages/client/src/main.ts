@@ -690,34 +690,30 @@ botForm?.addEventListener("submit", async (e) => {
 
 $("#add-bot-btn")?.addEventListener("click", openBotModal);
 
+// ── Settings panel ──
+
+$("#settings-btn")?.addEventListener("click", async () => {
+  $("#settings-panel").classList.remove("hidden");
+  await loadBots();
+});
+
+$("#settings-close")?.addEventListener("click", () => {
+  $("#settings-panel").classList.add("hidden");
+});
+
+$("#settings-panel")?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).id === "settings-panel") {
+    $("#settings-panel").classList.add("hidden");
+  }
+});
+
 // ── Init ──
 
 async function init() {
-  // Show username in sidebar
-  const sidebarHeader = $(".sidebar-header");
-  if (sidebarHeader) {
-    const userTag = document.createElement("div");
-    userTag.className = "user-tag";
-    userTag.textContent = `👤 ${currentUser.username}`;
-    userTag.title = "Click to change name";
-    userTag.style.cursor = "pointer";
-    userTag.style.fontSize = "0.8rem";
-    userTag.style.opacity = "0.7";
-    userTag.style.marginTop = "4px";
-    userTag.addEventListener("click", () => {
-      const newName = prompt("Change your name:", currentUser.username);
-      if (newName && newName.trim()) {
-        currentUser.username = newName.trim();
-        currentUser.id = newName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-");
-        localStorage.setItem("cove-user", JSON.stringify(currentUser));
-        userTag.textContent = `👤 ${currentUser.username}`;
-      }
-    });
-    sidebarHeader.appendChild(userTag);
-  }
+  // Update user bar at bottom of sidebar
+  $("#user-display-name").textContent = currentUser.username;
 
   await loadChannels();
-  await loadBots();
   connectGateway();
 }
 

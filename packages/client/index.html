@@ -28,12 +28,12 @@
       <nav id="channel-list" aria-label="Channels">
         <div class="loading">Loading scenes…</div>
       </nav>
-      <div id="bot-section">
-        <div class="sidebar-section-header">
-          <span>🤖 Bots</span>
-          <button id="add-bot-btn" class="section-add-btn" title="Create bot">+</button>
+      <div id="user-bar">
+        <div id="user-avatar">👤</div>
+        <div id="user-info">
+          <span id="user-display-name">Loading…</span>
         </div>
-        <div id="bot-list"></div>
+        <button id="settings-btn" title="Settings">⚙️</button>
       </div>
     </aside>
 
@@ -97,6 +97,25 @@
         </div>
         <div class="form-actions">
           <button type="button" id="token-done" class="btn-primary">I’ve copied it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings panel -->
+    <div id="settings-panel" class="modal-overlay hidden">
+      <div class="settings-container">
+        <div class="settings-sidebar">
+          <h3>Settings</h3>
+          <button class="settings-tab active" data-tab="bots">🤖 Bots</button>
+        </div>
+        <div class="settings-content">
+          <div class="settings-header">
+            <h2>Bot Management</h2>
+            <button class="modal-close" id="settings-close">×</button>
+          </div>
+          <p class="settings-desc">Create and manage bots that live on your island.</p>
+          <button id="add-bot-btn" class="btn-primary" style="margin-bottom:16px;">➕ Create Bot</button>
+          <div id="bot-list"></div>
         </div>
       </div>
     </div>

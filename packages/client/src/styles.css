@@ -484,49 +484,140 @@ html {
 }
 
 /* ── Bot section ── */
+/* ── User Bar (bottom of sidebar, Discord-style) ── */
 
-#bot-section {
+#user-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.2);
   border-top: 1px solid var(--border);
-  padding: 12px 0;
   margin-top: auto;
 }
 
-.sidebar-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.section-add-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  cursor: pointer;
+#user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  transition: all 0.15s;
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
-.section-add-btn:hover {
-  color: var(--text);
-  border-color: var(--text-muted);
-  background: rgba(255,255,255,0.05);
+#user-info {
+  flex: 1;
+  min-width: 0;
 }
+
+#user-display-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#settings-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+#settings-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+/* ── Settings Panel (Discord-style full overlay) ── */
+
+.settings-container {
+  display: flex;
+  width: 90%;
+  max-width: 800px;
+  height: 80vh;
+  background: var(--bg-surface);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.settings-sidebar {
+  width: 200px;
+  background: var(--bg-deep);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-sidebar h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.settings-tab {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-tab:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+
+.settings-tab.active {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+.settings-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.settings-header h2 {
+  font-size: 1.2rem;
+}
+
+.settings-desc {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+/* Bot list in settings */
 
 #bot-list {
-  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bot-empty {
