@@ -57,8 +57,11 @@ jobs:
           $SSH "mkdir -p /home/azureuser/cove-staging"
           $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
 
+          # Ensure native dependencies are installed on VM
+          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
+
           # Upload client dist to staging
-          $SSH "sudo mkdir -p /var/www/cove-staging"
+          $SSH "sudo mkdir -p /var/www/cove-staging /tmp/cove-staging-client"
           $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
           $SSH "sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/"
 
@@ -85,9 +88,9 @@ jobs:
 
           $SSH "sudo systemctl daemon-reload && sudo systemctl restart cove-staging"
 
-          # Health check
-          sleep 3
-          $SSH "curl -sf http://localhost:3501/api/health" || exit 1
+          # Health check (wait for service to start)
+          sleep 5
+          $SSH "curl -sf http://localhost:3501/api/health" || { $SSH "sudo journalctl -u cove-staging --no-pager -n 20"; exit 1; }
           echo "✅ Preview deploy successful!"
 
       - name: Comment preview URL
