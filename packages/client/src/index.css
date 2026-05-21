@@ -31,3 +31,23 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in { animation: fadeIn 0.2s ease; }
+
+/* Mobile responsive */
+.mobile-header { display: none !important; }
+
+@media (max-width: 640px) {
+  .mobile-header { display: flex !important; }
+  .ant-layout-sider { display: none !important; }
+  .ant-layout-content { padding-top: 52px; }
+}
+
+@media (max-width: 640px) {
+  .ant-layout-sider.sidebar-open {
+    display: block !important;
+    position: fixed !important;
+    z-index: 30 !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+  }
+}

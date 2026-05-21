@@ -61,28 +61,22 @@ export default function App() {
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" } }}>
       <Layout style={{ height: "100%", background: "var(--bg-deep)" }}>
         {/* Mobile header */}
-        <div style={{ display: "none" }} className="mobile-header">
-          <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 12, padding: "0 14px", height: 52, background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-            <Button type="text" icon={<MenuOutlined />} onClick={() => setSidebarOpen(!sidebarOpen)} style={{ color: "var(--text-primary)" }} />
-            <h1 style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0, color: "var(--text-primary)" }}>
-              {activeChannel ? `${getChannelIcon(activeChannel)} ${activeChannel.name}` : "Cove 🏝️"}
-            </h1>
-          </div>
+        <div className="mobile-header" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 12, padding: "0 14px", height: 52, background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          <Button type="text" icon={<MenuOutlined />} onClick={() => setSidebarOpen(!sidebarOpen)} style={{ color: "var(--text-primary)" }} />
+          <h1 style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0, color: "var(--text-primary)" }}>
+            {activeChannel ? `${getChannelIcon(activeChannel)} ${activeChannel.name}` : "Cove 🏝️"}
+          </h1>
         </div>
 
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 }} />}
 
         <Layout.Sider
           width={260}
+          className={sidebarOpen ? "sidebar-open" : ""}
           style={{
             background: "var(--bg-surface)",
             borderRight: "1px solid rgba(255,255,255,0.08)",
             height: "100%",
-            position: sidebarOpen ? "fixed" : undefined,
-            zIndex: sidebarOpen ? 30 : undefined,
-            left: 0,
-            top: 0,
-            bottom: 0,
           }}
           breakpoint="sm"
           collapsedWidth={0}
