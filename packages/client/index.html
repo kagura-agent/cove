@@ -28,7 +28,75 @@
       <nav id="channel-list" aria-label="Channels">
         <div class="loading">Loading scenes…</div>
       </nav>
+      <div id="bot-section">
+        <div class="sidebar-section-header">
+          <span>🤖 Bots</span>
+          <button id="add-bot-btn" class="section-add-btn" title="Create bot">+</button>
+        </div>
+        <div id="bot-list"></div>
+      </div>
     </aside>
+
+    <!-- Bot create/edit modal -->
+    <div id="bot-modal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="bot-modal-title">Create Bot</h3>
+          <button class="modal-close" id="bot-modal-close">×</button>
+        </div>
+        <form id="bot-form">
+          <div class="form-group">
+            <label for="bot-username">Name <span class="required">*</span></label>
+            <input type="text" id="bot-username" placeholder="e.g. Ruantang" required />
+          </div>
+          <div class="form-group">
+            <label for="bot-avatar">Avatar emoji</label>
+            <input type="text" id="bot-avatar" placeholder="🤖" maxlength="4" />
+          </div>
+          <div class="form-group">
+            <label for="bot-bio">Bio</label>
+            <input type="text" id="bot-bio" placeholder="A friendly island companion" />
+          </div>
+          <div class="form-group">
+            <label for="bot-backend">Backend</label>
+            <select id="bot-backend">
+              <option value="openclaw">OpenClaw</option>
+              <option value="hermes">Hermes</option>
+              <option value="webhook">Webhook</option>
+            </select>
+          </div>
+          <div id="backend-config-fields">
+            <div class="form-group" id="field-agent-id">
+              <label for="bot-agent-id">Agent ID <span class="hint">OpenClaw agent name, e.g. "kagura"</span></label>
+              <input type="text" id="bot-agent-id" placeholder="kagura" />
+            </div>
+            <div class="form-group hidden" id="field-endpoint">
+              <label for="bot-endpoint">Endpoint URL</label>
+              <input type="text" id="bot-endpoint" placeholder="https://..." />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="bot-cancel" class="btn-secondary">Cancel</button>
+            <button type="submit" class="btn-primary">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Bot detail modal -->
+    <div id="bot-detail-modal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="bot-detail-title">Bot Details</h3>
+          <button class="modal-close" id="bot-detail-close">×</button>
+        </div>
+        <div id="bot-detail-content"></div>
+        <div class="form-actions">
+          <button type="button" id="bot-detail-delete" class="btn-danger">Delete Bot</button>
+          <button type="button" id="bot-detail-done" class="btn-secondary">Done</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Overlay for mobile sidebar -->
     <div id="sidebar-overlay"></div>

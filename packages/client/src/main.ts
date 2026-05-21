@@ -27,6 +27,23 @@ interface Message {
   timestamp: string;
 }
 
+interface Bot {
+  id: string;
+  username: string;
+  avatar: string | null;
+  bot: boolean;
+  bio?: string | null;
+  backend?: string;
+  backend_config?: Record<string, unknown> | null;
+}
+
+interface GuildMember {
+  user: Bot;
+  nick: string | null;
+  roles: string[];
+  joined_at: string;
+}
+
 // ── User identity ──
 
 function getUser(): { id: string; username: string } {
@@ -66,6 +83,7 @@ let channels: Channel[] = [];
 let activeChannelId: string | null = null;
 let ws: WebSocket | null = null;
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let bots: Bot[] = [];
 
 // ── API helpers ──
 
@@ -455,6 +473,161 @@ function formatTime(ts: string): string {
   }
 }
 
+// ── Bot management ──
+
+async function loadBots() {
+  const botList = $("#bot-list");
+  try {
+    const members = await api<GuildMember[]>("/api/v10/guilds/cove/members");
+    bots = members.map((m) => m.user);
+    renderBots();
+  } catch (err) {
+    botList.innerHTML = '<div class="loading">Failed to load bots</div>';
+    console.error("loadBots:", err);
+  }
+}
+
+function renderBots() {
+  const botList = $("#bot-list");
+  botList.innerHTML = "";
+
+  if (bots.length === 0) {
+    botList.innerHTML = '<div class="bot-empty">No bots yet</div>';
+    return;
+  }
+
+  for (const bot of bots) {
+    const item = document.createElement("div");
+    item.className = "bot-item";
+    item.innerHTML = `
+      <span class="bot-avatar">${bot.avatar || "🤖"}</span>
+      <span class="bot-name">${escapeHtml(bot.username)}</span>
+      <button class="bot-delete" title="Remove bot">×</button>
+    `;
+    item.querySelector(".bot-name")!.addEventListener("click", () => showBotDetail(bot));
+    item.querySelector(".bot-delete")!.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Remove bot "${bot.username}"?`)) return;
+      try {
+        await api(`/api/v10/users/${bot.id}`, { method: "DELETE" });
+        await loadBots();
+      } catch (err) { console.error("delete bot:", err); }
+    });
+    botList.appendChild(item);
+  }
+}
+
+function showBotDetail(bot: Bot) {
+  const modal = $("#bot-detail-modal");
+  $("#bot-detail-title").textContent = `${bot.avatar || "🤖"} ${bot.username}`;
+  $("#bot-detail-content").innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-label">ID</div>
+      <div class="detail-value">${escapeHtml(bot.id)}</div>
+      <div class="detail-label">Bio</div>
+      <div class="detail-value">${escapeHtml(bot.bio || "(none)")}</div>
+      <div class="detail-label">Backend</div>
+      <div class="detail-value">${escapeHtml(bot.backend || "openclaw")}</div>
+      <div class="detail-label">Config</div>
+      <div class="detail-value"><code>${bot.backend_config ? escapeHtml(JSON.stringify(bot.backend_config)) : "(none)"}</code></div>
+    </div>
+  `;
+  (modal as any).__botId = bot.id;
+  modal.classList.remove("hidden");
+}
+
+$("#bot-detail-close")?.addEventListener("click", () => $("#bot-detail-modal").classList.add("hidden"));
+$("#bot-detail-done")?.addEventListener("click", () => $("#bot-detail-modal").classList.add("hidden"));
+$("#bot-detail-modal")?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).classList.contains("modal-overlay")) $("#bot-detail-modal").classList.add("hidden");
+});
+$("#bot-detail-delete")?.addEventListener("click", async () => {
+  const modal = $("#bot-detail-modal");
+  const botId = (modal as any).__botId;
+  if (!botId || !confirm("Delete this bot?")) return;
+  try {
+    await api(`/api/v10/users/${botId}`, { method: "DELETE" });
+    modal.classList.add("hidden");
+    await loadBots();
+  } catch (err) { console.error("delete bot:", err); }
+});
+
+// Bot form modal
+const botModal = $("#bot-modal");
+const botForm = $<HTMLFormElement>("#bot-form");
+const botBackendSelect = $<HTMLSelectElement>("#bot-backend");
+
+function openBotModal() {
+  botForm.reset();
+  $("#bot-avatar").setAttribute("value", "🤖");
+  updateBackendFields();
+  botModal.classList.remove("hidden");
+  $("#bot-username").focus();
+}
+
+function closeBotModal() {
+  botModal.classList.add("hidden");
+}
+
+function updateBackendFields() {
+  const backend = botBackendSelect.value;
+  const agentIdField = $("#field-agent-id");
+  const endpointField = $("#field-endpoint");
+
+  if (backend === "openclaw") {
+    agentIdField.classList.remove("hidden");
+    endpointField.classList.add("hidden");
+  } else {
+    agentIdField.classList.add("hidden");
+    endpointField.classList.remove("hidden");
+  }
+}
+
+botBackendSelect?.addEventListener("change", updateBackendFields);
+$("#bot-modal-close")?.addEventListener("click", closeBotModal);
+$("#bot-cancel")?.addEventListener("click", closeBotModal);
+botModal?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).classList.contains("modal-overlay")) closeBotModal();
+});
+
+botForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = $<HTMLInputElement>("#bot-username").value.trim();
+  if (!username) return;
+
+  const avatar = $<HTMLInputElement>("#bot-avatar").value.trim() || "🤖";
+  const bio = $<HTMLInputElement>("#bot-bio").value.trim() || undefined;
+  const backend = botBackendSelect.value;
+
+  let backendConfig: Record<string, unknown> | null = null;
+  if (backend === "openclaw") {
+    const agentId = $<HTMLInputElement>("#bot-agent-id").value.trim();
+    if (agentId) backendConfig = { agentId };
+  } else {
+    const endpoint = $<HTMLInputElement>("#bot-endpoint").value.trim();
+    if (endpoint) backendConfig = { url: endpoint };
+  }
+
+  try {
+    const newBot = await api<Bot>("/api/v10/users", {
+      method: "POST",
+      body: JSON.stringify({ username, avatar, bio, backend, backend_config: backendConfig }),
+    });
+
+    await api(`/api/v10/guilds/cove/members/${newBot.id}`, {
+      method: "PUT",
+      body: JSON.stringify({}),
+    });
+
+    closeBotModal();
+    await loadBots();
+  } catch (err) {
+    console.error("create bot:", err);
+  }
+});
+
+$("#add-bot-btn")?.addEventListener("click", openBotModal);
+
 // ── Init ──
 
 async function init() {
@@ -482,6 +655,7 @@ async function init() {
   }
 
   await loadChannels();
+  await loadBots();
   connectGateway();
 }
 
