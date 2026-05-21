@@ -87,6 +87,28 @@ export interface SceneState {
   updatedAt: number;
 }
 
+/** An agent/character registered in Cove — Discord User compatible. */
+export interface CoveAgent {
+  id: string;
+  username: string;
+  avatar: string | null;
+  bot: boolean;
+  /** Cove extension: agent bio/description. */
+  bio?: string | null;
+  /** Cove extension: backend runtime type. */
+  backend?: string;
+  /** Cove extension: backend-specific config. */
+  backend_config?: Record<string, unknown> | null;
+}
+
+/** Guild member — an agent assigned to the Cove guild. Discord GuildMember compatible. */
+export interface CoveGuildMember {
+  user: CoveAgent;
+  nick: string | null;
+  roles: string[];
+  joined_at: string; // ISO 8601
+}
+
 /** WebSocket event types for real-time scene updates. */
 export type WSEvent =
   | { type: "message"; payload: Message }

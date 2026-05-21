@@ -18,6 +18,27 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       position_y  REAL
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id          TEXT PRIMARY KEY,
+      username    TEXT NOT NULL,
+      avatar      TEXT,
+      bot         INTEGER NOT NULL DEFAULT 1,
+      bio         TEXT,
+      backend     TEXT NOT NULL DEFAULT 'openclaw',
+      backend_config TEXT,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS guild_members (
+      guild_id    TEXT NOT NULL DEFAULT 'cove',
+      user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+      nick        TEXT,
+      roles       TEXT DEFAULT '[]',
+      joined_at   INTEGER NOT NULL,
+      PRIMARY KEY (guild_id, user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id               TEXT PRIMARY KEY,
       scene_id         TEXT REFERENCES scenes(id),
