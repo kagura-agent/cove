@@ -1,0 +1,147 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  deploy-preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Bundle server
+        run: |
+          npx esbuild packages/server/dist/index.js \
+            --bundle --platform=node --format=esm \
+            --outfile=server-bundle.js \
+            --external:better-sqlite3 --external:ws \
+            --alias:@cove/shared=./packages/shared/src/types.ts
+
+      - name: Deploy preview to VM1
+        env:
+          SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
+          HOST: moltbook.kagura-agent.com
+          USER: azureuser
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
+          SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Upload server bundle to staging directory
+          $SSH "mkdir -p /home/azureuser/cove-staging"
+          $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
+
+          # Upload client dist to staging
+          $SSH "sudo mkdir -p /var/www/cove-staging"
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
+          $SSH "sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/"
+
+          # Create/restart staging service (port 3501, separate DB)
+          $SSH "sudo tee /etc/systemd/system/cove-staging.service > /dev/null << 'UNIT'
+          [Unit]
+          Description=Cove Staging Server
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=azureuser
+          WorkingDirectory=/home/azureuser/cove-staging
+          ExecStart=/usr/bin/node server-bundle.js
+          Environment=PORT=3501
+          Environment=COVE_DB_PATH=/home/azureuser/cove-staging/cove-staging.db
+          Environment=COVE_STATIC_DIR=/var/www/cove-staging
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT"
+
+          $SSH "sudo systemctl daemon-reload && sudo systemctl restart cove-staging"
+
+          # Health check
+          sleep 3
+          $SSH "curl -sf http://localhost:3501/api/health" || exit 1
+          echo "✅ Preview deploy successful!"
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `🏝️ **Preview deployed!**\n\n` +
+              `**URL:** https://staging.cove.kagura-agent.com\n` +
+              `**Port:** 3501 (separate DB)\n\n` +
+              `This preview will be torn down when the PR is merged or closed.`;
+
+            // Find existing preview comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Preview deployed')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  teardown-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Stop staging service
+        env:
+          SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
+          HOST: moltbook.kagura-agent.com
+          USER: azureuser
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
+          $SSH "sudo systemctl stop cove-staging || true"
+          echo "✅ Preview torn down"
