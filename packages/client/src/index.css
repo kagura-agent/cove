@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-deep: #1a1a2e;
+  --color-bg-surface: #22223a;
+  --color-bg-card: #2a2a45;
+  --color-bg-input: #33334d;
+  --color-accent: #f4a261;
+  --color-accent-hover: #e68a3e;
+  --color-text-primary: #f0ead6;
+  --color-text-muted: #a09db0;
+  --color-text-dim: #6b6880;
+  --color-border: #3a3a55;
+  --color-msg-own: #3a3560;
+  --color-msg-other: #2a2a45;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  background: var(--color-bg-deep);
+  color: var(--color-text-primary);
+  overflow: hidden;
+}
+
+#root { height: 100%; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.2s ease; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot { animation: pulse-dot 1s infinite; }
