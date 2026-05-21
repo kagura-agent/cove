@@ -29,7 +29,7 @@ export function createApp(
   // No auth middleware — we check per-route where needed.
 
   // Mount route modules
-  app.route("/", channelRoutes(db));
+  app.route("/", channelRoutes(db, broadcast));
   app.route("/", messagesRoutes(db, broadcast));
 
   // Gateway discovery (Discord-compatible)

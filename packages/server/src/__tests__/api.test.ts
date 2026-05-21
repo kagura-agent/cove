@@ -394,6 +394,136 @@ describe("Cove API — Discord-compatible", () => {
       expect(state).toHaveLength(1);
       expect(state[0].value).toBe("5");
     });
+
+    it("PUT broadcasts STATE_UPDATE event", async () => {
+      broadcastEvents.length = 0;
+      await app.request("/api/v10/channels/garden/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "mood", value: "happy" }),
+      });
+
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: SceneState };
+      expect(event.op).toBe(0);
+      expect(event.t).toBe("STATE_UPDATE");
+      expect(event.d.sceneId).toBe("garden");
+      expect(event.d.key).toBe("mood");
+      expect(event.d.value).toBe("happy");
+    });
+  });
+
+  // ─── Channel PATCH ──────────────────────────────────────────────────
+
+  describe("PATCH /api/v10/channels/:id", () => {
+    it("updates channel name and topic", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Zen Garden", topic: "A peaceful place" }),
+      });
+      expect(res.status).toBe(200);
+      const ch: DiscordChannel = await res.json();
+      expect(ch.name).toBe("Zen Garden");
+      expect(ch.topic).toBe("A peaceful place");
+      expect(ch.id).toBe("garden");
+    });
+
+    it("updates icon only", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ icon: "🌺" }),
+      });
+      expect(res.status).toBe(200);
+      const ch: DiscordChannel = await res.json();
+      expect(ch.icon).toBe("🌺");
+      expect(ch.name).toBe("Garden"); // unchanged
+    });
+
+    it("updates cove_position", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cove_position: { x: 999, y: 888 } }),
+      });
+      expect(res.status).toBe(200);
+      const ch: DiscordChannel = await res.json();
+      expect(ch.cove_position).toEqual({ x: 999, y: 888 });
+    });
+
+    it("broadcasts CHANNEL_UPDATE event", async () => {
+      broadcastEvents.length = 0;
+      await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: "updated" }),
+      });
+
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: DiscordChannel };
+      expect(event.op).toBe(0);
+      expect(event.t).toBe("CHANNEL_UPDATE");
+      expect(event.d.topic).toBe("updated");
+    });
+
+    it("returns current state for empty body", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(200);
+      const ch: DiscordChannel = await res.json();
+      expect(ch.id).toBe("garden");
+    });
+
+    it("returns 404 for unknown channel", async () => {
+      const res = await app.request("/api/v10/channels/nonexistent", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "nope" }),
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── State DELETE ───────────────────────────────────────────────────────
+
+  describe("DELETE /api/v10/channels/:id/state/:key", () => {
+    it("deletes a state entry and returns 204", async () => {
+      // Create state first
+      await app.request("/api/v10/channels/garden/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "temp", value: "42" }),
+      });
+      broadcastEvents.length = 0;
+
+      const res = await app.request("/api/v10/channels/garden/state/temp", {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(204);
+
+      // Verify STATE_DELETE broadcast
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: { scene_id: string; key: string } };
+      expect(event.t).toBe("STATE_DELETE");
+      expect(event.d.scene_id).toBe("garden");
+      expect(event.d.key).toBe("temp");
+
+      // Verify state is gone
+      const getRes = await app.request("/api/v10/channels/garden/state");
+      const state: SceneState[] = await getRes.json();
+      expect(state).toHaveLength(0);
+    });
+
+    it("returns 404 for nonexistent key", async () => {
+      const res = await app.request("/api/v10/channels/garden/state/nonexistent", {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+    });
   });
 
   // ─── Gateway discovery ────────────────────────────────────────────────
