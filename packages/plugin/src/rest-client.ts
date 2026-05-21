@@ -10,10 +10,14 @@ import type { DiscordChannel, DiscordMessage } from "@cove/shared";
 export class CoveRestClient {
   private readonly baseUrl: string;
   private readonly token: string;
+  private readonly defaultAgentId: string;
+  private readonly defaultAgentName: string;
 
-  constructor(baseUrl: string, token: string) {
+  constructor(baseUrl: string, token: string, agentId?: string, agentName?: string) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.token = token;
+    this.defaultAgentId = agentId ?? "";
+    this.defaultAgentName = agentName ?? "";
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -60,9 +64,16 @@ export class CoveRestClient {
 
   /** POST /api/v10/channels/:id/messages — send a message. */
   async sendMessage(channelId: string, content: string, author?: { userId: string; username: string }): Promise<DiscordMessage> {
+    const resolvedAuthor = author ?? {
+      userId: this.defaultAgentId || process.env["COVE_AGENT_ID"] || "",
+      username: this.defaultAgentName || process.env["COVE_AGENT_NAME"] || "",
+    };
+    if (!resolvedAuthor.userId) {
+      throw new Error("Cove: agent ID is required — set COVE_AGENT_ID env or pass agentId to CoveRestClient");
+    }
     return this.request("POST", `/api/v10/channels/${channelId}/messages`, {
       content,
-      ...(author ?? { userId: process.env["COVE_AGENT_ID"] ?? "ruantang", username: process.env["COVE_AGENT_NAME"] ?? "软糖 🐾" }),
+      ...resolvedAuthor,
     });
   }
 

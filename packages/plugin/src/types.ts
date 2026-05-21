@@ -19,6 +19,8 @@ export interface CoveAccount {
   token: string;
   baseUrl: string;
   guildId: string;
+  agentId: string;
+  agentName: string;
   allowFrom: string[];
   dmPolicy: string | undefined;
 }
