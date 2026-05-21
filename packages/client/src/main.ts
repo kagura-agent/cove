@@ -537,21 +537,49 @@ $("#bot-detail-done")?.addEventListener("click", () => $("#bot-detail-modal").cl
 $("#bot-detail-modal")?.addEventListener("click", (e) => {
   if ((e.target as HTMLElement).classList.contains("modal-overlay")) $("#bot-detail-modal").classList.add("hidden");
 });
-$("#bot-detail-delete")?.addEventListener("click", async () => {
-  const modal = $("#bot-detail-modal");
-  const botId = (modal as any).__botId;
-  if (!botId || !confirm("Delete this bot?")) return;
-  try {
-    await api(`/api/v10/users/${botId}`, { method: "DELETE" });
-    modal.classList.add("hidden");
-    await loadBots();
-  } catch (err) { console.error("delete bot:", err); }
+$("#bot-detail-delete")?.addEventListener("click", () => {
+  const area = $("#delete-confirm-area");
+  // Show inline confirmation
+  area.innerHTML = `
+    <span class="delete-confirm-text">Are you sure?</span>
+    <button type="button" id="delete-yes" class="btn-danger">Yes, delete</button>
+    <button type="button" id="delete-no" class="btn-secondary">Cancel</button>
+  `;
+  $("#delete-yes")?.addEventListener("click", async () => {
+    const modal = $("#bot-detail-modal");
+    const botId = (modal as any).__botId;
+    if (!botId) return;
+    try {
+      await api(`/api/v10/users/${botId}`, { method: "DELETE" });
+      modal.classList.add("hidden");
+      await loadBots();
+    } catch (err) { console.error("delete bot:", err); }
+  });
+  $("#delete-no")?.addEventListener("click", () => {
+    area.innerHTML = `<button type="button" id="bot-detail-delete" class="btn-danger">Delete Bot</button>`;
+    // Re-attach the click handler
+    $("#bot-detail-delete")?.addEventListener("click", () => {
+      $("#bot-detail-delete")?.click();
+    });
+  });
 });
 
 $("#bot-detail-regen")?.addEventListener("click", async () => {
   const modal = $("#bot-detail-modal");
   const botId = (modal as any).__botId;
-  if (!botId || !confirm("Regenerate token? The old token will stop working.")) return;
+  if (!botId) return;
+  const btn = $("#bot-detail-regen");
+  if (btn.textContent === "Regenerate Token") {
+    btn.textContent = "Confirm regenerate?";
+    btn.classList.add("btn-danger");
+    btn.classList.remove("btn-secondary");
+    setTimeout(() => {
+      btn.textContent = "Regenerate Token";
+      btn.classList.remove("btn-danger");
+      btn.classList.add("btn-secondary");
+    }, 3000);
+    return;
+  }
   try {
     const res = await api<{ token: string }>(`/api/v10/users/${botId}/token`, { method: "POST" });
     modal.classList.add("hidden");

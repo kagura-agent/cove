@@ -809,6 +809,18 @@ html {
 
 /* Token modal */
 
+#delete-confirm-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-confirm-text {
+  font-size: 0.85rem;
+  color: #e74c3c;
+  font-weight: 600;
+}
+
 .token-warning {
   color: #e67e22;
   font-size: 0.85rem;
