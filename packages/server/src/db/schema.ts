@@ -19,12 +19,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS messages (
-      id         TEXT PRIMARY KEY,
-      scene_id   TEXT REFERENCES scenes(id),
-      sender     TEXT,
-      content    TEXT,
-      timestamp  INTEGER,
-      metadata   TEXT
+      id               TEXT PRIMARY KEY,
+      scene_id         TEXT REFERENCES scenes(id),
+      sender           TEXT,
+      content          TEXT,
+      timestamp        INTEGER,
+      metadata         TEXT,
+      edited_timestamp INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS scene_state (
@@ -35,6 +36,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       PRIMARY KEY (scene_id, key)
     );
   `);
+
+  // Migration: add edited_timestamp to existing messages tables
+  try {
+    db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
+  } catch (_) {
+    // Column already exists — ignore
+  }
 
   return db;
 }

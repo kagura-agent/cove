@@ -169,6 +169,192 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
+  // ─── Single message ─────────────────────────────────────────────────────
+
+  describe("GET /api/v10/channels/:id/messages/:msgId", () => {
+    it("returns a single message by ID", async () => {
+      const createRes = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        body: JSON.stringify({ content: "find me" }),
+      });
+      const created: DiscordMessage = await createRes.json();
+
+      const res = await app.request(`/api/v10/channels/garden/messages/${created.id}`);
+      expect(res.status).toBe(200);
+      const msg: DiscordMessage = await res.json();
+      expect(msg.id).toBe(created.id);
+      expect(msg.content).toBe("find me");
+      expect(msg.channel_id).toBe("garden");
+    });
+
+    it("returns 404 for nonexistent message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/nonexistent");
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── Delete single message ──────────────────────────────────────────────
+
+  describe("DELETE /api/v10/channels/:id/messages/:msgId", () => {
+    it("deletes a message and returns 204", async () => {
+      const createRes = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        body: JSON.stringify({ content: "delete me" }),
+      });
+      const created: DiscordMessage = await createRes.json();
+      broadcastEvents.length = 0;
+
+      const delRes = await app.request(`/api/v10/channels/garden/messages/${created.id}`, {
+        method: "DELETE",
+      });
+      expect(delRes.status).toBe(204);
+
+      // Verify MESSAGE_DELETE broadcast
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: { id: string; channel_id: string } };
+      expect(event.op).toBe(0);
+      expect(event.t).toBe("MESSAGE_DELETE");
+      expect(event.d.id).toBe(created.id);
+      expect(event.d.channel_id).toBe("garden");
+
+      // Verify message is gone
+      const getRes = await app.request(`/api/v10/channels/garden/messages/${created.id}`);
+      expect(getRes.status).toBe(404);
+    });
+
+    it("returns 404 for nonexistent message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/nonexistent", {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── Edit message ───────────────────────────────────────────────────────
+
+  describe("PATCH /api/v10/channels/:id/messages/:msgId", () => {
+    it("edits a message and returns updated content with edited_timestamp", async () => {
+      const createRes = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        body: JSON.stringify({ content: "original" }),
+      });
+      const created: DiscordMessage = await createRes.json();
+      expect(created.edited_timestamp).toBeNull();
+      broadcastEvents.length = 0;
+
+      const patchRes = await app.request(`/api/v10/channels/garden/messages/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "edited" }),
+      });
+      expect(patchRes.status).toBe(200);
+      const updated: DiscordMessage = await patchRes.json();
+      expect(updated.content).toBe("edited");
+      expect(updated.edited_timestamp).toBeTruthy();
+      expect(new Date(updated.edited_timestamp!).toISOString()).toBe(updated.edited_timestamp);
+
+      // Verify MESSAGE_UPDATE broadcast
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: DiscordMessage };
+      expect(event.op).toBe(0);
+      expect(event.t).toBe("MESSAGE_UPDATE");
+      expect(event.d.content).toBe("edited");
+    });
+
+    it("returns 404 for nonexistent message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/nonexistent", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "nope" }),
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── Typing indicator ──────────────────────────────────────────────────
+
+  describe("POST /api/v10/channels/:id/typing", () => {
+    it("returns 204 and broadcasts TYPING_START", async () => {
+      broadcastEvents.length = 0;
+      const res = await app.request("/api/v10/channels/garden/typing", {
+        method: "POST",
+        headers: { Authorization: "Bot kagura" },
+      });
+      expect(res.status).toBe(204);
+
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { op: number; t: string; d: { channel_id: string; user_id: string; timestamp: number } };
+      expect(event.op).toBe(0);
+      expect(event.t).toBe("TYPING_START");
+      expect(event.d.channel_id).toBe("garden");
+      expect(event.d.user_id).toBe("kagura");
+      expect(typeof event.d.timestamp).toBe("number");
+    });
+  });
+
+  // ─── Pagination ────────────────────────────────────────────────────────
+
+  describe("GET /api/v10/channels/:id/messages — pagination", () => {
+    let messageIds: string[];
+
+    beforeEach(() => {
+      // Insert 5 messages with incrementing timestamps
+      messageIds = [];
+      const insert = db.prepare(
+        "INSERT INTO messages (id, scene_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      );
+      for (let i = 0; i < 5; i++) {
+        const id = `msg-${i}`;
+        insert.run(id, "garden", "kagura", `message ${i}`, 1000000 + i * 1000, null, null);
+        messageIds.push(id);
+      }
+    });
+
+    it("before returns messages older than reference", async () => {
+      // msg-3 timestamp = 1003000, so before should return msg-0, msg-1, msg-2
+      const res = await app.request("/api/v10/channels/garden/messages?before=msg-3");
+      expect(res.status).toBe(200);
+      const msgs: DiscordMessage[] = await res.json();
+      expect(msgs).toHaveLength(3);
+      // DESC order
+      expect(msgs[0].id).toBe("msg-2");
+      expect(msgs[1].id).toBe("msg-1");
+      expect(msgs[2].id).toBe("msg-0");
+    });
+
+    it("after returns messages newer than reference", async () => {
+      // msg-1 timestamp = 1001000, so after should return msg-2, msg-3, msg-4
+      const res = await app.request("/api/v10/channels/garden/messages?after=msg-1");
+      expect(res.status).toBe(200);
+      const msgs: DiscordMessage[] = await res.json();
+      expect(msgs).toHaveLength(3);
+      // ASC order for after
+      expect(msgs[0].id).toBe("msg-2");
+      expect(msgs[1].id).toBe("msg-3");
+      expect(msgs[2].id).toBe("msg-4");
+    });
+
+    it("around returns messages around reference", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages?around=msg-2&limit=4");
+      expect(res.status).toBe(200);
+      const msgs: DiscordMessage[] = await res.json();
+      // Should include msg-2 center + 2 before/after (limited by half=2)
+      expect(msgs.length).toBeGreaterThanOrEqual(3);
+      const ids = msgs.map((m) => m.id);
+      expect(ids).toContain("msg-2");
+    });
+
+    it("returns empty array for unknown reference message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages?before=nonexistent");
+      expect(res.status).toBe(200);
+      const msgs: DiscordMessage[] = await res.json();
+      expect(msgs).toEqual([]);
+    });
+  });
+
   // ─── Scene state (Cove extension) ─────────────────────────────────────
 
   describe("Channel state", () => {
