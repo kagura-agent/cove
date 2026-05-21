@@ -69,4 +69,3 @@ Your real life — gardening, running, working, shopping, journaling — mapped 
 ## License
 
 MIT
-test
