@@ -555,12 +555,34 @@ $("#bot-detail-delete")?.addEventListener("click", async () => {
 // Bot form modal
 const botModal = $("#bot-modal");
 const botForm = $<HTMLFormElement>("#bot-form");
-const botBackendSelect = $<HTMLSelectElement>("#bot-backend");
+
+const BOT_EMOJIS = [
+  "🤖", "🐻", "🐱", "🐶", "🦊", "🐰", "🐧", "🦉",
+  "🌸", "🌟", "🌙", "☄️", "🌿", "🌵", "🌻", "🌺",
+  "🎵", "🎨", "📚", "☕", "🍵", "🧩", "🔮", "💎",
+  "🚀", "🎮", "🧪", "🔥", "⚡", "🌊", "🌈", "🧑‍💻",
+];
+
+let selectedEmoji = "🤖";
+
+function renderEmojiPicker() {
+  const picker = $("#emoji-picker");
+  picker.innerHTML = BOT_EMOJIS.map(e =>
+    `<button type="button" class="emoji-btn${e === selectedEmoji ? " selected" : ""}" data-emoji="${e}">${e}</button>`
+  ).join("");
+  picker.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest(".emoji-btn") as HTMLElement | null;
+    if (!btn) return;
+    selectedEmoji = btn.dataset.emoji || "🤖";
+    picker.querySelectorAll(".emoji-btn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+  });
+}
 
 function openBotModal() {
   botForm.reset();
-  $("#bot-avatar").setAttribute("value", "🤖");
-  updateBackendFields();
+  selectedEmoji = "🤖";
+  renderEmojiPicker();
   botModal.classList.remove("hidden");
   $("#bot-username").focus();
 }
@@ -569,21 +591,6 @@ function closeBotModal() {
   botModal.classList.add("hidden");
 }
 
-function updateBackendFields() {
-  const backend = botBackendSelect.value;
-  const agentIdField = $("#field-agent-id");
-  const endpointField = $("#field-endpoint");
-
-  if (backend === "openclaw") {
-    agentIdField.classList.remove("hidden");
-    endpointField.classList.add("hidden");
-  } else {
-    agentIdField.classList.add("hidden");
-    endpointField.classList.remove("hidden");
-  }
-}
-
-botBackendSelect?.addEventListener("change", updateBackendFields);
 $("#bot-modal-close")?.addEventListener("click", closeBotModal);
 $("#bot-cancel")?.addEventListener("click", closeBotModal);
 botModal?.addEventListener("click", (e) => {
@@ -595,23 +602,12 @@ botForm?.addEventListener("submit", async (e) => {
   const username = $<HTMLInputElement>("#bot-username").value.trim();
   if (!username) return;
 
-  const avatar = $<HTMLInputElement>("#bot-avatar").value.trim() || "🤖";
   const bio = $<HTMLInputElement>("#bot-bio").value.trim() || undefined;
-  const backend = botBackendSelect.value;
-
-  let backendConfig: Record<string, unknown> | null = null;
-  if (backend === "openclaw") {
-    const agentId = $<HTMLInputElement>("#bot-agent-id").value.trim();
-    if (agentId) backendConfig = { agentId };
-  } else {
-    const endpoint = $<HTMLInputElement>("#bot-endpoint").value.trim();
-    if (endpoint) backendConfig = { url: endpoint };
-  }
 
   try {
     const newBot = await api<Bot>("/api/v10/users", {
       method: "POST",
-      body: JSON.stringify({ username, avatar, bio, backend, backend_config: backendConfig }),
+      body: JSON.stringify({ username, avatar: selectedEmoji, bio }),
     });
 
     await api(`/api/v10/guilds/cove/members/${newBot.id}`, {

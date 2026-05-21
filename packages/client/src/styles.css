@@ -751,6 +751,35 @@ html {
 
 /* Bot detail modal */
 
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-btn {
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.emoji-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.emoji-btn.selected {
+  border-color: var(--accent, #7c5cbf);
+  background: rgba(124,92,191,0.15);
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: auto 1fr;

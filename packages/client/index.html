@@ -50,30 +50,12 @@
             <input type="text" id="bot-username" placeholder="e.g. Ruantang" required />
           </div>
           <div class="form-group">
-            <label for="bot-avatar">Avatar emoji</label>
-            <input type="text" id="bot-avatar" placeholder="🤖" maxlength="4" />
+            <label>Avatar</label>
+            <div id="emoji-picker" class="emoji-grid"></div>
           </div>
           <div class="form-group">
             <label for="bot-bio">Bio</label>
             <input type="text" id="bot-bio" placeholder="A friendly island companion" />
-          </div>
-          <div class="form-group">
-            <label for="bot-backend">Backend</label>
-            <select id="bot-backend">
-              <option value="openclaw">OpenClaw</option>
-              <option value="hermes">Hermes</option>
-              <option value="webhook">Webhook</option>
-            </select>
-          </div>
-          <div id="backend-config-fields">
-            <div class="form-group" id="field-agent-id">
-              <label for="bot-agent-id">Agent ID <span class="hint">OpenClaw agent name, e.g. "kagura"</span></label>
-              <input type="text" id="bot-agent-id" placeholder="kagura" />
-            </div>
-            <div class="form-group hidden" id="field-endpoint">
-              <label for="bot-endpoint">Endpoint URL</label>
-              <input type="text" id="bot-endpoint" placeholder="https://..." />
-            </div>
           </div>
           <div class="form-actions">
             <button type="button" id="bot-cancel" class="btn-secondary">Cancel</button>
