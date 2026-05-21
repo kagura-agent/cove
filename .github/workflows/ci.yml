@@ -21,9 +21,9 @@ jobs:
       - uses: pnpm/action-setup@v4
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Rebuild better-sqlite3
+      - name: Build native addons
         run: cd node_modules/better-sqlite3 && npx --yes prebuild-install || npx --yes node-gyp rebuild
 
       - name: Build shared
