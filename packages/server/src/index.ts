@@ -5,7 +5,6 @@ import { setupGateway, broadcastGatewayEvent } from "./ws/index.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
 const DB_PATH = process.env["DB_PATH"] ?? "cove.db";
-const BOT_TOKEN = process.env["COVE_BOT_TOKEN"];
 
 // Initialize database
 const db = initDb(DB_PATH);
@@ -14,13 +13,10 @@ console.log("🏝️  Database initialized and seeded");
 
 // Create Hono app with broadcast wired up
 const app = createApp(db, broadcastGatewayEvent, {
-  botToken: BOT_TOKEN,
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
 });
 
-if (BOT_TOKEN) {
-  console.log("🔒  Bot token auth enabled");
-}
+console.log("🔒  Bot token auth enabled (per-user tokens)");
 
 // Start HTTP server
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
@@ -28,5 +24,5 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
 });
 
 // Attach Gateway WebSocket server
-setupGateway(server as any);
+setupGateway(server as any, db);
 console.log("🏝️  Gateway WebSocket ready on /gateway");

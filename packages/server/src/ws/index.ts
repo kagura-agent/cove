@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
+import type Database from "better-sqlite3";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 
 /** Set of identified (authenticated) WebSocket clients. */
@@ -18,7 +19,7 @@ const HEARTBEAT_INTERVAL = 41250;
  * 3. Client sends HEARTBEAT (op 1) → server responds HEARTBEAT_ACK (op 11)
  * 4. Server broadcasts DISPATCH events (MESSAGE_CREATE, CHANNEL_UPDATE) to identified clients
  */
-export function setupGateway(server: HttpServer): void {
+export function setupGateway(server: HttpServer, db: Database.Database): void {
   const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
@@ -38,7 +39,18 @@ export function setupGateway(server: HttpServer): void {
         switch (payload.op) {
           case GatewayOpcode.IDENTIFY: {
             const data = payload.d as { token?: string } | null;
-            const token = data?.token ?? "anonymous";
+            const token = data?.token;
+
+            if (!token) {
+              ws.close(4001, "Token required");
+              return;
+            }
+
+            const user = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
+            if (!user) {
+              ws.close(4004, "Authentication failed");
+              return;
+            }
 
             identifiedClients.add(ws);
 
@@ -49,7 +61,7 @@ export function setupGateway(server: HttpServer): void {
               t: "READY",
               d: {
                 v: 10,
-                user: { id: token, username: token, bot: true },
+                user: { id: user.id, username: user.username, bot: true },
                 guilds: [{ id: "cove" }],
                 session_id: randomUUID(),
               },

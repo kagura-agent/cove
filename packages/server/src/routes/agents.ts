@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { CoveAgent, CoveGuildMember } from "@cove/shared";
 
@@ -10,8 +11,7 @@ interface UserRow {
   avatar: string | null;
   bot: number;
   bio: string | null;
-  backend: string;
-  backend_config: string | null;
+  token: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -31,8 +31,6 @@ function toUser(row: UserRow): CoveAgent {
     avatar: row.avatar,
     bot: row.bot === 1,
     bio: row.bio,
-    backend: row.backend,
-    backend_config: row.backend_config ? JSON.parse(row.backend_config) : null,
   };
 }
 
@@ -58,8 +56,6 @@ export function agentRoutes(db: Database.Database): Hono {
       avatar?: string;
       bot?: boolean;
       bio?: string;
-      backend?: string;
-      backend_config?: Record<string, unknown>;
     }>();
 
     const username = body.username?.trim();
@@ -75,22 +71,36 @@ export function agentRoutes(db: Database.Database): Hono {
       return c.json({ message: "User already exists", code: 10013 }, 409);
     }
 
+    const token = randomUUID();
+
     db.prepare(
-      "INSERT INTO users (id, username, avatar, bot, bio, backend, backend_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
       id,
       username,
       body.avatar ?? null,
       body.bot !== false ? 1 : 0,
       body.bio ?? null,
-      body.backend ?? "openclaw",
-      body.backend_config ? JSON.stringify(body.backend_config) : null,
+      token,
       now,
       now,
     );
 
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
-    return c.json(toUser(row), 201);
+    return c.json({ ...toUser(row), token }, 201);
+  });
+
+  /** POST /api/v10/users/:id/token — regenerate bot token. */
+  app.post("/api/v10/users/:id/token", (c) => {
+    const id = c.req.param("id");
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
+    if (!row) {
+      return c.json({ message: "Unknown User", code: 10013 }, 404);
+    }
+
+    const token = randomUUID();
+    db.prepare("UPDATE users SET token = ?, updated_at = ? WHERE id = ?").run(token, Date.now(), id);
+    return c.json({ token });
   });
 
   /** GET /api/v10/users/:id — get user details (Discord-compatible). */
@@ -116,8 +126,6 @@ export function agentRoutes(db: Database.Database): Hono {
       username?: string;
       avatar?: string | null;
       bio?: string | null;
-      backend?: string;
-      backend_config?: Record<string, unknown> | null;
     }>();
 
     const updates: string[] = [];
@@ -134,14 +142,6 @@ export function agentRoutes(db: Database.Database): Hono {
     if (body.bio !== undefined) {
       updates.push("bio = ?");
       params.push(body.bio);
-    }
-    if (body.backend !== undefined) {
-      updates.push("backend = ?");
-      params.push(body.backend);
-    }
-    if (body.backend_config !== undefined) {
-      updates.push("backend_config = ?");
-      params.push(body.backend_config ? JSON.stringify(body.backend_config) : null);
     }
 
     if (updates.length === 0) {

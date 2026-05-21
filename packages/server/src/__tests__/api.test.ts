@@ -16,6 +16,16 @@ describe("Cove API — Discord-compatible", () => {
     app = createApp(db, (event) => broadcastEvents.push(event));
   });
 
+  // Helper to create a bot user and get its token
+  async function createBotUser(id: string, username: string, extra?: Record<string, unknown>) {
+    const res = await app.request("/api/v10/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, username, ...extra }),
+    });
+    return res.json() as Promise<CoveAgent & { token: string }>;
+  }
+
   // ─── Channels ───────────────────────────────────────────────────────────
 
   describe("GET /api/v10/guilds/cove/channels", () => {
@@ -91,11 +101,12 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("POST /api/v10/channels/:id/messages", () => {
     it("creates a message and returns Discord format", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       const res = await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bot kagura",
+          Authorization: `Bot ${bot.token}`,
         },
         body: JSON.stringify({ content: "The roses look beautiful today!" }),
       });
@@ -104,7 +115,7 @@ describe("Cove API — Discord-compatible", () => {
       expect(msg.channel_id).toBe("garden");
       expect(msg.content).toBe("The roses look beautiful today!");
       expect(msg.author.id).toBe("kagura");
-      expect(msg.author.username).toBe("kagura");
+      expect(msg.author.username).toBe("Kagura");
       expect(msg.author.bot).toBe(true);
       expect(msg.type).toBe(0);
       expect(msg.id).toBeTruthy();
@@ -126,11 +137,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("message appears in channel messages list", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bot kagura",
+          Authorization: `Bot ${bot.token}`,
         },
         body: JSON.stringify({ content: "Watering the plants" }),
       });
@@ -143,11 +155,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("broadcasts MESSAGE_CREATE event", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bot kagura",
+          Authorization: `Bot ${bot.token}`,
         },
         body: JSON.stringify({ content: "test broadcast" }),
       });
@@ -173,9 +186,10 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("GET /api/v10/channels/:id/messages/:msgId", () => {
     it("returns a single message by ID", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "find me" }),
       });
       const created: DiscordMessage = await createRes.json();
@@ -198,9 +212,10 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("DELETE /api/v10/channels/:id/messages/:msgId", () => {
     it("deletes a message and returns 204", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "delete me" }),
       });
       const created: DiscordMessage = await createRes.json();
@@ -236,9 +251,10 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("PATCH /api/v10/channels/:id/messages/:msgId", () => {
     it("edits a message and returns updated content with edited_timestamp", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bot kagura" },
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "original" }),
       });
       const created: DiscordMessage = await createRes.json();
@@ -278,10 +294,11 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("POST /api/v10/channels/:id/typing", () => {
     it("returns 204 and broadcasts TYPING_START", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       broadcastEvents.length = 0;
       const res = await app.request("/api/v10/channels/garden/typing", {
         method: "POST",
-        headers: { Authorization: "Bot kagura" },
+        headers: { Authorization: `Bot ${bot.token}` },
       });
       expect(res.status).toBe(204);
 
@@ -529,7 +546,7 @@ describe("Cove API — Discord-compatible", () => {
   // ─── Users (Bot Users) ───────────────────────────────────────────────
 
   describe("User CRUD (Discord-compatible)", () => {
-    it("POST /users creates a bot user", async () => {
+    it("POST /users creates a bot user and returns token", async () => {
       const res = await app.request("/api/v10/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -538,18 +555,16 @@ describe("Cove API — Discord-compatible", () => {
           username: "Kagura",
           avatar: "🌸",
           bio: "AI assistant",
-          backend: "openclaw",
-          backend_config: { agentId: "kagura", endpoint: "ws://localhost:3000" },
         }),
       });
       expect(res.status).toBe(201);
-      const user: CoveAgent = await res.json();
+      const user = await res.json();
       expect(user.id).toBe("kagura");
       expect(user.username).toBe("Kagura");
       expect(user.avatar).toBe("🌸");
       expect(user.bot).toBe(true);
-      expect(user.backend).toBe("openclaw");
-      expect(user.backend_config).toEqual({ agentId: "kagura", endpoint: "ws://localhost:3000" });
+      expect(user.token).toBeTruthy();
+      expect(typeof user.token).toBe("string");
     });
 
     it("POST auto-generates ID from username", async () => {
@@ -618,18 +633,17 @@ describe("Cove API — Discord-compatible", () => {
       await app.request("/api/v10/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "switchme", username: "Switch", backend: "openclaw" }),
+        body: JSON.stringify({ id: "switchme", username: "Switch" }),
       });
 
       const res = await app.request("/api/v10/users/switchme", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ backend: "hermes", backend_config: { url: "http://hermes:8000" } }),
+        body: JSON.stringify({ bio: "new bio" }),
       });
       expect(res.status).toBe(200);
       const user: CoveAgent = await res.json();
-      expect(user.backend).toBe("hermes");
-      expect(user.backend_config).toEqual({ url: "http://hermes:8000" });
+      expect(user.bio).toBe("new bio");
     });
 
     it("DELETE removes a user", async () => {
@@ -771,14 +785,15 @@ describe("Cove API — Discord-compatible", () => {
   // ─── Users ────────────────────────────────────────────────────────────
 
   describe("GET /api/v10/users/@me", () => {
-    it("returns bot user info from auth header", async () => {
+    it("returns bot user info from auth header (token-based)", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
       const res = await app.request("/api/v10/users/@me", {
-        headers: { Authorization: "Bot kagura" },
+        headers: { Authorization: `Bot ${bot.token}` },
       });
       expect(res.status).toBe(200);
       const user = await res.json();
       expect(user.id).toBe("kagura");
-      expect(user.username).toBe("kagura");
+      expect(user.username).toBe("Kagura");
       expect(user.bot).toBe(true);
     });
 
@@ -788,6 +803,15 @@ describe("Cove API — Discord-compatible", () => {
       const user = await res.json();
       expect(user.id).toBe("anonymous");
       expect(user.username).toBe("anonymous");
+    });
+
+    it("returns anonymous for invalid token", async () => {
+      const res = await app.request("/api/v10/users/@me", {
+        headers: { Authorization: "Bot invalid-token-123" },
+      });
+      expect(res.status).toBe(200);
+      const user = await res.json();
+      expect(user.id).toBe("anonymous");
     });
   });
 

@@ -5,11 +5,16 @@ import type { DiscordMessage, DiscordUser } from "@cove/shared";
 
 export type BroadcastFn = (event: unknown) => void;
 
-/** Extract author info from Authorization header. */
-function extractAuthor(authHeader: string | undefined): DiscordUser {
+/** Extract author info from Authorization header, resolving token against DB. */
+function extractAuthor(db: Database.Database, authHeader: string | undefined): DiscordUser {
   if (authHeader?.startsWith("Bot ")) {
     const token = authHeader.slice(4).trim();
-    return { id: token, username: token, bot: true };
+    if (token) {
+      const row = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
+      if (row) {
+        return { id: row.id, username: row.username, bot: true };
+      }
+    }
   }
   return { id: "anonymous", username: "anonymous", bot: false };
 }
@@ -154,7 +159,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     // Prefer body userId/username (browser client), fall back to Authorization header (game server)
     const author = body.userId
       ? { id: body.userId, username: body.username || body.userId, bot: false }
-      : extractAuthor(c.req.header("Authorization"));
+      : extractAuthor(db, c.req.header("Authorization"));
     const now = Date.now();
     const id = randomUUID();
 
@@ -255,7 +260,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
   /** POST /api/v10/channels/:id/typing — typing indicator. */
   app.post("/api/v10/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
-    const author = extractAuthor(c.req.header("Authorization"));
+    const author = extractAuthor(db, c.req.header("Authorization"));
 
     broadcast?.({
       op: 0,
