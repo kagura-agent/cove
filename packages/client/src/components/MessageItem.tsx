@@ -1,4 +1,5 @@
 import { useUserStore } from "../stores/useUserStore";
+import { Avatar, Typography } from "antd";
 import type { Message } from "../types";
 
 function formatTime(ts: string): string {
@@ -17,10 +18,28 @@ export function MessageItem({ message }: { message: Message }) {
   const isSelf = message.author.id === userId;
 
   return (
-    <div className={`max-w-[75%] max-sm:max-w-[80%] px-3.5 py-2.5 rounded-[14px] text-sm leading-relaxed break-words animate-fade-in ${isSelf ? "bg-msg-own self-end rounded-br-[4px]" : "bg-msg-other self-start rounded-bl-[4px]"}`}>
-      <div className={`text-xs font-semibold mb-0.5 ${isSelf ? "text-purple-300" : "text-primary"}`}>{message.author.username}</div>
-      <div className="whitespace-pre-wrap">{message.content}</div>
-      <div className="text-[10px] text-muted-foreground/60 mt-1 text-right">{formatTime(message.timestamp)}</div>
+    <div
+      className="animate-fade-in"
+      style={{
+        maxWidth: "75%",
+        padding: "10px 14px",
+        borderRadius: 14,
+        fontSize: 14,
+        lineHeight: 1.6,
+        wordBreak: "break-word",
+        alignSelf: isSelf ? "flex-end" : "flex-start",
+        background: isSelf ? "var(--msg-own)" : "var(--msg-other)",
+        borderBottomRightRadius: isSelf ? 4 : 14,
+        borderBottomLeftRadius: isSelf ? 14 : 4,
+      }}
+    >
+      <Typography.Text strong style={{ fontSize: 12, color: isSelf ? "#b39ddb" : "#f4a261", display: "block", marginBottom: 2 }}>
+        {message.author.username}
+      </Typography.Text>
+      <div style={{ whiteSpace: "pre-wrap", color: "var(--text-primary)" }}>{message.content}</div>
+      <Typography.Text type="secondary" style={{ fontSize: 10, display: "block", textAlign: "right", marginTop: 4, opacity: 0.6 }}>
+        {formatTime(message.timestamp)}
+      </Typography.Text>
     </div>
   );
 }

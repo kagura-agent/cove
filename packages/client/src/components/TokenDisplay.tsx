@@ -1,32 +1,25 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Copy, Check } from "lucide-react";
+import { Modal, Input, Alert, message } from "antd";
+import { CopyOutlined } from "@ant-design/icons";
 
 export function TokenDisplay({ token, onClose }: { token: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-
   async function handleCopy() {
     await navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    message.success("Token copied to clipboard");
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Bot Token Created</DialogTitle></DialogHeader>
-        <div className="mt-4 space-y-3">
-          <p className="text-sm text-muted-foreground">Copy this token now. You won't be able to see it again.</p>
-          <div className="flex gap-2">
-            <code className="flex-1 bg-muted p-3 rounded-lg text-xs break-all text-primary font-mono">{token}</code>
-            <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0">
-              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-          <p className="text-xs text-red-400">Warning: This token provides full access to the bot account. Keep it secret.</p>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <Modal open onCancel={onClose} title="Bot Token Created" footer={null} centered>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Copy this token now. You won't be able to see it again.</p>
+        <Input.Search
+          value={token}
+          readOnly
+          enterButton={<CopyOutlined />}
+          onSearch={handleCopy}
+          style={{ fontFamily: "monospace", fontSize: 12 }}
+        />
+        <Alert type="error" message="Warning: This token provides full access to the bot account. Keep it secret." showIcon />
+      </div>
+    </Modal>
   );
 }

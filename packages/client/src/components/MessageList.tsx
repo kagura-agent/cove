@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { MessageItem } from "./MessageItem";
+import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
 
 export function MessageList({ channelId }: { channelId: string }) {
@@ -21,20 +22,23 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [messages]);
 
   if (!messages) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground/60 text-sm">Loading messages…</div>;
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Spin tip="Loading messages…" />
+      </div>
+    );
   }
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60 gap-3">
-        <span className="text-5xl">🌊</span>
-        <p className="text-[15px]">No messages yet — be the first!</p>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" }} description="No messages yet — be the first!" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-1.5">
+    <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
       {messages.map((msg) => <MessageItem key={msg.id} message={msg} />)}
       <div ref={bottomRef} />
     </div>
