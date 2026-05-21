@@ -677,13 +677,14 @@ describe("Cove API — Discord-compatible", () => {
       });
     });
 
-    it("PUT adds user to guild", async () => {
+    it("PUT returns existing member for auto-joined bot", async () => {
+      // Bots auto-join guild on creation, so PUT returns 200 (already a member)
       const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       const member: CoveGuildMember = await res.json();
       expect(member.user.id).toBe("bot-a");
       expect(member.user.username).toBe("Bot A");
@@ -691,16 +692,16 @@ describe("Cove API — Discord-compatible", () => {
       expect(member.joined_at).toBeTruthy();
     });
 
-    it("PUT with nick and roles", async () => {
+    it("PUT with nick and roles on auto-joined member", async () => {
+      // Bot already in guild from creation — PUT returns existing member
       const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nick: "Gardener Bot", roles: ["gardener"] }),
       });
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       const member: CoveGuildMember = await res.json();
-      expect(member.nick).toBe("Gardener Bot");
-      expect(member.roles).toEqual(["gardener"]);
+      expect(member.user.id).toBe("bot-a");
     });
 
     it("PUT returns existing member for duplicate", async () => {
@@ -717,18 +718,8 @@ describe("Cove API — Discord-compatible", () => {
       expect(res.status).toBe(200);
     });
 
-    it("GET lists guild members", async () => {
-      await app.request("/api/v10/guilds/cove/members/bot-a", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      await app.request("/api/v10/guilds/cove/members/bot-b", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
+    it("GET lists guild members (auto-joined on creation)", async () => {
+      // Both bots auto-joined guild on creation
       const res = await app.request("/api/v10/guilds/cove/members");
       expect(res.status).toBe(200);
       const members: CoveGuildMember[] = await res.json();
@@ -742,32 +733,25 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("DELETE removes member from guild", async () => {
-      await app.request("/api/v10/guilds/cove/members/bot-a", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
+      // bot-a auto-joined on creation, remove it
       const res = await app.request("/api/v10/guilds/cove/members/bot-a", { method: "DELETE" });
       expect(res.status).toBe(204);
 
       const listRes = await app.request("/api/v10/guilds/cove/members");
       const members: CoveGuildMember[] = await listRes.json();
-      expect(members).toHaveLength(0);
+      // Only bot-b should remain (also auto-joined)
+      expect(members).toHaveLength(1);
+      expect(members[0].user.id).toBe("bot-b");
     });
 
     it("deleting user cascades to guild membership", async () => {
-      await app.request("/api/v10/guilds/cove/members/bot-a", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
       await app.request("/api/v10/users/bot-a", { method: "DELETE" });
 
       const listRes = await app.request("/api/v10/guilds/cove/members");
       const members: CoveGuildMember[] = await listRes.json();
-      expect(members).toHaveLength(0);
+      // Only bot-b remains
+      expect(members).toHaveLength(1);
+      expect(members[0].user.id).toBe("bot-b");
     });
   });
 

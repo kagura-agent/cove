@@ -86,6 +86,11 @@ export function agentRoutes(db: Database.Database): Hono {
       now,
     );
 
+    // Auto-join the bot to the cove guild (like Discord auto-adding to server)
+    db.prepare(
+      "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(GUILD_ID, id, null, '[]', now);
+
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
     return c.json({ ...toUser(row), token }, 201);
   });
