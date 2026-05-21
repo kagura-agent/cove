@@ -62,7 +62,7 @@ export class CoveRestClient {
   async sendMessage(channelId: string, content: string, author?: { userId: string; username: string }): Promise<DiscordMessage> {
     return this.request("POST", `/api/v10/channels/${channelId}/messages`, {
       content,
-      ...(author ?? { userId: process.env["COVE_AGENT_ID"] ?? "ruantang", username: process.env["COVE_AGENT_NAME"] ?? "软糖 🐾" }),
+      ...(author ?? { userId: process.env["COVE_AGENT_ID"] ?? "ruantang", username: process.env["COVE_AGENT_NAME"] ?? "Ruantang 🐾" }),
     });
   }
 
