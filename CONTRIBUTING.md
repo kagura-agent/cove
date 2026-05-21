@@ -30,6 +30,8 @@ Thanks for your interest in contributing to Cove! 🏝️
 - PR description must explain what changed and why.
 - Use `Closes #N` or `Fixes #N` in PR description to link issues.
 - All PRs are set to **auto-merge** after approval — once CI passes and review is approved, the PR merges automatically. No manual merge step needed.
+- **Keep branch up to date** — if GitHub shows "This branch is out-of-date with the base branch", update it yourself immediately. Don't wait for someone to point it out.
+- After updating branch, the previous approval is automatically dismissed. **Re-request review** from the reviewer (`gh pr edit --add-reviewer`).
 - All PRs require:
   - CI passing (build + typecheck + tests)
   - At least 1 approved review
