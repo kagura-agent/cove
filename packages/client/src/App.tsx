@@ -70,8 +70,6 @@ export default function App() {
             borderRight: "1px solid rgba(255,255,255,0.08)",
             height: "100%",
           }}
-          breakpoint="sm"
-          collapsedWidth={0}
           trigger={null}
         >
           <Sidebar onClose={() => setSidebarOpen(false)} />
