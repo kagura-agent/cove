@@ -218,7 +218,7 @@ export function agentRoutes(db: Database.Database): Hono {
       return c.json(toGuildMember(userRow, existing as GuildMemberRow));
     }
 
-    const body = await c.req.json<{ nick?: string; roles?: string[] }>().catch(() => ({}));
+    const body = await c.req.json<{ nick?: string; roles?: string[] }>().catch(() => ({} as { nick?: string; roles?: string[] }));
     const now = Date.now();
 
     db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)").run(
