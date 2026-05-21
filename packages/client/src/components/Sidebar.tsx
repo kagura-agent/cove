@@ -38,19 +38,19 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-bg-surface">
+    <div className="flex flex-col h-full bg-card">
       <div className="p-5 pb-3.5 border-b border-border">
         <h1 className="text-[22px] font-bold tracking-tight">🏝️ Cove</h1>
-        <p className="text-xs text-text-muted mt-0.5">island scenes</p>
+        <p className="text-xs text-muted-foreground mt-0.5">island scenes</p>
       </div>
       <nav className="flex-1 overflow-y-auto p-2">
         {channels.map((ch) => (
           <div key={ch.id} className="flex items-center group relative">
-            <button onClick={() => handleSelectChannel(ch.id)} className={`flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] text-[15px] text-left transition-all cursor-pointer ${ch.id === activeChannelId ? "bg-accent text-bg-deep font-semibold" : "text-text-muted hover:bg-bg-card hover:text-text-primary"}`}>
+            <button onClick={() => handleSelectChannel(ch.id)} className={`flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] text-[15px] text-left transition-all cursor-pointer ${ch.id === activeChannelId ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               <span className="text-xl w-7 text-center shrink-0">{getChannelIcon(ch)}</span>
               <span className="overflow-hidden text-ellipsis whitespace-nowrap">{ch.name}</span>
             </button>
-            <button onClick={() => handleDeleteChannel(ch.id, ch.name)} className="hidden group-hover:block absolute right-2 text-text-dim hover:text-red-500 hover:bg-red-500/10 px-2 py-1 rounded text-sm cursor-pointer" title="Delete channel">×</button>
+            <button onClick={() => handleDeleteChannel(ch.id, ch.name)} className="hidden group-hover:block absolute right-2 text-muted-foreground/60 hover:text-red-500 hover:bg-red-500/10 px-2 py-1 rounded text-sm cursor-pointer" title="Delete channel">×</button>
           </div>
         ))}
         {adding ? (
@@ -63,7 +63,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
             </div>
           </form>
         ) : (
-          <button onClick={() => setAdding(true)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] text-[15px] text-text-muted opacity-50 hover:opacity-100 border border-dashed border-border mt-2 cursor-pointer">
+          <button onClick={() => setAdding(true)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] text-[15px] text-muted-foreground opacity-50 hover:opacity-100 border border-dashed border-border mt-2 cursor-pointer">
             <span className="text-xl w-7 text-center">➕</span>
             <span>New channel</span>
           </button>

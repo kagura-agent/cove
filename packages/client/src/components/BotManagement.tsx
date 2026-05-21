@@ -19,13 +19,13 @@ export function BotManagement() {
       {bots.length > 0 && (
         <div className="space-y-2">
           {bots.map((bot) => (
-            <div key={bot.id} className="flex items-center gap-3 p-3 rounded-lg bg-bg-card">
+            <div key={bot.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted">
               <span className="text-lg">{bot.emoji || "🤖"}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{bot.username}</div>
-                {bot.bio && <div className="text-xs text-text-dim truncate">{bot.bio}</div>}
+                {bot.bio && <div className="text-xs text-muted-foreground/60 truncate">{bot.bio}</div>}
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleDelete(bot.id, bot.username)} className="shrink-0 h-8 w-8 text-text-dim hover:text-red-500">
+              <Button variant="ghost" size="icon" onClick={() => handleDelete(bot.id, bot.username)} className="shrink-0 h-8 w-8 text-muted-foreground/60 hover:text-red-500">
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>

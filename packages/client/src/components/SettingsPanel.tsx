@@ -21,7 +21,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
         <DialogHeader><DialogTitle>Settings</DialogTitle></DialogHeader>
         <div className="space-y-6 mt-4">
           <section>
-            <h3 className="text-sm font-semibold text-text-muted mb-3 uppercase tracking-wider">Profile</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Profile</h3>
             <form onSubmit={handleSaveName} className="flex gap-2">
               <div className="flex-1 space-y-1">
                 <Label htmlFor="username">Username</Label>
@@ -31,7 +31,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             </form>
           </section>
           <section>
-            <h3 className="text-sm font-semibold text-text-muted mb-3 uppercase tracking-wider">Bot Management</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Bot Management</h3>
             <BotManagement />
           </section>
         </div>

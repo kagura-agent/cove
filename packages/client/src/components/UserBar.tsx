@@ -9,12 +9,12 @@ export function UserBar() {
 
   return (
     <>
-      <div className="flex items-center gap-3 p-3 border-t border-border bg-bg-deep/50">
-        <div className="w-8 h-8 rounded-full bg-accent text-bg-deep flex items-center justify-center font-bold text-sm shrink-0">
+      <div className="flex items-center gap-3 p-3 border-t border-border bg-background/50">
+        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shrink-0">
           {username.charAt(0).toUpperCase()}
         </div>
         <span className="flex-1 text-sm font-medium truncate">{username}</span>
-        <button onClick={() => setSettingsOpen(true)} className="text-text-muted hover:text-text-primary p-1.5 rounded-lg hover:bg-bg-card transition-colors cursor-pointer" title="Settings">
+        <button onClick={() => setSettingsOpen(true)} className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer" title="Settings">
           <Settings className="w-4 h-4" />
         </button>
       </div>

@@ -21,12 +21,12 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [messages]);
 
   if (!messages) {
-    return <div className="flex-1 flex items-center justify-center text-text-dim text-sm">Loading messages…</div>;
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground/60 text-sm">Loading messages…</div>;
   }
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-text-dim gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60 gap-3">
         <span className="text-5xl">🌊</span>
         <p className="text-[15px]">No messages yet — be the first!</p>
       </div>
