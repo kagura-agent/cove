@@ -526,10 +526,6 @@ function showBotDetail(bot: Bot) {
       <div class="detail-value">${escapeHtml(bot.id)}</div>
       <div class="detail-label">Bio</div>
       <div class="detail-value">${escapeHtml(bot.bio || "(none)")}</div>
-      <div class="detail-label">Backend</div>
-      <div class="detail-value">${escapeHtml(bot.backend || "openclaw")}</div>
-      <div class="detail-label">Config</div>
-      <div class="detail-value"><code>${bot.backend_config ? escapeHtml(JSON.stringify(bot.backend_config)) : "(none)"}</code></div>
     </div>
   `;
   (modal as any).__botId = bot.id;
@@ -550,6 +546,43 @@ $("#bot-detail-delete")?.addEventListener("click", async () => {
     modal.classList.add("hidden");
     await loadBots();
   } catch (err) { console.error("delete bot:", err); }
+});
+
+$("#bot-detail-regen")?.addEventListener("click", async () => {
+  const modal = $("#bot-detail-modal");
+  const botId = (modal as any).__botId;
+  if (!botId || !confirm("Regenerate token? The old token will stop working.")) return;
+  try {
+    const res = await api<{ token: string }>(`/api/v10/users/${botId}/token`, { method: "POST" });
+    modal.classList.add("hidden");
+    showTokenModal(res.token);
+  } catch (err) { console.error("regen token:", err); }
+});
+
+// Token modal
+function showTokenModal(token: string) {
+  $("#token-value").textContent = token;
+  $("#token-modal").classList.remove("hidden");
+}
+
+$("#token-modal-close")?.addEventListener("click", () => $("#token-modal").classList.add("hidden"));
+$("#token-done")?.addEventListener("click", () => $("#token-modal").classList.add("hidden"));
+$("#token-modal")?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).classList.contains("modal-overlay")) $("#token-modal").classList.add("hidden");
+});
+$("#token-copy")?.addEventListener("click", async () => {
+  const token = $("#token-value").textContent || "";
+  try {
+    await navigator.clipboard.writeText(token);
+    $("#token-copy").textContent = "Copied!";
+    setTimeout(() => { $("#token-copy").textContent = "Copy"; }, 2000);
+  } catch {
+    // Fallback: select text
+    const range = document.createRange();
+    range.selectNodeContents($("#token-value"));
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }
 });
 
 // Bot form modal
@@ -605,7 +638,7 @@ botForm?.addEventListener("submit", async (e) => {
   const bio = $<HTMLInputElement>("#bot-bio").value.trim() || undefined;
 
   try {
-    const newBot = await api<Bot>("/api/v10/users", {
+    const newBot = await api<Bot & { token?: string }>("/api/v10/users", {
       method: "POST",
       body: JSON.stringify({ username, avatar: selectedEmoji, bio }),
     });
@@ -617,6 +650,11 @@ botForm?.addEventListener("submit", async (e) => {
 
     closeBotModal();
     await loadBots();
+
+    // Show token immediately after creation
+    if (newBot.token) {
+      showTokenModal(newBot.token);
+    }
   } catch (err) {
     console.error("create bot:", err);
   }

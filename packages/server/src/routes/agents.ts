@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type Database from "better-sqlite3";
+import { createHash, randomBytes } from "node:crypto";
 import type { CoveAgent, CoveGuildMember } from "@cove/shared";
 
 const GUILD_ID = "cove";
@@ -45,6 +46,13 @@ function toGuildMember(userRow: UserRow, memberRow: GuildMemberRow): CoveGuildMe
   };
 }
 
+function generateToken(botId: string): { token: string; hash: string } {
+  const raw = randomBytes(32).toString("base64url");
+  const token = `${botId}.${raw}`;
+  const hash = createHash("sha256").update(token).digest("hex");
+  return { token, hash };
+}
+
 export function agentRoutes(db: Database.Database): Hono {
   const app = new Hono();
 
@@ -75,8 +83,10 @@ export function agentRoutes(db: Database.Database): Hono {
       return c.json({ message: "User already exists", code: 10013 }, 409);
     }
 
+    const tokenData = generateToken(id);
+
     db.prepare(
-      "INSERT INTO users (id, username, avatar, bot, bio, backend, backend_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO users (id, username, avatar, bot, bio, backend, backend_config, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(
       id,
       username,
@@ -85,12 +95,13 @@ export function agentRoutes(db: Database.Database): Hono {
       body.bio ?? null,
       body.backend ?? "openclaw",
       body.backend_config ? JSON.stringify(body.backend_config) : null,
+      tokenData.hash,
       now,
       now,
     );
 
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
-    return c.json(toUser(row), 201);
+    return c.json({ ...toUser(row), token: tokenData.token }, 201);
   });
 
   /** GET /api/v10/users/:id — get user details (Discord-compatible). */
@@ -169,6 +180,19 @@ export function agentRoutes(db: Database.Database): Hono {
     db.prepare("DELETE FROM guild_members WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM users WHERE id = ?").run(id);
     return c.body(null, 204);
+  });
+
+  /** POST /api/v10/users/:id/token — regenerate bot token (Cove extension). */
+  app.post("/api/v10/users/:id/token", (c) => {
+    const id = c.req.param("id");
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
+    if (!row) {
+      return c.json({ message: "Unknown User", code: 10013 }, 404);
+    }
+
+    const tokenData = generateToken(id);
+    db.prepare("UPDATE users SET token_hash = ?, updated_at = ? WHERE id = ?").run(tokenData.hash, Date.now(), id);
+    return c.json({ token: tokenData.token });
   });
 
   // ─── Guild Members (Discord-compatible) ─────────────────────────────────

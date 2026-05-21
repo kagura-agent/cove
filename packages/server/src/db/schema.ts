@@ -26,6 +26,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       bio         TEXT,
       backend     TEXT NOT NULL DEFAULT 'openclaw',
       backend_config TEXT,
+      token_hash  TEXT,
       created_at  INTEGER NOT NULL,
       updated_at  INTEGER NOT NULL
     );
@@ -61,6 +62,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   // Migration: add edited_timestamp to existing messages tables
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
+  } catch (_) {
+    // Column already exists — ignore
+  }
+
+  // Migration: add token_hash to existing users tables
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN token_hash TEXT");
   } catch (_) {
     // Column already exists — ignore
   }

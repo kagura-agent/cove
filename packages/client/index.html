@@ -74,8 +74,27 @@
         </div>
         <div id="bot-detail-content"></div>
         <div class="form-actions">
+          <button type="button" id="bot-detail-regen" class="btn-secondary">Regenerate Token</button>
           <button type="button" id="bot-detail-delete" class="btn-danger">Delete Bot</button>
           <button type="button" id="bot-detail-done" class="btn-secondary">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Token display modal -->
+    <div id="token-modal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>🔑 Bot Token</h3>
+          <button class="modal-close" id="token-modal-close">×</button>
+        </div>
+        <p class="token-warning">⚠️ Copy this token now. You won’t be able to see it again.</p>
+        <div class="token-display">
+          <code id="token-value"></code>
+          <button type="button" id="token-copy" class="btn-secondary">Copy</button>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="token-done" class="btn-primary">I’ve copied it</button>
         </div>
       </div>
     </div>
