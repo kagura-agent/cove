@@ -56,6 +56,15 @@ test: add message edit tests
 chore: update dependencies
 ```
 
+## Issue Discipline
+
+**Every issue must be actionable and closable.** Before creating an issue, ask: "What does 'done' look like?"
+
+- ✅ Concrete feature, bug fix, or task → issue
+- ✅ Tracking checklist with checkboxes that get ticked off → issue
+- ❌ Strategic decisions, meeting notes, design rationale → document in `docs/`, not an issue
+- ❌ Vague "we should think about X" → not an issue until there's a concrete action
+
 ## Code Style
 
 - TypeScript strict mode
