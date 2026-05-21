@@ -1,10 +1,11 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { getChannelIcon } from "../lib/icons";
-import { Typography } from "antd";
+import { Typography, Button } from "antd";
+import { MenuOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 
-export function ChatArea() {
+export function ChatArea({ onMenuClick }: { onMenuClick?: () => void }) {
   const { channels, activeChannelId } = useChannelStore();
   const channel = channels.find((c) => c.id === activeChannelId);
 
@@ -20,6 +21,7 @@ export function ChatArea() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)", minHeight: 52 }}>
+        {onMenuClick && <Button type="text" icon={<MenuOutlined />} onClick={onMenuClick} className="mobile-only" style={{ color: "var(--text-primary)" }} />}
         <span style={{ fontSize: 28 }}>{getChannelIcon(channel)}</span>
         <div style={{ flex: 1 }}>
           <Typography.Title level={5} style={{ margin: 0, color: "var(--text-primary)" }}>{channel.name}</Typography.Title>

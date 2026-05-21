@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ConfigProvider, theme, Modal, Input, Button, Layout } from "antd";
-import { MenuOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
@@ -60,13 +59,6 @@ export default function App() {
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" } }}>
       <Layout style={{ height: "100%", background: "var(--bg-deep)" }}>
-        {/* Mobile header */}
-        <div className="mobile-header" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: 12, padding: "0 14px", height: 52, background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <Button type="text" icon={<MenuOutlined />} onClick={() => setSidebarOpen(!sidebarOpen)} style={{ color: "var(--text-primary)" }} />
-          <h1 style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0, color: "var(--text-primary)" }}>
-            {activeChannel ? `${getChannelIcon(activeChannel)} ${activeChannel.name}` : "Cove 🏝️"}
-          </h1>
-        </div>
 
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 }} />}
 
@@ -92,7 +84,7 @@ export default function App() {
               <span>{wsStatus === "connecting" ? "Connecting…" : "Disconnected"}</span>
             </div>
           )}
-          <ChatArea />
+          <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         </Layout.Content>
       </Layout>
     </ConfigProvider>
