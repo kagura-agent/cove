@@ -24,9 +24,11 @@ function UsernameDialog() {
     <Dialog open>
       <DialogContent>
         <DialogHeader><DialogTitle>Welcome to Cove 🏝️</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <p className="text-sm text-text-muted">What's your name?</p>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Islander" autoFocus />
+        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm text-text-muted">What's your name?</p>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Islander" autoFocus />
+          </div>
           <Button type="submit" className="w-full">Enter Cove</Button>
         </form>
       </DialogContent>
