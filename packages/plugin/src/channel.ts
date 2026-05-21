@@ -38,11 +38,20 @@ function resolveAccount(
     throw new Error("cove: bot token is required (set channels.cove.token or COVE_BOT_TOKEN env)");
   }
 
+  const agentId = section?.agentId ?? process.env["COVE_AGENT_ID"] ?? "";
+  const agentName = section?.agentName ?? process.env["COVE_AGENT_NAME"] ?? "";
+
+  if (!agentId) {
+    throw new Error("cove: agent ID is required (set channels.cove.agentId or COVE_AGENT_ID env)");
+  }
+
   return {
     accountId: accountId ?? null,
     token,
     baseUrl,
     guildId: section?.guildId ?? "cove",
+    agentId,
+    agentName: agentName || agentId,
     allowFrom: section?.allowFrom ?? [],
     dmPolicy: section?.dmSecurity,
   };
@@ -138,8 +147,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
-          // Override agent routing to target ruantang (or env override)
-          const targetAgent = process.env["COVE_AGENT_ID"] ?? "ruantang";
+          // Override agent routing to target the configured agent
+          const targetAgent = account.agentId;
           const originalRouting = channelRuntime.routing;
           const patchedRuntime = {
             channel: {
