@@ -3,6 +3,10 @@ import { useMessageStore } from "../stores/useMessageStore";
 import { MessageItem } from "./MessageItem";
 import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
+import type { CSSProperties } from "react";
+
+const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" };
+const listStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6 };
 
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
@@ -31,23 +35,19 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [messages]);
 
   if (!messages) {
-    return (
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Spin tip="Loading messages…" />
-      </div>
-    );
+    return <div style={centerStyle}><Spin tip="Loading messages…" /></div>;
   }
 
   if (messages.length === 0) {
     return (
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={centerStyle}>
         <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" }} description="No messages yet — be the first!" />
       </div>
     );
   }
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={listStyle}>
       {messages.map((msg) => <MessageItem key={msg.id} message={msg} />)}
       <div ref={bottomRef} />
     </div>
