@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { ConfigProvider, theme, Modal, Input, Button, Layout } from "antd";
+import { ConfigProvider, theme, Modal, Input, Button, Layout, message } from "antd";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
-import { getChannelIcon } from "./lib/icons";
 import * as api from "./lib/api";
+
+const themeConfig = {
+  algorithm: theme.darkAlgorithm,
+  token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" },
+};
 
 function UsernameDialog() {
   const [name, setName] = useState("");
@@ -35,20 +39,19 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   useEffect(() => {
     if (needsSetup) return;
     api.fetchChannels().then((chs) => {
       setChannels(chs);
       if (chs.length > 0) setActiveChannel(chs[0].id);
-    }).catch(console.error);
+    }).catch(() => message.error("Failed to load scenes"));
     connect();
   }, [needsSetup, setChannels, setActiveChannel, connect]);
 
   if (needsSetup) {
     return (
-      <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" } }}>
+      <ConfigProvider theme={themeConfig}>
         <div style={{ height: "100%", background: "var(--bg-deep)" }}>
           <UsernameDialog />
         </div>
@@ -57,7 +60,7 @@ export default function App() {
   }
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" } }}>
+    <ConfigProvider theme={themeConfig}>
       <Layout style={{ height: "100%", background: "var(--bg-deep)" }}>
 
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 }} />}

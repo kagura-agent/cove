@@ -1,7 +1,6 @@
 import type { Channel, Message, Bot, BotCreateResponse } from "../types";
 
-const API_BASE = (import.meta as Record<string, Record<string, string>>).env
-  ?.VITE_COVE_API_URL || "";
+const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
 async function api<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

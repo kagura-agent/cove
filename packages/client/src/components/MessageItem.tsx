@@ -1,5 +1,5 @@
 import { useUserStore } from "../stores/useUserStore";
-import { Avatar, Typography } from "antd";
+import { Typography } from "antd";
 import type { Message } from "../types";
 
 function formatTime(ts: string): string {
