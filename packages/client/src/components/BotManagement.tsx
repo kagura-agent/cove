@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useBotStore } from "../stores/useBotStore";
-import { List, Button, Popconfirm, Typography } from "antd";
+import { List, Button, Popconfirm } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { BotCreateForm } from "./BotCreateForm";
 
