@@ -24,8 +24,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       avatar      TEXT,
       bot         INTEGER NOT NULL DEFAULT 1,
       bio         TEXT,
-      backend     TEXT NOT NULL DEFAULT 'openclaw',
-      backend_config TEXT,
+      token       TEXT UNIQUE,
       created_at  INTEGER NOT NULL,
       updated_at  INTEGER NOT NULL
     );

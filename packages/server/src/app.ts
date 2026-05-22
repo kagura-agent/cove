@@ -5,10 +5,18 @@ import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 
 export interface AppConfig {
-  /** Static bot token for auth. If not set, auth is disabled. */
-  botToken?: string;
   /** Base URL for gateway discovery. */
   gatewayUrl?: string;
+}
+
+/** Resolve a Bot token to the user record from the DB. Returns undefined if not found. */
+function resolveBot(db: Database.Database, authHeader: string | undefined): { id: string; username: string; bot: boolean } | undefined {
+  if (!authHeader?.startsWith("Bot ")) return undefined;
+  const token = authHeader.slice(4).trim();
+  if (!token) return undefined;
+  const row = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
+  if (!row) return undefined;
+  return { id: row.id, username: row.username, bot: true };
 }
 
 /**
@@ -22,13 +30,6 @@ export function createApp(
 ): Hono {
   const app = new Hono();
 
-  // Discord-compatible API routes use /api/v10/* path prefix.
-  // This mirrors Discord's URL versioning so that standard Discord
-  // client libraries (discord.js, etc.) can connect without modification.
-  // Auth: Bot token required only for game-server API calls.
-  // Browser clients send userId/username in body instead.
-  // No auth middleware — we check per-route where needed.
-
   // Mount route modules
   app.route("/", channelRoutes(db, broadcast));
   app.route("/", messagesRoutes(db, broadcast));
@@ -38,15 +39,13 @@ export function createApp(
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
-  // Bot user info (Discord-compatible)
+  // Bot user info (Discord-compatible) — resolve from DB via token
   app.get("/api/v10/users/@me", (c) => {
-    const auth = c.req.header("Authorization");
-    const token = auth?.startsWith("Bot ") ? auth.slice(4).trim() : "anonymous";
-    return c.json({
-      id: token,
-      username: token,
-      bot: true,
-    });
+    const bot = resolveBot(db, c.req.header("Authorization"));
+    if (bot) {
+      return c.json(bot);
+    }
+    return c.json({ id: "anonymous", username: "anonymous", bot: false });
   });
 
   // Health check (no auth required)

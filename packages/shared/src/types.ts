@@ -95,10 +95,6 @@ export interface CoveAgent {
   bot: boolean;
   /** Cove extension: agent bio/description. */
   bio?: string | null;
-  /** Cove extension: backend runtime type. */
-  backend?: string;
-  /** Cove extension: backend-specific config. */
-  backend_config?: Record<string, unknown> | null;
 }
 
 /** Guild member — an agent assigned to the Cove guild. Discord GuildMember compatible. */
