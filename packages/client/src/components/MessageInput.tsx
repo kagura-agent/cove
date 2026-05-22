@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
-  const user = useUserStore();
+  const { username } = useUserStore();
   const inputRef = useRef<InputRef>(null);
 
   async function handleSubmit() {
@@ -16,7 +16,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setContent("");
     inputRef.current?.focus();
     try {
-      await api.sendMessage(channelId, text, user.id, user.username);
+      await api.sendMessage(channelId, text, username);
     } catch (err) {
       console.error("send:", err);
       setContent(text);

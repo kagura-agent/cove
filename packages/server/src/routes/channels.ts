@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type Database from "better-sqlite3";
 import type { DiscordChannel, SceneState } from "@cove/shared";
 import type { BroadcastFn } from "./messages.js";
+import { requireBotAuth } from "../auth.js";
 
 const GUILD_ID = "cove";
 let broadcastFn: BroadcastFn | undefined;
@@ -34,6 +35,7 @@ function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
 
 export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): Hono {
   const app = new Hono();
+  const auth = requireBotAuth(db);
   broadcastFn = broadcast;
 
   /** GET /api/v10/guilds/:guildId/channels — list all scenes as Discord channels. */
@@ -216,8 +218,8 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
     return c.body(null, 204);
   });
 
-  /** DELETE /api/v10/channels/:id — delete a scene/channel and its messages. */
-  app.delete("/api/v10/channels/:id", (c) => {
+  /** DELETE /api/v10/channels/:id — delete a scene/channel and its messages (requires bot auth). */
+  app.delete("/api/v10/channels/:id", auth, (c) => {
     const id = c.req.param("id");
     const row = db.prepare("SELECT id FROM scenes WHERE id = ?").get(id);
     if (!row) {
