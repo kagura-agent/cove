@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 import { useState } from "react";
 
 export function Sidebar({ onClose }: { onClose?: () => void }) {
-  const { channels, activeChannelId, setActiveChannel, removeChannel, setChannels } = useChannelStore();
+  const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newIcon, setNewIcon] = useState("🏝️");
@@ -29,7 +29,7 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
     if (!newName.trim()) return;
     try {
       const ch = await api.createChannel(newName.trim(), newIcon || "🏝️");
-      setChannels([...channels, ch]);
+      addChannel(ch);
       setNewName("");
       setNewIcon("🏝️");
       setAdding(false);
