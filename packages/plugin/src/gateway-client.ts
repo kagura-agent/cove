@@ -10,6 +10,7 @@ import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import { GatewayOpcode } from "@cove/shared";
 import type { GatewayPayload } from "@cove/shared";
+import type { GatewayEvents } from "./types.js";
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const INITIAL_RECONNECT_DELAY_MS = 1_000;
@@ -21,7 +22,12 @@ export interface CoveGatewayClientOptions {
   token: string;
 }
 
-export class CoveGatewayClient extends EventEmitter {
+type TypedEmitter<T> = {
+  on<K extends keyof T>(event: K, listener: T[K]): TypedEmitter<T>;
+  emit<K extends keyof T>(event: K, ...args: Parameters<T[K] & ((...args: any[]) => any)>): boolean;
+} & EventEmitter;
+
+export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<GatewayEvents>) {
   private readonly url: string;
   private readonly token: string;
   private ws: WebSocket | null = null;

@@ -20,7 +20,7 @@ function extractAuthor(db: Database.Database, authHeader: string | undefined, bo
   return { id: "anonymous", username: bodyUsername || "anonymous", bot: false };
 }
 
-/** DB row shape for messages. */
+/** DB row shape for messages (with optional JOIN data). */
 interface MessageRow {
   id: string;
   scene_id: string;
@@ -29,7 +29,11 @@ interface MessageRow {
   timestamp: number;
   metadata: string | null;
   edited_timestamp: number | null;
+  sender_username: string | null;
+  sender_bot: number | null;
 }
+
+const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
 /** Convert a DB message row into a Discord message object. */
 function toDiscordMessage(row: MessageRow): DiscordMessage {
@@ -39,8 +43,8 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
     content: row.content,
     author: {
       id: row.sender,
-      username: row.sender,
-      bot: false,
+      username: row.sender_username ?? row.sender,
+      bot: row.sender_bot === 1,
     },
     timestamp: new Date(row.timestamp).toISOString(),
     edited_timestamp: row.edited_timestamp
@@ -80,7 +84,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       }
       rows = db
         .prepare(
-          "SELECT * FROM messages WHERE scene_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?"
+          `${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`
         )
         .all(channelId, ref.timestamp, limit) as MessageRow[];
     } else if (after) {
@@ -92,7 +96,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       }
       rows = db
         .prepare(
-          "SELECT * FROM messages WHERE scene_id = ? AND timestamp > ? ORDER BY timestamp ASC LIMIT ?"
+          `${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`
         )
         .all(channelId, ref.timestamp, limit) as MessageRow[];
     } else if (around) {
@@ -105,17 +109,17 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       const half = Math.floor(limit / 2);
       const beforeRows = db
         .prepare(
-          "SELECT * FROM messages WHERE scene_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?"
+          `${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`
         )
         .all(channelId, ref.timestamp, half) as MessageRow[];
       const centerRow = db
         .prepare(
-          "SELECT * FROM messages WHERE scene_id = ? AND id = ?"
+          `${MSG_SELECT} WHERE m.scene_id = ? AND m.id = ?`
         )
         .get(channelId, around) as MessageRow | undefined;
       const afterRows = db
         .prepare(
-          "SELECT * FROM messages WHERE scene_id = ? AND timestamp > ? ORDER BY timestamp ASC LIMIT ?"
+          `${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`
         )
         .all(channelId, ref.timestamp, half) as MessageRow[];
       const combined = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
@@ -123,7 +127,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       rows = combined.reverse();
     } else {
       rows = db
-        .prepare("SELECT * FROM messages WHERE scene_id = ? ORDER BY timestamp DESC LIMIT ?")
+        .prepare(`${MSG_SELECT} WHERE m.scene_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
         .all(channelId, limit) as MessageRow[];
     }
 
@@ -137,7 +141,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     const msgId = c.req.param("msgId");
 
     const row = db
-      .prepare("SELECT * FROM messages WHERE id = ? AND scene_id = ?")
+      .prepare(`${MSG_SELECT} WHERE m.id = ? AND m.scene_id = ?`)
       .get(msgId, channelId) as MessageRow | undefined;
 
     if (!row) {
@@ -205,7 +209,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     }
 
     const row = db
-      .prepare("SELECT * FROM messages WHERE id = ? AND scene_id = ?")
+      .prepare(`${MSG_SELECT} WHERE m.id = ? AND m.scene_id = ?`)
       .get(msgId, channelId) as MessageRow;
 
     const updated = toDiscordMessage(row);

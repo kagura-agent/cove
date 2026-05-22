@@ -5,7 +5,6 @@ import type { BroadcastFn } from "./messages.js";
 import { requireBotAuth } from "../auth.js";
 
 const GUILD_ID = "cove";
-let broadcastFn: BroadcastFn | undefined;
 
 interface SceneRow {
   id: string;
@@ -36,7 +35,6 @@ function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
 export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): Hono {
   const app = new Hono();
   const auth = requireBotAuth(db);
-  broadcastFn = broadcast;
 
   /** GET /api/v10/guilds/:guildId/channels — list all scenes as Discord channels. */
   app.get("/api/v10/guilds/:guildId/channels", (c) => {
@@ -105,8 +103,8 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
     };
 
     // Broadcast STATE_UPDATE
-    if (broadcastFn) {
-      broadcastFn({ op: 0, t: "STATE_UPDATE", d: entry, s: null });
+    if (broadcast) {
+      broadcast({ op: 0, t: "STATE_UPDATE", d: entry, s: null });
     }
 
     return c.json(entry);
@@ -191,8 +189,8 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
     const channel = toDiscordChannel(updated, allIds.indexOf(id));
 
     // Broadcast CHANNEL_UPDATE
-    if (broadcastFn) {
-      broadcastFn({ op: 0, t: "CHANNEL_UPDATE", d: channel, s: null });
+    if (broadcast) {
+      broadcast({ op: 0, t: "CHANNEL_UPDATE", d: channel, s: null });
     }
 
     return c.json(channel);
@@ -211,8 +209,8 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
     db.prepare("DELETE FROM scene_state WHERE scene_id = ? AND key = ?").run(channelId, key);
 
     // Broadcast STATE_DELETE
-    if (broadcastFn) {
-      broadcastFn({ op: 0, t: "STATE_DELETE", d: { scene_id: channelId, key }, s: null });
+    if (broadcast) {
+      broadcast({ op: 0, t: "STATE_DELETE", d: { scene_id: channelId, key }, s: null });
     }
 
     return c.body(null, 204);

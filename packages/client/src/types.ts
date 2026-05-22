@@ -1,32 +1,9 @@
-export interface Channel {
-  id: string;
-  name: string;
-  topic?: string;
-  icon?: string;
-  type?: number;
-}
+import type { DiscordChannel, DiscordMessage, DiscordUser, CoveAgent } from "@cove/shared";
 
-export interface Author {
-  id: string;
-  username: string;
-  avatar?: string | null;
-}
-
-export interface Message {
-  id: string;
-  channel_id: string;
-  content: string;
-  author: Author;
-  timestamp: string;
-}
-
-export interface Bot {
-  id: string;
-  username: string;
-  emoji?: string;
-  bio?: string;
-  bot: boolean;
-}
+export type Channel = DiscordChannel;
+export type Author = DiscordUser;
+export type Message = DiscordMessage;
+export type Bot = CoveAgent;
 
 export interface BotCreateResponse {
   id: string;
