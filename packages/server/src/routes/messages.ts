@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { DiscordMessage, DiscordUser } from "@cove/shared";
+import { requireBotAuth } from "../auth.js";
 
 export type BroadcastFn = (event: unknown) => void;
 
 /** Extract author info from Authorization header, resolving token against DB. */
-function extractAuthor(db: Database.Database, authHeader: string | undefined): DiscordUser {
+function extractAuthor(db: Database.Database, authHeader: string | undefined, bodyUsername?: string): DiscordUser {
   if (authHeader?.startsWith("Bot ")) {
     const token = authHeader.slice(4).trim();
     if (token) {
@@ -16,7 +17,7 @@ function extractAuthor(db: Database.Database, authHeader: string | undefined): D
       }
     }
   }
-  return { id: "anonymous", username: "anonymous", bot: false };
+  return { id: "anonymous", username: bodyUsername || "anonymous", bot: false };
 }
 
 /** DB row shape for messages. */
@@ -51,6 +52,7 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
 
 export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): Hono {
   const app = new Hono();
+  const auth = requireBotAuth(db);
 
   /** GET /api/v10/channels/:id/messages — list messages with optional pagination. */
   app.get("/api/v10/channels/:id/messages", (c) => {
@@ -155,11 +157,8 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    const body = await c.req.json<{ content: string; userId?: string; username?: string }>();
-    // Prefer body userId/username (browser client), fall back to Authorization header (game server)
-    const author = body.userId
-      ? { id: body.userId, username: body.username || body.userId, bot: false }
-      : extractAuthor(db, c.req.header("Authorization"));
+    const body = await c.req.json<{ content: string; username?: string }>();
+    const author = extractAuthor(db, c.req.header("Authorization"), body.username);
     const now = Date.now();
     const id = randomUUID();
 
@@ -244,16 +243,10 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     return c.body(null, 204);
   });
 
-  /** DELETE /api/v10/channels/:id/messages — clear all messages in a channel. */
-  app.delete("/api/v10/channels/:id/messages", (c) => {
+  /** DELETE /api/v10/channels/:id/messages — clear all messages in a channel (requires bot auth). */
+  app.delete("/api/v10/channels/:id/messages", auth, (c) => {
     const channelId = c.req.param("id");
     const result = db.prepare("DELETE FROM messages WHERE scene_id = ?").run(channelId);
-    return c.json({ deleted: result.changes });
-  });
-
-  /** DELETE /api/v10/messages — clear ALL messages across all channels. */
-  app.delete("/api/v10/messages", (c) => {
-    const result = db.prepare("DELETE FROM messages").run();
     return c.json({ deleted: result.changes });
   });
 

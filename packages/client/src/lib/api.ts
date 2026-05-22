@@ -20,9 +20,9 @@ export function fetchChannels() {
 export function fetchMessages(channelId: string) {
   return api<Message[]>(`/api/v10/channels/${channelId}/messages?limit=50`);
 }
-export function sendMessage(channelId: string, content: string, userId: string, username: string) {
+export function sendMessage(channelId: string, content: string, username: string) {
   return api<Message>(`/api/v10/channels/${channelId}/messages`, {
-    method: "POST", body: JSON.stringify({ content, userId, username }),
+    method: "POST", body: JSON.stringify({ content, username }),
   });
 }
 export function clearMessages(channelId: string) {

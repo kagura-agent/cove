@@ -8,19 +8,33 @@ describe("Cove API — Discord-compatible", () => {
   let db: Database.Database;
   let app: ReturnType<typeof createApp>;
   const broadcastEvents: unknown[] = [];
+  let adminToken: string;
 
   beforeEach(() => {
     db = initDb(":memory:");
     seedScenes(db);
     broadcastEvents.length = 0;
     app = createApp(db, (event) => broadcastEvents.push(event));
+
+    // Bootstrap an admin bot directly in DB for auth
+    adminToken = "test-admin-token";
+    const now = Date.now();
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("admin", "Admin", null, 1, null, adminToken, now, now);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run("cove", "admin", null, "[]", now);
+  });
+
+  const authHeaders = () => ({
+    "Content-Type": "application/json",
+    Authorization: `Bot ${adminToken}`,
   });
 
   // Helper to create a bot user and get its token
   async function createBotUser(id: string, username: string, extra?: Record<string, unknown>) {
     const res = await app.request("/api/v10/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ id, username, ...extra }),
     });
     return res.json() as Promise<CoveAgent & { token: string }>;
@@ -128,12 +142,12 @@ describe("Cove API — Discord-compatible", () => {
       const res = await app.request("/api/v10/channels/garden/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "Hello" }),
+        body: JSON.stringify({ content: "Hello", username: "Islander" }),
       });
       expect(res.status).toBe(201);
       const msg: DiscordMessage = await res.json();
       expect(msg.author.id).toBe("anonymous");
-      expect(msg.author.username).toBe("anonymous");
+      expect(msg.author.username).toBe("Islander");
     });
 
     it("message appears in channel messages list", async () => {
@@ -549,7 +563,7 @@ describe("Cove API — Discord-compatible", () => {
     it("POST /users creates a bot user and returns token", async () => {
       const res = await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           id: "kagura",
           username: "Kagura",
@@ -570,7 +584,7 @@ describe("Cove API — Discord-compatible", () => {
     it("POST auto-generates ID from username", async () => {
       const res = await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ username: "Test Bot" }),
       });
       expect(res.status).toBe(201);
@@ -581,23 +595,28 @@ describe("Cove API — Discord-compatible", () => {
     it("POST returns 409 for duplicate ID", async () => {
       await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ id: "dup", username: "First" }),
       });
       const res = await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ id: "dup", username: "Second" }),
       });
       expect(res.status).toBe(409);
     });
 
-    it("GET /users/:id returns a user", async () => {
-      await app.request("/api/v10/users", {
+    it("POST returns 401 without auth", async () => {
+      const res = await app.request("/api/v10/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "solo", username: "Solo" }),
+        body: JSON.stringify({ id: "noauth", username: "NoAuth" }),
       });
+      expect(res.status).toBe(401);
+    });
+
+    it("GET /users/:id returns a user", async () => {
+      await createBotUser("solo", "Solo");
 
       const res = await app.request("/api/v10/users/solo");
       expect(res.status).toBe(200);
@@ -612,15 +631,11 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PATCH updates user fields", async () => {
-      await app.request("/api/v10/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "patchme", username: "Original" }),
-      });
+      await createBotUser("patchme", "Original");
 
       const res = await app.request("/api/v10/users/patchme", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ username: "Updated", bio: "New bio" }),
       });
       expect(res.status).toBe(200);
@@ -630,15 +645,11 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PATCH switches backend", async () => {
-      await app.request("/api/v10/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "switchme", username: "Switch" }),
-      });
+      await createBotUser("switchme", "Switch");
 
       const res = await app.request("/api/v10/users/switchme", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ bio: "new bio" }),
       });
       expect(res.status).toBe(200);
@@ -647,17 +658,22 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("DELETE removes a user", async () => {
-      await app.request("/api/v10/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "deleteme", username: "Delete" }),
-      });
+      await createBotUser("deleteme", "Delete");
 
-      const res = await app.request("/api/v10/users/deleteme", { method: "DELETE" });
+      const res = await app.request("/api/v10/users/deleteme", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${adminToken}` },
+      });
       expect(res.status).toBe(204);
 
       const getRes = await app.request("/api/v10/users/deleteme");
       expect(getRes.status).toBe(404);
+    });
+
+    it("DELETE returns 401 without auth", async () => {
+      await createBotUser("protecteduser", "Protected");
+      const res = await app.request("/api/v10/users/protecteduser", { method: "DELETE" });
+      expect(res.status).toBe(401);
     });
   });
 
@@ -667,12 +683,12 @@ describe("Cove API — Discord-compatible", () => {
     beforeEach(async () => {
       await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ id: "bot-a", username: "Bot A" }),
       });
       await app.request("/api/v10/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ id: "bot-b", username: "Bot B" }),
       });
     });
@@ -719,12 +735,11 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("GET lists guild members (auto-joined on creation)", async () => {
-      // Both bots auto-joined guild on creation
+      // admin + bot-a + bot-b = 3 members
       const res = await app.request("/api/v10/guilds/cove/members");
       expect(res.status).toBe(200);
       const members: CoveGuildMember[] = await res.json();
-      expect(members).toHaveLength(2);
-      expect(members[0].user.bot).toBe(true);
+      expect(members).toHaveLength(3);
     });
 
     it("GET returns 404 for unknown guild", async () => {
@@ -733,25 +748,27 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("DELETE removes member from guild", async () => {
-      // bot-a auto-joined on creation, remove it
       const res = await app.request("/api/v10/guilds/cove/members/bot-a", { method: "DELETE" });
       expect(res.status).toBe(204);
 
       const listRes = await app.request("/api/v10/guilds/cove/members");
       const members: CoveGuildMember[] = await listRes.json();
-      // Only bot-b should remain (also auto-joined)
-      expect(members).toHaveLength(1);
-      expect(members[0].user.id).toBe("bot-b");
+      // admin + bot-b remain
+      expect(members).toHaveLength(2);
+      expect(members.find((m) => m.user.id === "bot-a")).toBeUndefined();
     });
 
     it("deleting user cascades to guild membership", async () => {
-      await app.request("/api/v10/users/bot-a", { method: "DELETE" });
+      await app.request("/api/v10/users/bot-a", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${adminToken}` },
+      });
 
       const listRes = await app.request("/api/v10/guilds/cove/members");
       const members: CoveGuildMember[] = await listRes.json();
-      // Only bot-b remains
-      expect(members).toHaveLength(1);
-      expect(members[0].user.id).toBe("bot-b");
+      // admin + bot-b remain
+      expect(members).toHaveLength(2);
+      expect(members.find((m) => m.user.id === "bot-a")).toBeUndefined();
     });
   });
 

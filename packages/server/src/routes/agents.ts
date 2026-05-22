@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { CoveAgent, CoveGuildMember } from "@cove/shared";
+import { requireBotAuth } from "../auth.js";
 
 const GUILD_ID = "cove";
 
@@ -45,11 +46,12 @@ function toGuildMember(userRow: UserRow, memberRow: GuildMemberRow): CoveGuildMe
 
 export function agentRoutes(db: Database.Database): Hono {
   const app = new Hono();
+  const auth = requireBotAuth(db);
 
   // ─── Users (Discord-compatible) ─────────────────────────────────────────
 
-  /** POST /api/v10/users — create a new bot user (Cove extension). */
-  app.post("/api/v10/users", async (c) => {
+  /** POST /api/v10/users — create a new bot user (requires bot auth). */
+  app.post("/api/v10/users", auth, async (c) => {
     const body = await c.req.json<{
       id?: string;
       username: string;
@@ -95,8 +97,8 @@ export function agentRoutes(db: Database.Database): Hono {
     return c.json({ ...toUser(row), token }, 201);
   });
 
-  /** POST /api/v10/users/:id/token — regenerate bot token. */
-  app.post("/api/v10/users/:id/token", (c) => {
+  /** POST /api/v10/users/:id/token — regenerate bot token (requires bot auth). */
+  app.post("/api/v10/users/:id/token", auth, (c) => {
     const id = c.req.param("id");
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
     if (!row) {
@@ -119,8 +121,8 @@ export function agentRoutes(db: Database.Database): Hono {
     return c.json(toUser(row));
   });
 
-  /** PATCH /api/v10/users/:id — update user profile (Cove extension). */
-  app.patch("/api/v10/users/:id", async (c) => {
+  /** PATCH /api/v10/users/:id — update user profile (requires bot auth). */
+  app.patch("/api/v10/users/:id", auth, async (c) => {
     const id = c.req.param("id");
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
     if (!row) {
@@ -163,8 +165,8 @@ export function agentRoutes(db: Database.Database): Hono {
     return c.json(toUser(updated));
   });
 
-  /** DELETE /api/v10/users/:id — remove a user (Cove extension). */
-  app.delete("/api/v10/users/:id", (c) => {
+  /** DELETE /api/v10/users/:id — remove a user (requires bot auth). */
+  app.delete("/api/v10/users/:id", auth, (c) => {
     const id = c.req.param("id");
     const row = db.prepare("SELECT id FROM users WHERE id = ?").get(id);
     if (!row) {
