@@ -1,13 +1,14 @@
 import { useRef, useState } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { Input, Button } from "antd";
+import type { InputRef } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const user = useUserStore();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<InputRef>(null);
 
   async function handleSubmit() {
     const text = content.trim();

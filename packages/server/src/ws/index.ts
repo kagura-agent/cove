@@ -38,17 +38,24 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
 
         switch (payload.op) {
           case GatewayOpcode.IDENTIFY: {
-            const data = payload.d as { token?: string } | null;
+            const data = payload.d as { token?: string; user?: { id: string; username: string } } | null;
             const token = data?.token;
 
-            if (!token) {
-              ws.close(4001, "Token required");
-              return;
+            let user: { id: string; username: string; bot: boolean } | undefined;
+
+            if (token && token !== "user") {
+              const row = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
+              if (!row) {
+                ws.close(4004, "Authentication failed");
+                return;
+              }
+              user = { id: row.id, username: row.username, bot: true };
+            } else if (data?.user?.id && data?.user?.username) {
+              user = { id: data.user.id, username: data.user.username, bot: false };
             }
 
-            const user = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
             if (!user) {
-              ws.close(4004, "Authentication failed");
+              ws.close(4001, "Token or user info required");
               return;
             }
 
@@ -61,7 +68,7 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
               t: "READY",
               d: {
                 v: 10,
-                user: { id: user.id, username: user.username, bot: true },
+                user,
                 guilds: [{ id: "cove" }],
                 session_id: randomUUID(),
               },
