@@ -133,7 +133,7 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
 
     db.prepare(
       "INSERT INTO scenes (id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, name, body.icon ?? "🏝️", "outdoor", id, body.topic ?? "", 0, 0);
+    ).run(id, name, body.icon ?? "🏝️", "open", id, body.topic ?? "", 0, 0);
 
     const count = (db.prepare("SELECT COUNT(*) as c FROM scenes").get() as any).c;
     const row = db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow;
