@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUserStore } from "../stores/useUserStore";
-import { Avatar, Button, Space, Typography } from "antd";
+import { Avatar, Button, Typography } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import { SettingsPanel } from "./SettingsPanel";
 

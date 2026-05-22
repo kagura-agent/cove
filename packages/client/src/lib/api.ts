@@ -25,14 +25,6 @@ export function sendMessage(channelId: string, content: string, userId: string, 
     method: "POST", body: JSON.stringify({ content, userId, username }),
   });
 }
-export function editMessage(channelId: string, messageId: string, content: string) {
-  return api<Message>(`/api/v10/channels/${channelId}/messages/${messageId}`, {
-    method: "PATCH", body: JSON.stringify({ content }),
-  });
-}
-export function deleteMessage(channelId: string, messageId: string) {
-  return api<void>(`/api/v10/channels/${channelId}/messages/${messageId}`, { method: "DELETE" });
-}
 export function clearMessages(channelId: string) {
   return api<void>(`/api/v10/channels/${channelId}/messages`, { method: "DELETE" });
 }
@@ -54,7 +46,4 @@ export function createBot(username: string, emoji: string, bio: string) {
 }
 export function deleteBot(id: string) {
   return api<void>(`/api/v10/users/${id}`, { method: "DELETE" });
-}
-export function regenerateToken(id: string) {
-  return api<{ token: string }>(`/api/v10/users/${id}/token`, { method: "POST" });
 }
