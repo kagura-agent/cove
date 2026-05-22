@@ -36,6 +36,12 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
   const app = new Hono();
   const auth = requireBotAuth(db);
 
+  function getSceneWithPosition(id: string): (SceneRow & { position: number }) | undefined {
+    return db.prepare(
+      "SELECT s.*, (SELECT COUNT(*) FROM scenes s2 WHERE s2.name < s.name) AS position FROM scenes s WHERE s.id = ?"
+    ).get(id) as (SceneRow & { position: number }) | undefined;
+  }
+
   /** GET /api/v10/guilds/:guildId/channels — list all scenes as Discord channels. */
   app.get("/api/v10/guilds/:guildId/channels", (c) => {
     const guildId = c.req.param("guildId");
@@ -51,17 +57,11 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
   /** GET /api/v10/channels/:id — single channel detail. */
   app.get("/api/v10/channels/:id", (c) => {
     const id = c.req.param("id");
-    const row = db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow | undefined;
+    const row = getSceneWithPosition(id);
     if (!row) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
-
-    // Find position by sorting all scenes
-    const allIds = (db.prepare("SELECT id FROM scenes ORDER BY name").all() as Array<{ id: string }>)
-      .map((r) => r.id);
-    const position = allIds.indexOf(id);
-
-    return c.json(toDiscordChannel(row, position));
+    return c.json(toDiscordChannel(row, row.position));
   });
 
   /** GET /api/v10/channels/:id/state — get all state entries for a channel (Cove extension). */
@@ -176,17 +176,15 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
     }
 
     if (updates.length === 0) {
-      // Nothing to update — return current state
-      const allIds = (db.prepare("SELECT id FROM scenes ORDER BY name").all() as Array<{ id: string }>).map((r) => r.id);
-      return c.json(toDiscordChannel(row, allIds.indexOf(id)));
+      const current = getSceneWithPosition(id)!;
+      return c.json(toDiscordChannel(current, current.position));
     }
 
     params.push(id);
     db.prepare(`UPDATE scenes SET ${updates.join(", ")} WHERE id = ?`).run(...params);
 
-    const updated = db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow;
-    const allIds = (db.prepare("SELECT id FROM scenes ORDER BY name").all() as Array<{ id: string }>).map((r) => r.id);
-    const channel = toDiscordChannel(updated, allIds.indexOf(id));
+    const updated = getSceneWithPosition(id)!;
+    const channel = toDiscordChannel(updated, updated.position);
 
     // Broadcast CHANNEL_UPDATE
     if (broadcast) {
