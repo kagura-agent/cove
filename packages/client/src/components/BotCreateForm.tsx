@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useBotStore } from "../stores/useBotStore";
-import { Form, Input, Button } from "antd";
+import { Input, Button } from "antd";
 import { TokenDisplay } from "./TokenDisplay";
 
 export function BotCreateForm() {
@@ -11,7 +11,8 @@ export function BotCreateForm() {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);
     try {
@@ -24,22 +25,25 @@ export function BotCreateForm() {
 
   return (
     <>
-      <Form layout="vertical" onFinish={handleSubmit}>
-        <Form.Item label="Bot Name">
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Bot Name</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Bot" />
-        </Form.Item>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Form.Item label="Emoji" style={{ width: 80 }}>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ width: 80 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Emoji</label>
             <Input value={emoji} onChange={(e) => setEmoji(e.target.value)} />
-          </Form.Item>
-          <Form.Item label="Bio" style={{ flex: 1 }}>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Bio</label>
             <Input.TextArea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What does this bot do?" rows={1} style={{ resize: "none" }} />
-          </Form.Item>
+          </div>
         </div>
         <Button type="primary" htmlType="submit" loading={loading} disabled={!name.trim()} block>
           {loading ? "Creating…" : "Create Bot"}
         </Button>
-      </Form>
+      </form>
       {token && <TokenDisplay token={token} onClose={() => setToken(null)} />}
     </>
   );

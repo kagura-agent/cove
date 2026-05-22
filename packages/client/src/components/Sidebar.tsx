@@ -1,12 +1,12 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { getChannelIcon } from "../lib/icons";
-import { Button, Input, Menu, Popconfirm } from "antd";
+import { Button, Input, Menu, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { UserBar } from "./UserBar";
 import * as api from "../lib/api";
 import { useState } from "react";
 
-export function Sidebar({ onClose }: { onClose?: () => void }) {
+export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: boolean }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -57,6 +57,12 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+            <Spin tip="Loading scenes…" />
+          </div>
+        ) : (
+          <>
         <Menu
           mode="inline"
           selectedKeys={activeChannelId ? [activeChannelId] : []}
@@ -78,6 +84,8 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
           <Button type="dashed" icon={<PlusOutlined />} onClick={() => setAdding(true)} block style={{ marginTop: 8, opacity: 0.6 }}>
             New channel
           </Button>
+        )}
+          </>
         )}
       </div>
 

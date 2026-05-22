@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ConfigProvider, theme, Modal, Input, Button, Layout, message } from "antd";
+import { ConfigProvider, theme, Modal, Input, Button, Layout, Spin, message } from "antd";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
@@ -39,13 +39,16 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [channelsLoading, setChannelsLoading] = useState(true);
 
   useEffect(() => {
     if (needsSetup) return;
+    setChannelsLoading(true);
     api.fetchChannels().then((chs) => {
       setChannels(chs);
       if (chs.length > 0) setActiveChannel(chs[0].id);
-    }).catch(() => message.error("Failed to load scenes"));
+    }).catch(() => message.error("Failed to load scenes"))
+      .finally(() => setChannelsLoading(false));
     connect();
   }, [needsSetup, setChannels, setActiveChannel, connect]);
 
@@ -75,7 +78,7 @@ export default function App() {
           }}
           trigger={null}
         >
-          <Sidebar onClose={() => setSidebarOpen(false)} />
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} />
         </Layout.Sider>
 
         <Layout.Content style={{ display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg-deep)" }}>

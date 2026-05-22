@@ -1,13 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useBotStore } from "../stores/useBotStore";
-import { List, Button, Popconfirm } from "antd";
+import { List, Button, Popconfirm, Spin } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { BotCreateForm } from "./BotCreateForm";
 
 export function BotManagement() {
   const { bots, fetchBots, deleteBot } = useBotStore();
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchBots().catch(console.error); }, [fetchBots]);
+  useEffect(() => {
+    fetchBots().catch(console.error).finally(() => setLoading(false));
+  }, [fetchBots]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+        <Spin tip="Loading bots…" />
+      </div>
+    );
+  }
 
   return (
     <div>

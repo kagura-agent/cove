@@ -8,17 +8,26 @@ export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     api.fetchMessages(channelId).then((msgs) => {
-      if (!cancelled) setMessages(channelId, msgs.reverse());
+      if (!cancelled) {
+        const reversed = msgs.reverse();
+        setMessages(channelId, reversed);
+        prevCountRef.current = reversed.length;
+      }
     }).catch((err) => console.error("loadMessages:", err));
     return () => { cancelled = true; };
   }, [channelId, setMessages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!messages) return;
+    if (messages.length > prevCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevCountRef.current = messages.length;
   }, [messages]);
 
   if (!messages) {
