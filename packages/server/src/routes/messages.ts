@@ -25,6 +25,7 @@ interface MessageRow {
   id: string;
   scene_id: string;
   sender: string;
+  sender_name: string | null;
   content: string;
   timestamp: number;
   metadata: string | null;
@@ -43,7 +44,7 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
     content: row.content,
     author: {
       id: row.sender,
-      username: row.sender_username ?? row.sender,
+      username: row.sender_username ?? row.sender_name ?? row.sender,
       bot: row.sender_bot === 1,
     },
     timestamp: new Date(row.timestamp).toISOString(),
@@ -167,8 +168,8 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
     const id = randomUUID();
 
     db.prepare(
-      "INSERT INTO messages (id, scene_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, author.id, body.content, now, null, null);
+      "INSERT INTO messages (id, scene_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, author.id, author.username, body.content, now, null, null);
 
     const message: DiscordMessage = {
       id,
