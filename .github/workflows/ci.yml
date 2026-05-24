@@ -27,10 +27,10 @@ jobs:
         run: cd node_modules/better-sqlite3 && npx --yes prebuild-install || npx --yes node-gyp rebuild
 
       - name: Build shared
-        run: pnpm -r --filter @cove/shared build
+        run: pnpm -r build
 
       - name: Type check
-        run: pnpm -r --filter @cove/server exec tsc --noEmit
+        run: pnpm -r exec tsc --noEmit
 
       - name: Test
         run: pnpm -r --filter @cove/server exec vitest run
