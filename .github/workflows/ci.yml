@@ -30,7 +30,7 @@ jobs:
         run: pnpm -r build
 
       - name: Type check
-        run: pnpm -r --filter '!@cove/client' exec tsc --noEmit
+        run: pnpm -r exec tsc --noEmit
 
       - name: Test
         run: pnpm -r --filter @cove/server exec vitest run

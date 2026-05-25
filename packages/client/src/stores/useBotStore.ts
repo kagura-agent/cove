@@ -5,7 +5,7 @@ import * as api from "../lib/api";
 interface BotState {
   bots: Bot[];
   fetchBots: () => Promise<void>;
-  createBot: (name: string, emoji: string, bio: string) => Promise<BotCreateResponse>;
+  createBot: (name: string, bio: string) => Promise<BotCreateResponse>;
   deleteBot: (id: string) => Promise<void>;
 }
 
@@ -15,9 +15,9 @@ export const useBotStore = create<BotState>((set) => ({
     const members = await api.fetchBots();
     set({ bots: members.filter((m) => m.bot) });
   },
-  createBot: async (name, emoji, bio) => {
-    const result = await api.createBot(name, emoji, bio);
-    set((s) => ({ bots: [...s.bots, { id: result.id, username: result.username, emoji: result.emoji, bio: result.bio, bot: true }] }));
+  createBot: async (name, bio) => {
+    const result = await api.createBot(name, bio);
+    set((s) => ({ bots: [...s.bots, { id: result.id, username: result.username, avatar: null, bio: result.bio, bot: true }] }));
     return result;
   },
   deleteBot: async (id) => {
