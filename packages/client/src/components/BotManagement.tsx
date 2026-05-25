@@ -34,7 +34,7 @@ export function BotManagement() {
               ]}
             >
               <List.Item.Meta
-                avatar={<span style={{ fontSize: 24 }}>{bot.emoji || "🤖"}</span>}
+                avatar={<span style={{ fontSize: 24 }}>🤖</span>}
                 title={bot.username}
                 description={bot.bio}
               />

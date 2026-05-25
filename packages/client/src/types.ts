@@ -9,6 +9,5 @@ export interface BotCreateResponse {
   id: string;
   username: string;
   token: string;
-  emoji?: string;
   bio?: string;
 }

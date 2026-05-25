@@ -39,9 +39,9 @@ export function deleteChannel(channelId: string) {
 export function fetchBots() {
   return api<Bot[]>("/api/v10/guilds/cove/members");
 }
-export function createBot(username: string, emoji: string, bio: string) {
+export function createBot(username: string, bio: string) {
   return api<BotCreateResponse>("/api/v10/users", {
-    method: "POST", body: JSON.stringify({ username, emoji, bio }),
+    method: "POST", body: JSON.stringify({ username, bio }),
   });
 }
 export function deleteBot(id: string) {
