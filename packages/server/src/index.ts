@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { initDb, seedScenes } from "./db/schema.js";
+import { initDb, seedScenes, seedAdminBot } from "./db/schema.js";
 import { createApp } from "./app.js";
 import { setupGateway, broadcastGatewayEvent } from "./ws/index.js";
 
@@ -9,6 +9,7 @@ const DB_PATH = process.env["DB_PATH"] ?? "cove.db";
 // Initialize database
 const db = initDb(DB_PATH);
 seedScenes(db);
+seedAdminBot(db);
 console.log("🏝️  Database initialized and seeded");
 
 // Create Hono app with broadcast wired up

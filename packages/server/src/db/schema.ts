@@ -96,3 +96,13 @@ export function seedScenes(db: Database.Database): void {
   });
   tx();
 }
+
+export function seedAdminBot(db: Database.Database): void {
+  const token = process.env["COVE_ADMIN_TOKEN"];
+  if (!token) return;
+
+  const now = Date.now();
+  db.prepare(
+    "INSERT OR IGNORE INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run("admin", "admin", null, 1, "System admin bot", token, now, now);
+}
