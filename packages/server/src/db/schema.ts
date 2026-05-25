@@ -71,6 +71,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     // Column already exists — ignore
   }
 
+  // Migration: add token column to users table (older DBs lack it)
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN token TEXT UNIQUE");
+  } catch (_) {
+    // Column already exists — ignore
+  }
+
   return db;
 }
 
