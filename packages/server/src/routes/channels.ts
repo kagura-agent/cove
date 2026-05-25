@@ -222,9 +222,11 @@ export function channelRoutes(db: Database.Database, broadcast?: BroadcastFn): H
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    db.prepare("DELETE FROM messages WHERE scene_id = ?").run(id);
-    db.prepare("DELETE FROM scene_state WHERE scene_id = ?").run(id);
-    db.prepare("DELETE FROM scenes WHERE id = ?").run(id);
+    db.transaction(() => {
+      db.prepare("DELETE FROM messages WHERE scene_id = ?").run(id);
+      db.prepare("DELETE FROM scene_state WHERE scene_id = ?").run(id);
+      db.prepare("DELETE FROM scenes WHERE id = ?").run(id);
+    })();
     return c.json({ deleted: true });
   });
 
