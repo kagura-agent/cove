@@ -64,6 +64,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     // Column already exists — ignore
   }
 
+  // Migration: add sender_name to store display name alongside sender ID
+  try {
+    db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
+  } catch (_) {
+    // Column already exists — ignore
+  }
+
   return db;
 }
 

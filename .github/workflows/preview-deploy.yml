@@ -79,6 +79,7 @@ jobs:
           Environment=PORT=3501
           Environment=COVE_DB_PATH=/home/azureuser/cove-staging/cove-staging.db
           Environment=COVE_STATIC_DIR=/var/www/cove-staging
+          Environment=GATEWAY_URL=wss://staging.cove.kagura-agent.com/gateway
           Restart=on-failure
           RestartSec=5
 
