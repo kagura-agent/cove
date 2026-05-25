@@ -11,6 +11,7 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
