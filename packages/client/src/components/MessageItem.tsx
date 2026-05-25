@@ -35,6 +35,11 @@ function authorStyle(isSelf: boolean): CSSProperties {
   return { fontSize: 12, color: isSelf ? "#b39ddb" : "#f4a261", display: "block", marginBottom: 2 };
 }
 
+const botBadgeStyle: CSSProperties = {
+  fontSize: 10, fontWeight: 600, color: "#fff", background: "#5865f2",
+  borderRadius: 3, padding: "1px 4px", marginLeft: 4, verticalAlign: "middle",
+};
+
 export function MessageItem({ message }: { message: Message }) {
   const userId = useUserStore((s) => s.id);
   const isSelf = message.author.id === userId;
@@ -43,6 +48,7 @@ export function MessageItem({ message }: { message: Message }) {
     <div className="animate-fade-in" style={bubbleStyle(isSelf)}>
       <Typography.Text strong style={authorStyle(isSelf)}>
         {message.author.username}
+        {message.author.bot && <span style={botBadgeStyle}>BOT</span>}
       </Typography.Text>
       <div style={contentStyle}>{message.content}</div>
       <Typography.Text type="secondary" style={timeStyle}>
