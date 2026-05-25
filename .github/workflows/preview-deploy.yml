@@ -44,6 +44,7 @@ jobs:
           SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
           HOST: moltbook.kagura-agent.com
           USER: azureuser
+          STAGING_BASIC_AUTH_PASSWORD: ${{ secrets.STAGING_BASIC_AUTH_PASSWORD }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
@@ -64,6 +65,12 @@ jobs:
           $SSH "sudo mkdir -p /var/www/cove-staging /tmp/cove-staging-client"
           $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
           $SSH "sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/"
+
+          # Set up basic auth for staging (requires one-time nginx config, see #88)
+          if [ -n "$STAGING_BASIC_AUTH_PASSWORD" ]; then
+            $SSH "echo \"cove:\$(openssl passwd -apr1 '$STAGING_BASIC_AUTH_PASSWORD')\" | sudo tee /etc/nginx/.htpasswd-staging > /dev/null"
+            $SSH "sudo nginx -t && sudo systemctl reload nginx"
+          fi
 
           # Create/restart staging service (port 3501, separate DB)
           $SSH "sudo tee /etc/systemd/system/cove-staging.service > /dev/null << 'UNIT'
