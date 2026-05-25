@@ -12,9 +12,18 @@ seedScenes(db);
 seedUsers(db);
 console.log("🏝️  Database initialized and seeded");
 
+const googleClientId = process.env["GOOGLE_CLIENT_ID"];
+const googleClientSecret = process.env["GOOGLE_CLIENT_SECRET"];
+const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
+
 // Create Hono app with broadcast wired up
 const app = createApp(db, broadcastGatewayEvent, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
+  oauth: googleClientId && googleClientSecret ? {
+    clientId: googleClientId,
+    clientSecret: googleClientSecret,
+    redirectUri: `${baseUrl}/api/auth/callback`,
+  } : undefined,
 });
 
 console.log("🔒  Bot token auth enabled (per-user tokens)");
