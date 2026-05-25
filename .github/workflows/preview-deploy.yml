@@ -80,6 +80,7 @@ jobs:
           Environment=COVE_DB_PATH=/home/azureuser/cove-staging/cove-staging.db
           Environment=COVE_STATIC_DIR=/var/www/cove-staging
           Environment=GATEWAY_URL=wss://staging.cove.kagura-agent.com/gateway
+          Environment=COVE_ADMIN_TOKEN=${{ secrets.COVE_ADMIN_TOKEN }}
           Restart=on-failure
           RestartSec=5
 
