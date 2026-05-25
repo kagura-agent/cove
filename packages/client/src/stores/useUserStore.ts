@@ -20,7 +20,8 @@ export const useUserStore = create<UserState>((set) => ({
   username: existing?.username ?? "",
   needsSetup: !existing,
   setUser: (username: string) => {
-    const id = crypto.randomUUID();
+    const existing = loadUser();
+    const id = existing?.id ?? crypto.randomUUID();
     const user = { id, username };
     localStorage.setItem("cove-user", JSON.stringify(user));
     set({ id, username, needsSetup: false });
