@@ -104,12 +104,14 @@ export function seedScenes(db: Database.Database): void {
   tx();
 }
 
-export function seedAdminBot(db: Database.Database): void {
+export function seedUsers(db: Database.Database): void {
   const token = process.env["COVE_ADMIN_TOKEN"];
   if (!token) return;
 
   const now = Date.now();
-  db.prepare(
-    "INSERT OR IGNORE INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run("admin", "admin", null, 1, "System admin bot", token, now, now);
+  const insert = db.prepare(
+    "INSERT OR REPLACE INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  );
+  insert.run("luna", "Luna", null, 0, null, null, now, now);
+  insert.run("ruantang", "ruantang", null, 1, null, token, now, now);
 }
