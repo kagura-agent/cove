@@ -124,8 +124,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
         )
         .all(channelId, ref.timestamp, half) as MessageRow[];
       const combined = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
-      // Return in DESC order like Discord
-      rows = combined.reverse();
+      rows = combined;
     } else {
       rows = db
         .prepare(`${MSG_SELECT} WHERE m.scene_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
