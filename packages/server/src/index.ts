@@ -4,7 +4,7 @@ import { createApp } from "./app.js";
 import { setupGateway, broadcastGatewayEvent } from "./ws/index.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
-const DB_PATH = process.env["DB_PATH"] ?? "cove.db";
+const DB_PATH = process.env["COVE_DB_PATH"] ?? process.env["DB_PATH"] ?? "cove.db";
 
 // Initialize database
 const db = initDb(DB_PATH);
