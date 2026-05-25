@@ -16,11 +16,11 @@ const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
 
 const restClients = new Map<string, CoveRestClient>();
 
-function getRestClient(baseUrl: string, token: string, agentId?: string, agentName?: string): CoveRestClient {
+function getRestClient(baseUrl: string, token: string): CoveRestClient {
   const key = `${baseUrl}::${token}`;
   let client = restClients.get(key);
   if (!client) {
-    client = new CoveRestClient(baseUrl, token, agentId, agentName);
+    client = new CoveRestClient(baseUrl, token);
     restClients.set(key, client);
   }
   return client;
@@ -94,7 +94,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     sendText: async (ctx) => {
       const cfg = ctx.cfg;
       const account = resolveAccount(cfg);
-      const client = getRestClient(account.baseUrl, account.token, account.agentId, account.agentName);
+      const client = getRestClient(account.baseUrl, account.token);
       const channelId = ctx.to ?? "home";
       const text = ctx.text ?? "";
       const result = await client.sendMessage(channelId, text);
@@ -144,7 +144,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
 
         try {
-          const restClient = getRestClient(account.baseUrl, account.token, account.agentId, account.agentName);
+          const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
           // Override agent routing to target the configured agent

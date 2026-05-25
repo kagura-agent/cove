@@ -13,6 +13,8 @@ export type {
   GatewayPayload,
 } from "@cove/shared";
 
+import type { DiscordMessage } from "@cove/shared";
+
 /** Resolved account configuration for the Cove channel. */
 export interface CoveAccount {
   accountId: string | null;
@@ -28,13 +30,7 @@ export interface CoveAccount {
 /** Gateway client events. */
 export interface GatewayEvents {
   ready: (user: { id: string; username: string }) => void;
-  messageCreate: (message: {
-    id: string;
-    channel_id: string;
-    content: string;
-    author: { id: string; username: string; bot: boolean };
-    timestamp: string;
-  }) => void;
+  messageCreate: (message: DiscordMessage) => void;
   error: (error: Error) => void;
   close: () => void;
 }

@@ -24,7 +24,10 @@
           "allowFrom": {
             "type": "array",
             "items": { "type": "string" }
-          }
+          },
+          "agentId": { "type": "string" },
+          "agentName": { "type": "string" },
+          "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] }
         }
       },
       "uiHints": {
