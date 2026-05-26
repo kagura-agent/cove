@@ -4,7 +4,7 @@ import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
-import { requireAuth } from "./auth.js";
+import { requireAuth, resolveUser } from "./auth.js";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -18,6 +18,7 @@ export function createApp(
   broadcast?: BroadcastFn,
   config?: AppConfig,
 ): Hono {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
@@ -42,7 +43,7 @@ export function createApp(
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/users/@me", (c) => {
-    const user = c.get("botUser");
+    const user = resolveUser(db, c.req.header("Authorization"));
     if (user) return c.json(user);
     return c.json({ message: "Authentication required", code: 40001 }, 401);
   });
