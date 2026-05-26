@@ -4,6 +4,7 @@ import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
+import { adminRoutes } from "./routes/admin.js";
 import { requireAuth, resolveUser } from "./auth.js";
 
 export interface AppConfig {
@@ -11,7 +12,7 @@ export interface AppConfig {
   oauth?: OAuthConfig;
 }
 
-const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me"]);
+const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", "/api/v10/auth/register"]);
 
 export function createApp(
   db: Database.Database,
@@ -38,6 +39,7 @@ export function createApp(
   app.route("/", channelRoutes(db, broadcast));
   app.route("/", messagesRoutes(db, broadcast));
   app.route("/", agentRoutes(db));
+  app.route("/", adminRoutes(db));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));

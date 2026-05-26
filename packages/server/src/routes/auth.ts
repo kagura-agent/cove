@@ -66,19 +66,20 @@ export function authRoutes(db: Database.Database, config: OAuthConfig): Hono {
     const now = Date.now();
     const existing = db.prepare("SELECT id, token FROM users WHERE id = ?").get(userId) as { id: string; token: string | null } | undefined;
 
-    let token: string;
     if (existing) {
-      token = existing.token ?? randomUUID();
+      const token = existing.token ?? randomUUID();
       db.prepare("UPDATE users SET username = ?, avatar = ?, token = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, token, now, userId);
-    } else {
-      token = randomUUID();
-      db.prepare(
-        "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(userId, googleUser.name, googleUser.picture, 0, null, token, now, now);
+      return c.redirect(`/?token=${token}`);
     }
 
-    return c.redirect(`/?token=${token}`);
+    // New user: store in pending_registrations, require invite code
+    const pendingToken = randomUUID();
+    db.prepare(
+      "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(randomUUID(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, now);
+
+    return c.redirect(`/?pending=${pendingToken}`);
   });
 
   app.get("/api/auth/me", (c) => {

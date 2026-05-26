@@ -814,6 +814,132 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
+  // ─── Invite Codes ─────────────────────────────────────────────────────
+
+  describe("Invite Codes", () => {
+    it("POST /api/v10/admin/invite-codes generates codes with correct format", async () => {
+      const res = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 3 }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { codes: string[] };
+      expect(data.codes).toHaveLength(3);
+      for (const code of data.codes) {
+        expect(code).toMatch(/^COVE-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+      }
+    });
+
+    it("POST /api/v10/admin/invite-codes validates count (1-50)", async () => {
+      const res0 = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 0 }),
+      });
+      expect(res0.status).toBe(400);
+
+      const res51 = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 51 }),
+      });
+      expect(res51.status).toBe(400);
+    });
+
+    it("POST /api/v10/auth/register with valid invite code + valid pending token creates user", async () => {
+      // Generate invite code
+      const codeRes = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 1 }),
+      });
+      const { codes } = await codeRes.json() as { codes: string[] };
+
+      // Create pending registration directly in DB
+      const pendingToken = "test-pending-token";
+      db.prepare(
+        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run("pending-1", pendingToken, "google-123", "newuser@example.com", "New User", "https://avatar.url", Date.now());
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: codes[0], pendingToken }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { token: string };
+      expect(data.token).toBeTruthy();
+
+      // Verify user was created
+      const user = db.prepare("SELECT id, username FROM users WHERE id = ?").get("newuser") as { id: string; username: string } | undefined;
+      expect(user).toBeDefined();
+      expect(user!.username).toBe("New User");
+    });
+
+    it("POST /api/v10/auth/register with invalid code returns 400", async () => {
+      db.prepare(
+        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run("pending-2", "token-2", "google-456", "test@example.com", "Test", null, Date.now());
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "token-2" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /api/v10/auth/register with already-used code returns 400", async () => {
+      // Generate and use a code
+      const codeRes = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 1 }),
+      });
+      const { codes } = await codeRes.json() as { codes: string[] };
+
+      // Use the code
+      db.prepare(
+        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run("pending-3", "token-3", "g1", "user1@example.com", "User1", null, Date.now());
+
+      await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "token-3" }),
+      });
+
+      // Try to use the same code again
+      db.prepare(
+        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run("pending-4", "token-4", "g2", "user2@example.com", "User2", null, Date.now());
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "token-4" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /api/v10/auth/register with invalid pending token returns 400", async () => {
+      const codeRes = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ count: 1 }),
+      });
+      const { codes } = await codeRes.json() as { codes: string[] };
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "nonexistent-token" }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
   // ─── Health ───────────────────────────────────────────────────────────
 
   describe("GET /api/health", () => {

@@ -55,6 +55,24 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       updated_at INTEGER,
       PRIMARY KEY (scene_id, key)
     );
+
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      id         TEXT PRIMARY KEY,
+      code       TEXT UNIQUE NOT NULL,
+      created_at INTEGER NOT NULL,
+      used_at    INTEGER,
+      used_by    TEXT REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS pending_registrations (
+      id            TEXT PRIMARY KEY,
+      pending_token TEXT UNIQUE NOT NULL,
+      google_id     TEXT,
+      email         TEXT,
+      username      TEXT,
+      avatar        TEXT,
+      created_at    INTEGER
+    );
   `);
 
   // Migration: add edited_timestamp to existing messages tables
