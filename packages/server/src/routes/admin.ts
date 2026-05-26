@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomInt } from "node:crypto";
 import type Database from "better-sqlite3";
+import type { AuthUser } from "../auth.js";
 
 const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -8,16 +9,21 @@ function generateCode(): string {
   let part1 = "";
   let part2 = "";
   for (let i = 0; i < 4; i++) {
-    part1 += CHARS[Math.floor(Math.random() * CHARS.length)];
-    part2 += CHARS[Math.floor(Math.random() * CHARS.length)];
+    part1 += CHARS[randomInt(0, CHARS.length)];
+    part2 += CHARS[randomInt(0, CHARS.length)];
   }
   return `COVE-${part1}-${part2}`;
 }
 
-export function adminRoutes(db: Database.Database): Hono {
-  const app = new Hono();
+export function adminRoutes(db: Database.Database): Hono<{ Variables: { botUser: AuthUser } }> {
+  const app = new Hono<{ Variables: { botUser: AuthUser } }>();
 
   app.post("/api/v10/admin/invite-codes", async (c) => {
+    const user = c.get("botUser");
+    if (!user.bot) {
+      return c.json({ message: "Bot authentication required" }, 403);
+    }
+
     const body = await c.req.json<{ count?: number }>();
     const count = body.count ?? 1;
 
@@ -60,16 +66,19 @@ export function adminRoutes(db: Database.Database): Hono {
       return c.json({ message: "Invalid pending token" }, 400);
     }
 
-    const userId = pending.email.split("@")[0];
+    const userId = randomUUID();
     const now = Date.now();
     const token = randomUUID();
 
-    db.prepare(
-      "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(userId, pending.username, pending.avatar, 0, null, token, now, now);
+    const register = db.transaction(() => {
+      db.prepare(
+        "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(userId, pending.username, pending.avatar, 0, null, token, now, now);
 
-    db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
-    db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
+      db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
+      db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
+    });
+    register();
 
     return c.json({ token });
   });

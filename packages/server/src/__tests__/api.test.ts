@@ -872,9 +872,9 @@ describe("Cove API — Discord-compatible", () => {
       expect(data.token).toBeTruthy();
 
       // Verify user was created
-      const user = db.prepare("SELECT id, username FROM users WHERE id = ?").get("newuser") as { id: string; username: string } | undefined;
-      expect(user).toBeDefined();
-      expect(user!.username).toBe("New User");
+      const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
+      expect(userRow).toBeDefined();
+      expect(userRow!.username).toBe("New User");
     });
 
     it("POST /api/v10/auth/register with invalid code returns 400", async () => {
@@ -937,6 +937,22 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ inviteCode: codes[0], pendingToken: "nonexistent-token" }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it("POST /api/v10/admin/invite-codes returns 403 for non-bot user", async () => {
+      const now = Date.now();
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("human-user", "Human", null, 0, null, "human-token", now, now);
+
+      const res = await app.request("/api/v10/admin/invite-codes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer human-token",
+        },
+        body: JSON.stringify({ count: 1 }),
+      });
+      expect(res.status).toBe(403);
     });
   });
 

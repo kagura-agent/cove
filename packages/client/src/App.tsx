@@ -43,10 +43,10 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
       const res = await fetch(`${API_BASE}/api/v10/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: code, pendingToken }),
+        body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), pendingToken }),
       });
       if (!res.ok) {
-        setError("Invalid or already used invite code");
+        setError(res.status === 400 ? "Invalid or already used invite code" : "Something went wrong, please try again");
         return;
       }
       const data = await res.json() as { token: string };
@@ -54,7 +54,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
       window.history.replaceState({}, "", "/");
       window.location.reload();
     } catch {
-      setError("Invalid or already used invite code");
+      setError("Network error, please try again");
     } finally {
       setLoading(false);
     }
