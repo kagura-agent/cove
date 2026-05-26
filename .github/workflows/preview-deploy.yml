@@ -80,7 +80,10 @@ jobs:
           Environment=COVE_DB_PATH=/home/azureuser/cove-staging/cove-staging.db
           Environment=COVE_STATIC_DIR=/var/www/cove-staging
           Environment=GATEWAY_URL=wss://staging.cove.kagura-agent.com/gateway
+          Environment=BASE_URL=https://staging.cove.kagura-agent.com
           Environment=COVE_ADMIN_TOKEN=${{ secrets.COVE_ADMIN_TOKEN }}
+          Environment=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          Environment=GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           Restart=on-failure
           RestartSec=5
 

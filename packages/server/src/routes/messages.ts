@@ -2,20 +2,15 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { DiscordMessage, DiscordUser } from "@cove/shared";
-import { requireBotAuth } from "../auth.js";
+import { resolveUser, requireAuth } from "../auth.js";
 
 export type BroadcastFn = (event: unknown) => void;
 
 /** Extract author info from Authorization header, resolving token against DB. */
 function extractAuthor(db: Database.Database, authHeader: string | undefined, bodyUsername?: string): DiscordUser {
-  if (authHeader?.startsWith("Bot ")) {
-    const token = authHeader.slice(4).trim();
-    if (token) {
-      const row = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
-      if (row) {
-        return { id: row.id, username: row.username, bot: true };
-      }
-    }
+  const user = resolveUser(db, authHeader);
+  if (user) {
+    return { id: user.id, username: user.username, bot: user.bot };
   }
   return { id: "anonymous", username: bodyUsername || "anonymous", bot: false };
 }
@@ -57,7 +52,7 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
 
 export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): Hono {
   const app = new Hono();
-  const auth = requireBotAuth(db);
+  const auth = requireAuth(db);
 
   /** GET /api/v10/channels/:id/messages — list messages with optional pagination. */
   app.get("/api/v10/channels/:id/messages", (c) => {

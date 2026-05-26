@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ConfigProvider, theme, Modal, Input, Button, Layout, Spin, message } from "antd";
+import { ConfigProvider, theme, Button, Layout, message } from "antd";
+import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
@@ -15,12 +16,12 @@ const themeConfig = {
 
 const styles = {
   fullHeight: { height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  dialogForm: { display: "flex", flexDirection: "column", gap: 16, marginTop: 8 } as CSSProperties,
-  dialogHint: { fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
   sider: { background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)", height: "100%" } as CSSProperties,
   content: { display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg-deep)" } as CSSProperties,
   connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
+  loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
+  loginTitle: { fontSize: 32, fontWeight: 700, color: "#f4a261" } as CSSProperties,
 };
 
 const connDot = (status: string): CSSProperties => ({
@@ -28,37 +29,58 @@ const connDot = (status: string): CSSProperties => ({
   background: status === "connecting" ? "#faad14" : "#ff4d4f",
 });
 
-function UsernameDialog() {
-  const [name, setName] = useState("");
-  const setUser = useUserStore((s) => s.setUser);
+const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
-  function handleSubmit() {
-    setUser(name.trim() || "Islander");
-  }
-
+function LoginPage() {
   return (
-    <Modal open closable={false} footer={null} title="Welcome to Cove 🏝️" centered>
-      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={styles.dialogForm}>
-        <div>
-          <p style={styles.dialogHint}>What's your name?</p>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Islander" autoFocus size="large" />
-        </div>
-        <Button type="primary" htmlType="submit" block size="large">Enter Cove</Button>
-      </form>
-    </Modal>
+    <div style={styles.loginPage}>
+      <div style={styles.loginTitle}>Cove</div>
+      <Button
+        type="primary"
+        size="large"
+        icon={<GoogleOutlined />}
+        onClick={() => { window.location.href = `${API_BASE}/api/auth/google`; }}
+      >
+        Sign in with Google
+      </Button>
+    </div>
   );
 }
 
 export default function App() {
-  const needsSetup = useUserStore((s) => s.needsSetup);
+  const { needsSetup, setUser } = useUserStore();
   const { channels, activeChannelId, setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    if (needsSetup) return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      localStorage.setItem("cove-token", token);
+      window.history.replaceState({}, "", "/");
+    }
+
+    if (localStorage.getItem("cove-token")) {
+      api.fetchMe()
+        .then((user) => {
+          setUser(user);
+        })
+        .catch(() => {
+          localStorage.removeItem("cove-token");
+          useUserStore.setState({ needsSetup: true });
+        })
+        .finally(() => setAuthLoading(false));
+    } else {
+      setAuthLoading(false);
+    }
+  }, [setUser]);
+
+  useEffect(() => {
+    if (needsSetup || authLoading) return;
     setChannelsLoading(true);
     api.fetchChannels().then((chs) => {
       setChannels(chs);
@@ -66,13 +88,23 @@ export default function App() {
     }).catch(() => message.error("Failed to load scenes"))
       .finally(() => setChannelsLoading(false));
     connect();
-  }, [needsSetup, setChannels, setActiveChannel, connect]);
+  }, [needsSetup, authLoading, setChannels, setActiveChannel, connect]);
+
+  if (authLoading) {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div style={{ ...styles.fullHeight, ...styles.loginPage }}>
+          <div style={styles.loginTitle}>Cove</div>
+        </div>
+      </ConfigProvider>
+    );
+  }
 
   if (needsSetup) {
     return (
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
-          <UsernameDialog />
+          <LoginPage />
         </div>
       </ConfigProvider>
     );
@@ -91,7 +123,7 @@ export default function App() {
           {wsStatus !== "connected" && (
             <div style={styles.connStatus}>
               <span style={connDot(wsStatus)} />
-              <span>{wsStatus === "connecting" ? "Connecting…" : "Disconnected"}</span>
+              <span>{wsStatus === "connecting" ? "Connecting..." : "Disconnected"}</span>
             </div>
           )}
           <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} />

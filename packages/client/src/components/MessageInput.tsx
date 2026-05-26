@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useUserStore } from "../stores/useUserStore";
 import { Input, Button } from "antd";
 import type { InputRef } from "antd";
 import { SendOutlined } from "@ant-design/icons";
@@ -16,7 +15,6 @@ const inputStyle: CSSProperties = { borderRadius: 24, background: "rgba(255,255,
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
-  const { username } = useUserStore();
   const inputRef = useRef<InputRef>(null);
 
   async function handleSubmit() {
@@ -25,7 +23,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setContent("");
     inputRef.current?.focus();
     try {
-      await api.sendMessage(channelId, text, username);
+      await api.sendMessage(channelId, text);
     } catch (err) {
       console.error("send:", err);
       setContent(text);

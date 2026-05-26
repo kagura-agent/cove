@@ -3,27 +3,27 @@ import { create } from "zustand";
 interface UserState {
   id: string;
   username: string;
+  avatar: string | null;
   needsSetup: boolean;
-  setUser: (username: string) => void;
+  setUser: (user: { id: string; username: string; avatar: string | null }) => void;
+  logout: () => void;
 }
 
-function loadUser(): { id: string; username: string } | null {
-  const saved = localStorage.getItem("cove-user");
-  if (!saved) return null;
-  try { return JSON.parse(saved); } catch { return null; }
+function hasToken(): boolean {
+  return !!localStorage.getItem("cove-token");
 }
-
-const existing = loadUser();
 
 export const useUserStore = create<UserState>((set) => ({
-  id: existing?.id ?? "",
-  username: existing?.username ?? "",
-  needsSetup: !existing,
-  setUser: (username: string) => {
-    const existing = loadUser();
-    const id = existing?.id ?? crypto.randomUUID();
-    const user = { id, username };
-    localStorage.setItem("cove-user", JSON.stringify(user));
-    set({ id, username, needsSetup: false });
+  id: "",
+  username: "",
+  avatar: null,
+  needsSetup: !hasToken(),
+  setUser: (user) => {
+    set({ id: user.id, username: user.username, avatar: user.avatar, needsSetup: false });
+  },
+  logout: () => {
+    localStorage.removeItem("cove-token");
+    localStorage.removeItem("cove-user");
+    set({ id: "", username: "", avatar: null, needsSetup: true });
   },
 }));
