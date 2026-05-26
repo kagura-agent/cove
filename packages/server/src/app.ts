@@ -4,14 +4,14 @@ import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
-import { resolveUser } from "./auth.js";
+import { requireAuth } from "./auth.js";
 
 export interface AppConfig {
   gatewayUrl?: string;
   oauth?: OAuthConfig;
 }
 
-const PUBLIC_PATHS = new Set(["/api/health", "/api/auth/google", "/api/auth/callback", "/api/auth/me"]);
+const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me"]);
 
 export function createApp(
   db: Database.Database,
@@ -26,14 +26,12 @@ export function createApp(
     app.route("/", authRoutes(db, config.oauth));
   }
 
+  const authMw = requireAuth(db);
   app.use("/api/*", async (c, next) => {
-    if (PUBLIC_PATHS.has(c.req.path)) return next();
-
-    const user = resolveUser(db, c.req.header("Authorization"));
-    if (!user) {
-      return c.json({ message: "Authentication required", code: 40001 }, 401);
-    }
-    return next();
+    if (c.req.method === "OPTIONS") return next();
+    const path = c.req.path.replace(/\/+$/, "") || "/";
+    if (PUBLIC_PATHS.has(path)) return next();
+    return authMw(c, next);
   });
 
   app.route("/", channelRoutes(db, broadcast));
@@ -44,7 +42,7 @@ export function createApp(
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/users/@me", (c) => {
-    const user = resolveUser(db, c.req.header("Authorization"));
+    const user = c.get("botUser");
     if (user) return c.json(user);
     return c.json({ message: "Authentication required", code: 40001 }, 401);
   });

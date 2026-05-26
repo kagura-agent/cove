@@ -823,5 +823,12 @@ describe("Cove API — Discord-compatible", () => {
       const data = await res.json();
       expect(data).toEqual({ status: "ok" });
     });
+
+    it("is accessible without authentication", async () => {
+      const res = await app.request("/api/health");
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data).toEqual({ status: "ok" });
+    });
   });
 });
