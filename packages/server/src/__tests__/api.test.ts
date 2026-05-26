@@ -814,145 +814,105 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
-  // ─── Invite Codes ─────────────────────────────────────────────────────
+  // ─── Invite Code Registration ───────────────────────────────────────
 
-  describe("Invite Codes", () => {
-    it("POST /api/v10/admin/invite-codes generates codes with correct format", async () => {
-      const res = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 3 }),
-      });
-      expect(res.status).toBe(200);
-      const data = await res.json() as { codes: string[] };
-      expect(data.codes).toHaveLength(3);
-      for (const code of data.codes) {
-        expect(code).toMatch(/^COVE-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-      }
-    });
+  describe("Invite Code Registration", () => {
+    // Helper: seed an invite code directly in DB (simulates generate-invite-codes.js script)
+    function seedInviteCode(code: string) {
+      db.prepare("INSERT INTO invite_codes (id, code, created_at) VALUES (?, ?, ?)")
+        .run(`inv-${code}`, code, Date.now());
+    }
 
-    it("POST /api/v10/admin/invite-codes validates count (1-50)", async () => {
-      const res0 = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 0 }),
-      });
-      expect(res0.status).toBe(400);
-
-      const res51 = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 51 }),
-      });
-      expect(res51.status).toBe(400);
-    });
-
-    it("POST /api/v10/auth/register with valid invite code + valid pending token creates user", async () => {
-      // Generate invite code
-      const codeRes = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 1 }),
-      });
-      const { codes } = await codeRes.json() as { codes: string[] };
-
-      // Create pending registration directly in DB
-      const pendingToken = "test-pending-token";
+    // Helper: seed a pending registration
+    function seedPending(id: string, token: string, email: string, username: string) {
       db.prepare(
         "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run("pending-1", pendingToken, "google-123", "newuser@example.com", "New User", "https://avatar.url", Date.now());
+      ).run(id, token, `google-${id}`, email, username, null, Date.now());
+    }
+
+    it("POST /api/v10/auth/register with valid invite code creates user", async () => {
+      seedInviteCode("COVE-TEST-AA01");
+      seedPending("p1", "tok-1", "newuser@example.com", "New User");
 
       const res = await app.request("/api/v10/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: codes[0], pendingToken }),
+        body: JSON.stringify({ inviteCode: "COVE-TEST-AA01", pendingToken: "tok-1" }),
       });
       expect(res.status).toBe(200);
       const data = await res.json() as { token: string };
       expect(data.token).toBeTruthy();
 
-      // Verify user was created
+      // Verify user created with UUID id (not email prefix)
       const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
       expect(userRow).toBeDefined();
       expect(userRow!.username).toBe("New User");
+      // id should be a UUID, not email prefix
+      expect(userRow!.id).toMatch(/^[0-9a-f-]{36}$/);
     });
 
-    it("POST /api/v10/auth/register with invalid code returns 400", async () => {
-      db.prepare(
-        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run("pending-2", "token-2", "google-456", "test@example.com", "Test", null, Date.now());
+    it("normalizes invite code input (lowercase + whitespace)", async () => {
+      seedInviteCode("COVE-NORM-BB02");
+      seedPending("p-norm", "tok-norm", "norm@example.com", "NormUser");
 
       const res = await app.request("/api/v10/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "token-2" }),
+        body: JSON.stringify({ inviteCode: "  cove-norm-bb02  ", pendingToken: "tok-norm" }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 400 for invalid code", async () => {
+      seedPending("p2", "tok-2", "test@example.com", "Test");
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "tok-2" }),
       });
       expect(res.status).toBe(400);
     });
 
-    it("POST /api/v10/auth/register with already-used code returns 400", async () => {
-      // Generate and use a code
-      const codeRes = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 1 }),
-      });
-      const { codes } = await codeRes.json() as { codes: string[] };
+    it("returns 400 for already-used code", async () => {
+      seedInviteCode("COVE-USED-CC03");
+      seedPending("p3", "tok-3", "user1@example.com", "User1");
 
       // Use the code
-      db.prepare(
-        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run("pending-3", "token-3", "g1", "user1@example.com", "User1", null, Date.now());
-
       await app.request("/api/v10/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "token-3" }),
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-3" }),
       });
 
-      // Try to use the same code again
-      db.prepare(
-        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run("pending-4", "token-4", "g2", "user2@example.com", "User2", null, Date.now());
-
+      // Try again with same code
+      seedPending("p4", "tok-4", "user2@example.com", "User2");
       const res = await app.request("/api/v10/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "token-4" }),
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-4" }),
       });
       expect(res.status).toBe(400);
     });
 
-    it("POST /api/v10/auth/register with invalid pending token returns 400", async () => {
-      const codeRes = await app.request("/api/v10/admin/invite-codes", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ count: 1 }),
-      });
-      const { codes } = await codeRes.json() as { codes: string[] };
+    it("returns 400 for invalid pending token", async () => {
+      seedInviteCode("COVE-PEND-DD04");
 
       const res = await app.request("/api/v10/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: codes[0], pendingToken: "nonexistent-token" }),
+        body: JSON.stringify({ inviteCode: "COVE-PEND-DD04", pendingToken: "nonexistent" }),
       });
       expect(res.status).toBe(400);
     });
 
-    it("POST /api/v10/admin/invite-codes returns 403 for non-bot user", async () => {
-      const now = Date.now();
-      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .run("human-user", "Human", null, 0, null, "human-token", now, now);
-
-      const res = await app.request("/api/v10/admin/invite-codes", {
+    it("returns 400 when missing fields", async () => {
+      const res = await app.request("/api/v10/auth/register", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer human-token",
-        },
-        body: JSON.stringify({ count: 1 }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-XXXX-YYYY" }),
       });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(400);
     });
   });
 
