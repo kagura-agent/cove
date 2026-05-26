@@ -11,6 +11,8 @@ export interface AppConfig {
   oauth?: OAuthConfig;
 }
 
+const PUBLIC_PATHS = new Set(["/api/health", "/api/auth/google", "/api/auth/callback", "/api/auth/me"]);
+
 export function createApp(
   db: Database.Database,
   broadcast?: BroadcastFn,
@@ -18,26 +20,34 @@ export function createApp(
 ): Hono {
   const app = new Hono();
 
-  app.route("/", channelRoutes(db, broadcast));
-  app.route("/", messagesRoutes(db, broadcast));
-  app.route("/", agentRoutes(db));
+  app.get("/api/health", (c) => c.json({ status: "ok" }));
 
   if (config?.oauth) {
     app.route("/", authRoutes(db, config.oauth));
   }
+
+  app.use("/api/*", async (c, next) => {
+    if (PUBLIC_PATHS.has(c.req.path)) return next();
+
+    const user = resolveUser(db, c.req.header("Authorization"));
+    if (!user) {
+      return c.json({ message: "Authentication required", code: 40001 }, 401);
+    }
+    return next();
+  });
+
+  app.route("/", channelRoutes(db, broadcast));
+  app.route("/", messagesRoutes(db, broadcast));
+  app.route("/", agentRoutes(db));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/users/@me", (c) => {
     const user = resolveUser(db, c.req.header("Authorization"));
-    if (user) {
-      return c.json(user);
-    }
-    return c.json({ id: "anonymous", username: "anonymous", bot: false });
+    if (user) return c.json(user);
+    return c.json({ message: "Authentication required", code: 40001 }, 401);
   });
-
-  app.get("/api/health", (c) => c.json({ status: "ok" }));
 
   return app;
 }
