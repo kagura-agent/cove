@@ -135,4 +135,11 @@ export function seedUsers(db: Database.Database): void {
   );
   insert.run("luna", "Luna", null, 0, null, null, now, now);
   insert.run("ruantang", "ruantang", null, 1, null, token, now, now);
+
+  // Ensure seeded users are guild members
+  const addMember = db.prepare(
+    "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+  );
+  addMember.run("cove", "luna", null, '[]', now);
+  addMember.run("cove", "ruantang", null, '[]', now);
 }

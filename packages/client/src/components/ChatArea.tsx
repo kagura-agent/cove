@@ -2,7 +2,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { getChannelIcon } from "../lib/icons";
 import { Typography, Button, Popconfirm } from "antd";
-import { MenuOutlined, DeleteOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import * as api from "../lib/api";
@@ -14,9 +14,11 @@ const styles = {
   header: { display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)", minHeight: 52 } as CSSProperties,
   menuBtn: { color: "var(--text-primary)" } as CSSProperties,
   clearBtn: { color: "var(--text-secondary)", opacity: 0.5 } as CSSProperties,
+  membersBtn: { color: "var(--text-secondary)" } as CSSProperties,
+  membersBtnActive: { color: "var(--text-primary)" } as CSSProperties,
 };
 
-export function ChatArea({ onMenuClick }: { onMenuClick?: () => void }) {
+export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean }) {
   const { channels, activeChannelId } = useChannelStore();
   const setMessages = useMessageStore((s) => s.setMessages);
   const channel = channels.find((c) => c.id === activeChannelId);
@@ -50,6 +52,7 @@ export function ChatArea({ onMenuClick }: { onMenuClick?: () => void }) {
         <Popconfirm title="Clear all messages in this channel?" onConfirm={handleClear} okText="Clear" cancelText="Cancel" okButtonProps={{ danger: true }}>
           <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />
         </Popconfirm>
+        {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
       <MessageList channelId={channel.id} />
       <MessageInput channelId={channel.id} />

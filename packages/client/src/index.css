@@ -37,19 +37,19 @@ html, body {
 
 @media (max-width: 640px) {
   .mobile-only { display: inline-flex !important; }
-  .ant-layout-sider {
+  .sidebar-panel {
     display: none !important;
     position: fixed !important;
     z-index: 30 !important;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 260px !important;
-    max-width: 260px !important;
-    min-width: 260px !important;
-    flex: none !important;
+    width: 240px !important;
   }
-  .ant-layout-sider.sidebar-open {
-    display: block !important;
+  .sidebar-open .sidebar-panel {
+    display: flex !important;
+  }
+  .member-list {
+    display: none !important;
   }
 }

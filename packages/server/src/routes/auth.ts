@@ -70,6 +70,9 @@ export function authRoutes(db: Database.Database, config: OAuthConfig): Hono {
       const token = existing.token ?? randomUUID();
       db.prepare("UPDATE users SET username = ?, avatar = ?, token = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, token, now, userId);
+      // Ensure user is in default guild
+      db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run("cove", userId, null, "[]", now);
       return c.redirect(`/?token=${token}`);
     }
 

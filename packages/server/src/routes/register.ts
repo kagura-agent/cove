@@ -41,6 +41,11 @@ export function registerRoutes(db: Database.Database): Hono {
         "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(userId, pending.username, pending.avatar, 0, null, token, now, now);
 
+      // Add new user to default guild
+      db.prepare(
+        "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+      ).run("cove", userId, null, "[]", now);
+
       db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
     });

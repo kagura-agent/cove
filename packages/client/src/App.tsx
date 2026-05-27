@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import { ConfigProvider, theme, Button, Layout, message, Input } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { ConfigProvider, theme, Button, Input, message } from "antd";
+import { GoogleOutlined, TeamOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
+import { MemberList } from "./components/MemberList";
 import * as api from "./lib/api";
 import type { CSSProperties } from "react";
 
@@ -17,8 +18,8 @@ const themeConfig = {
 const styles = {
   fullHeight: { height: "100%", background: "var(--bg-deep)" } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
-  sider: { background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)", height: "100%" } as CSSProperties,
-  content: { display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
+  layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
+  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
   connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
   loginTitle: { fontSize: 32, fontWeight: 700, color: "#f4a261" } as CSSProperties,
@@ -103,6 +104,7 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -180,23 +182,25 @@ export default function App() {
 
   return (
     <ConfigProvider theme={themeConfig}>
-      <Layout style={styles.fullHeight}>
+      <div style={styles.fullHeight}>
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={styles.overlay} />}
 
-        <Layout.Sider width={260} className={sidebarOpen ? "sidebar-open" : ""} style={styles.sider} trigger={null}>
+        <div style={styles.layout}>
           <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} />
-        </Layout.Sider>
 
-        <Layout.Content style={styles.content}>
-          {wsStatus !== "connected" && (
-            <div style={styles.connStatus}>
-              <span style={connDot(wsStatus)} />
-              <span>{wsStatus === "connecting" ? "Connecting..." : "Disconnected"}</span>
-            </div>
-          )}
-          <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        </Layout.Content>
-      </Layout>
+          <div style={styles.chatColumn}>
+            {wsStatus !== "connected" && (
+              <div style={styles.connStatus}>
+                <span style={connDot(wsStatus)} />
+                <span>{wsStatus === "connecting" ? "Connecting..." : "Disconnected"}</span>
+              </div>
+            )}
+            <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
+          </div>
+
+          {membersOpen && <MemberList />}
+        </div>
+      </div>
     </ConfigProvider>
   );
 }
