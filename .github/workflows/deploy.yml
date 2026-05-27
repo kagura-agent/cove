@@ -33,7 +33,7 @@ jobs:
             --external:better-sqlite3 --external:ws \
             --alias:@cove/shared=./packages/shared/src/types.ts
 
-      - name: Deploy to VM1
+      - name: Deploy to VM1 (staging)
         env:
           SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
           HOST: moltbook.kagura-agent.com
@@ -48,17 +48,22 @@ jobs:
           SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
           SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
 
-          # Upload server bundle
-          $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove/server-bundle.js
+          # Upload server bundle to staging
+          $SSH "mkdir -p /home/azureuser/cove-staging"
+          $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
 
-          # Upload client dist
-          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-client/
-          $SSH "sudo cp -r /tmp/cove-client/* /var/www/cove/"
+          # Ensure native dependencies
+          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
-          # Restart server
-          $SSH "sudo systemctl restart cove-server"
+          # Upload client dist to staging
+          $SSH "sudo mkdir -p /var/www/cove-staging /tmp/cove-staging-client"
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
+          $SSH "sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/"
+
+          # Restart staging service
+          $SSH "sudo systemctl daemon-reload && sudo systemctl restart cove-staging"
 
           # Health check
           sleep 3
-          $SSH "curl -sf http://localhost:3500/api/health" || exit 1
-          echo "✅ Deploy successful!"
+          $SSH "curl -sf http://localhost:3501/api/health" || exit 1
+          echo "✅ Staging deploy successful!"
