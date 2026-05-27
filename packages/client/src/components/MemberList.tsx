@@ -35,7 +35,7 @@ function MemberRow({ member }: { member: GuildMember }) {
       <Avatar size={32} style={{ backgroundColor: hashColor(user.username), color: "#fff", fontWeight: 700, ...styles.avatar }}>
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
-      <span style={styles.username}>{user.nick || user.username}</span>
+      <span style={styles.username}>{member.nick || user.username}</span>
       {user.bot && <span style={styles.badge}>BOT</span>}
     </div>
   );
