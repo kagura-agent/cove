@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import { Input, Button } from "antd";
 import type { InputRef } from "antd";
 import { SendOutlined } from "@ant-design/icons";
@@ -16,6 +16,20 @@ const inputStyle: CSSProperties = { borderRadius: 24, background: "rgba(255,255,
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const inputRef = useRef<InputRef>(null);
+  const lastTypingRef = useRef(0);
+
+  const sendTypingThrottled = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingRef.current > 3000) {
+      lastTypingRef.current = now;
+      api.sendTyping(channelId).catch(() => {});
+    }
+  }, [channelId]);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setContent(e.target.value);
+    if (e.target.value.trim()) sendTypingThrottled();
+  }
 
   async function handleSubmit() {
     const text = content.trim();
@@ -35,7 +49,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
       <Input
         ref={inputRef}
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={handleChange}
         onPressEnter={handleSubmit}
         placeholder="Say something…"
         maxLength={2000}

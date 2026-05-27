@@ -58,6 +58,9 @@ export function createBot(username: string, bio: string) {
 export function deleteBot(id: string) {
   return api<void>(`/api/v10/users/${id}`, { method: "DELETE" });
 }
+export function sendTyping(channelId: string) {
+  return api<void>(`/api/v10/channels/${channelId}/typing`, { method: "POST" });
+}
 export function fetchMe() {
   return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");
 }
