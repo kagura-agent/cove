@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { ConfigProvider, theme, Button, Input, message } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { GoogleOutlined, TeamOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
@@ -104,6 +104,7 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -194,10 +195,10 @@ export default function App() {
                 <span>{wsStatus === "connecting" ? "Connecting..." : "Disconnected"}</span>
               </div>
             )}
-            <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+            <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
           </div>
 
-          <MemberList />
+          {membersOpen && <MemberList />}
         </div>
       </div>
     </ConfigProvider>
