@@ -1,6 +1,5 @@
 import { useChannelStore } from "../stores/useChannelStore";
-import { getChannelIcon } from "../lib/icons";
-import { Button, Input, Menu, Popconfirm, Spin } from "antd";
+import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { UserBar } from "./UserBar";
 import * as api from "../lib/api";
@@ -8,24 +7,52 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-surface)" } as CSSProperties,
-  header: { padding: "20px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
-  title: { fontSize: 22, fontWeight: 700, margin: 0, color: "var(--text-primary)" } as CSSProperties,
-  subtitle: { fontSize: 12, color: "var(--text-secondary)", marginTop: 2 } as CSSProperties,
-  list: { flex: 1, overflowY: "auto", padding: 8 } as CSSProperties,
+  root: { display: "flex", flexDirection: "column", height: "100%", width: 240, minWidth: 240, background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
+  header: { padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 8 } as CSSProperties,
+  title: { fontSize: 16, fontWeight: 700, margin: 0, color: "var(--text-primary)" } as CSSProperties,
+  list: { flex: 1, overflowY: "auto", padding: "0 8px" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
-  menuItem: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" } as CSSProperties,
-  channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
-  deleteBtn: { opacity: 0.4, fontSize: 12 } as CSSProperties,
-  menu: { background: "transparent", border: "none" } as CSSProperties,
-  addBtn: { marginTop: 8, opacity: 0.6 } as CSSProperties,
+  categoryHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 8px 4px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)", cursor: "default" } as CSSProperties,
+  channelItem: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 4, cursor: "pointer", transition: "background 0.15s", fontSize: 14, color: "var(--text-secondary)" } as CSSProperties,
+  channelActive: { background: "rgba(255,255,255,0.08)", color: "var(--text-primary)" } as CSSProperties,
+  channelHover: { background: "rgba(255,255,255,0.04)", color: "var(--text-primary)" } as CSSProperties,
+  hash: { fontSize: 18, fontWeight: 600, opacity: 0.5, width: 20, textAlign: "center", flexShrink: 0 } as CSSProperties,
+  channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
+  deleteBtn: { opacity: 0, fontSize: 12, transition: "opacity 0.15s" } as CSSProperties,
+  addBtn: { margin: "4px 8px 8px", opacity: 0.5, fontSize: 12 } as CSSProperties,
 };
+
+function ChannelItem({ id, name, isActive, onSelect, onDelete }: {
+  id: string; name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      style={{ ...styles.channelItem, ...(isActive ? styles.channelActive : hovered ? styles.channelHover : {}) }}
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span style={styles.hash}>#</span>
+      <span style={styles.channelName}>{name}</span>
+      <Popconfirm title={`Delete #${name}?`} description="All messages will be lost." onConfirm={(e) => { e?.stopPropagation(); onDelete(); }} onCancel={(e) => e?.stopPropagation()} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
+        <Button
+          type="text"
+          size="small"
+          icon={<DeleteOutlined />}
+          onClick={(e) => e.stopPropagation()}
+          style={{ ...styles.deleteBtn, opacity: hovered ? 0.5 : 0 }}
+        />
+      </Popconfirm>
+    </div>
+  );
+}
 
 export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: boolean }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newIcon, setNewIcon] = useState("🏝️");
 
   function handleSelectChannel(id: string) {
     setActiveChannel(id);
@@ -43,32 +70,18 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      const ch = await api.createChannel(newName.trim(), newIcon || "🏝️");
+      const ch = await api.createChannel(newName.trim(), "#️⃣");
       addChannel(ch);
       setNewName("");
-      setNewIcon("🏝️");
       setAdding(false);
     } catch (err) { console.error("create channel:", err); }
   }
 
-  const menuItems = channels.map((ch) => ({
-    key: ch.id,
-    label: (
-      <div style={styles.menuItem}>
-        <span style={styles.channelName}>{ch.name}</span>
-        <Popconfirm title={`Delete #${ch.name}?`} description="All messages will be lost." onConfirm={(e) => { e?.stopPropagation(); handleDeleteChannel(ch.id); }} onCancel={(e) => e?.stopPropagation()} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
-          <Button type="text" size="small" icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} style={styles.deleteBtn} className="channel-delete-btn" />
-        </Popconfirm>
-      </div>
-    ),
-    icon: <span style={{ fontSize: 18 }}>{getChannelIcon(ch)}</span>,
-  }));
-
   return (
-    <div style={styles.root}>
+    <div style={styles.root} className="sidebar-panel">
       <div style={styles.header}>
-        <h1 style={styles.title}>🏝️ Cove</h1>
-        <p style={styles.subtitle}>island scenes</p>
+        <span style={{ fontSize: 20 }}>🏝️</span>
+        <h1 style={styles.title}>Cove</h1>
       </div>
 
       <div style={styles.list}>
@@ -76,26 +89,28 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
           <div style={styles.loading}><Spin tip="Loading scenes…" /></div>
         ) : (
           <>
-            <Menu
-              mode="inline"
-              selectedKeys={activeChannelId ? [activeChannelId] : []}
-              onClick={({ key }) => handleSelectChannel(key)}
-              items={menuItems}
-              style={styles.menu}
-            />
-            {adding ? (
-              <form onSubmit={handleAddChannel} style={{ padding: 8, marginTop: 8 }}>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Channel name" autoFocus style={{ marginBottom: 8 }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Input value={newIcon} onChange={(e) => setNewIcon(e.target.value)} placeholder="Icon" style={{ width: 64 }} />
+            <div style={styles.categoryHeader}>
+              <span>Scenes</span>
+              <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--text-secondary)", fontSize: 12, opacity: 0.6 }} />
+            </div>
+            {channels.map((ch) => (
+              <ChannelItem
+                key={ch.id}
+                id={ch.id}
+                name={ch.name}
+                isActive={ch.id === activeChannelId}
+                onSelect={() => handleSelectChannel(ch.id)}
+                onDelete={() => handleDeleteChannel(ch.id)}
+              />
+            ))}
+            {adding && (
+              <form onSubmit={handleAddChannel} style={{ padding: "4px 8px" }}>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="channel-name" autoFocus size="small" style={{ marginBottom: 4 }} />
+                <div style={{ display: "flex", gap: 4 }}>
                   <Button type="primary" htmlType="submit" size="small" style={{ flex: 1 }}>Create</Button>
                   <Button size="small" onClick={() => setAdding(false)}>Cancel</Button>
                 </div>
               </form>
-            ) : (
-              <Button type="dashed" icon={<PlusOutlined />} onClick={() => setAdding(true)} block style={styles.addBtn}>
-                New channel
-              </Button>
             )}
           </>
         )}

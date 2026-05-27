@@ -1,9 +1,10 @@
-import type { DiscordChannel, DiscordMessage, DiscordUser, CoveAgent } from "@cove/shared";
+import type { DiscordChannel, DiscordMessage, DiscordUser, CoveAgent, CoveGuildMember } from "@cove/shared";
 
 export type Channel = DiscordChannel;
 export type Author = DiscordUser;
 export type Message = DiscordMessage;
 export type Bot = CoveAgent;
+export type GuildMember = CoveGuildMember;
 
 export interface BotCreateResponse {
   id: string;

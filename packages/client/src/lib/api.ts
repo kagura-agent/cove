@@ -1,4 +1,4 @@
-import type { Channel, Message, Bot, BotCreateResponse } from "../types";
+import type { Channel, Message, Bot, BotCreateResponse, GuildMember } from "../types";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
@@ -46,6 +46,9 @@ export function deleteChannel(channelId: string) {
 }
 export function fetchBots() {
   return api<Bot[]>("/api/v10/guilds/cove/members");
+}
+export function fetchMembers() {
+  return api<GuildMember[]>("/api/v10/guilds/cove/members");
 }
 export function createBot(username: string, bio: string) {
   return api<BotCreateResponse>("/api/v10/users", {
