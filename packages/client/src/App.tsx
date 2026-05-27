@@ -18,7 +18,7 @@ const styles = {
   fullHeight: { height: "100%", background: "var(--bg-deep)" } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
   sider: { background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)", height: "100%" } as CSSProperties,
-  content: { display: "flex", flexDirection: "column", minWidth: 0, background: "var(--bg-deep)" } as CSSProperties,
+  content: { display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
   connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
   loginTitle: { fontSize: 32, fontWeight: 700, color: "#f4a261" } as CSSProperties,
