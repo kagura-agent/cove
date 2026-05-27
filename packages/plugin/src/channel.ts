@@ -143,11 +143,15 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
 
+        let typingInterval: ReturnType<typeof setInterval> | undefined;
         try {
           const restClient = getRestClient(account.baseUrl, account.token);
 
-          // Send typing indicator while bot processes
+          // Send typing indicator periodically while bot processes (Discord-style: every 5s)
           restClient.sendTyping(channelId).catch(() => {});
+          typingInterval = setInterval(() => {
+            restClient.sendTyping(channelId).catch(() => {});
+          }, 5000);
 
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
@@ -194,6 +198,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               ChannelId: channelId,
             },
             deliver: async (payload) => {
+              clearInterval(typingInterval);
               const text = payload.text ?? "";
               if (text) {
                 log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
@@ -208,6 +213,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             },
           });
         } catch (err: any) {
+          if (typingInterval) clearInterval(typingInterval);
           log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
         }
       });
