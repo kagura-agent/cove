@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useWebSocketStore } from "../stores/useWebSocketStore";
 import { MessageItem } from "./MessageItem";
@@ -39,7 +39,8 @@ function TypingDots() {
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
-  const typingUsers = useWebSocketStore((s) => s.typingUsers[channelId] ?? []);
+  const typingUsersRaw = useWebSocketStore((s) => s.typingUsers[channelId]);
+  const typingUsers = useMemo(() => typingUsersRaw ?? [], [typingUsersRaw]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
 
