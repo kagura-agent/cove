@@ -90,11 +90,14 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   }
 
   // Migration: add token column to users table (older DBs lack it)
+  // Note: SQLite ALTER TABLE ADD COLUMN does not support UNIQUE constraint.
+  // Must add column first, then create a unique index separately.
   try {
-    db.exec("ALTER TABLE users ADD COLUMN token TEXT UNIQUE");
+    db.exec("ALTER TABLE users ADD COLUMN token TEXT");
   } catch (_) {
     // Column already exists — ignore
   }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
   return db;
 }
