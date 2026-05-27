@@ -145,6 +145,10 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         try {
           const restClient = getRestClient(account.baseUrl, account.token);
+
+          // Send typing indicator while bot processes
+          restClient.sendTyping(channelId).catch(() => {});
+
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
           // Override agent routing to target the configured agent
