@@ -180,7 +180,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             rawBody: message.content,
             bodyForAgent: message.content,
             messageId: message.id ?? `cove-${Date.now()}`,
-            timestamp: Date.now(),
+            timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
             provider: "cove",
             surface: "cove",
             extraContext: {
