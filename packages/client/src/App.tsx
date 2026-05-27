@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ConfigProvider, theme, Button, Layout, message } from "antd";
+import { useEffect, useState, useCallback } from "react";
+import { ConfigProvider, theme, Button, Layout, message, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
@@ -31,6 +31,56 @@ const connDot = (status: string): CSSProperties => ({
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
+function InviteCodePage({ pendingToken }: { pendingToken: string }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = useCallback(async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v10/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), pendingToken }),
+      });
+      if (!res.ok) {
+        setError(res.status === 400 ? "Invalid or already used invite code" : "Something went wrong, please try again");
+        return;
+      }
+      const data = await res.json() as { token: string };
+      localStorage.setItem("cove-token", data.token);
+      window.history.replaceState({}, "", "/");
+      window.location.reload();
+    } catch {
+      setError("Network error, please try again");
+    } finally {
+      setLoading(false);
+    }
+  }, [code, pendingToken]);
+
+  return (
+    <div style={styles.loginPage}>
+      <div style={styles.loginTitle}>Cove</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 300 }}>
+        <Input
+          placeholder="Enter invite code (COVE-XXXX-XXXX)"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onPressEnter={handleSubmit}
+          size="large"
+          style={{ textAlign: "center", letterSpacing: 1 }}
+        />
+        <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
+          Submit
+        </Button>
+        {error && <div style={{ color: "#ff4d4f", textAlign: "center" }}>{error}</div>}
+      </div>
+    </div>
+  );
+}
+
 function LoginPage() {
   return (
     <div style={styles.loginPage}>
@@ -55,13 +105,21 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
+    const pending = params.get("pending");
     if (token) {
       localStorage.setItem("cove-token", token);
       window.history.replaceState({}, "", "/");
+    }
+
+    if (pending) {
+      setPendingToken(pending);
+      setAuthLoading(false);
+      return;
     }
 
     if (localStorage.getItem("cove-token")) {
@@ -95,6 +153,16 @@ export default function App() {
       <ConfigProvider theme={themeConfig}>
         <div style={{ ...styles.fullHeight, ...styles.loginPage }}>
           <div style={styles.loginTitle}>Cove</div>
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (pendingToken) {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div style={styles.fullHeight}>
+          <InviteCodePage pendingToken={pendingToken} />
         </div>
       </ConfigProvider>
     );

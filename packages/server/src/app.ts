@@ -4,6 +4,7 @@ import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
+import { registerRoutes } from "./routes/register.js";
 import { requireAuth, resolveUser } from "./auth.js";
 
 export interface AppConfig {
@@ -11,7 +12,7 @@ export interface AppConfig {
   oauth?: OAuthConfig;
 }
 
-const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me"]);
+const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", "/api/v10/auth/register"]);
 
 export function createApp(
   db: Database.Database,
@@ -22,6 +23,9 @@ export function createApp(
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+  // Register route is always available (public, no OAuth config needed)
+  app.route("/", registerRoutes(db));
 
   if (config?.oauth) {
     app.route("/", authRoutes(db, config.oauth));

@@ -814,6 +814,108 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
+  // ─── Invite Code Registration ───────────────────────────────────────
+
+  describe("Invite Code Registration", () => {
+    // Helper: seed an invite code directly in DB (simulates generate-invite-codes.js script)
+    function seedInviteCode(code: string) {
+      db.prepare("INSERT INTO invite_codes (id, code, created_at) VALUES (?, ?, ?)")
+        .run(`inv-${code}`, code, Date.now());
+    }
+
+    // Helper: seed a pending registration
+    function seedPending(id: string, token: string, email: string, username: string) {
+      db.prepare(
+        "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run(id, token, `google-${id}`, email, username, null, Date.now());
+    }
+
+    it("POST /api/v10/auth/register with valid invite code creates user", async () => {
+      seedInviteCode("COVE-TEST-AA01");
+      seedPending("p1", "tok-1", "newuser@example.com", "New User");
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-TEST-AA01", pendingToken: "tok-1" }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { token: string };
+      expect(data.token).toBeTruthy();
+
+      // Verify user created with UUID id (not email prefix)
+      const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
+      expect(userRow).toBeDefined();
+      expect(userRow!.username).toBe("New User");
+      // id should be a UUID, not email prefix
+      expect(userRow!.id).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    it("normalizes invite code input (lowercase + whitespace)", async () => {
+      seedInviteCode("COVE-NORM-BB02");
+      seedPending("p-norm", "tok-norm", "norm@example.com", "NormUser");
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "  cove-norm-bb02  ", pendingToken: "tok-norm" }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 400 for invalid code", async () => {
+      seedPending("p2", "tok-2", "test@example.com", "Test");
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "tok-2" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for already-used code", async () => {
+      seedInviteCode("COVE-USED-CC03");
+      seedPending("p3", "tok-3", "user1@example.com", "User1");
+
+      // Use the code
+      await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-3" }),
+      });
+
+      // Try again with same code
+      seedPending("p4", "tok-4", "user2@example.com", "User2");
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-4" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for invalid pending token", async () => {
+      seedInviteCode("COVE-PEND-DD04");
+
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-PEND-DD04", pendingToken: "nonexistent" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when missing fields", async () => {
+      const res = await app.request("/api/v10/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: "COVE-XXXX-YYYY" }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
   // ─── Health ───────────────────────────────────────────────────────────
 
   describe("GET /api/health", () => {

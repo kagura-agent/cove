@@ -40,7 +40,8 @@ Thanks for your interest in contributing to Cove! 🏝️
 
 ## PR Review Process
 
-- PRs are automatically assigned to Luna for review via CODEOWNERS.
+- **Before requesting Luna's review**, send the PR to the `#code-review` channel (Discord <#1508641076204802159>) for automated multi-model code review. Address any findings first, then request Luna's review.
+- PRs are assigned to Luna for final review via CODEOWNERS.
 - When review comments are posted:
   - **Reply directly in the review comment thread** (not as a general PR comment)
   - **Resolve the thread** after addressing the feedback
