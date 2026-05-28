@@ -11,6 +11,7 @@ import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
+import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
@@ -165,7 +166,40 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const originalRouting = channelRuntime.routing;
           const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
 
-          let streamingMessageId: string | null = null;
+          const draftState = { stopped: false, final: false };
+          let draftMessageId: string | undefined;
+          let lastSentText = "";
+
+          const sendOrEdit = async (text: string) => {
+            if (draftState.stopped && !draftState.final) return false;
+            const trimmed = text.trimEnd();
+            if (!trimmed || trimmed === lastSentText) return false;
+            lastSentText = trimmed;
+            try {
+              if (draftMessageId) {
+                await restClient.editMessage(channelId, draftMessageId, trimmed);
+              } else {
+                const msg = await restClient.sendMessage(channelId, trimmed);
+                draftMessageId = msg.id;
+              }
+              return true;
+            } catch (err: any) {
+              draftState.stopped = true;
+              log?.warn?.(`cove: stream preview failed: ${err.message}`);
+              return false;
+            }
+          };
+
+          const draft = createFinalizableDraftLifecycle({
+            throttleMs: 250,
+            state: draftState,
+            sendOrEditStreamMessage: sendOrEdit,
+            readMessageId: () => draftMessageId,
+            clearMessageId: () => { draftMessageId = undefined; },
+            isValidMessageId: (v: unknown) => typeof v === "string",
+            deleteMessage: async () => {},
+            warnPrefix: "cove",
+          });
 
           const patchedRuntime = {
             channel: {
@@ -185,33 +219,30 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                     dispatcherOptions: {
                       ...params.dispatcherOptions,
                       typingCallbacks,
-                      deliver: async (payload: any, info: { kind: string }) => {
+                      deliver: async (payload: any, _info: { kind: string }) => {
+                        typingCallbacks.onCleanup?.();
                         const text = payload.text ?? "";
                         if (!text) return;
 
-                        if (info.kind === "block") {
-                          if (!streamingMessageId) {
-                            log?.info?.(`cove: stream start → [${channelId}]`);
-                            const msg = await restClient.sendMessage(channelId, text);
-                            streamingMessageId = msg.id;
-                          } else {
-                            await restClient.editMessage(channelId, streamingMessageId, text);
-                          }
+                        draftState.final = true;
+                        await draft.seal();
+
+                        if (draftMessageId) {
+                          log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
+                          await restClient.editMessage(channelId, draftMessageId, text);
                         } else {
-                          typingCallbacks.onCleanup?.();
-                          if (streamingMessageId) {
-                            log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                            await restClient.editMessage(channelId, streamingMessageId, text);
-                          } else {
-                            log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-                            await restClient.sendMessage(channelId, text);
-                          }
+                          log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+                          await restClient.sendMessage(channelId, text);
                         }
                       },
                     },
                     replyOptions: {
                       ...params.replyOptions,
-                      disableBlockStreaming: false,
+                      disableBlockStreaming: true,
+                      onPartialReply: (payload: any) => {
+                        if (payload?.text) draft.update(payload.text);
+                      },
+                      onAssistantMessageStart: () => {},
                     },
                   }),
               },
