@@ -7,6 +7,9 @@ import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 /** Set of identified (authenticated) WebSocket clients. */
 const identifiedClients = new Set<WebSocket>();
 
+/** Map from WebSocket to the user who identified on that connection. */
+const connectedUsers = new Map<WebSocket, { id: string; username: string; bot: boolean }>();
+
 /** Heartbeat interval in milliseconds (Discord default-ish). */
 const HEARTBEAT_INTERVAL = 41250;
 
@@ -60,6 +63,7 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
             }
 
             identifiedClients.add(ws);
+            connectedUsers.set(ws, user);
 
             // Send READY dispatch
             const ready: GatewayPayload = {
@@ -88,6 +92,26 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
             break;
           }
 
+          case GatewayOpcode.REQUEST_TYPING: {
+            // TODO: validate channel membership (acceptable for now with small trusted user base)
+            const user = connectedUsers.get(ws);
+            if (!user) break;
+            const d = payload.d as { channel_id?: string } | null;
+            if (!d?.channel_id) break;
+            broadcastGatewayEvent({
+              op: GatewayOpcode.DISPATCH,
+              s: null,
+              t: "TYPING_START",
+              d: {
+                channel_id: d.channel_id,
+                user_id: user.id,
+                username: user.username,
+                timestamp: Date.now(),
+              },
+            });
+            break;
+          }
+
           default:
             // Ignore unknown opcodes
             break;
@@ -99,6 +123,7 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
 
     ws.on("close", () => {
       identifiedClients.delete(ws);
+      connectedUsers.delete(ws);
     });
   });
 }

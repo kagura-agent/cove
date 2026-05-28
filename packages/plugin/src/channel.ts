@@ -10,6 +10,7 @@ import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
+import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
@@ -143,13 +144,27 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
 
+        // Fire-and-forget early typing cue via WebSocket (instant, no TLS overhead)
+        gatewayClient.send({ op: 4, d: { channel_id: channelId } });
+
+        const typingCallbacks = createTypingCallbacks({
+          start: () => {
+            gatewayClient.send({ op: 4, d: { channel_id: channelId } });
+            return Promise.resolve();
+          },
+          keepaliveIntervalMs: 5000,
+          maxDurationMs: 60000,
+          onStartError: (err) => log?.warn?.(`cove: typing start error in [${channelId}]: ${err}`),
+        });
+
         try {
           const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
-          // Override agent routing to target the configured agent
           const targetAgent = account.agentId;
           const originalRouting = channelRuntime.routing;
+          const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
+
           const patchedRuntime = {
             channel: {
               ...channelRuntime,
@@ -160,18 +175,29 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                   return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
                 },
               },
+              reply: {
+                ...channelRuntime.reply,
+                dispatchReplyWithBufferedBlockDispatcher: (params: any) =>
+                  originalDispatcher({
+                    ...params,
+                    dispatcherOptions: {
+                      ...params.dispatcherOptions,
+                      typingCallbacks,
+                    },
+                  }),
+              },
             },
           };
 
-          // Route as group/channel — each scene gets its own OpenClaw session
-          // Session key will be like: agent:kagura:cove:channel:home
+          // Yield event loop so WS typing frame flushes before heavy bootstrap work
+          await new Promise<void>((resolve) => setTimeout(resolve, 1));
+
           await dispatchInboundDirectDmWithRuntime({
             cfg,
             runtime: patchedRuntime as any,
             channel: "cove",
             channelLabel: "Cove",
             accountId: ctx.accountId,
-            // Group peer = channel-based session (like Discord channels)
             peer: { kind: "group" as any, id: channelId },
             senderId,
             senderAddress: senderId,
@@ -190,6 +216,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               ChannelId: channelId,
             },
             deliver: async (payload) => {
+              typingCallbacks.onCleanup?.();
               const text = payload.text ?? "";
               if (text) {
                 log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
@@ -204,6 +231,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             },
           });
         } catch (err: any) {
+          typingCallbacks.onCleanup?.();
           log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
         }
       });

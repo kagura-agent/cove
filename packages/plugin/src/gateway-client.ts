@@ -173,7 +173,8 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
     }
   }
 
-  private send(payload: GatewayPayload): void {
+  /** Public: used by channel handler to send typing indicators. */
+  send(payload: GatewayPayload): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(payload));
     }

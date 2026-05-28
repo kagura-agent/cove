@@ -5,7 +5,7 @@ interface MessageState {
   messages: Record<string, Message[]>;
   setMessages: (channelId: string, messages: Message[]) => void;
   addMessage: (channelId: string, message: Message) => void;
-  updateMessage: (channelId: string, messageId: string, content: string) => void;
+  updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null) => void;
   removeMessage: (channelId: string, messageId: string) => void;
 }
 
@@ -19,11 +19,11 @@ export const useMessageStore = create<MessageState>((set) => ({
       if (existing.some((m) => m.id === message.id)) return s;
       return { messages: { ...s.messages, [channelId]: [...existing, message] } };
     }),
-  updateMessage: (channelId, messageId, content) =>
+  updateMessage: (channelId, messageId, content, editedTimestamp) =>
     set((s) => {
       const msgs = s.messages[channelId];
       if (!msgs) return s;
-      return { messages: { ...s.messages, [channelId]: msgs.map((m) => m.id === messageId ? { ...m, content } : m) } };
+      return { messages: { ...s.messages, [channelId]: msgs.map((m) => m.id === messageId ? { ...m, content, ...(editedTimestamp !== undefined ? { edited_timestamp: editedTimestamp } : {}) } : m) } };
     }),
   removeMessage: (channelId, messageId) =>
     set((s) => {

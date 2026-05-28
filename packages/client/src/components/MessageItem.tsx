@@ -40,6 +40,8 @@ const botBadgeStyle: CSSProperties = {
   borderRadius: 3, padding: "1px 4px", marginLeft: 4, verticalAlign: "middle",
 };
 
+const editedStyle: CSSProperties = { fontSize: 10, opacity: 0.4, marginLeft: 4 };
+
 export function MessageItem({ message }: { message: Message }) {
   const userId = useUserStore((s) => s.id);
   const isSelf = message.author.id === userId;
@@ -53,6 +55,7 @@ export function MessageItem({ message }: { message: Message }) {
       <div style={contentStyle}>{message.content}</div>
       <Typography.Text type="secondary" style={timeStyle}>
         {formatTime(message.timestamp)}
+        {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
       </Typography.Text>
     </div>
   );

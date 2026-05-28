@@ -261,6 +261,7 @@ export function messagesRoutes(db: Database.Database, broadcast?: BroadcastFn): 
       d: {
         channel_id: channelId,
         user_id: author.id,
+        username: author.username,
         timestamp: Date.now(),
       },
     });

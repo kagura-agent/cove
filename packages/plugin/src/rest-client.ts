@@ -69,4 +69,13 @@ export class CoveRestClient {
   async getMessages(channelId: string, limit = 50): Promise<DiscordMessage[]> {
     return this.request("GET", `/api/v10/channels/${channelId}/messages?limit=${limit}`);
   }
+
+  /** POST /api/v10/channels/:id/typing — send typing indicator. */
+  async sendTyping(channelId: string): Promise<void> {
+    const url = `${this.baseUrl}/api/v10/channels/${channelId}/typing`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Authorization": `Bot ${this.token}` },
+    });
+  }
 }
