@@ -65,6 +65,13 @@ export class CoveRestClient {
     });
   }
 
+  /** PATCH /api/v10/channels/:id/messages/:msgId — edit a message. */
+  async editMessage(channelId: string, messageId: string, content: string): Promise<DiscordMessage> {
+    return this.request("PATCH", `/api/v10/channels/${channelId}/messages/${messageId}`, {
+      content,
+    });
+  }
+
   /** GET /api/v10/channels/:id/messages — fetch recent messages. */
   async getMessages(channelId: string, limit = 50): Promise<DiscordMessage[]> {
     return this.request("GET", `/api/v10/channels/${channelId}/messages?limit=${limit}`);
