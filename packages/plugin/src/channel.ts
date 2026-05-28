@@ -240,6 +240,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       ...params.replyOptions,
                       disableBlockStreaming: true,
                       onPartialReply: (payload: any) => {
+                        log?.info?.(`cove: [${channelId}] onPartialReply called, text=${payload?.text?.length ?? 0} chars`);
                         if (payload?.text) draft.update(payload.text);
                       },
                       onAssistantMessageStart: () => {},
