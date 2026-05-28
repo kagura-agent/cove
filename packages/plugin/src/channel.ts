@@ -165,6 +165,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const originalRouting = channelRuntime.routing;
           const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
 
+          let streamingMessageId: string | null = null;
+
           const patchedRuntime = {
             channel: {
               ...channelRuntime,
@@ -183,6 +185,33 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                     dispatcherOptions: {
                       ...params.dispatcherOptions,
                       typingCallbacks,
+                      deliver: async (payload: any, info: { kind: string }) => {
+                        const text = payload.text ?? "";
+                        if (!text) return;
+
+                        if (info.kind === "block") {
+                          if (!streamingMessageId) {
+                            log?.info?.(`cove: stream start → [${channelId}]`);
+                            const msg = await restClient.sendMessage(channelId, text);
+                            streamingMessageId = msg.id;
+                          } else {
+                            await restClient.editMessage(channelId, streamingMessageId, text);
+                          }
+                        } else {
+                          typingCallbacks.onCleanup?.();
+                          if (streamingMessageId) {
+                            log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
+                            await restClient.editMessage(channelId, streamingMessageId, text);
+                          } else {
+                            log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+                            await restClient.sendMessage(channelId, text);
+                          }
+                        }
+                      },
+                    },
+                    replyOptions: {
+                      ...params.replyOptions,
+                      disableBlockStreaming: false,
                     },
                   }),
               },
@@ -215,13 +244,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               SenderName: senderName,
               ChannelId: channelId,
             },
-            deliver: async (payload) => {
-              typingCallbacks.onCleanup?.();
-              const text = payload.text ?? "";
-              if (text) {
-                log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-                await restClient.sendMessage(channelId, text);
-              }
+            deliver: async (_payload) => {
+              // Delivery is handled by the dispatcher's deliver callback above
+              // (block streaming sends/edits messages directly).
             },
             onRecordError: (err) => {
               log?.error?.(`cove: record error in [${channelId}]: ${err}`);
