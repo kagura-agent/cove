@@ -8,7 +8,7 @@ function formatTime(ts: string): string {
     const d = new Date(ts);
     const now = new Date();
     const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     if (isToday) return time;
     return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
   } catch { return ""; }

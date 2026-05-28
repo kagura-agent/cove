@@ -44,6 +44,7 @@ export enum GatewayOpcode {
   DISPATCH = 0,
   HEARTBEAT = 1,
   IDENTIFY = 2,
+  REQUEST_TYPING = 4, // Cove extension: client requests typing broadcast
   HELLO = 10,
   HEARTBEAT_ACK = 11,
 }

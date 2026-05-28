@@ -32,6 +32,8 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
     };
     ws.send(JSON.stringify(hello));
 
+    let connectedUser: { id: string; username: string; bot: boolean } | undefined;
+
     ws.on("message", (raw) => {
       try {
         const payload = JSON.parse(raw.toString()) as GatewayPayload;
@@ -60,6 +62,7 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
             }
 
             identifiedClients.add(ws);
+            connectedUser = user;
 
             // Send READY dispatch
             const ready: GatewayPayload = {
@@ -85,6 +88,25 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
               t: null,
             };
             ws.send(JSON.stringify(ack));
+            break;
+          }
+
+          case GatewayOpcode.REQUEST_TYPING: {
+            // Client requests typing broadcast — same effect as POST /typing but via WS
+            const typingData = payload.d as { channel_id?: string } | null;
+            const channelId = typingData?.channel_id;
+            if (!channelId || !connectedUser) break;
+            broadcastGatewayEvent({
+              op: 0,
+              s: null,
+              t: "TYPING_START",
+              d: {
+                channel_id: channelId,
+                user_id: connectedUser.id,
+                username: connectedUser.username,
+                timestamp: Date.now(),
+              },
+            });
             break;
           }
 
