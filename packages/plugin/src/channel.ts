@@ -243,6 +243,11 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         log?.info?.(`cove: [${channelId}] onPartialReply called, text=${payload?.text?.length ?? 0} chars`);
                         if (payload?.text) draft.update(payload.text);
                       },
+                      onToolStart: (payload: any) => {
+                        const toolName = payload?.toolName ?? payload?.name ?? "tool";
+                        const current = lastSentText;
+                        draft.update(current + (current ? "\n" : "") + `🔧 Using ${toolName}...`);
+                      },
                       onAssistantMessageStart: () => {},
                     },
                   }),
