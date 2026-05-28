@@ -94,6 +94,12 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     };
 
     ws.onclose = () => {
+      const { typingUsers, clearTyping } = get();
+      for (const channelId of Object.keys(typingUsers)) {
+        for (const entry of typingUsers[channelId] ?? []) {
+          clearTyping(channelId, entry.userId);
+        }
+      }
       set({ status: "disconnected" });
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(() => {

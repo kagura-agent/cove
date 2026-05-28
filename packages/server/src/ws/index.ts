@@ -93,6 +93,7 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
           }
 
           case GatewayOpcode.REQUEST_TYPING: {
+            // TODO: validate channel membership (acceptable for now with small trusted user base)
             const user = connectedUsers.get(ws);
             if (!user) break;
             const d = payload.d as { channel_id?: string } | null;
