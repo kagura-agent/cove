@@ -61,9 +61,9 @@ jobs:
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
           # Upload client dist to staging
-          $SSH "sudo mkdir -p /var/www/cove-staging /tmp/cove-staging-client"
+          $SSH "sudo rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
           $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
-          $SSH "sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/"
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
 
           # Create/restart staging service (port 3501, separate DB)
           $SSH "sudo tee /etc/systemd/system/cove-staging.service > /dev/null << 'UNIT'
