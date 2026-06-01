@@ -12,6 +12,7 @@ import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
+import { createToolProgressTracker } from "./tool-progress.js";
 
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
@@ -169,6 +170,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const draftState = { stopped: false, final: false };
           let draftMessageId: string | undefined;
           let lastSentText = "";
+          const toolProgress = createToolProgressTracker();
 
           const sendOrEdit = async (text: string) => {
             if (draftState.stopped && !draftState.final) return false;
@@ -241,14 +243,24 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       disableBlockStreaming: true,
                       onPartialReply: (payload: any) => {
                         log?.info?.(`cove: [${channelId}] onPartialReply called, text=${payload?.text?.length ?? 0} chars`);
-                        if (payload?.text) draft.update(payload.text);
+                        if (payload?.text) {
+                          toolProgress.onPartialReply(payload.text);
+                          draft.update(payload.text);
+                        }
                       },
                       onToolStart: (payload: any) => {
-                        const toolName = payload?.toolName ?? payload?.name ?? "tool";
-                        const current = lastSentText;
-                        draft.update(current + (current ? "\n" : "") + `🔧 Using ${toolName}...`);
+                        toolProgress.onToolStart({
+                          name: payload?.name ?? payload?.toolName,
+                          args: payload?.args,
+                          phase: payload?.phase,
+                          detailMode: payload?.detailMode,
+                        });
+                        const combined = toolProgress.getCombinedText();
+                        if (combined) draft.update(combined);
                       },
-                      onAssistantMessageStart: () => {},
+                      onAssistantMessageStart: () => {
+                        toolProgress.onAssistantMessageStart();
+                      },
                     },
                   }),
               },
