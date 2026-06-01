@@ -170,7 +170,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const draftState = { stopped: false, final: false };
           let draftMessageId: string | undefined;
           let lastSentText = "";
-          const toolProgress = createToolProgressTracker();
+          const toolProgress = createToolProgressTracker(undefined, {
+            seed: message.id ?? String(Date.now()),
+            onProgressUpdate: () => {
+              const combined = toolProgress.getCombinedText();
+              if (combined) draft.update(combined);
+            },
+          });
 
           const sendOrEdit = async (text: string) => {
             if (draftState.stopped && !draftState.final) return false;
@@ -242,7 +248,6 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       ...params.replyOptions,
                       disableBlockStreaming: true,
                       onPartialReply: (payload: any) => {
-                        log?.info?.(`cove: [${channelId}] onPartialReply called, text=${payload?.text?.length ?? 0} chars`);
                         if (payload?.text) {
                           toolProgress.onPartialReply(payload.text);
                           draft.update(payload.text);
@@ -255,8 +260,29 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                           phase: payload?.phase,
                           detailMode: payload?.detailMode,
                         });
+                      },
+                      onItemEvent: (payload: any) => {
+                        toolProgress.onItemEvent(payload);
+                      },
+                      onPlanUpdate: (payload: any) => {
+                        toolProgress.onPlanUpdate(payload);
+                      },
+                      onApprovalEvent: (payload: any) => {
+                        toolProgress.onApprovalEvent(payload);
+                      },
+                      onCommandOutput: (payload: any) => {
+                        toolProgress.onCommandOutput(payload);
+                      },
+                      onPatchSummary: (payload: any) => {
+                        toolProgress.onPatchSummary(payload);
+                      },
+                      onCompactionStart: () => {
+                        toolProgress.onCompactionStart();
                         const combined = toolProgress.getCombinedText();
                         if (combined) draft.update(combined);
+                      },
+                      onCompactionEnd: () => {
+                        toolProgress.onCompactionEnd();
                       },
                       onAssistantMessageStart: () => {
                         toolProgress.onAssistantMessageStart();

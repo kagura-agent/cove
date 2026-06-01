@@ -18,7 +18,8 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
-    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:openclaw"
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:openclaw",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cove/shared": "workspace:*",
@@ -26,8 +27,9 @@
   },
   "devDependencies": {
     "@types/ws": "^8.18.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.8.0",
-    "esbuild": "^0.25.0"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "openclaw": ">=2026.3.0"
