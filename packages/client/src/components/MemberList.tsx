@@ -5,13 +5,13 @@ import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-surface)", borderLeft: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
+  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-surface)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
   header: { padding: "12px 16px 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)" } as CSSProperties,
   member: { display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
-  memberHover: { background: "rgba(255,255,255,0.04)" } as CSSProperties,
+  memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
   username: { fontSize: 14, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
-  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "#5865f2", color: "#fff", marginLeft: 4, flexShrink: 0 } as CSSProperties,
+  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "var(--accent)", color: "#fff", marginLeft: 4, flexShrink: 0 } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
 };
 

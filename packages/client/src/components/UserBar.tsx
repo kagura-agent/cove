@@ -7,7 +7,7 @@ import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: 12,
-  borderTop: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.15)",
+  borderTop: "1px solid var(--border-subtle)", background: "var(--bg-overlay)",
 };
 const avatarStyle: CSSProperties = { backgroundColor: "#f4a261", color: "#1a1a2e", fontWeight: 700, flexShrink: 0 };
 const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-primary)" };

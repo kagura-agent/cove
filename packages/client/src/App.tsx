@@ -20,14 +20,14 @@ const styles = {
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
   layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
   chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
+  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
-  loginTitle: { fontSize: 32, fontWeight: 700, color: "#f4a261" } as CSSProperties,
+  loginTitle: { fontSize: 32, fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
 
 const connDot = (status: string): CSSProperties => ({
   width: 8, height: 8, borderRadius: "50%", display: "inline-block",
-  background: status === "connecting" ? "#faad14" : "#ff4d4f",
+  background: status === "connecting" ? "var(--warning)" : "var(--danger)",
 });
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -76,7 +76,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
         <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
           Submit
         </Button>
-        {error && <div style={{ color: "#ff4d4f", textAlign: "center" }}>{error}</div>}
+        {error && <div style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
       </div>
     </div>
   );

@@ -31,14 +31,14 @@ function avatarColor(name: string): string {
 }
 
 function roleColor(isBot: boolean): string {
-  return isBot ? "#7289da" : "#f2f3f5";
+  return isBot ? "var(--text-bot)" : "var(--text-user)";
 }
 
 const botBadgeStyle: CSSProperties = {
   fontSize: 10,
   fontWeight: 600,
   color: "#fff",
-  background: "#5865f2",
+  background: "var(--accent)",
   borderRadius: 3,
   padding: "1px 5px",
   marginLeft: 6,

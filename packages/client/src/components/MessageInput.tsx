@@ -8,10 +8,10 @@ import type { CSSProperties } from "react";
 const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: 8,
   padding: "12px 16px", background: "var(--bg-surface)",
-  borderTop: "1px solid rgba(255,255,255,0.08)",
+  borderTop: "1px solid var(--border-subtle)",
   paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
 };
-const inputStyle: CSSProperties = { borderRadius: 8, background: "#222226", border: "none" };
+const inputStyle: CSSProperties = { borderRadius: 8, background: "var(--bg-input)", border: "none" };
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
