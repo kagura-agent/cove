@@ -218,12 +218,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             readMessageId: () => draftMessageId,
             clearMessageId: () => { draftMessageId = undefined; },
             isValidMessageId: (v: unknown) => typeof v === "string",
-            deleteMessage: async () => {
-              if (draftMessageId) {
+            deleteMessage: async (messageId?: string) => {
+              const idToDelete = messageId ?? draftMessageId;
+              if (idToDelete) {
                 try {
-                  await restClient.deleteMessage(channelId, draftMessageId);
+                  await restClient.deleteMessage(channelId, idToDelete);
                 } catch (err: any) {
-                  log?.warn?.(`cove: failed to delete draft message ${draftMessageId}: ${err.message}`);
+                  log?.warn?.(`cove: failed to delete draft message ${idToDelete}: ${err.message}`);
                 }
               }
             },

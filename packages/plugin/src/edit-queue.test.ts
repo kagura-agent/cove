@@ -196,29 +196,3 @@ describe("editQueue serialization", () => {
     expect(calls).toEqual(["Hello"]);
   });
 });
-
-describe("orphaned draft cleanup", () => {
-  // TODO: Integration test for orphaned draft deletion on streaming failure.
-  // The deliver callback in channel.ts now calls restClient.deleteMessage()
-  // before falling back to sendMessage when draftState.stopped is true.
-  // Full integration testing requires mocking the channel runtime dispatcher
-  // which is deferred to a future iteration.
-
-  it("placeholder — draft cleanup is tested via manual QA", () => {
-    // See channel.ts deliver callback:
-    // if (draftMessageId && !draftState.stopped) { editMessage }
-    // else { deleteMessage(draft); sendMessage(fresh) }
-    expect(true).toBe(true);
-  });
-});
-
-describe("scroll behavior", () => {
-  // TODO: Scroll-to-lastMessageContent after streaming edits is a DOM behavior
-  // that requires a browser/DOM testing environment.  The current implementation
-  // targets `[data-last-message-content]` in the client package, which narrows
-  // scroll scope to the message content area.  Full scroll testing deferred to
-  // an E2E test suite.
-  it("placeholder — scroll targeting is verified via manual QA", () => {
-    expect(true).toBe(true);
-  });
-});
