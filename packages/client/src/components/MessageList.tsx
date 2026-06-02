@@ -9,7 +9,7 @@ import type { CSSProperties } from "react";
 const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" };
 const listStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "0", display: "flex", flexDirection: "column" };
 const typingBarStyle: CSSProperties = {
-  padding: "4px 20px", fontSize: 12, color: "var(--text-secondary, rgba(255,255,255,0.5))",
+  padding: "4px 20px", fontSize: 12, color: "var(--text-muted)",
   minHeight: 24, display: "flex", alignItems: "center", gap: 4,
 };
 
@@ -90,7 +90,6 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [messages?.length, scrollToBottom]);
 
   // Message content updated (streaming edits) → keep following if was near bottom.
-  // Only react to the last message's content to avoid firing on unrelated property changes.
   const lastMessageContent = messages?.[messages.length - 1]?.content;
   useEffect(() => {
     if (!messages) return;

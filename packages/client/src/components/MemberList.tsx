@@ -5,22 +5,23 @@ import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-surface)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
-  header: { padding: "12px 16px 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)" } as CSSProperties,
+  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
+  header: { padding: "12px 16px 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
   member: { display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
-  username: { fontSize: 14, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
-  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "var(--accent)", color: "#fff", marginLeft: 4, flexShrink: 0 } as CSSProperties,
+  username: { fontSize: 14, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
+  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: 4, flexShrink: 0 } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
 };
 
-const avatarColors = ["#f4a261", "#e76f51", "#2a9d8f", "#264653", "#e9c46a", "#606c38", "#bc6c25"];
+/* Avatar colors — decorative per-user colors, not theme tokens (same as Discord). */
+const AVATAR_COLORS = ["#f4a261", "#e76f51", "#2a9d8f", "#264653", "#e9c46a", "#606c38", "#bc6c25"];
 
 function hashColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return avatarColors[Math.abs(h) % avatarColors.length];
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
 function MemberRow({ member }: { member: GuildMember }) {
@@ -32,7 +33,7 @@ function MemberRow({ member }: { member: GuildMember }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Avatar size={32} style={{ backgroundColor: hashColor(user.username), color: "#fff", fontWeight: 700, ...styles.avatar }}>
+      <Avatar size={32} style={{ backgroundColor: hashColor(user.username), color: "var(--header-primary)", fontWeight: 700, ...styles.avatar }}>
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
       <span style={styles.username}>{member.nick || user.username}</span>

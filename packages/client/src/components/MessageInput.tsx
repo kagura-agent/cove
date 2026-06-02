@@ -7,7 +7,7 @@ import type { CSSProperties } from "react";
 
 const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: 8,
-  padding: "12px 16px", background: "var(--bg-surface)",
+  padding: "12px 16px", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
   paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
 };

@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Set default theme
-document.documentElement.setAttribute("data-theme", "midnight");
+// Theme initialization happens in useThemeStore (reads localStorage, applies data-theme)
+import "./stores/useThemeStore";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

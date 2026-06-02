@@ -23,11 +23,14 @@ function formatCompactTime(ts: string): string {
   } catch { return ""; }
 }
 
+/* Avatar colors — these are decorative per-user colors, not theme tokens.
+   They remain as literal values intentionally (same pattern as Discord). */
+const AVATAR_COLORS = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#f47b67", "#e78284", "#3ba55d"];
+
 function avatarColor(name: string): string {
-  const colors = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#f47b67", "#e78284", "#3ba55d"];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 function roleColor(isBot: boolean): string {
@@ -37,7 +40,7 @@ function roleColor(isBot: boolean): string {
 const botBadgeStyle: CSSProperties = {
   fontSize: 10,
   fontWeight: 600,
-  color: "#fff",
+  color: "var(--header-primary)",
   background: "var(--accent)",
   borderRadius: 3,
   padding: "1px 5px",
@@ -49,7 +52,7 @@ const botBadgeStyle: CSSProperties = {
 
 const editedStyle: CSSProperties = {
   fontSize: 10,
-  color: "var(--text-secondary)",
+  color: "var(--text-muted)",
   opacity: 0.6,
   marginLeft: 4,
   userSelect: "none",
@@ -89,7 +92,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             justifyContent: "center",
             fontSize: 18,
             fontWeight: 600,
-            color: "#fff",
+            color: "var(--header-primary)",
             flexShrink: 0,
             cursor: "pointer",
           }}
@@ -114,7 +117,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             {isBot && <span style={botBadgeStyle}>BOT</span>}
             <Typography.Text
               type="secondary"
-              style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 8 }}
+              style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}
             >
               {formatTime(message.timestamp)}
             </Typography.Text>
@@ -124,7 +127,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           <div
             style={{
               whiteSpace: "pre-wrap",
-              color: "var(--text-primary)",
+              color: "var(--text-normal)",
               fontSize: 16,
               lineHeight: 1.375,
               wordBreak: "break-word",
@@ -155,7 +158,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         <div
           style={{
             whiteSpace: "pre-wrap",
-            color: "var(--text-primary)",
+            color: "var(--text-normal)",
             fontSize: 16,
             lineHeight: 1.375,
             wordBreak: "break-word",

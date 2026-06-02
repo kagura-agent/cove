@@ -12,15 +12,15 @@ import type { CSSProperties } from "react";
 
 const themeConfig = {
   algorithm: theme.darkAlgorithm,
-  token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" },
+  token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
 };
 
 const styles = {
-  fullHeight: { height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
+  fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
+  overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20 } as CSSProperties,
   layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
-  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
+  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-primary)" } as CSSProperties,
+  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
   loginTitle: { fontSize: 32, fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };

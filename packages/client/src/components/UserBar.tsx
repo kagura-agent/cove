@@ -9,9 +9,9 @@ const barStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: 12, padding: 12,
   borderTop: "1px solid var(--border-subtle)", background: "var(--bg-overlay)",
 };
-const avatarStyle: CSSProperties = { backgroundColor: "#f4a261", color: "#1a1a2e", fontWeight: 700, flexShrink: 0 };
-const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-primary)" };
-const settingsBtnStyle: CSSProperties = { color: "var(--text-secondary)" };
+const avatarStyle: CSSProperties = { backgroundColor: "var(--accent-brand)", color: "var(--bg-tertiary)", fontWeight: 700, flexShrink: 0 };
+const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-normal)" };
+const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)" };
 
 export function UserBar() {
   const { username } = useUserStore();
