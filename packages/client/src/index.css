@@ -284,6 +284,7 @@ textarea:focus-visible {
   margin-bottom: 2px;
   transition: background 0.1s ease, color 0.1s ease;
   background: transparent;
+  color: var(--interactive-normal);
 }
 
 .settings-nav-item:hover {
@@ -388,7 +389,7 @@ textarea:focus-visible {
 
   /* Settings panel mobile — full-screen like Discord mobile */
   .settings-backdrop {
-    background: rgba(0, 0, 0, 1);
+    background: rgba(0, 0, 0, 0.85);
     backdrop-filter: none;
   }
   .settings-panel {
