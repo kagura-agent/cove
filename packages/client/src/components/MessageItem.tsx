@@ -31,7 +31,7 @@ function avatarColor(name: string): string {
 }
 
 function roleColor(isBot: boolean): string {
-  return isBot ? "#7289da" : "#f4a261";
+  return isBot ? "#7289da" : "#f2f3f5";
 }
 
 const botBadgeStyle: CSSProperties = {

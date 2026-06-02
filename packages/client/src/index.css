@@ -1,14 +1,14 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg-deep: #1a1a2e;
-  --bg-surface: #22223a;
-  --bg-elevated: #2a2a4a;
-  --text-primary: #e0e0e0;
-  --text-secondary: #a0a0b8;
-  --accent: #f4a261;
-  --msg-own: #2e2a50;
-  --msg-other: #262640;
+  --bg-deep: #313338;
+  --bg-surface: #2b2d31;
+  --bg-elevated: #232428;
+  --text-primary: #dbdee1;
+  --text-secondary: #949ba4;
+  --accent: #5865f2;
+  --msg-own: #313338;
+  --msg-other: #313338;
 }
 
 html, body {
@@ -34,7 +34,7 @@ html, body {
 
 /* Discord-style message hover */
 .discord-msg-row { position: relative; }
-.discord-msg-row:hover { background: rgba(255,255,255,0.02); }
+.discord-msg-row:hover { background: rgba(116,127,141,0.06); }
 .discord-msg-row .compact-ts { position: absolute; left: 0; width: 56px; text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-secondary); line-height: 22px; opacity: 0; user-select: none; top: 4px; }
 .discord-msg-row:hover .compact-ts { opacity: 1; }
 
