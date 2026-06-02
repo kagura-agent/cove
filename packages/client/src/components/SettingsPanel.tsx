@@ -4,7 +4,8 @@ import { Drawer, Tabs, Typography, Button } from "antd";
 import { BotManagement } from "./BotManagement";
 import type { CSSProperties } from "react";
 
-const THEME_PRESETS: { key: ThemePreset; label: string; preview: { bg: string; sidebar: string; accent: string } }[] = [
+const THEME_PRESETS: { key: ThemePreset; label: string; preview: { bg: string; sidebar: string; accent: string; isLight?: boolean } }[] = [
+  { key: "light", label: "Light", preview: { bg: "#ffffff", sidebar: "#f2f3f5", accent: "#5865f2", isLight: true } },
   { key: "dark", label: "Dark", preview: { bg: "#313338", sidebar: "#2b2d31", accent: "#5865f2" } },
   { key: "midnight", label: "Midnight", preview: { bg: "#1a191d", sidebar: "#111113", accent: "#5865f2" } },
 ];
@@ -35,7 +36,7 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
   const sidebarStyle: CSSProperties = {
     width: 36,
     background: preset.preview.sidebar,
-    borderRight: "1px solid rgba(255,255,255,0.06)",
+    borderRight: preset.preview.isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.06)",
   };
 
   const contentStyle: CSSProperties = {
@@ -51,7 +52,7 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
     height: 4,
     borderRadius: 2,
     width,
-    background: "rgba(255,255,255,0.15)",
+    background: preset.preview.isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.15)",
   });
 
   const accentLineStyle: CSSProperties = {
@@ -67,7 +68,7 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
     padding: "8px 0",
     fontSize: 13,
     fontWeight: isActive ? 600 : 400,
-    color: "var(--text-normal)",
+    color: preset.preview.isLight ? "#313338" : "var(--text-normal)",
     background: preset.preview.sidebar,
   };
 

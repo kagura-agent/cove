@@ -4,16 +4,20 @@ import { GoogleOutlined, TeamOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
+import { useThemeStore } from "./stores/useThemeStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { MemberList } from "./components/MemberList";
 import * as api from "./lib/api";
 import type { CSSProperties } from "react";
 
-const themeConfig = {
-  algorithm: theme.darkAlgorithm,
-  token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
-};
+function useAntdThemeConfig() {
+  const currentTheme = useThemeStore((s) => s.theme);
+  return {
+    algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
+    token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+  };
+}
 
 const styles = {
   fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
@@ -99,6 +103,7 @@ function LoginPage() {
 }
 
 export default function App() {
+  const themeConfig = useAntdThemeConfig();
   const { needsSetup, setUser } = useUserStore();
   const { channels, activeChannelId, setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);

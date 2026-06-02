@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ThemePreset = "dark" | "midnight";
+export type ThemePreset = "light" | "dark" | "midnight";
 
 interface ThemeState {
   theme: ThemePreset;
@@ -14,7 +14,7 @@ function applyTheme(theme: ThemePreset) {
 
 function loadTheme(): ThemePreset {
   const stored = localStorage.getItem("cove-theme");
-  if (stored === "dark" || stored === "midnight") return stored;
+  if (stored === "light" || stored === "dark" || stored === "midnight") return stored;
   return "midnight";
 }
 
