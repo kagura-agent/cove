@@ -247,6 +247,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                     replyOptions: {
                       ...params.replyOptions,
                       disableBlockStreaming: true,
+                      suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {
                         if (payload?.text) {
                           toolProgress.onPartialReply(payload.text);
