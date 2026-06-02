@@ -49,7 +49,7 @@ function ChannelItem({ id, name, isActive, onSelect, onDelete }: {
   );
 }
 
-export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: boolean }) {
+export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -116,7 +116,7 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
         )}
       </div>
 
-      <UserBar onCloseSidebar={onClose} />
+      <UserBar onCloseSidebar={onClose} onSettingsOpen={onSettingsOpen} />
     </div>
   );
 }

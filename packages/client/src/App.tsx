@@ -8,6 +8,7 @@ import { useThemeStore } from "./stores/useThemeStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { MemberList } from "./components/MemberList";
+import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
 import type { CSSProperties } from "react";
 
@@ -112,6 +113,7 @@ export default function App() {
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -193,7 +195,7 @@ export default function App() {
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={styles.overlay} />}
 
         <div style={styles.layout} className={sidebarOpen ? "sidebar-open" : ""}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} />
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} onSettingsOpen={() => setSettingsOpen(true)} />
 
           <div style={styles.chatColumn}>
             {wsStatus !== "connected" && (
@@ -207,6 +209,8 @@ export default function App() {
 
           {membersOpen && <MemberList />}
         </div>
+
+        <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
     </ConfigProvider>
   );

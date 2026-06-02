@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { useThemeStore, type ThemePreset } from "../stores/useThemeStore";
@@ -158,7 +157,7 @@ const SECTION_COMPONENTS: Record<SectionKey, () => ReactNode> = {
 
 /* ── Main Settings Panel ────────────────────────────────────── */
 
-export function SettingsPanel({ open, onOpenChange, onCloseSidebar }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseSidebar?: () => void }) {
+export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [activeSection, setActiveSection] = useState<SectionKey>("appearance");
   const { logout } = useUserStore();
 
@@ -173,17 +172,12 @@ export function SettingsPanel({ open, onOpenChange, onCloseSidebar }: { open: bo
     return () => document.removeEventListener("keydown", handler);
   }, [open, close]);
 
-  // Close the mobile sidebar when settings opens
-  useEffect(() => {
-    if (open && onCloseSidebar) onCloseSidebar();
-  }, [open, onCloseSidebar]);
-
   if (!open) return null;
 
   const { username } = useUserStore();
   const avatarLetter = username ? username[0].toUpperCase() : "?";
 
-  return createPortal(
+  return (
     <div className="settings-backdrop" onClick={close}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         {/* Close button */}
@@ -244,8 +238,7 @@ export function SettingsPanel({ open, onOpenChange, onCloseSidebar }: { open: bo
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
 
