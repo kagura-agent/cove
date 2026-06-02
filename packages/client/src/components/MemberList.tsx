@@ -3,6 +3,7 @@ import { Avatar, Spin } from "antd";
 import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
+import { pickAvatarColor, MEMBER_AVATAR_COLORS } from "../lib/avatar-palette";
 
 const styles = {
   root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
@@ -15,13 +16,8 @@ const styles = {
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
 };
 
-/* Avatar colors — decorative per-user colors, not theme tokens (same as Discord). */
-const AVATAR_COLORS = ["#f4a261", "#e76f51", "#2a9d8f", "#264653", "#e9c46a", "#606c38", "#bc6c25"];
-
 function hashColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+  return pickAvatarColor(name, MEMBER_AVATAR_COLORS);
 }
 
 function MemberRow({ member }: { member: GuildMember }) {

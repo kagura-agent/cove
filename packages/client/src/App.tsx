@@ -13,9 +13,11 @@ import type { CSSProperties } from "react";
 
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
+  // Read accent-brand from CSS custom property so Ant Design follows our theme system
+  const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim();
   return {
     algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
-    token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+    token: { colorPrimary: accentBrand, colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
   };
 }
 

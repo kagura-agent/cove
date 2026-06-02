@@ -1,6 +1,7 @@
 import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
+import { pickAvatarColor, MESSAGE_AVATAR_COLORS } from "../lib/avatar-palette";
 
 function formatTime(ts: string): string {
   try {
@@ -23,14 +24,8 @@ function formatCompactTime(ts: string): string {
   } catch { return ""; }
 }
 
-/* Avatar colors — these are decorative per-user colors, not theme tokens.
-   They remain as literal values intentionally (same pattern as Discord). */
-const AVATAR_COLORS = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#f47b67", "#e78284", "#3ba55d"];
-
 function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return pickAvatarColor(name, MESSAGE_AVATAR_COLORS);
 }
 
 function roleColor(isBot: boolean): string {
