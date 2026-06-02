@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 
 const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" };
-const listStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6 };
+const listStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "0", display: "flex", flexDirection: "column" };
 const typingBarStyle: CSSProperties = {
   padding: "4px 20px", fontSize: 12, color: "var(--text-secondary, rgba(255,255,255,0.5))",
   minHeight: 24, display: "flex", alignItems: "center", gap: 4,
@@ -120,7 +120,12 @@ export function MessageList({ channelId }: { channelId: string }) {
   return (
     <>
       <div ref={scrollContainerRef} style={listStyle}>
-        {messages.map((msg) => <MessageItem key={msg.id} message={msg} />)}
+        {messages.map((msg, i) => {
+          const prev = i > 0 ? messages[i - 1] : null;
+          const isGroupStart = !prev || prev.author.id !== msg.author.id ||
+            (new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime() > 7 * 60 * 1000);
+          return <MessageItem key={msg.id} message={msg} isGroupStart={isGroupStart} />;
+        })}
         <div ref={bottomRef} />
       </div>
       <div style={typingBarStyle}>
