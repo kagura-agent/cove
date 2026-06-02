@@ -23,7 +23,6 @@ function formatCompactTime(ts: string): string {
   } catch { return ""; }
 }
 
-/** Generate a consistent color from username for avatar background */
 function avatarColor(name: string): string {
   const colors = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#f47b67", "#e78284", "#3ba55d"];
   let hash = 0;
@@ -31,71 +30,9 @@ function avatarColor(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
-
-const rowStyle: CSSProperties = {
-  display: "flex",
-  padding: "2px 48px 2px 72px",
-  position: "relative",
-  minHeight: 22,
-};
-
-const rowHoverBg = "rgba(255,255,255,0.02)";
-
-const groupStartRowStyle: CSSProperties = {
-  ...rowStyle,
-  marginTop: 16,
-  padding: "2px 48px 2px 72px",
-};
-
-const avatarStyle: CSSProperties = {
-  position: "absolute",
-  left: 16,
-  top: 2,
-  width: 40,
-  height: 40,
-  borderRadius: "50%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 18,
-  fontWeight: 600,
-  color: "#fff",
-  flexShrink: 0,
-  cursor: "pointer",
-};
-
-const compactTimestampStyle: CSSProperties = {
-  position: "absolute",
-  left: 0,
-  width: 56,
-  textAlign: "right",
-  paddingRight: 4,
-  fontSize: 11,
-  color: "var(--text-secondary)",
-  lineHeight: "22px",
-  opacity: 0,
-  userSelect: "none",
-};
-
-const headerStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "baseline",
-  gap: 8,
-  lineHeight: "22px",
-};
-
-const usernameStyle: CSSProperties = {
-  fontSize: 16,
-  fontWeight: 500,
-  cursor: "pointer",
-};
-
-const timestampStyle: CSSProperties = {
-  fontSize: 12,
-  color: "var(--text-secondary)",
-  marginLeft: 4,
-};
+function roleColor(isBot: boolean): string {
+  return isBot ? "#7289da" : "#f4a261";
+}
 
 const botBadgeStyle: CSSProperties = {
   fontSize: 10,
@@ -104,20 +41,10 @@ const botBadgeStyle: CSSProperties = {
   background: "#5865f2",
   borderRadius: 3,
   padding: "1px 5px",
-  marginLeft: 4,
+  marginLeft: 6,
   verticalAlign: "middle",
-  lineHeight: "16px",
+  lineHeight: "14px",
   display: "inline-block",
-  position: "relative",
-  top: -1,
-};
-
-const contentStyle: CSSProperties = {
-  whiteSpace: "pre-wrap",
-  color: "var(--text-primary)",
-  fontSize: 16,
-  lineHeight: "22px",
-  wordBreak: "break-word",
 };
 
 const editedStyle: CSSProperties = {
@@ -127,11 +54,6 @@ const editedStyle: CSSProperties = {
   marginLeft: 4,
   userSelect: "none",
 };
-
-// Role colors matching Discord
-function roleColor(isBot: boolean): string {
-  return isBot ? "#7289da" : "#f4a261";
-}
 
 interface MessageItemProps {
   message: Message;
@@ -143,36 +65,99 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
 
-  return (
-    <div
-      className="discord-msg-row"
-      style={isGroupStart ? groupStartRowStyle : rowStyle}
-      onMouseEnter={(e) => { e.currentTarget.style.background = rowHoverBg; const ts = e.currentTarget.querySelector('.compact-ts') as HTMLElement; if (ts) ts.style.opacity = '1'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = ''; const ts = e.currentTarget.querySelector('.compact-ts') as HTMLElement; if (ts) ts.style.opacity = '0'; }}
-    >
-      {isGroupStart ? (
-        <div style={{ ...avatarStyle, backgroundColor: bgColor }}>
+  if (isGroupStart) {
+    return (
+      <div
+        className="discord-msg-row"
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 16,
+          padding: "4px 48px 0 16px",
+          marginTop: 16,
+        }}
+      >
+        {/* Avatar */}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            backgroundColor: bgColor,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 18,
+            fontWeight: 600,
+            color: "#fff",
+            flexShrink: 0,
+            cursor: "pointer",
+          }}
+        >
           {initial}
         </div>
-      ) : (
-        <span className="compact-ts" style={compactTimestampStyle}>
-          {formatCompactTime(message.timestamp)}
-        </span>
-      )}
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {isGroupStart && (
-          <div style={headerStyle}>
-            <span style={{ ...usernameStyle, color: roleColor(isBot) }}>
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Header: username + badge + timestamp */}
+          <div style={{ display: "flex", alignItems: "baseline", lineHeight: "22px" }}>
+            <span
+              style={{
+                fontSize: 16,
+                fontWeight: 500,
+                color: roleColor(isBot),
+                cursor: "pointer",
+              }}
+            >
               {message.author.username}
             </span>
             {isBot && <span style={botBadgeStyle}>BOT</span>}
-            <Typography.Text type="secondary" style={timestampStyle}>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 8 }}
+            >
               {formatTime(message.timestamp)}
             </Typography.Text>
           </div>
-        )}
-        <div style={contentStyle}>
+
+          {/* Message body */}
+          <div
+            style={{
+              whiteSpace: "pre-wrap",
+              color: "var(--text-primary)",
+              fontSize: 16,
+              lineHeight: 1.375,
+              wordBreak: "break-word",
+            }}
+          >
+            {message.content}
+            {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Grouped (continuation) message — no avatar, compact
+  return (
+    <div
+      className="discord-msg-row"
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        padding: "2px 48px 0 72px",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            whiteSpace: "pre-wrap",
+            color: "var(--text-primary)",
+            fontSize: 16,
+            lineHeight: 1.375,
+            wordBreak: "break-word",
+          }}
+        >
           {message.content}
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
         </div>
