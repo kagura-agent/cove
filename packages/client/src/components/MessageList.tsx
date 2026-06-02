@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useWebSocketStore } from "../stores/useWebSocketStore";
 import { MessageItem } from "./MessageItem";
@@ -12,6 +12,8 @@ const typingBarStyle: CSSProperties = {
   padding: "4px 20px", fontSize: 12, color: "var(--text-secondary, rgba(255,255,255,0.5))",
   minHeight: 24, display: "flex", alignItems: "center", gap: 4,
 };
+
+const NEAR_BOTTOM_THRESHOLD = 100;
 
 const dotKeyframes = `
 @keyframes typingDot {
@@ -36,33 +38,66 @@ function TypingDots() {
   );
 }
 
+function isNearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_THRESHOLD;
+}
+
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
   const typingUsersRaw = useWebSocketStore((s) => s.typingUsers[channelId]);
   const typingUsers = useMemo(() => typingUsersRaw ?? [], [typingUsersRaw]);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
+  const wasNearBottomRef = useRef(true);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    bottomRef.current?.scrollIntoView({ behavior });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    prevCountRef.current = 0;
+    wasNearBottomRef.current = true;
     api.fetchMessages(channelId).then((msgs) => {
       if (!cancelled) {
         const reversed = msgs.reverse();
         setMessages(channelId, reversed);
         prevCountRef.current = reversed.length;
+        requestAnimationFrame(() => scrollToBottom("instant"));
       }
     }).catch((err) => console.error("loadMessages:", err));
     return () => { cancelled = true; };
-  }, [channelId, setMessages]);
+  }, [channelId, setMessages, scrollToBottom]);
 
+  // Track near-bottom on scroll so we know user intent even when content grows
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => { wasNearBottomRef.current = isNearBottom(container); };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // New message added → scroll if was near bottom
   useEffect(() => {
     if (!messages) return;
-    if (messages.length > prevCountRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > prevCountRef.current && wasNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
     }
     prevCountRef.current = messages.length;
-  }, [messages]);
+  }, [messages?.length, scrollToBottom]);
+
+  // Message content updated (streaming edits) → keep following if was near bottom.
+  // Only react to the last message's content to avoid firing on unrelated property changes.
+  const lastMessageContent = messages?.[messages.length - 1]?.content;
+  useEffect(() => {
+    if (!messages) return;
+    if (wasNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [lastMessageContent, scrollToBottom]);
 
   if (!messages) {
     return <div style={centerStyle}><Spin tip="Loading messages…" /></div>;
@@ -86,7 +121,7 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   return (
     <>
-      <div style={listStyle}>
+      <div ref={scrollContainerRef} style={listStyle}>
         {messages.map((msg) => <MessageItem key={msg.id} message={msg} />)}
         <div ref={bottomRef} />
       </div>
