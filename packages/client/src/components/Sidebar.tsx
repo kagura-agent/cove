@@ -7,15 +7,15 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { display: "flex", flexDirection: "column", height: "100%", width: 240, minWidth: 240, background: "var(--bg-surface)", borderRight: "none" } as CSSProperties,
-  header: { padding: "16px 16px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", gap: 8 } as CSSProperties,
+  root: { display: "flex", flexDirection: "column", height: "100%", width: 240, minWidth: 240, background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
+  header: { padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 8 } as CSSProperties,
   title: { fontSize: 16, fontWeight: 700, margin: 0, color: "var(--text-primary)" } as CSSProperties,
   list: { flex: 1, overflowY: "auto", padding: "0 8px" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
   categoryHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 8px 4px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)", cursor: "default" } as CSSProperties,
   channelItem: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 4, cursor: "pointer", transition: "background 0.15s", fontSize: 14, color: "var(--text-secondary)" } as CSSProperties,
-  channelActive: { background: "var(--bg-active)", color: "var(--text-primary)" } as CSSProperties,
-  channelHover: { background: "var(--bg-hover)", color: "var(--text-primary)" } as CSSProperties,
+  channelActive: { background: "rgba(255,255,255,0.08)", color: "var(--text-primary)" } as CSSProperties,
+  channelHover: { background: "rgba(255,255,255,0.04)", color: "var(--text-primary)" } as CSSProperties,
   hash: { fontSize: 18, fontWeight: 600, opacity: 0.5, width: 20, textAlign: "center", flexShrink: 0 } as CSSProperties,
   channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
   deleteBtn: { opacity: 0, fontSize: 12, transition: "opacity 0.15s" } as CSSProperties,

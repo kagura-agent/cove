@@ -1,3 +1,4 @@
+import { useUserStore } from "../stores/useUserStore";
 import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
@@ -8,163 +9,54 @@ function formatTime(ts: string): string {
     const now = new Date();
     const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
     const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    if (isToday) return `Today at ${time}`;
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const isYesterday = d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate();
-    if (isYesterday) return `Yesterday at ${time}`;
-    return `${d.toLocaleDateString([], { month: "2-digit", day: "2-digit", year: "numeric" })} ${time}`;
+    if (isToday) return time;
+    return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
   } catch { return ""; }
 }
 
-function formatCompactTime(ts: string): string {
-  try {
-    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch { return ""; }
+const baseStyle: CSSProperties = {
+  maxWidth: "75%", padding: "10px 14px", borderRadius: 14,
+  fontSize: 14, lineHeight: 1.6, wordBreak: "break-word",
+};
+const contentStyle: CSSProperties = { whiteSpace: "pre-wrap", color: "var(--text-primary)" };
+const timeStyle: CSSProperties = { fontSize: 10, display: "block", textAlign: "right", marginTop: 4, opacity: 0.6 };
+
+function bubbleStyle(isSelf: boolean): CSSProperties {
+  return {
+    ...baseStyle,
+    alignSelf: isSelf ? "flex-end" : "flex-start",
+    background: isSelf ? "var(--msg-own)" : "var(--msg-other)",
+    borderBottomRightRadius: isSelf ? 4 : 14,
+    borderBottomLeftRadius: isSelf ? 14 : 4,
+  };
 }
 
-function avatarColor(name: string): string {
-  const colors = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#f47b67", "#e78284", "#3ba55d"];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
-
-function roleColor(isBot: boolean): string {
-  return isBot ? "var(--text-bot)" : "var(--text-user)";
+function authorStyle(isSelf: boolean): CSSProperties {
+  return { fontSize: 12, color: isSelf ? "#b39ddb" : "#f4a261", display: "block", marginBottom: 2 };
 }
 
 const botBadgeStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 600,
-  color: "#fff",
-  background: "var(--accent)",
-  borderRadius: 3,
-  padding: "1px 5px",
-  marginLeft: 6,
-  verticalAlign: "middle",
-  lineHeight: "14px",
-  display: "inline-block",
+  fontSize: 10, fontWeight: 600, color: "#fff", background: "#5865f2",
+  borderRadius: 3, padding: "1px 4px", marginLeft: 4, verticalAlign: "middle",
 };
 
-const editedStyle: CSSProperties = {
-  fontSize: 10,
-  color: "var(--text-secondary)",
-  opacity: 0.6,
-  marginLeft: 4,
-  userSelect: "none",
-};
+const editedStyle: CSSProperties = { fontSize: 10, opacity: 0.4, marginLeft: 4 };
 
-interface MessageItemProps {
-  message: Message;
-  isGroupStart: boolean;
-}
+export function MessageItem({ message }: { message: Message }) {
+  const userId = useUserStore((s) => s.id);
+  const isSelf = message.author.id === userId;
 
-export function MessageItem({ message, isGroupStart }: MessageItemProps) {
-  const isBot = message.author.bot;
-  const initial = message.author.username.charAt(0).toUpperCase();
-  const bgColor = avatarColor(message.author.username);
-
-  if (isGroupStart) {
-    return (
-      <div
-        className="discord-msg-row"
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 16,
-          padding: "4px 48px 0 16px",
-          marginTop: 16,
-        }}
-      >
-        {/* Avatar */}
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: "50%",
-            backgroundColor: bgColor,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            fontWeight: 600,
-            color: "#fff",
-            flexShrink: 0,
-            cursor: "pointer",
-          }}
-        >
-          {initial}
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Header: username + badge + timestamp */}
-          <div style={{ display: "flex", alignItems: "baseline", lineHeight: "22px" }}>
-            <span
-              style={{
-                fontSize: 16,
-                fontWeight: 500,
-                color: roleColor(isBot),
-                cursor: "pointer",
-              }}
-            >
-              {message.author.username}
-            </span>
-            {isBot && <span style={botBadgeStyle}>BOT</span>}
-            <Typography.Text
-              type="secondary"
-              style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 8 }}
-            >
-              {formatTime(message.timestamp)}
-            </Typography.Text>
-          </div>
-
-          {/* Message body */}
-          <div
-            style={{
-              whiteSpace: "pre-wrap",
-              color: "var(--text-primary)",
-              fontSize: 16,
-              lineHeight: 1.375,
-              wordBreak: "break-word",
-            }}
-          >
-            {message.content}
-            {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Grouped (continuation) message — no avatar, show compact timestamp on hover
   return (
-    <div
-      className="discord-msg-row"
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        padding: "2px 48px 0 72px",
-      }}
-    >
-      <span className="compact-ts">
-        {formatCompactTime(message.timestamp)}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            whiteSpace: "pre-wrap",
-            color: "var(--text-primary)",
-            fontSize: 16,
-            lineHeight: 1.375,
-            wordBreak: "break-word",
-          }}
-        >
-          {message.content}
-          {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-        </div>
-      </div>
+    <div className="animate-fade-in" style={bubbleStyle(isSelf)}>
+      <Typography.Text strong style={authorStyle(isSelf)}>
+        {message.author.username}
+        {message.author.bot && <span style={botBadgeStyle}>BOT</span>}
+      </Typography.Text>
+      <div style={contentStyle}>{message.content}</div>
+      <Typography.Text type="secondary" style={timeStyle}>
+        {formatTime(message.timestamp)}
+        {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+      </Typography.Text>
     </div>
   );
 }
