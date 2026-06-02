@@ -190,7 +190,7 @@ export default function App() {
       <div style={styles.fullHeight}>
         {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={styles.overlay} />}
 
-        <div style={styles.layout}>
+        <div style={styles.layout} className={sidebarOpen ? "sidebar-open" : ""}>
           <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} />
 
           <div style={styles.chatColumn}>
