@@ -89,13 +89,15 @@ export function MessageList({ channelId }: { channelId: string }) {
     prevCountRef.current = messages.length;
   }, [messages?.length, scrollToBottom]);
 
-  // Message content updated (streaming edits) → keep following if was near bottom
+  // Message content updated (streaming edits) → keep following if was near bottom.
+  // Only react to the last message's content to avoid firing on unrelated property changes.
+  const lastMessageContent = messages?.[messages.length - 1]?.content;
   useEffect(() => {
     if (!messages) return;
     if (wasNearBottomRef.current) {
       requestAnimationFrame(() => scrollToBottom());
     }
-  }, [messages, scrollToBottom]);
+  }, [lastMessageContent, scrollToBottom]);
 
   if (!messages) {
     return <div style={centerStyle}><Spin tip="Loading messages…" /></div>;

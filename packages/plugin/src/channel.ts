@@ -178,24 +178,32 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             },
           });
 
-          const sendOrEdit = async (text: string) => {
-            if (draftState.stopped && !draftState.final) return false;
-            const trimmed = text.trimEnd();
-            if (!trimmed || trimmed === lastSentText) return false;
-            lastSentText = trimmed;
-            try {
-              if (draftMessageId) {
-                await restClient.editMessage(channelId, draftMessageId, trimmed);
-              } else {
-                const msg = await restClient.sendMessage(channelId, trimmed);
-                draftMessageId = msg.id;
-              }
-              return true;
-            } catch (err: any) {
-              draftState.stopped = true;
-              log?.warn?.(`cove: stream preview failed: ${err.message}`);
-              return false;
-            }
+          // Sequential queue ensures PATCH requests land in order even if
+          // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
+          let editQueue = Promise.resolve();
+
+          const sendOrEdit = async (text: string): Promise<boolean> => {
+            return new Promise<boolean>((resolve) => {
+              editQueue = editQueue.then(async () => {
+                if (draftState.stopped && !draftState.final) { resolve(false); return; }
+                const trimmed = text.trimEnd();
+                if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
+                lastSentText = trimmed;
+                try {
+                  if (draftMessageId) {
+                    await restClient.editMessage(channelId, draftMessageId, trimmed);
+                  } else {
+                    const msg = await restClient.sendMessage(channelId, trimmed);
+                    draftMessageId = msg.id;
+                  }
+                  resolve(true);
+                } catch (err: any) {
+                  draftState.stopped = true;
+                  log?.warn?.(`cove: stream preview failed: ${err.message}`);
+                  resolve(false);
+                }
+              });
+            });
           };
 
           const draft = createFinalizableDraftLifecycle({
@@ -205,7 +213,15 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             readMessageId: () => draftMessageId,
             clearMessageId: () => { draftMessageId = undefined; },
             isValidMessageId: (v: unknown) => typeof v === "string",
-            deleteMessage: async () => {},
+            deleteMessage: async () => {
+              if (draftMessageId) {
+                try {
+                  await restClient.deleteMessage(channelId, draftMessageId);
+                } catch (err: any) {
+                  log?.warn?.(`cove: failed to delete draft message ${draftMessageId}: ${err.message}`);
+                }
+              }
+            },
             warnPrefix: "cove",
           });
 
@@ -235,7 +251,11 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         draftState.final = true;
                         await draft.seal();
 
-                        if (draftMessageId) {
+                        // If streaming was stopped due to an earlier API error,
+                        // the draftMessageId may be stale or absent. Fall back
+                        // to sending a fresh message so the final reply is not
+                        // silently lost.
+                        if (draftMessageId && !draftState.stopped) {
                           log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
                           await restClient.editMessage(channelId, draftMessageId, text);
                         } else {
@@ -246,6 +266,10 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                     },
                     replyOptions: {
                       ...params.replyOptions,
+                      // Disable the DEFAULT block dispatcher so our custom
+                      // createFinalizableDraftLifecycle handles streaming instead.
+                      // This does NOT disable streaming events — only the built-in
+                      // block delivery mechanism.
                       disableBlockStreaming: true,
                       suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {

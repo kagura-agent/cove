@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createToolProgressTracker } from "./tool-progress.js";
 
+// Hand-rolled mock of openclaw/plugin-sdk/channel-streaming.
+// This replicates the module's public API surface with minimal logic so unit
+// tests stay deterministic and don't depend on SDK internals.  If the real
+// module adds or changes exports, update this mock to match.
 vi.mock("openclaw/plugin-sdk/channel-streaming", () => {
   return {
     isChannelProgressDraftWorkToolName: (name: string) => {

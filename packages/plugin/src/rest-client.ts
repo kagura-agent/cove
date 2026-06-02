@@ -77,6 +77,19 @@ export class CoveRestClient {
     return this.request("GET", `/api/v10/channels/${channelId}/messages?limit=${limit}`);
   }
 
+  /** DELETE /api/v10/channels/:id/messages/:msgId — delete a message. */
+  async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    const url = `${this.baseUrl}/api/v10/channels/${channelId}/messages/${messageId}`;
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: { "Authorization": `Bot ${this.token}` },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Cove API DELETE /channels/${channelId}/messages/${messageId} failed: ${res.status} ${text}`);
+    }
+  }
+
   /** POST /api/v10/channels/:id/typing — send typing indicator. */
   async sendTyping(channelId: string): Promise<void> {
     const url = `${this.baseUrl}/api/v10/channels/${channelId}/typing`;

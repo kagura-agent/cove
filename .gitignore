@@ -7,3 +7,4 @@ dist/
 *.db-wal
 server-bundle.js
 .claude/worktrees/
+*.tsbuildinfo
