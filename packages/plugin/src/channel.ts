@@ -29,6 +29,29 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
   return client;
 }
 
+/**
+ * Clean up an orphaned draft message and fall back to sending a fresh
+ * message.  Reused by both the streaming-error path and the final-edit
+ * failure path.
+ */
+async function cleanupAndSend(
+  restClient: CoveRestClient,
+  channelId: string,
+  draftMessageId: string | undefined,
+  text: string,
+  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
+): Promise<void> {
+  if (draftMessageId) {
+    try {
+      await restClient.deleteMessage(channelId, draftMessageId);
+    } catch (delErr: any) {
+      log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
+    }
+  }
+  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+  await restClient.sendMessage(channelId, text);
+}
+
 function resolveAccount(
   cfg: any,
   accountId?: string | null,
@@ -263,20 +286,14 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         // silently lost.
                         if (draftMessageId && !draftState.stopped) {
                           log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                          await restClient.editMessage(channelId, draftMessageId, text);
-                        } else {
-                          // Clean up orphaned draft before falling back to a
-                          // fresh message — otherwise the half-rendered draft
-                          // stays visible alongside the final reply.
-                          if (draftMessageId) {
-                            try {
-                              await restClient.deleteMessage(channelId, draftMessageId);
-                            } catch (delErr: any) {
-                              log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
-                            }
+                          try {
+                            await restClient.editMessage(channelId, draftMessageId, text);
+                          } catch (editErr: any) {
+                            log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
+                            await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                           }
-                          log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-                          await restClient.sendMessage(channelId, text);
+                        } else {
+                          await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                         }
                       },
                     },

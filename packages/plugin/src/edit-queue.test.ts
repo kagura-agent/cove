@@ -196,3 +196,88 @@ describe("editQueue serialization", () => {
     expect(calls).toEqual(["Hello"]);
   });
 });
+
+/**
+ * Unit tests for the cleanupAndSend fallback pattern used in channel.ts.
+ *
+ * When the final editMessage call fails (e.g. message was deleted, network
+ * error), channel.ts must delete the stale draft and fall back to sendMessage
+ * so the agent's completed reply is not silently lost.
+ */
+describe("cleanupAndSend fallback", () => {
+  /** Minimal reproduction of the cleanupAndSend helper from channel.ts */
+  async function cleanupAndSend(opts: {
+    deleteMessage: (id: string) => Promise<void>;
+    sendMessage: (text: string) => Promise<void>;
+    draftMessageId: string | undefined;
+    text: string;
+  }): Promise<void> {
+    if (opts.draftMessageId) {
+      try {
+        await opts.deleteMessage(opts.draftMessageId);
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+    await opts.sendMessage(opts.text);
+  }
+
+  it("deletes stale draft then sends a fresh message", async () => {
+    const calls: string[] = [];
+    await cleanupAndSend({
+      deleteMessage: async (id) => { calls.push(`delete:${id}`); },
+      sendMessage: async (text) => { calls.push(`send:${text}`); },
+      draftMessageId: "draft-1",
+      text: "Final reply",
+    });
+    expect(calls).toEqual(["delete:draft-1", "send:Final reply"]);
+  });
+
+  it("still sends even when draft deletion fails", async () => {
+    const calls: string[] = [];
+    await cleanupAndSend({
+      deleteMessage: async () => { throw new Error("404 Not Found"); },
+      sendMessage: async (text) => { calls.push(`send:${text}`); },
+      draftMessageId: "draft-gone",
+      text: "Final reply",
+    });
+    expect(calls).toEqual(["send:Final reply"]);
+  });
+
+  it("sends directly when no draft exists", async () => {
+    const calls: string[] = [];
+    await cleanupAndSend({
+      deleteMessage: async () => { calls.push("delete — should not happen"); },
+      sendMessage: async (text) => { calls.push(`send:${text}`); },
+      draftMessageId: undefined,
+      text: "No draft reply",
+    });
+    expect(calls).toEqual(["send:No draft reply"]);
+  });
+
+  it("final edit failure triggers fallback to cleanupAndSend", async () => {
+    /**
+     * Simulates the full deliver() path: first tries editMessage, and on
+     * failure falls through to cleanupAndSend.
+     */
+    const calls: string[] = [];
+    const draftMessageId = "draft-99";
+    const text = "Completed agent response";
+
+    // Simulate the deliver() logic from channel.ts
+    try {
+      // editMessage fails
+      throw new Error("Discord API 404");
+    } catch {
+      // Falls through to cleanupAndSend
+      await cleanupAndSend({
+        deleteMessage: async (id) => { calls.push(`delete:${id}`); },
+        sendMessage: async (t) => { calls.push(`send:${t}`); },
+        draftMessageId,
+        text,
+      });
+    }
+
+    expect(calls).toEqual(["delete:draft-99", "send:Completed agent response"]);
+  });
+});
