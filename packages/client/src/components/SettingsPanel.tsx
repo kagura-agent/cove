@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { useThemeStore, type ThemePreset } from "../stores/useThemeStore";
@@ -177,7 +178,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
   const { username } = useUserStore();
   const avatarLetter = username ? username[0].toUpperCase() : "?";
 
-  return (
+  return createPortal(
     <div className="settings-backdrop" onClick={close}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         {/* Close button */}
@@ -221,7 +222,8 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
