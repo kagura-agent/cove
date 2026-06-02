@@ -29,6 +29,29 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
   return client;
 }
 
+/**
+ * Clean up an orphaned draft message and fall back to sending a fresh
+ * message.  Reused by both the streaming-error path and the final-edit
+ * failure path.
+ */
+async function cleanupAndSend(
+  restClient: CoveRestClient,
+  channelId: string,
+  draftMessageId: string | undefined,
+  text: string,
+  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
+): Promise<void> {
+  if (draftMessageId) {
+    try {
+      await restClient.deleteMessage(channelId, draftMessageId);
+    } catch (delErr: any) {
+      log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
+    }
+  }
+  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+  await restClient.sendMessage(channelId, text);
+}
+
 function resolveAccount(
   cfg: any,
   accountId?: string | null,
@@ -170,7 +193,12 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const draftState = { stopped: false, final: false };
           let draftMessageId: string | undefined;
           let lastSentText = "";
-          const toolProgress = createToolProgressTracker(undefined, {
+          // Pass the channel config section so tool-progress can read
+          // channel-level settings (e.g. maxLines, labels).  `cfg` is the
+          // full gateway config; the cove channel entry lives under
+          // `channels.cove`.
+          const channelEntry = cfg?.channels?.["cove"] ?? {};
+          const toolProgress = createToolProgressTracker(channelEntry, {
             seed: message.id ?? String(Date.now()),
             onProgressUpdate: () => {
               const combined = toolProgress.getCombinedText();
@@ -178,24 +206,32 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             },
           });
 
-          const sendOrEdit = async (text: string) => {
-            if (draftState.stopped && !draftState.final) return false;
-            const trimmed = text.trimEnd();
-            if (!trimmed || trimmed === lastSentText) return false;
-            lastSentText = trimmed;
-            try {
-              if (draftMessageId) {
-                await restClient.editMessage(channelId, draftMessageId, trimmed);
-              } else {
-                const msg = await restClient.sendMessage(channelId, trimmed);
-                draftMessageId = msg.id;
-              }
-              return true;
-            } catch (err: any) {
-              draftState.stopped = true;
-              log?.warn?.(`cove: stream preview failed: ${err.message}`);
-              return false;
-            }
+          // Sequential queue ensures PATCH requests land in order even if
+          // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
+          let editQueue = Promise.resolve();
+
+          const sendOrEdit = async (text: string): Promise<boolean> => {
+            return new Promise<boolean>((resolve) => {
+              editQueue = editQueue.then(async () => {
+                if (draftState.stopped && !draftState.final) { resolve(false); return; }
+                const trimmed = text.trimEnd();
+                if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
+                lastSentText = trimmed;
+                try {
+                  if (draftMessageId) {
+                    await restClient.editMessage(channelId, draftMessageId, trimmed);
+                  } else {
+                    const msg = await restClient.sendMessage(channelId, trimmed);
+                    draftMessageId = msg.id;
+                  }
+                  resolve(true);
+                } catch (err: any) {
+                  draftState.stopped = true;
+                  log?.warn?.(`cove: stream preview failed: ${err.message}`);
+                  resolve(false);
+                }
+              });
+            });
           };
 
           const draft = createFinalizableDraftLifecycle({
@@ -205,7 +241,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             readMessageId: () => draftMessageId,
             clearMessageId: () => { draftMessageId = undefined; },
             isValidMessageId: (v: unknown) => typeof v === "string",
-            deleteMessage: async () => {},
+            deleteMessage: async (messageId?: string) => {
+              const idToDelete = messageId ?? draftMessageId;
+              if (idToDelete) {
+                try {
+                  await restClient.deleteMessage(channelId, idToDelete);
+                } catch (err: any) {
+                  log?.warn?.(`cove: failed to delete draft message ${idToDelete}: ${err.message}`);
+                }
+              }
+            },
             warnPrefix: "cove",
           });
 
@@ -235,17 +280,29 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         draftState.final = true;
                         await draft.seal();
 
-                        if (draftMessageId) {
+                        // If streaming was stopped due to an earlier API error,
+                        // the draftMessageId may be stale or absent. Fall back
+                        // to sending a fresh message so the final reply is not
+                        // silently lost.
+                        if (draftMessageId && !draftState.stopped) {
                           log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                          await restClient.editMessage(channelId, draftMessageId, text);
+                          try {
+                            await restClient.editMessage(channelId, draftMessageId, text);
+                          } catch (editErr: any) {
+                            log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
+                            await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+                          }
                         } else {
-                          log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-                          await restClient.sendMessage(channelId, text);
+                          await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                         }
                       },
                     },
                     replyOptions: {
                       ...params.replyOptions,
+                      // Disable the DEFAULT block dispatcher so our custom
+                      // createFinalizableDraftLifecycle handles streaming instead.
+                      // This does NOT disable streaming events — only the built-in
+                      // block delivery mechanism.
                       disableBlockStreaming: true,
                       suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {
