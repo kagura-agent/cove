@@ -11,7 +11,7 @@ const wrapperStyle: CSSProperties = {
   borderTop: "1px solid rgba(255,255,255,0.08)",
   paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
 };
-const inputStyle: CSSProperties = { borderRadius: 8, background: "#2b2d31", border: "none" };
+const inputStyle: CSSProperties = { borderRadius: 8, background: "#222226", border: "none" };
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");

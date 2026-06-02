@@ -1,14 +1,14 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg-deep: #1a1b1e;
-  --bg-surface: #111214;
-  --bg-elevated: #0c0c0d;
+  --bg-deep: #1a191d;
+  --bg-surface: #111113;
+  --bg-elevated: #0c0c0e;
   --text-primary: #dbdee1;
   --text-secondary: #949ba4;
   --accent: #5865f2;
-  --msg-own: #1a1b1e;
-  --msg-other: #1a1b1e;
+  --msg-own: #1a191d;
+  --msg-other: #1a191d;
 }
 
 html, body {
