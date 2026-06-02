@@ -1,8 +1,10 @@
+import { useState, useEffect, useCallback } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { useThemeStore, type ThemePreset } from "../stores/useThemeStore";
-import { Drawer, Tabs, Typography, Button } from "antd";
 import { BotManagement } from "./BotManagement";
-import type { CSSProperties } from "react";
+
+/* ── Theme presets ──────────────────────────────────────────── */
 
 const THEME_PRESETS: { key: ThemePreset; label: string; preview: { bg: string; sidebar: string; accent: string; isLight?: boolean } }[] = [
   { key: "light", label: "Light", preview: { bg: "#ffffff", sidebar: "#f2f3f5", accent: "#5865f2", isLight: true } },
@@ -10,9 +12,22 @@ const THEME_PRESETS: { key: ThemePreset; label: string; preview: { bg: string; s
   { key: "midnight", label: "Midnight", preview: { bg: "#1a191d", sidebar: "#111113", accent: "#5865f2" } },
 ];
 
-const swatchContainerStyle: CSSProperties = {
-  display: "flex", gap: 16, flexWrap: "wrap",
-};
+/* ── Nav sections ───────────────────────────────────────────── */
+
+type SectionKey = "appearance" | "profile" | "bots";
+
+interface NavItem {
+  key: SectionKey;
+  label: string;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { key: "appearance", label: "Appearance" },
+  { key: "profile", label: "Profile" },
+  { key: "bots", label: "Bots" },
+];
+
+/* ── ThemeSwatch (unchanged) ────────────────────────────────── */
 
 function ThemeSwatch({ preset, isActive, onSelect }: {
   preset: typeof THEME_PRESETS[number]; isActive: boolean; onSelect: () => void;
@@ -88,16 +103,19 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
   );
 }
 
-function AppearanceTab() {
+/* ── Section content components ─────────────────────────────── */
+
+function AppearanceSection() {
   const { theme, setTheme } = useThemeStore();
 
   return (
     <div>
+      <h2 style={sectionTitleStyle}>Appearance</h2>
       <div style={{ marginBottom: 16 }}>
-        <Typography.Text strong style={{ fontSize: 13, display: "block", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em", color: "var(--text-muted)", marginBottom: 12 }}>
           Theme
-        </Typography.Text>
-        <div style={swatchContainerStyle}>
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           {THEME_PRESETS.map((preset) => (
             <ThemeSwatch
               key={preset.key}
@@ -112,38 +130,216 @@ function AppearanceTab() {
   );
 }
 
-export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { username, logout } = useUserStore();
+function ProfileSection() {
+  const { username } = useUserStore();
 
   return (
-    <Drawer open={open} onClose={() => onOpenChange(false)} title="Settings" placement="right" width={400}>
-      <Tabs
-        items={[
-          {
-            key: "appearance",
-            label: "Appearance",
-            children: <AppearanceTab />,
-          },
-          {
-            key: "profile",
-            label: "Profile",
-            children: (
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Signed in as</label>
-                <Typography.Text strong>{username}</Typography.Text>
-                <div style={{ marginTop: 16 }}>
-                  <Button danger onClick={logout}>Sign out</Button>
-                </div>
-              </div>
-            ),
-          },
-          {
-            key: "bots",
-            label: "Bots",
-            children: <BotManagement />,
-          },
-        ]}
-      />
-    </Drawer>
+    <div>
+      <h2 style={sectionTitleStyle}>Profile</h2>
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em", color: "var(--text-muted)", marginBottom: 8 }}>
+        Signed in as
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+    </div>
   );
 }
+
+function BotsSection() {
+  return (
+    <div>
+      <h2 style={sectionTitleStyle}>Bots</h2>
+      <BotManagement />
+    </div>
+  );
+}
+
+const sectionTitleStyle: CSSProperties = {
+  fontSize: 20,
+  fontWeight: 600,
+  color: "var(--text-normal)",
+  marginBottom: 20,
+  marginTop: 0,
+};
+
+const SECTION_COMPONENTS: Record<SectionKey, () => ReactNode> = {
+  appearance: () => <AppearanceSection />,
+  profile: () => <ProfileSection />,
+  bots: () => <BotsSection />,
+};
+
+/* ── Main Settings Panel ────────────────────────────────────── */
+
+export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [activeSection, setActiveSection] = useState<SectionKey>("appearance");
+  const { logout } = useUserStore();
+
+  const close = useCallback(() => onOpenChange(false), [onOpenChange]);
+
+  // ESC to close
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, close]);
+
+  if (!open) return null;
+
+  return (
+    <div style={overlayStyle}>
+      {/* Sidebar */}
+      <div style={sidebarContainerStyle}>
+        <div style={sidebarInnerStyle}>
+          <div style={categoryHeaderStyle}>USER SETTINGS</div>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setActiveSection(item.key)}
+              style={{
+                ...navItemStyle,
+                background: activeSection === item.key ? "var(--bg-modifier-active)" : "transparent",
+                color: activeSection === item.key ? "var(--text-normal)" : "var(--text-muted)",
+                fontWeight: activeSection === item.key ? 600 : 400,
+              }}
+              onMouseEnter={(e) => {
+                if (activeSection !== item.key) {
+                  e.currentTarget.style.background = "var(--bg-modifier-hover)";
+                  e.currentTarget.style.color = "var(--text-normal)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeSection !== item.key) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+          <div style={dividerStyle} />
+          <button onClick={() => { logout(); close(); }} style={signOutStyle}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={contentContainerStyle}>
+        <div style={contentInnerStyle}>
+          {SECTION_COMPONENTS[activeSection]()}
+        </div>
+        {/* Close button */}
+        <button onClick={close} style={closeButtonStyle} aria-label="Close settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: "var(--text-muted)" }}>ESC</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Styles ─────────────────────────────────────────────────── */
+
+const overlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  display: "flex",
+  background: "var(--bg-tertiary, #1e1f22)",
+};
+
+const sidebarContainerStyle: CSSProperties = {
+  flex: "0 0 218px",
+  background: "var(--bg-secondary, #2b2d31)",
+  display: "flex",
+  justifyContent: "flex-end",
+  padding: "60px 6px 20px 20px",
+  overflowY: "auto",
+};
+
+const sidebarInnerStyle: CSSProperties = {
+  width: 192,
+};
+
+const categoryHeaderStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.02em",
+  color: "var(--text-muted)",
+  padding: "6px 10px",
+  marginBottom: 2,
+};
+
+const navItemStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+  border: "none",
+  borderRadius: 4,
+  padding: "6px 10px",
+  fontSize: 15,
+  cursor: "pointer",
+  marginBottom: 2,
+  transition: "background 0.1s, color 0.1s",
+};
+
+const dividerStyle: CSSProperties = {
+  height: 1,
+  background: "var(--bg-modifier-hover, rgba(255,255,255,0.06))",
+  margin: "8px 10px",
+};
+
+const signOutStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+  border: "none",
+  background: "transparent",
+  borderRadius: 4,
+  padding: "6px 10px",
+  fontSize: 15,
+  color: "#ed4245",
+  cursor: "pointer",
+  fontWeight: 400,
+  transition: "background 0.1s",
+};
+
+const contentContainerStyle: CSSProperties = {
+  flex: 1,
+  background: "var(--bg-primary, #313338)",
+  display: "flex",
+  padding: "60px 40px 20px 40px",
+  overflowY: "auto",
+  position: "relative",
+};
+
+const contentInnerStyle: CSSProperties = {
+  maxWidth: 740,
+  width: "100%",
+};
+
+const closeButtonStyle: CSSProperties = {
+  position: "absolute",
+  top: 60,
+  right: 40,
+  width: 36,
+  height: 36,
+  borderRadius: "50%",
+  border: "1px solid var(--text-muted)",
+  background: "transparent",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+  transition: "border-color 0.15s, color 0.15s",
+};
