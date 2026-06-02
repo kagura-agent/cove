@@ -138,7 +138,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
     );
   }
 
-  // Grouped (continuation) message — no avatar, compact
+  // Grouped (continuation) message — no avatar, show compact timestamp on hover
   return (
     <div
       className="discord-msg-row"
@@ -148,6 +148,9 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         padding: "2px 48px 0 72px",
       }}
     >
+      <span className="compact-ts">
+        {formatCompactTime(message.timestamp)}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{

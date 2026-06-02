@@ -32,6 +32,12 @@ html, body {
 }
 .animate-fade-in { animation: fadeIn 0.2s ease; }
 
+/* Discord-style message hover */
+.discord-msg-row { position: relative; }
+.discord-msg-row:hover { background: rgba(255,255,255,0.02); }
+.discord-msg-row .compact-ts { position: absolute; left: 0; width: 56px; text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-secondary); line-height: 22px; opacity: 0; user-select: none; top: 4px; }
+.discord-msg-row:hover .compact-ts { opacity: 1; }
+
 /* Mobile responsive */
 .mobile-only { display: none !important; }
 
