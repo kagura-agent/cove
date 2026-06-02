@@ -255,16 +255,16 @@ const overlayStyle: CSSProperties = {
 };
 
 const sidebarContainerStyle: CSSProperties = {
-  flex: "0 0 218px",
+  flex: "1 1 50%",
   background: "var(--bg-secondary, #2b2d31)",
   display: "flex",
   justifyContent: "flex-end",
-  padding: "60px 6px 20px 20px",
+  padding: "60px 20px 20px 20px",
   overflowY: "auto",
 };
 
 const sidebarInnerStyle: CSSProperties = {
-  width: 192,
+  width: 220,
 };
 
 const categoryHeaderStyle: CSSProperties = {
@@ -312,23 +312,24 @@ const signOutStyle: CSSProperties = {
 };
 
 const contentContainerStyle: CSSProperties = {
-  flex: 1,
+  flex: "1 1 50%",
   background: "var(--bg-primary, #313338)",
   display: "flex",
+  alignItems: "flex-start",
   padding: "60px 40px 20px 40px",
   overflowY: "auto",
-  position: "relative",
 };
 
 const contentInnerStyle: CSSProperties = {
   maxWidth: 740,
   width: "100%",
+  flex: "0 1 740px",
 };
 
 const closeButtonStyle: CSSProperties = {
-  position: "absolute",
-  top: 60,
-  right: 40,
+  flexShrink: 0,
+  marginTop: 0,
+  marginLeft: 20,
   width: 36,
   height: 36,
   borderRadius: "50%",
