@@ -116,7 +116,7 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
         )}
       </div>
 
-      <UserBar />
+      <UserBar onCloseSidebar={onClose} />
     </div>
   );
 }

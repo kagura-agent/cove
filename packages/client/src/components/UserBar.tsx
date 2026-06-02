@@ -13,7 +13,7 @@ const avatarStyle: CSSProperties = { backgroundColor: "var(--accent-brand)", col
 const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-normal)" };
 const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)" };
 
-export function UserBar() {
+export function UserBar({ onCloseSidebar }: { onCloseSidebar?: () => void }) {
   const { username } = useUserStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -26,7 +26,7 @@ export function UserBar() {
         <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
         <Button type="text" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} style={settingsBtnStyle} />
       </div>
-      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} onCloseSidebar={onCloseSidebar} />
     </>
   );
 }

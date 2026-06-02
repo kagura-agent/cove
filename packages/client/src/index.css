@@ -250,6 +250,7 @@ textarea:focus-visible {
   max-height: 720px;
   border-radius: 10px;
   overflow: hidden;
+  background: var(--bg-primary);
   box-shadow: var(--shadow-modal);
   animation: modalFadeIn 0.2s ease;
 }
@@ -339,6 +340,10 @@ textarea:focus-visible {
   background: var(--bg-modifier-hover);
 }
 
+.settings-mobile-sign-out {
+  display: none;
+}
+
 /* ── Theme swatch ─────────────────────────────────────────── */
 
 .theme-swatch {
@@ -381,14 +386,18 @@ textarea:focus-visible {
     display: none !important;
   }
 
-  /* Settings panel mobile */
+  /* Settings panel mobile — full-screen like Discord mobile */
+  .settings-backdrop {
+    background: rgba(0, 0, 0, 1);
+    backdrop-filter: none;
+  }
   .settings-panel {
-    width: calc(100vw - 16px);
-    height: calc(100vh - 16px);
+    width: 100vw;
+    height: 100vh;
     max-width: none;
     max-height: none;
     flex-direction: column;
-    border-radius: 8px;
+    border-radius: 0;
   }
   .settings-sidebar {
     width: 100%;
@@ -396,6 +405,7 @@ textarea:focus-visible {
     overflow-x: auto;
     overflow-y: hidden;
     padding: 8px;
+    padding-right: 48px; /* leave space for close button */
     gap: 4px;
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -409,11 +419,13 @@ textarea:focus-visible {
     flex-shrink: 0;
   }
   .settings-sign-out {
-    white-space: nowrap;
-    flex-shrink: 0;
+    display: none;
   }
   .settings-content {
     padding: 20px 16px;
+  }
+  .settings-mobile-sign-out {
+    display: block;
   }
 
   /* Theme swatches stack on mobile */

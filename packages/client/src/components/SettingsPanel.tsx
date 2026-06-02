@@ -158,7 +158,7 @@ const SECTION_COMPONENTS: Record<SectionKey, () => ReactNode> = {
 
 /* ── Main Settings Panel ────────────────────────────────────── */
 
-export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function SettingsPanel({ open, onOpenChange, onCloseSidebar }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseSidebar?: () => void }) {
   const [activeSection, setActiveSection] = useState<SectionKey>("appearance");
   const { logout } = useUserStore();
 
@@ -172,6 +172,11 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [open, close]);
+
+  // Close the mobile sidebar when settings opens
+  useEffect(() => {
+    if (open && onCloseSidebar) onCloseSidebar();
+  }, [open, onCloseSidebar]);
 
   if (!open) return null;
 
@@ -219,6 +224,23 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
         <div className="settings-content">
           <div style={contentInnerStyle}>
             {SECTION_COMPONENTS[activeSection]()}
+            {/* Mobile-only sign out at bottom of content */}
+            <div className="settings-mobile-sign-out">
+              <div style={{ ...dividerStyle, margin: "24px 0 16px" }} />
+              <button
+                onClick={() => { logout(); close(); }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--danger)",
+                  fontSize: 15,
+                  cursor: "pointer",
+                  padding: "8px 0",
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </div>
