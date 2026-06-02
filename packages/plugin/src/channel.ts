@@ -170,7 +170,12 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const draftState = { stopped: false, final: false };
           let draftMessageId: string | undefined;
           let lastSentText = "";
-          const toolProgress = createToolProgressTracker(undefined, {
+          // Pass the channel config section so tool-progress can read
+          // channel-level settings (e.g. maxLines, labels).  `cfg` is the
+          // full gateway config; the cove channel entry lives under
+          // `channels.cove`.
+          const channelEntry = cfg?.channels?.["cove"] ?? {};
+          const toolProgress = createToolProgressTracker(channelEntry, {
             seed: message.id ?? String(Date.now()),
             onProgressUpdate: () => {
               const combined = toolProgress.getCombinedText();
@@ -259,6 +264,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                           log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
                           await restClient.editMessage(channelId, draftMessageId, text);
                         } else {
+                          // Clean up orphaned draft before falling back to a
+                          // fresh message — otherwise the half-rendered draft
+                          // stays visible alongside the final reply.
+                          if (draftMessageId) {
+                            try {
+                              await restClient.deleteMessage(channelId, draftMessageId);
+                            } catch (delErr: any) {
+                              log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
+                            }
+                          }
                           log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
                           await restClient.sendMessage(channelId, text);
                         }
