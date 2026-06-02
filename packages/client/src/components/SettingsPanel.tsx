@@ -187,11 +187,29 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
 
   if (!open) return null;
 
+  const { username } = useUserStore();
+  const avatarLetter = username ? username[0].toUpperCase() : "?";
+
   return (
-    <div style={overlayStyle}>
-      {/* Sidebar */}
-      <div style={sidebarContainerStyle}>
-        <div style={sidebarInnerStyle}>
+    <div style={backdropStyle} onClick={close}>
+      {/* Floating panel */}
+      <div style={panelStyle} onClick={(e) => e.stopPropagation()}>
+        {/* Close button — top-right of panel */}
+        <button onClick={close} style={closeButtonStyle} aria-label="Close settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        {/* Sidebar */}
+        <div style={sidebarContainerStyle}>
+          {/* User profile area */}
+          <div style={profileAreaStyle}>
+            <div style={avatarStyle}>{avatarLetter}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+          </div>
+          <div style={dividerStyle} />
           <div style={categoryHeaderStyle}>USER SETTINGS</div>
           {NAV_ITEMS.map((item) => (
             <button
@@ -224,21 +242,13 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             Sign Out
           </button>
         </div>
-      </div>
 
-      {/* Content */}
-      <div style={contentContainerStyle}>
-        <div style={contentInnerStyle}>
-          {SECTION_COMPONENTS[activeSection]()}
+        {/* Content */}
+        <div style={contentContainerStyle}>
+          <div style={contentInnerStyle}>
+            {SECTION_COMPONENTS[activeSection]()}
+          </div>
         </div>
-        {/* Close button */}
-        <button onClick={close} style={closeButtonStyle} aria-label="Close settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: "var(--text-muted)" }}>ESC</div>
-        </button>
       </div>
     </div>
   );
@@ -246,25 +256,58 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
 
 /* ── Styles ─────────────────────────────────────────────────── */
 
-const overlayStyle: CSSProperties = {
+const backdropStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
   zIndex: 1000,
   display: "flex",
-  background: "var(--bg-tertiary, #1e1f22)",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(0, 0, 0, 0.6)",
+  backdropFilter: "blur(2px)",
+};
+
+const panelStyle: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  width: "calc(100vw - 80px)",
+  maxWidth: 960,
+  height: "calc(100vh - 80px)",
+  maxHeight: 720,
+  borderRadius: 10,
+  overflow: "hidden",
+  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)",
 };
 
 const sidebarContainerStyle: CSSProperties = {
-  flex: "1 1 50%",
+  width: 220,
+  flexShrink: 0,
   background: "var(--bg-secondary, #2b2d31)",
   display: "flex",
-  justifyContent: "flex-end",
-  padding: "60px 20px 20px 20px",
+  flexDirection: "column",
+  padding: "16px 12px",
   overflowY: "auto",
 };
 
-const sidebarInnerStyle: CSSProperties = {
-  width: 220,
+const profileAreaStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 10px",
+};
+
+const avatarStyle: CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: "50%",
+  background: "var(--accent, #5865f2)",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 16,
+  fontWeight: 700,
+  flexShrink: 0,
 };
 
 const categoryHeaderStyle: CSSProperties = {
@@ -312,35 +355,32 @@ const signOutStyle: CSSProperties = {
 };
 
 const contentContainerStyle: CSSProperties = {
-  flex: "1 1 50%",
+  flex: 1,
   background: "var(--bg-primary, #313338)",
-  display: "flex",
-  alignItems: "flex-start",
-  padding: "60px 40px 20px 40px",
+  padding: "32px 40px",
   overflowY: "auto",
 };
 
 const contentInnerStyle: CSSProperties = {
-  maxWidth: 740,
+  maxWidth: 660,
   width: "100%",
-  flex: "0 1 740px",
 };
 
 const closeButtonStyle: CSSProperties = {
-  flexShrink: 0,
-  marginTop: 0,
-  marginLeft: 20,
-  width: 36,
-  height: 36,
+  position: "absolute",
+  top: 12,
+  right: 12,
+  width: 32,
+  height: 32,
   borderRadius: "50%",
   border: "1px solid var(--text-muted)",
   background: "transparent",
   color: "var(--text-muted)",
   cursor: "pointer",
   display: "flex",
-  flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
   padding: 0,
+  zIndex: 1,
   transition: "border-color 0.15s, color 0.15s",
 };
