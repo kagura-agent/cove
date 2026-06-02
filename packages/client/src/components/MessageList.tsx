@@ -50,7 +50,7 @@ export function MessageList({ channelId }: { channelId: string }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
-  const shouldScrollRef = useRef(true);
+  const wasNearBottomRef = useRef(true);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -59,7 +59,7 @@ export function MessageList({ channelId }: { channelId: string }) {
   useEffect(() => {
     let cancelled = false;
     prevCountRef.current = 0;
-    shouldScrollRef.current = true;
+    wasNearBottomRef.current = true;
     api.fetchMessages(channelId).then((msgs) => {
       if (!cancelled) {
         const reversed = msgs.reverse();
@@ -71,21 +71,28 @@ export function MessageList({ channelId }: { channelId: string }) {
     return () => { cancelled = true; };
   }, [channelId, setMessages, scrollToBottom]);
 
+  // Track near-bottom on scroll so we know user intent even when content grows
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => { wasNearBottomRef.current = isNearBottom(container); };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // New message added → scroll if was near bottom
   useEffect(() => {
     if (!messages) return;
-    const container = scrollContainerRef.current;
-    const wasNearBottom = !container || isNearBottom(container);
-
-    if (messages.length > prevCountRef.current && wasNearBottom) {
+    if (messages.length > prevCountRef.current && wasNearBottomRef.current) {
       requestAnimationFrame(() => scrollToBottom());
     }
     prevCountRef.current = messages.length;
   }, [messages?.length, scrollToBottom]);
 
+  // Message content updated (streaming edits) → keep following if was near bottom
   useEffect(() => {
     if (!messages) return;
-    const container = scrollContainerRef.current;
-    if (container && isNearBottom(container)) {
+    if (wasNearBottomRef.current) {
       requestAnimationFrame(() => scrollToBottom());
     }
   }, [messages, scrollToBottom]);
