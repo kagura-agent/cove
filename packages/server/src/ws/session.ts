@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
+import type { GatewayDispatcher } from "./dispatcher.js";
 
 export class GatewaySession {
   readonly id: string;
@@ -32,9 +33,12 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean }): void {
+  identify(user: { id: string; username: string; bot: boolean }, dispatcher?: GatewayDispatcher): void {
     this.user = user;
     this.identified = true;
+    const presences = dispatcher
+      ? dispatcher.getOnlineUserIds().map((id) => ({ user: { id }, status: "online" as const }))
+      : [];
     this.seq++;
     this.ws.send(JSON.stringify({
       op: GatewayOpcode.DISPATCH,
@@ -45,6 +49,7 @@ export class GatewaySession {
         user,
         guilds: [{ id: "cove" }],
         session_id: this.id,
+        presences,
       },
     }));
   }

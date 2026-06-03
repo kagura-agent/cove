@@ -37,6 +37,11 @@ export function setupGateway(server: HttpServer, users: UsersRepo, dispatcher: G
 
         switch (payload.op) {
           case GatewayOpcode.IDENTIFY: {
+            if (session.isIdentified) {
+              session.close(4005, "Already identified");
+              return;
+            }
+
             const data = payload.d as { token?: string } | null;
             const token = data?.token;
 
@@ -55,7 +60,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, dispatcher: G
 
             const user = { id: row.id, username: row.username, bot: row.bot };
 
-            session.identify(user);
+            session.identify(user, dispatcher);
             dispatcher.addSession(session);
             break;
           }

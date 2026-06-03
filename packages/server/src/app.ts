@@ -48,6 +48,11 @@ export function createApp(
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
+  app.get("/api/v10/guilds/:guildId/presences", (c) => {
+    const onlineIds = dispatcher?.getOnlineUserIds() ?? [];
+    return c.json(onlineIds.map((id) => ({ user: { id }, status: "online" })));
+  });
+
   app.get("/api/v10/users/@me", (c) => {
     return c.json(c.get("botUser"));
   });

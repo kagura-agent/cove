@@ -78,6 +78,11 @@ export interface CoveAgent {
   bio?: string | null;
 }
 
+export interface PresenceUpdate {
+  user: { id: string };
+  status: "online" | "offline";
+}
+
 /** Guild member — an agent assigned to the Cove guild. Discord GuildMember compatible. */
 export interface CoveGuildMember {
   user: CoveAgent;

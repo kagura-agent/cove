@@ -93,7 +93,9 @@
   /* Member list */
   --member-hover: rgba(255,255,255,0.04);
 
-  /* Modal / Overlay */
+  /* Status */
+  --status-online: #23a559;
+  --status-offline: #80848e;
   --modal-backdrop: rgba(0,0,0,0.6);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
   --shadow-elevated: 0 4px 16px rgba(0,0,0,0.3);
@@ -147,6 +149,10 @@
 
   --member-hover: rgba(0,0,0,0.04);
 
+  /* Status */
+  --status-online: #23a559;
+  --status-offline: #80848e;
+
   --modal-backdrop: rgba(0,0,0,0.5);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
   --shadow-elevated: 0 4px 16px rgba(0,0,0,0.12);
@@ -197,6 +203,10 @@
   --channel-text-area-placeholder: #72767d;
 
   --member-hover: rgba(255,255,255,0.04);
+
+  /* Status */
+  --status-online: #23a559;
+  --status-offline: #80848e;
 
   --modal-backdrop: rgba(0,0,0,0.6);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
