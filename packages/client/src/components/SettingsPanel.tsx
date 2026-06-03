@@ -159,7 +159,8 @@ const SECTION_COMPONENTS: Record<SectionKey, () => ReactNode> = {
 
 export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [activeSection, setActiveSection] = useState<SectionKey>("appearance");
-  const { logout } = useUserStore();
+  const { logout, username } = useUserStore();
+  const avatarLetter = username ? username[0].toUpperCase() : "?";
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
@@ -173,9 +174,6 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
   }, [open, close]);
 
   if (!open) return null;
-
-  const { username } = useUserStore();
-  const avatarLetter = username ? username[0].toUpperCase() : "?";
 
   return (
     <div className="settings-backdrop" onClick={close}>
