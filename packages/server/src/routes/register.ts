@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import { DEFAULT_GUILD_ID } from "@cove/shared";
 
 /**
  * Invite-code registration route.
@@ -44,7 +45,7 @@ export function registerRoutes(db: Database.Database): Hono {
       // Add new user to default guild
       db.prepare(
         "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-      ).run("cove", userId, null, "[]", now);
+      ).run(DEFAULT_GUILD_ID, userId, null, "[]", now);
 
       db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);

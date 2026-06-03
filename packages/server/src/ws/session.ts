@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
-import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
+import { GatewayOpcode, DEFAULT_GUILD_ID, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 
@@ -42,7 +42,7 @@ export class GatewaySession {
       : [];
     const guilds = guildsRepo
       ? guildsRepo.listForUser(user.id)
-      : [{ id: "cove", name: "Cove", icon: null, owner_id: null }];
+      : [{ id: DEFAULT_GUILD_ID, name: "Cove", icon: null, owner_id: null }];
     this.seq++;
     this.ws.send(JSON.stringify({
       op: GatewayOpcode.DISPATCH,

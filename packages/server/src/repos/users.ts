@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { CoveAgent } from "@cove/shared";
+import { DEFAULT_GUILD_ID, type CoveAgent } from "@cove/shared";
 
 interface UserRow {
   id: string;
@@ -31,7 +31,7 @@ export class UsersRepo {
     return row ? toUser(row) : null;
   }
 
-  create(opts: { id?: string; username: string; avatar?: string; bot?: boolean; bio?: string }, guildId = "cove"): CoveAgent & { token: string } {
+  create(opts: { id?: string; username: string; avatar?: string; bot?: boolean; bio?: string }, guildId = DEFAULT_GUILD_ID): CoveAgent & { token: string } {
     const username = opts.username;
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();

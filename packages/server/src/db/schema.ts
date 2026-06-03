@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { DEFAULT_GUILD_ID } from "@cove/shared";
 
 function migrateRenameTable(db: Database.Database, oldName: string, newName: string): void {
   const hasOld = db.prepare(
@@ -125,7 +126,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     const now = Date.now();
     db.prepare(
       "INSERT OR IGNORE INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run("cove", "Cove", null, null, now, now);
+    ).run(DEFAULT_GUILD_ID, "Cove", null, null, now, now);
   }
 
   // Migration: add edited_timestamp to existing messages tables
@@ -209,6 +210,6 @@ export function seedUsers(db: Database.Database): void {
   const addMember = db.prepare(
     "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
   );
-  addMember.run("cove", "luna", null, '[]', now);
-  addMember.run("cove", "ruantang", null, '[]', now);
+  addMember.run(DEFAULT_GUILD_ID, "luna", null, '[]', now);
+  addMember.run(DEFAULT_GUILD_ID, "ruantang", null, '[]', now);
 }
