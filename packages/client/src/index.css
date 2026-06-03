@@ -500,11 +500,4 @@ textarea:focus-visible {
 
 /* ── Markdown message content ────────────────────────────── */
 
-.msg-content p { margin: 0; }
-.msg-content div { margin: 0; }
-.msg-content pre { margin: var(--space-xs) 0; }
-.msg-content pre code { font-size: var(--font-size-sm); font-family: "Consolas", "Monaco", monospace; }
-.msg-content code { font-family: "Consolas", "Monaco", monospace; }
-.msg-content strong { color: var(--text-normal); font-weight: 700; }
-.msg-content img { max-width: 100%; border-radius: var(--input-radius); }
-.msg-content blockquote { margin: var(--space-xs) 0; }
+

@@ -121,7 +121,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
 
           {/* Message body */}
           <div
-            className="msg-content"
+            
             style={{
               whiteSpace: "pre-wrap",
               color: "var(--text-normal)",
@@ -153,7 +153,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          className="msg-content"
+          
           style={{
             whiteSpace: "pre-wrap",
             color: "var(--text-normal)",
