@@ -18,6 +18,18 @@ function MessageContentInner({ content }: MessageContentProps) {
         h4: ({ children }) => <div>{children}</div>,
         h5: ({ children }) => <div>{children}</div>,
         h6: ({ children }) => <div>{children}</div>,
+        // Discord does not render lists or tables — show as plain text
+        ul: ({ children }) => <>{children}</>,
+        ol: ({ children }) => <>{children}</>,
+        li: ({ children }) => <div>{'• '}{children}</div>,
+        table: ({ children }) => <>{children}</>,
+        thead: ({ children }) => <>{children}</>,
+        tbody: ({ children }) => <>{children}</>,
+        tr: ({ children }) => <div>{children}</div>,
+        th: ({ children }) => <>{children}{' '}</>,
+        td: ({ children }) => <>{children}{' '}</>,
+        hr: () => <div style={{ margin: 0 }}>{'---'}</div>,
+        img: ({ alt }) => <span>{alt || ''}</span>,
         a: ({ href, children }) => (
           <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
             {children}
@@ -40,21 +52,12 @@ function MessageContentInner({ content }: MessageContentProps) {
             </code>
           );
         },
-        li: ({ children }) => <li style={{ margin: 0, padding: 0 }}>{children}</li>,
         blockquote: ({ children }) => (
           <blockquote style={{ borderLeft: "3px solid var(--text-muted)", paddingLeft: "var(--space-sm)", margin: "var(--space-xs) 0", color: "var(--text-muted)" }}>
             {children}
           </blockquote>
         ),
         p: ({ children }) => <div style={{ margin: 0 }}>{children}</div>,
-        img: ({ src, alt }) => (
-          <img src={src} alt={alt} style={{ maxWidth: "100%", borderRadius: "var(--input-radius)" }} />
-        ),
-        table: ({ children }) => (
-          <div style={{ overflowX: "auto", margin: "var(--space-xs) 0" }}>
-            <table>{children}</table>
-          </div>
-        ),
       }}
     >
       {content}
