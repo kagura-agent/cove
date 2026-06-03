@@ -2,9 +2,8 @@ import { Hono } from "hono";
 import type Database from "better-sqlite3";
 import type { DiscordUser } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { resolveUser, requireAuth } from "../auth.js";
-
-export type BroadcastFn = (event: unknown) => void;
 
 function extractAuthor(db: Database.Database, authHeader: string | undefined, bodyUsername?: string): DiscordUser {
   const user = resolveUser(db, authHeader);
@@ -14,7 +13,7 @@ function extractAuthor(db: Database.Database, authHeader: string | undefined, bo
   return { id: "anonymous", username: bodyUsername || "anonymous", bot: false };
 }
 
-export function messagesRoutes(db: Database.Database, repos: Repos, broadcast?: BroadcastFn): Hono {
+export function messagesRoutes(db: Database.Database, repos: Repos, dispatcher?: GatewayDispatcher): Hono {
   const app = new Hono();
   const auth = requireAuth(db);
 
@@ -57,12 +56,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, broadcast?: 
 
     const message = repos.messages.create(channelId, author, body.content);
 
-    broadcast?.({
-      op: 0,
-      s: null,
-      t: "MESSAGE_CREATE",
-      d: message,
-    });
+    dispatcher?.messageCreate(message);
 
     return c.json(message, 201);
   });
@@ -77,12 +71,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, broadcast?: 
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
     }
 
-    broadcast?.({
-      op: 0,
-      s: null,
-      t: "MESSAGE_UPDATE",
-      d: updated,
-    });
+    dispatcher?.messageUpdate(updated);
 
     return c.json(updated);
   });
@@ -95,12 +84,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, broadcast?: 
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
     }
 
-    broadcast?.({
-      op: 0,
-      s: null,
-      t: "MESSAGE_DELETE",
-      d: { id: msgId, channel_id: channelId },
-    });
+    dispatcher?.messageDelete(channelId, msgId);
 
     return c.body(null, 204);
   });
@@ -115,17 +99,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, broadcast?: 
     const channelId = c.req.param("id");
     const author = extractAuthor(db, c.req.header("Authorization"));
 
-    broadcast?.({
-      op: 0,
-      s: null,
-      t: "TYPING_START",
-      d: {
-        channel_id: channelId,
-        user_id: author.id,
-        username: author.username,
-        timestamp: Date.now(),
-      },
-    });
+    dispatcher?.typingStart(channelId, { id: author.id, username: author.username });
 
     return c.body(null, 204);
   });

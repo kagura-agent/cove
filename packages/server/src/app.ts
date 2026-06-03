@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import type Database from "better-sqlite3";
 import { createRepos } from "./repos/index.js";
 import { channelRoutes } from "./routes/channels.js";
-import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
+import { messagesRoutes } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
 import { registerRoutes } from "./routes/register.js";
 import { requireAuth, resolveUser } from "./auth.js";
+import type { GatewayDispatcher } from "./ws/dispatcher.js";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -17,7 +18,7 @@ const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/au
 
 export function createApp(
   db: Database.Database,
-  broadcast?: BroadcastFn,
+  dispatcher?: GatewayDispatcher,
   config?: AppConfig,
 ): Hono {
   const app = new Hono();
@@ -39,8 +40,8 @@ export function createApp(
     return authMw(c, next);
   });
 
-  app.route("/", channelRoutes(db, repos, broadcast));
-  app.route("/", messagesRoutes(db, repos, broadcast));
+  app.route("/", channelRoutes(db, repos, dispatcher));
+  app.route("/", messagesRoutes(db, repos, dispatcher));
   app.route("/", agentRoutes(db, repos));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
