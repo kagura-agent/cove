@@ -84,7 +84,7 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
         <h1 style={styles.title}>Cove</h1>
       </div>
 
-      <div style={styles.list}>
+      <div style={styles.list} className="scroll-container">
         {loading ? (
           <div style={styles.loading}><Spin tip="Loading channels…" /></div>
         ) : (

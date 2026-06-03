@@ -121,7 +121,7 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   return (
     <>
-      <div ref={scrollContainerRef} style={listStyle}>
+      <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
         {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart = !prev || prev.author.id !== msg.author.id ||

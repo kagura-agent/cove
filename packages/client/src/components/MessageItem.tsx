@@ -1,7 +1,7 @@
 import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
-import { pickAvatarColor, MESSAGE_AVATAR_COLORS } from "../lib/avatar-palette";
+import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { MessageContent } from "./MessageContent";
 
 function formatTime(ts: string): string {
@@ -26,7 +26,7 @@ function formatCompactTime(ts: string): string {
 }
 
 function avatarColor(name: string): string {
-  return pickAvatarColor(name, MESSAGE_AVATAR_COLORS);
+  return pickAvatarColor(name);
 }
 
 function roleColor(isBot: boolean): string {
@@ -36,7 +36,7 @@ function roleColor(isBot: boolean): string {
 const botBadgeStyle: CSSProperties = {
   fontSize: "var(--font-size-xs)",
   fontWeight: 600,
-  color: "var(--header-primary)",
+  color: "var(--text-on-accent)",
   background: "var(--accent)",
   borderRadius: 3,
   padding: "1px 5px",
@@ -63,6 +63,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
   const isBot = message.author.bot;
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
+  const textColor = getContrastTextColor(bgColor);
 
   if (isGroupStart) {
     return (
@@ -88,7 +89,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             justifyContent: "center",
             fontSize: 18,
             fontWeight: 600,
-            color: "var(--header-primary)",
+            color: textColor,
             flexShrink: 0,
             cursor: "pointer",
           }}
@@ -110,7 +111,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             >
               {message.author.username}
             </span>
-            {isBot && <span style={botBadgeStyle}>BOT</span>}
+            {isBot && <span style={botBadgeStyle}>APP</span>}
             <Typography.Text
               type="secondary"
               style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", marginLeft: "var(--space-sm)" }}
