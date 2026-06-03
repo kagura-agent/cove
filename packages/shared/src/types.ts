@@ -14,7 +14,7 @@ export interface DiscordUser {
   bot: boolean;
 }
 
-/** Discord channel object — scenes are mapped to GUILD_TEXT channels. */
+/** Discord channel object — channels are mapped to GUILD_TEXT. */
 export interface DiscordChannel {
   id: string;
   name: string;
@@ -24,7 +24,7 @@ export interface DiscordChannel {
   position: number;
   // Cove extensions
   icon?: string;
-  scene_type?: string;
+  channel_type?: string;
   cove_position?: { x: number; y: number };
 }
 
@@ -59,9 +59,9 @@ export interface GatewayPayload {
 
 // ─── Cove extension types ───────────────────────────────────────────────────
 
-/** Key-value state entry for a scene (e.g. "flowers_watered_today": "3"). */
-export interface SceneState {
-  sceneId: string;
+/** Key-value state entry for a channel (e.g. "flowers_watered_today": "3"). */
+export interface ChannelState {
+  channelId: string;
   key: string;
   value: string;
   updatedAt: number;

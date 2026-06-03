@@ -3,7 +3,7 @@ import type { DiscordChannel } from "@cove/shared";
 
 import { DEFAULT_GUILD_ID } from "./index.js";
 
-interface SceneRow {
+interface ChannelRow {
   id: string;
   name: string;
   icon: string;
@@ -14,7 +14,7 @@ interface SceneRow {
   position_y: number;
 }
 
-function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
+function toDiscordChannel(row: ChannelRow, position: number): DiscordChannel {
   return {
     id: row.id,
     name: row.name,
@@ -23,7 +23,7 @@ function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
     topic: row.description ?? "",
     position,
     icon: row.icon,
-    scene_type: row.type,
+    channel_type: row.type,
     cove_position: { x: row.position_x, y: row.position_y },
   };
 }
@@ -33,14 +33,14 @@ export class ChannelsRepo {
 
   // guildId accepted for API symmetry; unused until multi-guild support
   list(guildId: string): DiscordChannel[] {
-    const rows = this.db.prepare("SELECT * FROM scenes ORDER BY name").all() as SceneRow[];
+    const rows = this.db.prepare("SELECT * FROM channels ORDER BY name").all() as ChannelRow[];
     return rows.map((r, i) => toDiscordChannel(r, i));
   }
 
   getById(id: string): DiscordChannel | null {
     const row = this.db.prepare(
-      "SELECT s.*, (SELECT COUNT(*) FROM scenes s2 WHERE s2.name < s.name) AS position FROM scenes s WHERE s.id = ?"
-    ).get(id) as (SceneRow & { position: number }) | undefined;
+      "SELECT s.*, (SELECT COUNT(*) FROM channels s2 WHERE s2.name < s.name) AS position FROM channels s WHERE s.id = ?"
+    ).get(id) as (ChannelRow & { position: number }) | undefined;
     return row ? toDiscordChannel(row, row.position) : null;
   }
 
@@ -48,11 +48,11 @@ export class ChannelsRepo {
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
     this.db.prepare(
-      "INSERT INTO scenes (id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO channels (id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(id, name, icon ?? "🏝️", "open", id, topic ?? "", 0, 0);
 
-    const count = (this.db.prepare("SELECT COUNT(*) as c FROM scenes").get() as any).c;
-    const row = this.db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as SceneRow;
+    const count = (this.db.prepare("SELECT COUNT(*) as c FROM channels").get() as any).c;
+    const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow;
     return toDiscordChannel(row, count - 1);
   }
 
@@ -70,25 +70,25 @@ export class ChannelsRepo {
 
     if (updates.length > 0) {
       params.push(id);
-      this.db.prepare(`UPDATE scenes SET ${updates.join(", ")} WHERE id = ?`).run(...params);
+      this.db.prepare(`UPDATE channels SET ${updates.join(", ")} WHERE id = ?`).run(...params);
     }
 
     return this.getById(id);
   }
 
   delete(id: string): boolean {
-    const row = this.db.prepare("SELECT id FROM scenes WHERE id = ?").get(id);
+    const row = this.db.prepare("SELECT id FROM channels WHERE id = ?").get(id);
     if (!row) return false;
 
     this.db.transaction(() => {
-      this.db.prepare("DELETE FROM messages WHERE scene_id = ?").run(id);
-      this.db.prepare("DELETE FROM scene_state WHERE scene_id = ?").run(id);
-      this.db.prepare("DELETE FROM scenes WHERE id = ?").run(id);
+      this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(id);
+      this.db.prepare("DELETE FROM channel_state WHERE channel_id = ?").run(id);
+      this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
     })();
     return true;
   }
 
   exists(id: string): boolean {
-    return !!this.db.prepare("SELECT id FROM scenes WHERE id = ?").get(id);
+    return !!this.db.prepare("SELECT id FROM channels WHERE id = ?").get(id);
   }
 }

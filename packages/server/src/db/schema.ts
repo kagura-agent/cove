@@ -7,7 +7,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("foreign_keys = ON");
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS scenes (
+    CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       icon        TEXT,
@@ -40,7 +40,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
 
     CREATE TABLE IF NOT EXISTS messages (
       id               TEXT PRIMARY KEY,
-      scene_id         TEXT REFERENCES scenes(id),
+      channel_id       TEXT REFERENCES channels(id),
       sender           TEXT,
       content          TEXT,
       timestamp        INTEGER,
@@ -48,12 +48,12 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       edited_timestamp INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS scene_state (
-      scene_id   TEXT REFERENCES scenes(id),
+    CREATE TABLE IF NOT EXISTS channel_state (
+      channel_id TEXT REFERENCES channels(id),
       key        TEXT,
       value      TEXT,
       updated_at INTEGER,
-      PRIMARY KEY (scene_id, key)
+      PRIMARY KEY (channel_id, key)
     );
 
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -99,26 +99,52 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
+  // Migration: rename scenes → channels
+  try {
+    db.exec("ALTER TABLE scenes RENAME TO channels");
+  } catch (_) {
+    // Table already named channels — ignore
+  }
+
+  // Migration: rename scene_state → channel_state
+  try {
+    db.exec("ALTER TABLE scene_state RENAME TO channel_state");
+  } catch (_) {
+    // Table already named channel_state — ignore
+  }
+
+  // Migration: rename messages.scene_id → channel_id
+  try {
+    db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
+  } catch (_) {
+    // Column already named channel_id — ignore
+  }
+
+  // Migration: rename channel_state.scene_id → channel_id
+  try {
+    db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
+  } catch (_) {
+    // Column already named channel_id — ignore
+  }
+
   return db;
 }
 
-// Core scenes for Phase 1. Additional scenes are unlocked progressively
-// as features are implemented (see README scene table for the full list).
-const SEED_SCENES = [
+const SEED_CHANNELS = [
   { id: "home", name: "Home", icon: "🏠", type: "indoor", channelId: "kagura-dm", description: "Living room — your cozy home base", x: 300, y: 300 },
   { id: "garden", name: "Garden", icon: "🌱", type: "open", channelId: "garden", description: "Tend your plants and watch them grow", x: 200, y: 200 },
   { id: "workshop", name: "Workshop", icon: "🔨", type: "indoor", channelId: "github-contribution", description: "Where code gets built", x: 500, y: 250 },
   { id: "post-office", name: "Post Office", icon: "📧", type: "indoor", channelId: "kagura-mail", description: "Send and receive letters", x: 350, y: 200 },
 ] as const;
 
-export function seedScenes(db: Database.Database): void {
+export function seedChannels(db: Database.Database): void {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO scenes (id, name, icon, type, channel_id, description, position_x, position_y)
+    INSERT OR IGNORE INTO channels (id, name, icon, type, channel_id, description, position_x, position_y)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
-    for (const s of SEED_SCENES) {
+    for (const s of SEED_CHANNELS) {
       insert.run(s.id, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
     }
   });

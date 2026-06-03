@@ -176,7 +176,7 @@ export default function App() {
     api.fetchChannels().then((chs) => {
       setChannels(chs);
       if (chs.length > 0) setActiveChannel(chs[0].id);
-    }).catch(() => message.error("Failed to load scenes"))
+    }).catch(() => message.error("Failed to load channels"))
       .finally(() => setChannelsLoading(false));
     connect();
   }, [needsSetup, authLoading, setChannels, setActiveChannel, connect]);

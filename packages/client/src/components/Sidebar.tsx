@@ -86,11 +86,11 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
 
       <div style={styles.list}>
         {loading ? (
-          <div style={styles.loading}><Spin tip="Loading scenes…" /></div>
+          <div style={styles.loading}><Spin tip="Loading channels…" /></div>
         ) : (
           <>
             <div style={styles.categoryHeader}>
-              <span>Scenes</span>
+              <span>Channels</span>
               <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)", opacity: 0.6 }} />
             </div>
             {channels.map((ch) => (

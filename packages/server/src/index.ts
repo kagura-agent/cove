@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { initDb, seedScenes, seedUsers } from "./db/schema.js";
+import { initDb, seedChannels, seedUsers } from "./db/schema.js";
 import { createApp } from "./app.js";
 import { setupGateway, broadcastGatewayEvent } from "./ws/index.js";
 
@@ -8,7 +8,7 @@ const DB_PATH = process.env["COVE_DB_PATH"] ?? process.env["DB_PATH"] ?? "cove.d
 
 // Initialize database
 const db = initDb(DB_PATH);
-seedScenes(db);
+seedChannels(db);
 seedUsers(db);
 console.log("🏝️  Database initialized and seeded");
 

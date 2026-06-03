@@ -101,7 +101,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
     }
 
     if (broadcast) {
-      broadcast({ op: 0, t: "STATE_DELETE", d: { scene_id: channelId, key }, s: null });
+      broadcast({ op: 0, t: "STATE_DELETE", d: { channel_id: channelId, key }, s: null });
     }
 
     return c.body(null, 204);
