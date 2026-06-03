@@ -11,7 +11,7 @@ import type { CSSProperties } from "react";
 const styles = {
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: 12, opacity: 0.6 } as CSSProperties,
   wrapper: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" } as CSSProperties,
-  header: { display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", minHeight: 52 } as CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", minHeight: 52 } as CSSProperties,
   menuBtn: { color: "var(--text-normal)" } as CSSProperties,
   clearBtn: { color: "var(--interactive-normal)", opacity: 0.5 } as CSSProperties,
   membersBtn: { color: "var(--interactive-normal)" } as CSSProperties,
@@ -44,7 +44,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
     <div style={styles.wrapper}>
       <div style={styles.header}>
         {onMenuClick && <Button type="text" icon={<MenuOutlined />} onClick={onMenuClick} className="mobile-only" style={styles.menuBtn} />}
-        <span style={{ fontSize: 20, display: "flex", alignItems: "center", lineHeight: 1 }}>{getChannelIcon(channel)}</span>
+        <span style={{ fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", width: 40, flexShrink: 0, lineHeight: 1 }}>{getChannelIcon(channel)}</span>
         <div style={{ flex: 1 }}>
           <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)" }}>{channel.name}</Typography.Title>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>{channel.topic || "A cozy scene"}</Typography.Text>
