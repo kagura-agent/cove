@@ -393,7 +393,19 @@ textarea:focus-visible {
     transform: translateX(0);
   }
   .member-list {
-    display: none !important;
+    position: fixed !important;
+    z-index: 30 !important;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 260px !important;
+    min-width: 260px !important;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+  .members-open .member-list {
+    transform: translateX(0);
   }
 
   /* Settings panel mobile — full-screen like Discord mobile */

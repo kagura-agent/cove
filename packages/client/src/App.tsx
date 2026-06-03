@@ -213,8 +213,9 @@ export default function App() {
     <ConfigProvider theme={themeConfig}>
       <div style={styles.fullHeight}>
         {<div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />}
+        {<div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />}
 
-        <div style={styles.layout} className={sidebarOpen ? "sidebar-open" : ""}>
+        <div style={styles.layout} className={`${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
           <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} onSettingsOpen={() => setSettingsOpen(true)} />
 
           <div style={styles.chatColumn}>
@@ -227,7 +228,7 @@ export default function App() {
             <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
           </div>
 
-          {membersOpen && <MemberList />}
+          <MemberList />
         </div>
 
         <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
