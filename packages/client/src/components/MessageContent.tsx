@@ -40,6 +40,7 @@ function MessageContentInner({ content }: MessageContentProps) {
             </code>
           );
         },
+        li: ({ children }) => <li style={{ margin: 0, padding: 0 }}>{children}</li>,
         blockquote: ({ children }) => (
           <blockquote style={{ borderLeft: "3px solid var(--text-muted)", paddingLeft: "var(--space-sm)", margin: "var(--space-xs) 0", color: "var(--text-muted)" }}>
             {children}
