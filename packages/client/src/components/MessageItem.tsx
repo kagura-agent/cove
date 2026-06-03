@@ -33,7 +33,7 @@ function roleColor(isBot: boolean): string {
 }
 
 const botBadgeStyle: CSSProperties = {
-  fontSize: 10,
+  fontSize: "var(--font-size-xs)",
   fontWeight: 600,
   color: "var(--header-primary)",
   background: "var(--accent)",
@@ -46,10 +46,10 @@ const botBadgeStyle: CSSProperties = {
 };
 
 const editedStyle: CSSProperties = {
-  fontSize: 10,
+  fontSize: "var(--font-size-xs)",
   color: "var(--text-muted)",
   opacity: 0.6,
-  marginLeft: 4,
+  marginLeft: "var(--space-xs)",
   userSelect: "none",
 };
 
@@ -70,16 +70,16 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         style={{
           display: "flex",
           alignItems: "flex-start",
-          gap: 16,
-          padding: "4px 48px 0 16px",
-          marginTop: 16,
+          gap: "var(--content-gap)",
+          padding: "var(--space-xs) 48px 0 var(--content-pad)",
+          marginTop: "var(--content-gap)",
         }}
       >
         {/* Avatar */}
         <div
           style={{
-            width: 40,
-            height: 40,
+            width: "var(--avatar-size)",
+            height: "var(--avatar-size)",
             borderRadius: "50%",
             backgroundColor: bgColor,
             display: "flex",
@@ -101,7 +101,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           <div style={{ display: "flex", alignItems: "baseline", lineHeight: "22px" }}>
             <span
               style={{
-                fontSize: 16,
+                fontSize: "var(--font-size-lg)",
                 fontWeight: 500,
                 color: roleColor(isBot),
                 cursor: "pointer",
@@ -112,7 +112,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             {isBot && <span style={botBadgeStyle}>BOT</span>}
             <Typography.Text
               type="secondary"
-              style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}
+              style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", marginLeft: "var(--space-sm)" }}
             >
               {formatTime(message.timestamp)}
             </Typography.Text>
@@ -123,7 +123,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             style={{
               whiteSpace: "pre-wrap",
               color: "var(--text-normal)",
-              fontSize: 16,
+              fontSize: "var(--font-size-lg)",
               lineHeight: 1.375,
               wordBreak: "break-word",
             }}
@@ -143,7 +143,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
       style={{
         display: "flex",
         alignItems: "flex-start",
-        padding: "2px 48px 0 72px",
+        padding: "var(--space-xxs) 48px 0 var(--content-start)",
       }}
     >
       <span className="compact-ts">
@@ -154,7 +154,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           style={{
             whiteSpace: "pre-wrap",
             color: "var(--text-normal)",
-            fontSize: 16,
+            fontSize: "var(--font-size-lg)",
             lineHeight: 1.375,
             wordBreak: "break-word",
           }}

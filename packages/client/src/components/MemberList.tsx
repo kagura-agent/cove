@@ -6,14 +6,14 @@ import type { CSSProperties } from "react";
 import { pickAvatarColor, MEMBER_AVATAR_COLORS } from "../lib/avatar-palette";
 
 const styles = {
-  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
-  header: { padding: "16px 16px 4px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
-  member: { display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
+  root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
+  header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
+  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px var(--space-lg)", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
-  username: { fontSize: 14, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
-  badge: { fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: 4, flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
-  loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
+  username: { fontSize: "var(--font-size-md)", color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
+  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
+  loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
 };
 
 function hashColor(name: string): string {
@@ -29,7 +29,7 @@ function MemberRow({ member }: { member: GuildMember }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Avatar size={32} style={{ backgroundColor: hashColor(user.username), color: "var(--header-primary)", fontWeight: 700, ...styles.avatar }}>
+      <Avatar size="small" style={{ backgroundColor: hashColor(user.username), color: "var(--header-primary)", fontWeight: 700, ...styles.avatar }}>
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
       <span style={styles.username}>{member.nick || user.username}</span>

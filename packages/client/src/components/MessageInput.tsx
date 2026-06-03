@@ -5,12 +5,12 @@ import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 
 const wrapperStyle: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8,
-  padding: "12px 16px", background: "var(--bg-secondary)",
+  display: "flex", alignItems: "center", gap: "var(--space-sm)",
+  padding: "var(--space-md) var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
+  paddingBottom: "calc(var(--space-md) + env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
 };
-const inputStyle: CSSProperties = { borderRadius: 8, background: "var(--bg-input)", border: "none" };
+const inputStyle: CSSProperties = { borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none" };
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");

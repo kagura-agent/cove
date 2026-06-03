@@ -94,9 +94,9 @@ function AppearanceSection() {
   return (
     <div>
       <h2 style={sectionTitleStyle}>Appearance</h2>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: "var(--space-lg)" }}>
         <div style={categoryLabelStyle}>Theme</div>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "var(--space-lg)", flexWrap: "wrap" }}>
           {THEME_PRESETS.map((preset) => (
             <ThemeSwatch
               key={preset.key}
@@ -118,7 +118,7 @@ function ProfileSection() {
     <div>
       <h2 style={sectionTitleStyle}>Profile</h2>
       <div style={categoryLabelStyle}>Signed in as</div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+      <div style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
     </div>
   );
 }
@@ -133,20 +133,20 @@ function BotsSection() {
 }
 
 const sectionTitleStyle: CSSProperties = {
-  fontSize: 20,
+  fontSize: "var(--font-size-xl)",
   fontWeight: 600,
   color: "var(--text-normal)",
-  marginBottom: 20,
+  marginBottom: "var(--space-xl)",
   marginTop: 0,
 };
 
 const categoryLabelStyle: CSSProperties = {
-  fontSize: 12,
+  fontSize: "var(--font-size-sm)",
   fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "0.02em",
   color: "var(--text-muted)",
-  marginBottom: 12,
+  marginBottom: "var(--space-md)",
 };
 
 const SECTION_COMPONENTS: Record<SectionKey, () => ReactNode> = {
@@ -190,7 +190,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
         <div className="settings-sidebar">
           <div className="settings-profile-area" style={profileAreaStyle}>
             <div style={avatarStyle}>{avatarLetter}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
           </div>
           <div className="settings-divider" style={dividerStyle} />
           <div className="settings-category-header" style={categoryHeaderStyle}>USER SETTINGS</div>
@@ -245,8 +245,8 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
 const profileAreaStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 10,
-  padding: "8px 10px",
+  gap: "var(--space-sm)",
+  padding: "var(--space-sm) var(--space-sm)",
 };
 
 const avatarStyle: CSSProperties = {
@@ -258,25 +258,25 @@ const avatarStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 16,
+  fontSize: "var(--font-size-lg)",
   fontWeight: 700,
   flexShrink: 0,
 };
 
 const categoryHeaderStyle: CSSProperties = {
-  fontSize: 12,
+  fontSize: "var(--font-size-sm)",
   fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "0.02em",
   color: "var(--text-muted)",
-  padding: "6px 10px",
-  marginBottom: 2,
+  padding: "6px var(--space-sm)",
+  marginBottom: "var(--space-xxs)",
 };
 
 const dividerStyle: CSSProperties = {
   height: 1,
   background: "var(--bg-modifier-hover)",
-  margin: "8px 10px",
+  margin: "var(--space-sm) var(--space-sm)",
 };
 
 const contentInnerStyle: CSSProperties = {

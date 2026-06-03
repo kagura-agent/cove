@@ -5,6 +5,41 @@
    hex/rgba values outside this block.                        */
 
 /* ── Theme: Midnight (default) ────────────────────────────── */
+/* ── Layout Constants ─────────────────────────────────── */
+:root {
+  --header-height: 48px;
+  --sidebar-width: 240px;
+  --member-list-width: 240px;
+
+  /* ── Spacing Scale (4px base) ─────────────────────────── */
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-3xl: 32px;
+
+  /* ── Content Alignment ────────────────────────────────── */
+  --content-pad: var(--space-lg);
+  --avatar-size: 40px;
+  --avatar-size-sm: 32px;
+  --avatar-size-xs: 28px;
+  --content-gap: var(--space-lg);
+  --content-start: calc(var(--content-pad) + var(--avatar-size) + var(--content-gap));
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* ── Input ────────────────────────────────────────────── */
+  --input-radius: 8px;
+}
+
 [data-theme="midnight"], :root {
   /* Backgrounds */
   --bg-primary: #1a191d;
@@ -388,7 +423,7 @@ textarea:focus-visible {
     top: 0;
     left: 0;
     bottom: 0;
-    width: 240px !important;
+    width: var(--sidebar-width) !important;
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
@@ -402,8 +437,8 @@ textarea:focus-visible {
     top: 0;
     right: 0;
     bottom: 0;
-    width: 260px !important;
-    min-width: 260px !important;
+    width: var(--member-list-width) !important;
+    min-width: var(--member-list-width) !important;
     transform: translateX(100%);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
