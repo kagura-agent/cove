@@ -5,6 +5,7 @@ export type Token =
   | { type: "strikethrough"; children: Token[] }
   | { type: "code"; text: string }
   | { type: "codeBlock"; lang: string; text: string }
+  | { type: "tableBlock"; headers: string[]; rows: string[][] }
   | { type: "link"; href: string; text: string }
   | { type: "autolink"; href: string }
   | { type: "blockquote"; children: Token[] }
@@ -12,10 +13,6 @@ export type Token =
   | { type: "br" };
 
 const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray) => { token: Token; length: number } }> = [
-  {
-    pattern: /^```(?:(\w+)\n)?([\s\S]*?)```/,
-    parse: (m) => ({ token: { type: "codeBlock", lang: m[1] || "", text: m[2] }, length: m[0].length }),
-  },
   {
     pattern: /^`([^`]+)`/,
     parse: (m) => ({ token: { type: "code", text: m[1] }, length: m[0].length }),
@@ -79,33 +76,89 @@ function parseInline(text: string): Token[] {
   return tokens;
 }
 
+function tryParseTable(lines: string[]): { headers: string[]; rows: string[][]; lineCount: number } | null {
+  if (lines.length < 3) return null;
+  const headerLine = lines[0];
+  const sepLine = lines[1];
+  if (!headerLine.includes("|") || !sepLine.includes("|")) return null;
+  if (!/^\|?[\s-:|]+\|[\s-:|]+\|?$/.test(sepLine)) return null;
+
+  const headers = headerLine.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+  const rows: string[][] = [];
+  let i = 2;
+  while (i < lines.length && lines[i].includes("|")) {
+    rows.push(lines[i].replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim()));
+    i++;
+  }
+  if (rows.length === 0) return null;
+  return { headers, rows, lineCount: i };
+}
+
 export function parseDiscordMarkdown(content: string): Token[] {
-  const lines = content.split("\n");
+  const segments: Array<{ type: "code"; lang: string; text: string } | { type: "text"; text: string }> = [];
+  const codeBlockRe = /```(\w+)?\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = codeBlockRe.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: "text", text: content.slice(lastIndex, match.index) });
+    }
+    segments.push({ type: "code", lang: match[1] || "", text: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    segments.push({ type: "text", text: content.slice(lastIndex) });
+  }
+
   const tokens: Token[] = [];
-  let quoteLines: string[] = [];
 
-  function flushQuote() {
-    if (quoteLines.length > 0) {
-      tokens.push({ type: "blockquote", children: parseInline(quoteLines.join("\n")) });
-      quoteLines = [];
+  for (const seg of segments) {
+    if (seg.type === "code") {
+      tokens.push({ type: "codeBlock", lang: seg.lang, text: seg.text });
+      continue;
     }
-  }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith("> ")) {
-      quoteLines.push(line.slice(2));
-    } else if (line === ">" && quoteLines.length > 0) {
-      quoteLines.push("");
-    } else {
-      flushQuote();
-      if (i > 0 && tokens.length > 0) {
-        tokens.push({ type: "br" });
+    const lines = seg.text.split("\n");
+    let quoteLines: string[] = [];
+
+    function flushQuote() {
+      if (quoteLines.length > 0) {
+        tokens.push({ type: "blockquote", children: parseInline(quoteLines.join("\n")) });
+        quoteLines = [];
       }
-      const lineTokens = parseInline(line);
-      tokens.push(...lineTokens);
     }
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      if (line.startsWith("> ")) {
+        quoteLines.push(line.slice(2));
+        i++;
+      } else if (line === ">" && quoteLines.length > 0) {
+        quoteLines.push("");
+        i++;
+      } else {
+        flushQuote();
+
+        const table = tryParseTable(lines.slice(i));
+        if (table) {
+          if (tokens.length > 0) tokens.push({ type: "br" });
+          tokens.push({ type: "tableBlock", headers: table.headers, rows: table.rows });
+          i += table.lineCount;
+          continue;
+        }
+
+        if (line !== "" && tokens.length > 0) {
+          tokens.push({ type: "br" });
+        }
+        if (line !== "" || tokens.length === 0) {
+          tokens.push(...parseInline(line));
+        }
+        i++;
+      }
+    }
+    flushQuote();
   }
-  flushQuote();
   return tokens;
 }

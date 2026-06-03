@@ -31,6 +31,27 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
             <code>{token.text}</code>
           </pre>
         );
+      case "tableBlock":
+        return (
+          <table key={k} style={{ borderCollapse: "collapse", margin: "var(--space-xs) 0", fontSize: "var(--font-size-sm)" }}>
+            <thead>
+              <tr>
+                {token.headers.map((h, hi) => (
+                  <th key={hi} style={{ border: "1px solid var(--border-subtle)", padding: "var(--space-xs) var(--space-sm)", background: "var(--bg-code)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {token.rows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} style={{ border: "1px solid var(--border-subtle)", padding: "var(--space-xs) var(--space-sm)" }}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
       case "link":
         return (
           <a key={k} href={token.href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
