@@ -57,5 +57,10 @@ export function createApp(
     return c.json(c.get("botUser"));
   });
 
+  app.get("/api/v10/users/@me/guilds", (c) => {
+    const user = c.get("botUser");
+    return c.json(repos.guilds.listForUser(user.id));
+  });
+
   return app;
 }

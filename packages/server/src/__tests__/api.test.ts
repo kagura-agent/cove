@@ -806,6 +806,26 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
+  // ─── Guilds ───────────────────────────────────────────────────────────
+
+  describe("GET /api/v10/users/@me/guilds", () => {
+    it("returns guilds for authenticated user", async () => {
+      const res = await authGet("/api/v10/users/@me/guilds");
+      expect(res.status).toBe(200);
+      const guilds = await res.json();
+      expect(guilds).toHaveLength(1);
+      expect(guilds[0].id).toBe("cove");
+      expect(guilds[0].name).toBe("Cove");
+      expect(guilds[0]).toHaveProperty("icon");
+      expect(guilds[0]).toHaveProperty("owner_id");
+    });
+
+    it("returns 401 when no auth", async () => {
+      const res = await app.request("/api/v10/users/@me/guilds");
+      expect(res.status).toBe(401);
+    });
+  });
+
   // ─── Users ────────────────────────────────────────────────────────────
 
   describe("GET /api/v10/users/@me", () => {

@@ -3,8 +3,6 @@ import type { Repos } from "../repos/index.js";
 import { requireAuth, type AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 
-const GUILD_ID = "cove";
-
 export function agentRoutes(repos: Repos): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
@@ -84,7 +82,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
 
   app.get("/api/v10/guilds/:guildId/members", (c) => {
     const guildId = c.req.param("guildId");
-    if (guildId !== GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     return c.json(repos.members.list(guildId));
@@ -94,7 +92,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     const guildId = c.req.param("guildId");
     const userId = c.req.param("userId");
 
-    if (guildId !== GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
@@ -116,7 +114,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     const guildId = c.req.param("guildId");
     const userId = c.req.param("userId");
 
-    if (guildId !== GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 

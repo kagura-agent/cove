@@ -42,8 +42,18 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   migrateRenameTable(db, "scene_state", "channel_state");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS guilds (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      icon        TEXT,
+      owner_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
+      guild_id    TEXT NOT NULL DEFAULT 'cove' REFERENCES guilds(id),
       name        TEXT NOT NULL,
       icon        TEXT,
       type        TEXT CHECK(type IN ('open', 'indoor', 'object', 'structure')),
@@ -110,6 +120,14 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
   `);
 
+  // Seed default guild (must exist before FK references from channels)
+  {
+    const now = Date.now();
+    db.prepare(
+      "INSERT OR IGNORE INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run("cove", "Cove", null, null, now, now);
+  }
+
   // Migration: add edited_timestamp to existing messages tables
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
@@ -131,6 +149,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     // Column already exists
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
+
+  // Migration: add guild_id to channels table
+  try {
+    db.exec("ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT 'cove' REFERENCES guilds(id)");
+  } catch (_) {
+    // Column already exists
+  }
 
   // Post-create migrations: rename columns in already-renamed tables
   try {

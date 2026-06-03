@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
-import { DEFAULT_GUILD_ID } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { requireAuth, type AppEnv } from "../auth.js";
 import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
@@ -11,7 +10,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
   app.get("/api/v10/guilds/:guildId/channels", (c) => {
     const guildId = c.req.param("guildId");
-    if (guildId !== DEFAULT_GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     return c.json(repos.channels.list(guildId));
@@ -50,7 +49,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
   app.post("/api/v10/guilds/:guildId/channels", async (c) => {
     const guildId = c.req.param("guildId");
-    if (guildId !== DEFAULT_GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
@@ -67,7 +66,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
       return c.json({ message: "Channel already exists", code: 10013 }, 409);
     }
 
-    const channel = repos.channels.create(name, body.icon, body.topic);
+    const channel = repos.channels.create(guildId, name, body.icon, body.topic);
     return c.json(channel, 201);
   });
 
