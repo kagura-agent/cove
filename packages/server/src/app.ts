@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type Database from "better-sqlite3";
+import { createRepos } from "./repos/index.js";
 import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes, type BroadcastFn } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
@@ -19,12 +20,11 @@ export function createApp(
   broadcast?: BroadcastFn,
   config?: AppConfig,
 ): Hono {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const app = new Hono();
+  const repos = createRepos(db);
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-  // Register route is always available (public, no OAuth config needed)
   app.route("/", registerRoutes(db));
 
   if (config?.oauth) {
@@ -39,9 +39,9 @@ export function createApp(
     return authMw(c, next);
   });
 
-  app.route("/", channelRoutes(db, broadcast));
-  app.route("/", messagesRoutes(db, broadcast));
-  app.route("/", agentRoutes(db));
+  app.route("/", channelRoutes(db, repos, broadcast));
+  app.route("/", messagesRoutes(db, repos, broadcast));
+  app.route("/", agentRoutes(db, repos));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
