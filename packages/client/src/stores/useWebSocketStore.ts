@@ -58,7 +58,6 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
       try {
         const payload = JSON.parse(evt.data) as { t?: string; op?: number; d?: unknown };
         if (payload.op === 10) {
-          const user = useUserStore.getState();
           const token = localStorage.getItem("cove-token");
           if (!token) { ws?.close(); return; }
           ws?.send(JSON.stringify({ op: 2, d: { token } }));

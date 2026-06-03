@@ -41,12 +41,14 @@ export function setupGateway(server: HttpServer, db: Database.Database, dispatch
             const token = data?.token;
 
             if (!token) {
+              if (heartbeatCheck) clearInterval(heartbeatCheck);
               session.close(4001, "Token required");
               return;
             }
 
             const row = db.prepare("SELECT id, username, bot FROM users WHERE token = ?").get(token) as { id: string; username: string; bot: number } | undefined;
             if (!row) {
+              if (heartbeatCheck) clearInterval(heartbeatCheck);
               session.close(4004, "Authentication failed");
               return;
             }
