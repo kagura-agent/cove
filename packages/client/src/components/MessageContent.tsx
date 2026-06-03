@@ -1,3 +1,4 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -5,7 +6,7 @@ interface MessageContentProps {
   content: string;
 }
 
-export function MessageContent({ content }: MessageContentProps) {
+function MessageContentInner({ content }: MessageContentProps) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -15,14 +16,16 @@ export function MessageContent({ content }: MessageContentProps) {
             {children}
           </a>
         ),
+        pre: ({ children }) => (
+          <pre style={{ background: "var(--bg-code)", padding: "var(--space-sm)", borderRadius: "var(--input-radius)", overflowX: "auto", margin: "var(--space-xs) 0" }}>
+            {children}
+          </pre>
+        ),
         code: ({ className, children, ...props }) => {
-          const isBlock = className?.startsWith("language-");
-          if (isBlock) {
-            return (
-              <pre style={{ background: "var(--bg-code)", padding: "var(--space-sm)", borderRadius: "var(--input-radius)", overflowX: "auto", margin: "var(--space-xs) 0" }}>
-                <code className={className} {...props}>{children}</code>
-              </pre>
-            );
+          // Fenced code blocks are already wrapped in <pre> by react-markdown
+          // Only style inline code here
+          if (className) {
+            return <code className={className} {...props}>{children}</code>;
           }
           return (
             <code style={{ background: "var(--bg-code)", padding: "1px 4px", borderRadius: 3, fontSize: "0.85em" }} {...props}>
@@ -35,10 +38,20 @@ export function MessageContent({ content }: MessageContentProps) {
             {children}
           </blockquote>
         ),
-        p: ({ children }) => <span>{children}</span>,
+        p: ({ children }) => <div style={{ margin: 0 }}>{children}</div>,
+        img: ({ src, alt }) => (
+          <img src={src} alt={alt} style={{ maxWidth: "100%", borderRadius: "var(--input-radius)" }} />
+        ),
+        table: ({ children }) => (
+          <div style={{ overflowX: "auto", margin: "var(--space-xs) 0" }}>
+            <table>{children}</table>
+          </div>
+        ),
       }}
     >
       {content}
     </ReactMarkdown>
   );
 }
+
+export const MessageContent = memo(MessageContentInner);
