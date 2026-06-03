@@ -11,6 +11,13 @@ function MessageContentInner({ content }: MessageContentProps) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        // Discord does not render headings — show as plain text
+        h1: ({ children }) => <div>{children}</div>,
+        h2: ({ children }) => <div>{children}</div>,
+        h3: ({ children }) => <div>{children}</div>,
+        h4: ({ children }) => <div>{children}</div>,
+        h5: ({ children }) => <div>{children}</div>,
+        h6: ({ children }) => <div>{children}</div>,
         a: ({ href, children }) => (
           <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
             {children}
