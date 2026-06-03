@@ -4,12 +4,12 @@ import { SettingOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+  display: "flex", alignItems: "center", gap: 8, padding: "4px 8px",
   borderTop: "1px solid var(--border-subtle)", background: "var(--bg-overlay)",
 };
 const avatarStyle: CSSProperties = { backgroundColor: "var(--accent-brand)", color: "var(--bg-tertiary)", fontWeight: 700, flexShrink: 0 };
-const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-normal)" };
-const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)" };
+const nameStyle: CSSProperties = { flex: 1, fontSize: 13, fontWeight: 500, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)", fontSize: 14 };
 
 export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: () => void; onSettingsOpen?: () => void }) {
   const { username } = useUserStore();
@@ -21,7 +21,7 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
 
   return (
     <div style={barStyle}>
-      <Avatar style={avatarStyle} size={32}>
+      <Avatar style={avatarStyle} size={28}>
         {username.charAt(0).toUpperCase()}
       </Avatar>
       <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>

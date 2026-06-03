@@ -1,7 +1,6 @@
 import { useRef, useState, useCallback } from "react";
-import { Input, Button } from "antd";
+import { Input } from "antd";
 import type { InputRef } from "antd";
-import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 
@@ -57,7 +56,6 @@ export function MessageInput({ channelId }: { channelId: string }) {
         size="large"
         style={inputStyle}
       />
-      <Button type="primary" shape="circle" size="large" icon={<SendOutlined />} onClick={handleSubmit} />
     </div>
   );
 }
