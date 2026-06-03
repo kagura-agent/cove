@@ -1,13 +1,12 @@
 import { Hono } from "hono";
-import type Database from "better-sqlite3";
 import type { Repos } from "../repos/index.js";
-import { requireBotAuth } from "../auth.js";
+import { requireAuth } from "../auth.js";
 
 const GUILD_ID = "cove";
 
-export function agentRoutes(db: Database.Database, repos: Repos): Hono {
+export function agentRoutes(repos: Repos): Hono {
   const app = new Hono();
-  const auth = requireBotAuth(db);
+  const auth = requireAuth(repos.users);
 
   app.post("/api/v10/users", auth, async (c) => {
     const body = await c.req.json<{

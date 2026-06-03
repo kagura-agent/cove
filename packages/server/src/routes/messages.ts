@@ -1,21 +1,10 @@
 import { Hono } from "hono";
-import type Database from "better-sqlite3";
-import type { DiscordUser } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { resolveUser, requireAuth } from "../auth.js";
+import type { AuthUser } from "../auth.js";
 
-function extractAuthor(db: Database.Database, authHeader: string | undefined, bodyUsername?: string): DiscordUser {
-  const user = resolveUser(db, authHeader);
-  if (user) {
-    return { id: user.id, username: user.username, bot: user.bot };
-  }
-  return { id: "anonymous", username: bodyUsername || "anonymous", bot: false };
-}
-
-export function messagesRoutes(db: Database.Database, repos: Repos, dispatcher?: GatewayDispatcher): Hono {
+export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono {
   const app = new Hono();
-  const auth = requireAuth(db);
 
   app.get("/api/v10/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
@@ -52,7 +41,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, dispatcher?:
     }
 
     const body = await c.req.json<{ content: string; username?: string }>();
-    const author = extractAuthor(db, c.req.header("Authorization"), body.username);
+    const author = c.get("botUser") as AuthUser;
 
     const message = repos.messages.create(channelId, author, body.content);
 
@@ -89,7 +78,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, dispatcher?:
     return c.body(null, 204);
   });
 
-  app.delete("/api/v10/channels/:id/messages", auth, (c) => {
+  app.delete("/api/v10/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
     const deleted = repos.messages.deleteAll(channelId!);
     return c.json({ deleted });
@@ -97,7 +86,7 @@ export function messagesRoutes(db: Database.Database, repos: Repos, dispatcher?:
 
   app.post("/api/v10/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
-    const author = extractAuthor(db, c.req.header("Authorization"));
+    const author = c.get("botUser") as AuthUser;
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username });
 

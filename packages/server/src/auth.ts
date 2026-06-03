@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import type Database from "better-sqlite3";
+import type { UsersRepo } from "./repos/users.js";
 
 export interface AuthUser {
   id: string;
@@ -7,7 +7,7 @@ export interface AuthUser {
   bot: boolean;
 }
 
-export function resolveUser(db: Database.Database, authHeader: string | undefined): AuthUser | undefined {
+export function resolveUser(users: UsersRepo, authHeader: string | undefined): AuthUser | undefined {
   if (!authHeader) return undefined;
 
   let token: string | undefined;
@@ -18,20 +18,14 @@ export function resolveUser(db: Database.Database, authHeader: string | undefine
   }
   if (!token) return undefined;
 
-  const row = db.prepare("SELECT id, username, bot FROM users WHERE token = ?").get(token) as
-    { id: string; username: string; bot: number } | undefined;
-  if (!row) return undefined;
-  return { id: row.id, username: row.username, bot: row.bot === 1 };
+  const user = users.findByToken(token);
+  if (!user) return undefined;
+  return { id: user.id, username: user.username, bot: user.bot };
 }
 
-/** @deprecated Use resolveUser instead */
-export function resolveBot(db: Database.Database, authHeader: string | undefined): AuthUser | undefined {
-  return resolveUser(db, authHeader);
-}
-
-export function requireAuth(db: Database.Database) {
+export function requireAuth(users: UsersRepo) {
   return async (c: Context, next: Next) => {
-    const user = resolveUser(db, c.req.header("Authorization"));
+    const user = resolveUser(users, c.req.header("Authorization"));
     if (!user) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
@@ -39,6 +33,3 @@ export function requireAuth(db: Database.Database) {
     return next();
   };
 }
-
-/** @deprecated Use requireAuth instead */
-export const requireBotAuth = requireAuth;

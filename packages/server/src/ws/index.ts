@@ -1,6 +1,6 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
-import type Database from "better-sqlite3";
+import type { UsersRepo } from "../repos/users.js";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import { GatewaySession } from "./session.js";
 import { GatewayDispatcher } from "./dispatcher.js";
@@ -8,7 +8,7 @@ import { GatewayDispatcher } from "./dispatcher.js";
 const HEARTBEAT_INTERVAL = 41250;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
 
-export function setupGateway(server: HttpServer, db: Database.Database, dispatcher: GatewayDispatcher): void {
+export function setupGateway(server: HttpServer, users: UsersRepo, dispatcher: GatewayDispatcher): void {
   const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
@@ -46,14 +46,14 @@ export function setupGateway(server: HttpServer, db: Database.Database, dispatch
               return;
             }
 
-            const row = db.prepare("SELECT id, username, bot FROM users WHERE token = ?").get(token) as { id: string; username: string; bot: number } | undefined;
+            const row = users.findByToken(token);
             if (!row) {
               if (heartbeatCheck) clearInterval(heartbeatCheck);
               session.close(4004, "Authentication failed");
               return;
             }
 
-            const user = { id: row.id, username: row.username, bot: row.bot === 1 };
+            const user = { id: row.id, username: row.username, bot: row.bot };
 
             session.identify(user);
             dispatcher.addSession(session);

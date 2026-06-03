@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type Database from "better-sqlite3";
-import { createRepos } from "./repos/index.js";
+import type { Repos } from "./repos/index.js";
 import { channelRoutes } from "./routes/channels.js";
 import { messagesRoutes } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
@@ -18,11 +18,11 @@ const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/au
 
 export function createApp(
   db: Database.Database,
+  repos: Repos,
   dispatcher?: GatewayDispatcher,
   config?: AppConfig,
 ): Hono {
   const app = new Hono();
-  const repos = createRepos(db);
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
@@ -32,7 +32,8 @@ export function createApp(
     app.route("/", authRoutes(db, config.oauth));
   }
 
-  const authMw = requireAuth(db);
+  // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.
+  const authMw = requireAuth(repos.users);
   app.use("/api/*", async (c, next) => {
     if (c.req.method === "OPTIONS") return next();
     const path = c.req.path.replace(/\/+$/, "") || "/";
@@ -40,15 +41,15 @@ export function createApp(
     return authMw(c, next);
   });
 
-  app.route("/", channelRoutes(db, repos, dispatcher));
-  app.route("/", messagesRoutes(db, repos, dispatcher));
-  app.route("/", agentRoutes(db, repos));
+  app.route("/", channelRoutes(repos, dispatcher));
+  app.route("/", messagesRoutes(repos, dispatcher));
+  app.route("/", agentRoutes(repos));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/users/@me", (c) => {
-    const user = resolveUser(db, c.req.header("Authorization"));
+    const user = resolveUser(repos.users, c.req.header("Authorization"));
     if (user) return c.json(user);
     return c.json({ message: "Authentication required", code: 40001 }, 401);
   });
