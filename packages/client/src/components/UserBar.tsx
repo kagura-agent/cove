@@ -32,8 +32,8 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
         <div style={{
           width: 10, height: 10, borderRadius: "50%",
           background: online ? "var(--status-online)" : "var(--status-offline)",
-          border: "3px solid var(--bg-overlay)",
-          position: "absolute", bottom: -2, right: -2,
+          border: "2px solid var(--bg-overlay)",
+          position: "absolute", bottom: -1, right: -1,
         }} />
       </div>
       <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
