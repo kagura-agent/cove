@@ -26,10 +26,10 @@ export function createApp(
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-  app.route("/", registerRoutes(db));
+  app.route("/", registerRoutes(db, repos.guilds));
 
   if (config?.oauth) {
-    app.route("/", authRoutes(db, config.oauth));
+    app.route("/", authRoutes(db, config.oauth, repos.guilds));
   }
 
   // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.

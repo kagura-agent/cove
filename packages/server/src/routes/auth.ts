@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { DEFAULT_GUILD_ID } from "@cove/shared";
+import type { GuildsRepo } from "../repos/guilds.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -9,7 +9,7 @@ export interface OAuthConfig {
   redirectUri: string;
 }
 
-export function authRoutes(db: Database.Database, config: OAuthConfig): Hono {
+export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRepo: GuildsRepo): Hono {
   const app = new Hono();
 
   app.get("/api/auth/google", (c) => {
@@ -73,7 +73,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig): Hono {
         .run(googleUser.name, googleUser.picture, token, now, userId);
       // Ensure user is in default guild
       db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
-        .run(DEFAULT_GUILD_ID, userId, null, "[]", now);
+        .run(guildsRepo.getDefaultId(), userId, null, "[]", now);
       return c.redirect(`/?token=${token}`);
     }
 

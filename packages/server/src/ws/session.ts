@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
-import { GatewayOpcode, DEFAULT_GUILD_ID, type GatewayPayload } from "@cove/shared";
+import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 
@@ -40,9 +40,7 @@ export class GatewaySession {
     const presences = dispatcher
       ? dispatcher.getOnlineUserIds().map((id) => ({ user: { id }, status: "online" as const }))
       : [];
-    const guilds = guildsRepo
-      ? guildsRepo.listForUser(user.id)
-      : [{ id: DEFAULT_GUILD_ID, name: "Cove", icon: null, owner_id: null }];
+    const guilds = guildsRepo?.listForUser(user.id) ?? [];
     this.seq++;
     this.ws.send(JSON.stringify({
       op: GatewayOpcode.DISPATCH,

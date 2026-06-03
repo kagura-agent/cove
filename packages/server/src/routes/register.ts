@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { DEFAULT_GUILD_ID } from "@cove/shared";
+import type { GuildsRepo } from "../repos/guilds.js";
 
 /**
  * Invite-code registration route.
  * Public endpoint — no auth required (new users after OAuth).
  * Mounted independently of OAuth config so it's always available.
  */
-export function registerRoutes(db: Database.Database): Hono {
+export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): Hono {
   const app = new Hono();
 
   app.post("/api/v10/auth/register", async (c) => {
@@ -45,7 +45,7 @@ export function registerRoutes(db: Database.Database): Hono {
       // Add new user to default guild
       db.prepare(
         "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-      ).run(DEFAULT_GUILD_ID, userId, null, "[]", now);
+      ).run(guildsRepo.getDefaultId(), userId, null, "[]", now);
 
       db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);

@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { DiscordGuild } from "@cove/shared";
+import { DEFAULT_GUILD_ID, type DiscordGuild } from "@cove/shared";
 
 interface GuildRow {
   id: string;
@@ -39,5 +39,10 @@ export class GuildsRepo {
 
   exists(id: string): boolean {
     return !!this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(id);
+  }
+
+  getDefaultId(): string {
+    const row = this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(DEFAULT_GUILD_ID) as { id: string } | undefined;
+    return row?.id ?? DEFAULT_GUILD_ID;
   }
 }

@@ -27,7 +27,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
       return c.json({ message: "User already exists", code: 10013 }, 409);
     }
 
-    const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio });
+    const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio }, repos.guilds.getDefaultId());
     return c.json(user, 201);
   });
 
