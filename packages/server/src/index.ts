@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { initDb, seedChannels, seedUsers } from "./db/schema.js";
 import { createApp } from "./app.js";
+import { createRepos } from "./repos/index.js";
 import { setupGateway, GatewayDispatcher } from "./ws/index.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
@@ -16,8 +17,9 @@ const googleClientSecret = process.env["GOOGLE_CLIENT_SECRET"];
 const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
 
 const dispatcher = new GatewayDispatcher();
+const repos = createRepos(db);
 
-const app = createApp(db, dispatcher, {
+const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
   oauth: googleClientId && googleClientSecret ? {
     clientId: googleClientId,
@@ -32,5 +34,5 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`🏝️  Cove server running on http://localhost:${info.port}`);
 });
 
-setupGateway(server as any, db, dispatcher);
+setupGateway(server as any, repos.users, dispatcher);
 console.log("🏝️  Gateway WebSocket ready on /gateway");

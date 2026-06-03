@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
+import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
 import type { DiscordChannel, DiscordMessage, ChannelState, CoveAgent, CoveGuildMember } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
@@ -39,7 +40,7 @@ describe("Cove API — Discord-compatible", () => {
     db = initDb(":memory:");
     seedChannels(db);
     broadcastEvents.length = 0;
-    app = createApp(db, new TestDispatcher());
+    app = createApp(db, createRepos(db), new TestDispatcher());
 
     // Bootstrap an admin bot directly in DB for auth
     adminToken = "test-admin-token";

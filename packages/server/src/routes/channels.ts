@@ -1,13 +1,12 @@
 import { Hono } from "hono";
-import type Database from "better-sqlite3";
 import type { Repos } from "../repos/index.js";
 import { DEFAULT_GUILD_ID } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { requireBotAuth } from "../auth.js";
+import { requireAuth, type AppEnv } from "../auth.js";
 
-export function channelRoutes(db: Database.Database, repos: Repos, dispatcher?: GatewayDispatcher): Hono {
-  const app = new Hono();
-  const auth = requireBotAuth(db);
+export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
+  const auth = requireAuth(repos.users);
 
   app.get("/api/v10/guilds/:guildId/channels", (c) => {
     const guildId = c.req.param("guildId");

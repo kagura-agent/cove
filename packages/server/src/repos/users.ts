@@ -88,4 +88,9 @@ export class UsersRepo {
   exists(id: string): boolean {
     return !!this.db.prepare("SELECT id FROM users WHERE id = ?").get(id);
   }
+
+  findByToken(token: string): CoveAgent & { bot: boolean } | null {
+    const row = this.db.prepare("SELECT id, username, avatar, bot, bio FROM users WHERE token = ?").get(token) as UserRow | undefined;
+    return row ? { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio } : null;
+  }
 }

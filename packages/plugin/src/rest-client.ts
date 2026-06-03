@@ -1,5 +1,5 @@
 /**
- * Cove REST API client.
+ * Cove REST API client — public API, used by external consumers.
  *
  * Simple fetch wrapper that speaks the Discord-compatible Cove REST API.
  * All requests include the Bot token in the Authorization header.

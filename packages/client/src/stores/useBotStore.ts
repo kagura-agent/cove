@@ -12,8 +12,8 @@ interface BotState {
 export const useBotStore = create<BotState>((set) => ({
   bots: [],
   fetchBots: async () => {
-    const members = await api.fetchBots();
-    set({ bots: members.filter((m) => m.bot) });
+    const members = await api.fetchMembers();
+    set({ bots: members.filter((m) => m.user.bot).map((m) => m.user) });
   },
   createBot: async (name, bio) => {
     const result = await api.createBot(name, bio);

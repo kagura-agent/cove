@@ -2,7 +2,7 @@ import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
-import { MessageContent } from "./MessageContent";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 function formatTime(ts: string): string {
   try {
@@ -131,7 +131,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
               wordBreak: "break-word",
             }}
           >
-            <MessageContent content={message.content} />
+            <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           </div>
         </div>
@@ -163,7 +163,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             wordBreak: "break-word",
           }}
         >
-          <MessageContent content={message.content} />
+          <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
         </div>
       </div>
