@@ -6,30 +6,44 @@ interface MessageContentProps {
   content: string;
 }
 
+/** Escape Markdown syntax that Discord does not render.
+ * Preserves: bold, italic, strikethrough, code, links, blockquotes.
+ * Escapes: headings (#), lists (- / * / 1.), hr (---), images (![]). */
+function escapeNonDiscordMarkdown(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      // Escape heading syntax: # at start of line
+      if (/^#{1,6}\s/.test(line)) {
+        return line.replace(/^(#{1,6})\s/, '$1\\. ');
+      }
+      // Escape unordered list: - or * at start (but not --- which is hr, or ** which is bold)
+      if (/^\s*[-]\s/.test(line)) {
+        return line.replace(/^(\s*)[-]\s/, '$1\\- ');
+      }
+      if (/^\s*[*]\s(?![*])/.test(line)) {
+        return line.replace(/^(\s*)[*]\s/, '$1\\* ');
+      }
+      // Escape ordered list: 1. 2. etc at start
+      if (/^\s*\d+\.\s/.test(line)) {
+        return line.replace(/^(\s*)(\d+)\.\s/, '$1$2\\. ');
+      }
+      // Escape horizontal rule: --- or *** or ___ alone on line
+      if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
+        return '\\' + line.trimStart();
+      }
+      // Escape image syntax: ![alt](url) → \![alt](url)
+      return line.replace(/^!\[/, '\\![');
+    })
+    .join('\n');
+}
+
 function MessageContentInner({ content }: MessageContentProps) {
+  const processed = escapeNonDiscordMarkdown(content);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        // Discord does not render headings — show as plain text
-        h1: ({ children }) => <div>{children}</div>,
-        h2: ({ children }) => <div>{children}</div>,
-        h3: ({ children }) => <div>{children}</div>,
-        h4: ({ children }) => <div>{children}</div>,
-        h5: ({ children }) => <div>{children}</div>,
-        h6: ({ children }) => <div>{children}</div>,
-        // Discord does not render lists or tables — show as plain text
-        ul: ({ children }) => <>{children}</>,
-        ol: ({ children }) => <>{children}</>,
-        li: ({ children }) => <div>{'• '}{children}</div>,
-        table: ({ children }) => <>{children}</>,
-        thead: ({ children }) => <>{children}</>,
-        tbody: ({ children }) => <>{children}</>,
-        tr: ({ children }) => <div>{children}</div>,
-        th: ({ children }) => <>{children}{' '}</>,
-        td: ({ children }) => <>{children}{' '}</>,
-        hr: () => <div style={{ margin: 0 }}>{'---'}</div>,
-        img: ({ alt }) => <span>{alt || ''}</span>,
         a: ({ href, children }) => (
           <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
             {children}
