@@ -27,7 +27,7 @@ function statusDotStyle(online: boolean): CSSProperties {
     border: "3px solid var(--bg-secondary)",
     position: "absolute",
     bottom: -2,
-    left: -2,
+    right: -2,
   };
 }
 
