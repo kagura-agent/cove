@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
-import { parseMarkdown, type Token } from "../lib/markdown";
+import { parseChatMarkdown, type Token } from "../lib/chat-markdown";
 
-interface MarkdownProps {
+interface ChatMarkdownProps {
   content: string;
   className?: string;
   style?: CSSProperties;
@@ -84,8 +84,8 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
   });
 }
 
-function MarkdownInner({ content, className, style }: MarkdownProps) {
-  const tokens = parseMarkdown(content);
+function ChatMarkdownInner({ content, className, style }: ChatMarkdownProps) {
+  const tokens = parseChatMarkdown(content);
   return (
     <span className={className} style={style}>
       {renderTokens(tokens)}
@@ -93,4 +93,4 @@ function MarkdownInner({ content, className, style }: MarkdownProps) {
   );
 }
 
-export const Markdown = memo(MarkdownInner);
+export const ChatMarkdown = memo(ChatMarkdownInner);

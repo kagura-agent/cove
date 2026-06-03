@@ -1,1 +1,1 @@
-export { Markdown as MessageContent } from "./Markdown";
+export { ChatMarkdown as MessageContent } from "./ChatMarkdown";
