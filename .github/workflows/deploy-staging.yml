@@ -1,13 +1,15 @@
-name: PR Preview Deploy
+name: Deploy Staging
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   pull_request_target:
     types: [closed]
+  push:
+    branches: [main]
 
 jobs:
-  deploy-preview:
+  deploy:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -17,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -39,7 +41,7 @@ jobs:
             --external:better-sqlite3 --external:ws \
             --alias:@cove/shared=./packages/shared/src/types.ts
 
-      - name: Deploy preview to VM1
+      - name: Deploy to VM1 (staging)
         env:
           SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
           HOST: moltbook.kagura-agent.com
@@ -53,14 +55,14 @@ jobs:
           SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
           SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
 
-          # Upload server bundle to staging directory
+          # Upload server bundle
           $SSH "mkdir -p /home/azureuser/cove-staging"
           $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
 
-          # Ensure native dependencies are installed on VM
+          # Ensure native dependencies
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
-          # Upload client dist to staging
+          # Upload client dist
           $SSH "sudo rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
           $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
           $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
@@ -93,12 +95,13 @@ jobs:
 
           $SSH "sudo systemctl daemon-reload && sudo systemctl restart cove-staging"
 
-          # Health check (wait for service to start)
+          # Health check
           sleep 5
           $SSH "curl -sf http://localhost:3501/api/health" || { $SSH "sudo journalctl -u cove-staging --no-pager -n 20"; exit 1; }
-          echo "✅ Preview deploy successful!"
+          echo "✅ Staging deploy successful!"
 
-      - name: Comment preview URL
+      - name: Comment preview URL (PRs only)
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -107,7 +110,6 @@ jobs:
               `**Port:** 3501 (separate DB)\n\n` +
               `This preview will be torn down when the PR is merged or closed.`;
 
-            // Find existing preview comment
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -133,7 +135,7 @@ jobs:
               });
             }
 
-  teardown-preview:
+  teardown:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -152,4 +154,4 @@ jobs:
 
           SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
           $SSH "sudo systemctl stop cove-staging || true"
-          echo "✅ Preview torn down"
+          echo "✅ Staging torn down"
