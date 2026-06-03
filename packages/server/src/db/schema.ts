@@ -1,5 +1,34 @@
 import Database from "better-sqlite3";
 
+function migrateRenameTable(db: Database.Database, oldName: string, newName: string): void {
+  const hasOld = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(oldName);
+  if (!hasOld) return;
+
+  const hasNew = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(newName);
+  if (hasNew) {
+    const newCount = (db.prepare(`SELECT COUNT(*) as c FROM "${newName}"`).get() as { c: number }).c;
+    if (newCount > 0) {
+      const oldCount = (db.prepare(`SELECT COUNT(*) as c FROM "${oldName}"`).get() as { c: number }).c;
+      if (oldCount > 0) {
+        throw new Error(
+          `Migration conflict: both "${oldName}" (${oldCount} rows) and "${newName}" (${newCount} rows) contain data. ` +
+          `Manually resolve before starting the server.`
+        );
+      }
+      // New table has data, old is empty — drop old, keep new
+      db.exec(`DROP TABLE "${oldName}"`);
+      return;
+    }
+    // New table is empty — safe to drop and rename
+    db.exec(`DROP TABLE "${newName}"`);
+  }
+  db.exec(`ALTER TABLE "${oldName}" RENAME TO "${newName}"`);
+}
+
 export function initDb(dbPath: string = ":memory:"): Database.Database {
   const db = new Database(dbPath);
 
@@ -9,32 +38,8 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
   // Handle case where both old (scenes) and new (channels) tables exist
   // (can happen if a buggy deploy created empty channels before rename)
-  const hasScenes = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='scenes'"
-  ).get();
-  if (hasScenes) {
-    const hasChannels = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='channels'"
-    ).get();
-    if (hasChannels) {
-      // Drop the empty channels table so rename can proceed
-      db.exec("DROP TABLE channels");
-    }
-    db.exec("ALTER TABLE scenes RENAME TO channels");
-  }
-
-  const hasSceneState = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='scene_state'"
-  ).get();
-  if (hasSceneState) {
-    const hasChannelState = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='channel_state'"
-    ).get();
-    if (hasChannelState) {
-      db.exec("DROP TABLE channel_state");
-    }
-    db.exec("ALTER TABLE scene_state RENAME TO channel_state");
-  }
+  migrateRenameTable(db, "scenes", "channels");
+  migrateRenameTable(db, "scene_state", "channel_state");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS channels (

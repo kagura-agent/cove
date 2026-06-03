@@ -953,4 +953,93 @@ describe("Cove API — Discord-compatible", () => {
       expect(data).toEqual({ status: "ok" });
     });
   });
+
+  // ─── Request body validation ───────────────────────────────────────────
+
+  describe("Request body validation", () => {
+    it("POST message rejects missing content", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST message rejects content over 4000 chars", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ content: "x".repeat(4001) }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST message rejects invalid JSON", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: "not json",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("PATCH message rejects empty content", async () => {
+      const bot = await createBotUser("val-bot", "ValBot");
+      const createRes = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
+        body: JSON.stringify({ content: "original" }),
+      });
+      const msg: DiscordMessage = await createRes.json();
+
+      const res = await app.request(`/api/v10/channels/garden/messages/${msg.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ content: "" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST channel rejects name over 100 chars", async () => {
+      const res = await app.request("/api/v10/guilds/cove/channels", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ name: "x".repeat(101) }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST user rejects username over 80 chars", async () => {
+      const res = await app.request("/api/v10/users", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ username: "x".repeat(81) }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("PATCH channel rejects non-finite position", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ cove_position: { x: "not-a-number", y: 0 } }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT state rejects missing key", async () => {
+      const res = await app.request("/api/v10/channels/garden/state", {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ value: "v" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET messages handles NaN limit gracefully", async () => {
+      const res = await authGet("/api/v10/channels/garden/messages?limit=abc");
+      expect(res.status).toBe(200);
+    });
+  });
 });
