@@ -2,10 +2,10 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import { DEFAULT_GUILD_ID } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, type AppEnv } from "../auth.js";
 
-export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono {
-  const app = new Hono();
+export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
 
   app.get("/api/v10/guilds/:guildId/channels", (c) => {

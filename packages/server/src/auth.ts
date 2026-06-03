@@ -7,6 +7,8 @@ export interface AuthUser {
   bot: boolean;
 }
 
+export type AppEnv = { Variables: { botUser: AuthUser } };
+
 export function resolveUser(users: UsersRepo, authHeader: string | undefined): AuthUser | undefined {
   if (!authHeader) return undefined;
 

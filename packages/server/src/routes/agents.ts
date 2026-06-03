@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, type AppEnv } from "../auth.js";
 
 const GUILD_ID = "cove";
 
-export function agentRoutes(repos: Repos): Hono {
-  const app = new Hono();
+export function agentRoutes(repos: Repos): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
 
   app.post("/api/v10/users", auth, async (c) => {

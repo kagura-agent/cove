@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import type { AuthUser } from "../auth.js";
+import type { AppEnv } from "../auth.js";
 
-export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono {
-  const app = new Hono();
+export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
 
   app.get("/api/v10/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
@@ -41,7 +41,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
 
     const body = await c.req.json<{ content: string; username?: string }>();
-    const author = c.get("botUser") as AuthUser;
+    const author = c.get("botUser");
 
     const message = repos.messages.create(channelId, author, body.content);
 
@@ -86,7 +86,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
   app.post("/api/v10/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
-    const author = c.get("botUser") as AuthUser;
+    const author = c.get("botUser");
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username });
 

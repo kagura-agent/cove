@@ -6,7 +6,7 @@ import { messagesRoutes } from "./routes/messages.js";
 import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
 import { registerRoutes } from "./routes/register.js";
-import { requireAuth, resolveUser } from "./auth.js";
+import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 
 export interface AppConfig {
@@ -21,8 +21,8 @@ export function createApp(
   repos: Repos,
   dispatcher?: GatewayDispatcher,
   config?: AppConfig,
-): Hono {
-  const app = new Hono();
+): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
@@ -49,9 +49,7 @@ export function createApp(
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/users/@me", (c) => {
-    const user = resolveUser(repos.users, c.req.header("Authorization"));
-    if (user) return c.json(user);
-    return c.json({ message: "Authentication required", code: 40001 }, 401);
+    return c.json(c.get("botUser"));
   });
 
   return app;
