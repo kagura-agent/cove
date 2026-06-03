@@ -51,7 +51,9 @@ function parseInline(text: string): Token[] {
   const tokens: Token[] = [];
   let remaining = text;
 
-  while (remaining.length > 0) {
+    let iterations = 0;
+  while (remaining.length > 0 && iterations < 10000) {
+    iterations++;
     let matched = false;
     for (const rule of INLINE_RULES) {
       const m = remaining.match(rule.pattern);
