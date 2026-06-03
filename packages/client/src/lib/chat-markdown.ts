@@ -12,30 +12,30 @@ export type Token =
   | { type: "spoiler"; children: Token[] }
   | { type: "br" };
 
-const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray) => { token: Token; length: number } }> = [
+const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray, depth: number) => { token: Token; length: number } }> = [
   {
     pattern: /^`([^`]+)`/,
     parse: (m) => ({ token: { type: "code", text: m[1] }, length: m[0].length }),
   },
   {
     pattern: /^\|\|(.+?)\|\|/,
-    parse: (m) => ({ token: { type: "spoiler", children: parseInline(m[1]) }, length: m[0].length }),
+    parse: (m, d) => ({ token: { type: "spoiler", children: parseInline(m[1], d + 1) }, length: m[0].length }),
   },
   {
     pattern: /^\*\*(.+?)\*\*/,
-    parse: (m) => ({ token: { type: "bold", children: parseInline(m[1]) }, length: m[0].length }),
+    parse: (m, d) => ({ token: { type: "bold", children: parseInline(m[1], d + 1) }, length: m[0].length }),
   },
   {
     pattern: /^\*([^*]+?)\*/,
-    parse: (m) => ({ token: { type: "italic", children: parseInline(m[1]) }, length: m[0].length }),
+    parse: (m, d) => ({ token: { type: "italic", children: parseInline(m[1], d + 1) }, length: m[0].length }),
   },
   {
     pattern: /^_([^_]+?)_/,
-    parse: (m) => ({ token: { type: "italic", children: parseInline(m[1]) }, length: m[0].length }),
+    parse: (m, d) => ({ token: { type: "italic", children: parseInline(m[1], d + 1) }, length: m[0].length }),
   },
   {
     pattern: /^~~(.+?)~~/,
-    parse: (m) => ({ token: { type: "strikethrough", children: parseInline(m[1]) }, length: m[0].length }),
+    parse: (m, d) => ({ token: { type: "strikethrough", children: parseInline(m[1], d + 1) }, length: m[0].length }),
   },
   {
     pattern: /^\[([^\]]+)\]\(([^)]+)\)/,
@@ -47,7 +47,10 @@ const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray) =>
   },
 ];
 
-function parseInline(text: string): Token[] {
+const MAX_INLINE_DEPTH = 10;
+
+function parseInline(text: string, depth = 0): Token[] {
+  if (depth >= MAX_INLINE_DEPTH) return [{ type: "text", text }];
   const tokens: Token[] = [];
   let remaining = text;
 
@@ -56,7 +59,7 @@ function parseInline(text: string): Token[] {
     for (const rule of INLINE_RULES) {
       const m = remaining.match(rule.pattern);
       if (m) {
-        const { token, length } = rule.parse(m);
+        const { token, length } = rule.parse(m, depth);
         tokens.push(token);
         remaining = remaining.slice(length);
         matched = true;

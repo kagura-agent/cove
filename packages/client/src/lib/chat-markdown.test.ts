@@ -78,3 +78,70 @@ test("handles 50 copies without OOM", () => {
 });
 
 console.log("All tests passed");
+
+// --- Edge case & security tests ---
+
+test("empty string", () => {
+  const tokens = parseChatMarkdown("");
+  if (tokens.length !== 0) throw new Error("expected no tokens");
+});
+
+test("only newlines", () => {
+  const tokens = parseChatMarkdown("\n\n\n\n\n");
+  for (const t of tokens) {
+    if (t.type !== "br") throw new Error(`unexpected: ${t.type}`);
+  }
+});
+
+test("only spaces", () => {
+  const tokens = parseChatMarkdown("   ");
+  if (tokens[0].type !== "text") throw new Error("expected text");
+});
+
+test("unclosed bold", () => {
+  const tokens = parseChatMarkdown("**bold without close");
+  if (tokens[0].type !== "text") throw new Error("expected text fallback");
+});
+
+test("1000 backticks", () => {
+  const input = "`".repeat(1000);
+  const tokens = parseChatMarkdown(input);
+  if (tokens.length === 0) throw new Error("expected tokens");
+});
+
+test("10000 char plain text", () => {
+  const input = "a".repeat(10000);
+  const start = Date.now();
+  const tokens = parseChatMarkdown(input);
+  if (Date.now() - start > 1000) throw new Error("too slow");
+  if (tokens[0].type !== "text") throw new Error("expected text");
+});
+
+test("nested formatting", () => {
+  const tokens = parseChatMarkdown("**bold *italic* bold**");
+  if (tokens[0].type !== "bold") throw new Error("expected bold");
+});
+
+test("malformed table not parsed as table", () => {
+  const tokens = parseChatMarkdown("| just |\n| no sep |\n| row |");
+  for (const t of tokens) {
+    if (t.type === "tableBlock") throw new Error("should not be table");
+  }
+});
+
+test("ambiguous *** does not crash", () => {
+  parseChatMarkdown("***");
+});
+
+test("deep nesting does not stack overflow", () => {
+  const input = "**".repeat(50) + "x" + "**".repeat(50);
+  const tokens = parseChatMarkdown(input);
+  if (tokens.length === 0) throw new Error("expected tokens");
+});
+
+test("autolink rejects non-http", () => {
+  const tokens = parseChatMarkdown("ftp://evil.com");
+  if (tokens[0].type === "autolink") throw new Error("should not match ftp");
+});
+
+console.log("Edge case tests passed");
