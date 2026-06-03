@@ -32,7 +32,7 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
         <div style={{
           width: 10, height: 10, borderRadius: "50%",
           background: online ? "var(--status-online)" : "var(--status-offline)",
-          border: "2px solid var(--bg-overlay)",
+          border: "2px solid var(--bg-secondary)",
           position: "absolute", bottom: -1, right: -1,
         }} />
       </div>
