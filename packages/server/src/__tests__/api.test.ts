@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createApp } from "../app.js";
-import { initDb, seedScenes } from "../db/schema.js";
+import { initDb, seedChannels } from "../db/schema.js";
 import type Database from "better-sqlite3";
-import type { DiscordChannel, DiscordMessage, SceneState, CoveAgent, CoveGuildMember } from "@cove/shared";
+import type { DiscordChannel, DiscordMessage, ChannelState, CoveAgent, CoveGuildMember } from "@cove/shared";
 
 describe("Cove API — Discord-compatible", () => {
   let db: Database.Database;
@@ -12,7 +12,7 @@ describe("Cove API — Discord-compatible", () => {
 
   beforeEach(() => {
     db = initDb(":memory:");
-    seedScenes(db);
+    seedChannels(db);
     broadcastEvents.length = 0;
     app = createApp(db, (event) => broadcastEvents.push(event));
 
@@ -71,7 +71,7 @@ describe("Cove API — Discord-compatible", () => {
       const garden = channels.find((c) => c.id === "garden");
       expect(garden).toBeDefined();
       expect(garden!.icon).toBe("🌱");
-      expect(garden!.scene_type).toBe("open");
+      expect(garden!.channel_type).toBe("open");
       expect(garden!.cove_position).toEqual({ x: 200, y: 200 });
     });
 
@@ -336,7 +336,7 @@ describe("Cove API — Discord-compatible", () => {
       // Insert 5 messages with incrementing timestamps
       messageIds = [];
       const insert = db.prepare(
-        "INSERT INTO messages (id, scene_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
       );
       for (let i = 0; i < 5; i++) {
         const id = `msg-${i}`;
@@ -387,7 +387,7 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
-  // ─── Scene state (Cove extension) ─────────────────────────────────────
+  // ─── Channel state (Cove extension) ────────────────────────────────
 
   describe("Channel state", () => {
     it("PUT creates state entry, GET retrieves it", async () => {
@@ -397,13 +397,13 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ key: "flowers_watered", value: "3" }),
       });
       expect(putRes.status).toBe(200);
-      const entry: SceneState = await putRes.json();
-      expect(entry.sceneId).toBe("garden");
+      const entry: ChannelState = await putRes.json();
+      expect(entry.channelId).toBe("garden");
       expect(entry.key).toBe("flowers_watered");
       expect(entry.value).toBe("3");
 
       const getRes = await authGet("/api/v10/channels/garden/state");
-      const state: SceneState[] = await getRes.json();
+      const state: ChannelState[] = await getRes.json();
       expect(state).toHaveLength(1);
       expect(state[0].key).toBe("flowers_watered");
       expect(state[0].value).toBe("3");
@@ -422,7 +422,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       const getRes = await authGet("/api/v10/channels/garden/state");
-      const state: SceneState[] = await getRes.json();
+      const state: ChannelState[] = await getRes.json();
       expect(state).toHaveLength(1);
       expect(state[0].value).toBe("5");
     });
@@ -436,10 +436,10 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: SceneState };
+      const event = broadcastEvents[0] as { op: number; t: string; d: ChannelState };
       expect(event.op).toBe(0);
       expect(event.t).toBe("STATE_UPDATE");
-      expect(event.d.sceneId).toBe("garden");
+      expect(event.d.channelId).toBe("garden");
       expect(event.d.key).toBe("mood");
       expect(event.d.value).toBe("happy");
     });
@@ -540,14 +540,14 @@ describe("Cove API — Discord-compatible", () => {
 
       // Verify STATE_DELETE broadcast
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: { scene_id: string; key: string } };
+      const event = broadcastEvents[0] as { op: number; t: string; d: { channel_id: string; key: string } };
       expect(event.t).toBe("STATE_DELETE");
-      expect(event.d.scene_id).toBe("garden");
+      expect(event.d.channel_id).toBe("garden");
       expect(event.d.key).toBe("temp");
 
       // Verify state is gone
       const getRes = await authGet("/api/v10/channels/garden/state");
-      const state: SceneState[] = await getRes.json();
+      const state: ChannelState[] = await getRes.json();
       expect(state).toHaveLength(0);
     });
 

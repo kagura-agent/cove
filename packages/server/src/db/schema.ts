@@ -6,8 +6,38 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
+  // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
+  // Handle case where both old (scenes) and new (channels) tables exist
+  // (can happen if a buggy deploy created empty channels before rename)
+  const hasScenes = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='scenes'"
+  ).get();
+  if (hasScenes) {
+    const hasChannels = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='channels'"
+    ).get();
+    if (hasChannels) {
+      // Drop the empty channels table so rename can proceed
+      db.exec("DROP TABLE channels");
+    }
+    db.exec("ALTER TABLE scenes RENAME TO channels");
+  }
+
+  const hasSceneState = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='scene_state'"
+  ).get();
+  if (hasSceneState) {
+    const hasChannelState = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='channel_state'"
+    ).get();
+    if (hasChannelState) {
+      db.exec("DROP TABLE channel_state");
+    }
+    db.exec("ALTER TABLE scene_state RENAME TO channel_state");
+  }
+
   db.exec(`
-    CREATE TABLE IF NOT EXISTS scenes (
+    CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       icon        TEXT,
@@ -40,7 +70,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
 
     CREATE TABLE IF NOT EXISTS messages (
       id               TEXT PRIMARY KEY,
-      scene_id         TEXT REFERENCES scenes(id),
+      channel_id       TEXT REFERENCES channels(id),
       sender           TEXT,
       content          TEXT,
       timestamp        INTEGER,
@@ -48,12 +78,12 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       edited_timestamp INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS scene_state (
-      scene_id   TEXT REFERENCES scenes(id),
+    CREATE TABLE IF NOT EXISTS channel_state (
+      channel_id TEXT REFERENCES channels(id),
       key        TEXT,
       value      TEXT,
       updated_at INTEGER,
-      PRIMARY KEY (scene_id, key)
+      PRIMARY KEY (channel_id, key)
     );
 
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -79,46 +109,55 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
 
   // Migration: add sender_name to store display name alongside sender ID
   try {
     db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
 
   // Migration: add token column to users table (older DBs lack it)
-  // Note: SQLite ALTER TABLE ADD COLUMN does not support UNIQUE constraint.
-  // Must add column first, then create a unique index separately.
   try {
     db.exec("ALTER TABLE users ADD COLUMN token TEXT");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
+
+  // Post-create migrations: rename columns in already-renamed tables
+  try {
+    db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
+  } catch (_) {
+    // Column already named channel_id
+  }
+
+  try {
+    db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
+  } catch (_) {
+    // Column already named channel_id
+  }
 
   return db;
 }
 
-// Core scenes for Phase 1. Additional scenes are unlocked progressively
-// as features are implemented (see README scene table for the full list).
-const SEED_SCENES = [
+const SEED_CHANNELS = [
   { id: "home", name: "Home", icon: "🏠", type: "indoor", channelId: "kagura-dm", description: "Living room — your cozy home base", x: 300, y: 300 },
   { id: "garden", name: "Garden", icon: "🌱", type: "open", channelId: "garden", description: "Tend your plants and watch them grow", x: 200, y: 200 },
   { id: "workshop", name: "Workshop", icon: "🔨", type: "indoor", channelId: "github-contribution", description: "Where code gets built", x: 500, y: 250 },
   { id: "post-office", name: "Post Office", icon: "📧", type: "indoor", channelId: "kagura-mail", description: "Send and receive letters", x: 350, y: 200 },
 ] as const;
 
-export function seedScenes(db: Database.Database): void {
+export function seedChannels(db: Database.Database): void {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO scenes (id, name, icon, type, channel_id, description, position_x, position_y)
+    INSERT OR IGNORE INTO channels (id, name, icon, type, channel_id, description, position_x, position_y)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
-    for (const s of SEED_SCENES) {
+    for (const s of SEED_CHANNELS) {
       insert.run(s.id, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
     }
   });

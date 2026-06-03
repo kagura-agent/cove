@@ -4,7 +4,7 @@ import type { DiscordMessage, DiscordUser } from "@cove/shared";
 
 interface MessageRow {
   id: string;
-  scene_id: string;
+  channel_id: string;
   sender: string;
   sender_name: string | null;
   content: string;
@@ -20,7 +20,7 @@ const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_b
 function toDiscordMessage(row: MessageRow): DiscordMessage {
   return {
     id: row.id,
-    channel_id: row.scene_id,
+    channel_id: row.channel_id,
     content: row.content,
     author: {
       id: row.sender,
@@ -45,26 +45,26 @@ export class MessagesRepo {
     if (before) {
       const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(before) as { timestamp: number } | undefined;
       if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
         .all(channelId, ref.timestamp, limit) as MessageRow[];
     } else if (after) {
       const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(after) as { timestamp: number } | undefined;
       if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
         .all(channelId, ref.timestamp, limit) as MessageRow[];
     } else if (around) {
       const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(around) as { timestamp: number } | undefined;
       if (!ref) return [];
       const half = Math.floor(limit / 2);
-      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
+      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
         .all(channelId, ref.timestamp, half) as MessageRow[];
-      const centerRow = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? AND m.id = ?`)
+      const centerRow = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id = ?`)
         .get(channelId, around) as MessageRow | undefined;
-      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
+      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
         .all(channelId, ref.timestamp, half) as MessageRow[];
       rows = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
     } else {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.scene_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
         .all(channelId, limit) as MessageRow[];
     }
 
@@ -72,7 +72,7 @@ export class MessagesRepo {
   }
 
   getById(channelId: string, messageId: string): DiscordMessage | null {
-    const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.scene_id = ?`)
+    const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow | undefined;
     return row ? toDiscordMessage(row) : null;
   }
@@ -82,7 +82,7 @@ export class MessagesRepo {
     const id = randomUUID();
 
     this.db.prepare(
-      "INSERT INTO messages (id, scene_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(id, channelId, author.id, author.username, content, now, null, null);
 
     return {
@@ -99,24 +99,24 @@ export class MessagesRepo {
   update(channelId: string, messageId: string, content: string): DiscordMessage | null {
     const editedTimestamp = Date.now();
     const result = this.db.prepare(
-      "UPDATE messages SET content = ?, edited_timestamp = ? WHERE id = ? AND scene_id = ?"
+      "UPDATE messages SET content = ?, edited_timestamp = ? WHERE id = ? AND channel_id = ?"
     ).run(content, editedTimestamp, messageId, channelId);
 
     if (result.changes === 0) return null;
 
-    const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.scene_id = ?`)
+    const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow;
     return toDiscordMessage(row);
   }
 
   delete(channelId: string, messageId: string): boolean {
-    const result = this.db.prepare("DELETE FROM messages WHERE id = ? AND scene_id = ?")
+    const result = this.db.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
       .run(messageId, channelId);
     return result.changes > 0;
   }
 
   deleteAll(channelId: string): number {
-    const result = this.db.prepare("DELETE FROM messages WHERE scene_id = ?").run(channelId);
+    const result = this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(channelId);
     return result.changes;
   }
 }

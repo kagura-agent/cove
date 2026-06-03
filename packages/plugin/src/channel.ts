@@ -1,9 +1,8 @@
 /**
  * Cove channel plugin definition.
  *
- * Each Cove scene (home, garden, beach, etc.) maps to a separate OpenClaw
- * session, just like Discord channels. Messages in different scenes go to
- * different agent sessions.
+ * Each Cove channel (home, garden, beach, etc.) maps to a separate OpenClaw
+ * session. Messages in different channels go to different agent sessions.
  */
 
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
@@ -93,7 +92,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     blurb: "Mirror world channel",
   },
   capabilities: {
-    // Support both channel (scene) and direct messages
+    // Support both channel and direct messages
     chatTypes: ["direct", "channel"],
   },
   config: {
