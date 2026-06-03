@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
-import { Input } from "antd";
+import { Button, Input } from "antd";
+import { SendOutlined } from "@ant-design/icons";
 import type { InputRef } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
@@ -56,6 +57,14 @@ export function MessageInput({ channelId }: { channelId: string }) {
         autoComplete="off"
         size="large"
         style={inputStyle}
+      />
+      <Button
+        type="text"
+        shape="circle"
+        icon={<SendOutlined />}
+        onClick={handleSubmit}
+        className="mobile-only"
+        style={{ color: content.trim() ? "var(--accent)" : "var(--text-muted)" }}
       />
     </div>
   );

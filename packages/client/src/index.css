@@ -221,10 +221,6 @@ html, body {
 
 #root { height: 100%; }
 
-@supports not (height: 1dvh) {
-  html, body { height: 100vh; }
-}
-
 /* ── Selection ────────────────────────────────────────────── */
 
 ::selection {
