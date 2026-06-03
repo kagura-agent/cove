@@ -6,6 +6,21 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
+  // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
+  const hasScenes = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='scenes'"
+  ).get();
+  if (hasScenes) {
+    db.exec("ALTER TABLE scenes RENAME TO channels");
+  }
+
+  const hasSceneState = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='scene_state'"
+  ).get();
+  if (hasSceneState) {
+    db.exec("ALTER TABLE scene_state RENAME TO channel_state");
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
@@ -79,52 +94,35 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
 
   // Migration: add sender_name to store display name alongside sender ID
   try {
     db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
 
   // Migration: add token column to users table (older DBs lack it)
-  // Note: SQLite ALTER TABLE ADD COLUMN does not support UNIQUE constraint.
-  // Must add column first, then create a unique index separately.
   try {
     db.exec("ALTER TABLE users ADD COLUMN token TEXT");
   } catch (_) {
-    // Column already exists — ignore
+    // Column already exists
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
-  // Migration: rename scenes → channels
-  try {
-    db.exec("ALTER TABLE scenes RENAME TO channels");
-  } catch (_) {
-    // Table already named channels — ignore
-  }
-
-  // Migration: rename scene_state → channel_state
-  try {
-    db.exec("ALTER TABLE scene_state RENAME TO channel_state");
-  } catch (_) {
-    // Table already named channel_state — ignore
-  }
-
-  // Migration: rename messages.scene_id → channel_id
+  // Post-create migrations: rename columns in already-renamed tables
   try {
     db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
   } catch (_) {
-    // Column already named channel_id — ignore
+    // Column already named channel_id
   }
 
-  // Migration: rename channel_state.scene_id → channel_id
   try {
     db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
   } catch (_) {
-    // Column already named channel_id — ignore
+    // Column already named channel_id
   }
 
   return db;

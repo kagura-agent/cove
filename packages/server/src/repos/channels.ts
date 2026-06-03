@@ -39,7 +39,7 @@ export class ChannelsRepo {
 
   getById(id: string): DiscordChannel | null {
     const row = this.db.prepare(
-      "SELECT s.*, (SELECT COUNT(*) FROM channels s2 WHERE s2.name < s.name) AS position FROM channels s WHERE s.id = ?"
+      "SELECT c.*, (SELECT COUNT(*) FROM channels c2 WHERE c2.name < c.name) AS position FROM channels c WHERE c.id = ?"
     ).get(id) as (ChannelRow & { position: number }) | undefined;
     return row ? toDiscordChannel(row, row.position) : null;
   }
