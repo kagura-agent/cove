@@ -375,9 +375,13 @@ textarea:focus-visible {
 /* ── Mobile responsive ────────────────────────────────────── */
 
 .mobile-only { display: none !important; }
+.mobile-sidebar-backdrop,
+.mobile-members-backdrop { display: none; }
 
 @media (max-width: 640px) {
   .mobile-only { display: inline-flex !important; }
+  .mobile-sidebar-backdrop,
+  .mobile-members-backdrop { display: block; }
   .sidebar-panel {
     position: fixed !important;
     z-index: 30 !important;
