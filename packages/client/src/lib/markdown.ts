@@ -94,7 +94,7 @@ function tryParseTable(lines: string[]): { headers: string[]; rows: string[][]; 
   return { headers, rows, lineCount: i };
 }
 
-export function parseDiscordMarkdown(content: string): Token[] {
+export function parseMarkdown(content: string): Token[] {
   const segments: Array<{ type: "code"; lang: string; text: string } | { type: "text"; text: string }> = [];
   const codeBlockRe = /```(\w+)?\n([\s\S]*?)```/g;
   let lastIndex = 0;

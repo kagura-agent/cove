@@ -7,7 +7,7 @@ import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
-import { DiscordMarkdown } from "./DiscordMarkdown";
+import { Markdown } from "./Markdown";
 
 const styles = {
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: 12, opacity: 0.6 } as CSSProperties,
@@ -48,7 +48,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
         <span style={{ fontSize: "var(--font-size-xl)", display: "flex", alignItems: "center", justifyContent: "center", width: "var(--avatar-size)", flexShrink: 0, lineHeight: 1 }}>{getChannelIcon(channel)}</span>
         <div style={{ flex: 1 }}>
           <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)" }}>{channel.name}</Typography.Title>
-          <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)" }}>{channel.topic ? <DiscordMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)" }}>{channel.topic ? <Markdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
         </div>
         <Popconfirm title="Clear all messages in this channel?" onConfirm={handleClear} okText="Clear" cancelText="Cancel" okButtonProps={{ danger: true }}>
           <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />

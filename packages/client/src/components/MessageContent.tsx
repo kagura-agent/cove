@@ -1,1 +1,1 @@
-export { DiscordMarkdown as MessageContent } from "./DiscordMarkdown";
+export { Markdown as MessageContent } from "./Markdown";

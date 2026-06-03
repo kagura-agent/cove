@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
-import { parseDiscordMarkdown, type Token } from "../lib/discord-markdown";
+import { parseMarkdown, type Token } from "../lib/markdown";
 
-interface DiscordMarkdownProps {
+interface MarkdownProps {
   content: string;
   className?: string;
   style?: CSSProperties;
@@ -84,8 +84,8 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
   });
 }
 
-function DiscordMarkdownInner({ content, className, style }: DiscordMarkdownProps) {
-  const tokens = parseDiscordMarkdown(content);
+function MarkdownInner({ content, className, style }: MarkdownProps) {
+  const tokens = parseMarkdown(content);
   return (
     <span className={className} style={style}>
       {renderTokens(tokens)}
@@ -93,4 +93,4 @@ function DiscordMarkdownInner({ content, className, style }: DiscordMarkdownProp
   );
 }
 
-export const DiscordMarkdown = memo(DiscordMarkdownInner);
+export const Markdown = memo(MarkdownInner);
