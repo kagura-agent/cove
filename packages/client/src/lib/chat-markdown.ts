@@ -22,7 +22,7 @@ const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray) =>
     parse: (m) => ({ token: { type: "spoiler", children: parseInline(m[1]) }, length: m[0].length }),
   },
   {
-    pattern: /^\*\*(.+?)\*\*/s,
+    pattern: /^\*\*(.+?)\*\*/,
     parse: (m) => ({ token: { type: "bold", children: parseInline(m[1]) }, length: m[0].length }),
   },
   {
@@ -34,7 +34,7 @@ const INLINE_RULES: Array<{ pattern: RegExp; parse: (match: RegExpMatchArray) =>
     parse: (m) => ({ token: { type: "italic", children: parseInline(m[1]) }, length: m[0].length }),
   },
   {
-    pattern: /^~~(.+?)~~/s,
+    pattern: /^~~(.+?)~~/,
     parse: (m) => ({ token: { type: "strikethrough", children: parseInline(m[1]) }, length: m[0].length }),
   },
   {
@@ -51,9 +51,7 @@ function parseInline(text: string): Token[] {
   const tokens: Token[] = [];
   let remaining = text;
 
-    let iterations = 0;
-  while (remaining.length > 0 && iterations < 10000) {
-    iterations++;
+  while (remaining.length > 0) {
     let matched = false;
     for (const rule of INLINE_RULES) {
       const m = remaining.match(rule.pattern);
@@ -155,6 +153,7 @@ export function parseChatMarkdown(content: string): Token[] {
           tokens.push({ type: "br" });
         }
         if (line === "") {
+          i++;
           continue;
         }
         tokens.push(...parseInline(line));
