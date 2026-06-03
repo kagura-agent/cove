@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import type { DiscordChannel } from "@cove/shared";
 
-const GUILD_ID = "cove";
+import { DEFAULT_GUILD_ID } from "./index.js";
 
 interface SceneRow {
   id: string;
@@ -19,7 +19,7 @@ function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
     id: row.id,
     name: row.name,
     type: 0,
-    guild_id: GUILD_ID,
+    guild_id: DEFAULT_GUILD_ID,
     topic: row.description ?? "",
     position,
     icon: row.icon,
@@ -31,6 +31,7 @@ function toDiscordChannel(row: SceneRow, position: number): DiscordChannel {
 export class ChannelsRepo {
   constructor(private db: Database.Database) {}
 
+  // guildId accepted for API symmetry; unused until multi-guild support
   list(guildId: string): DiscordChannel[] {
     const rows = this.db.prepare("SELECT * FROM scenes ORDER BY name").all() as SceneRow[];
     return rows.map((r, i) => toDiscordChannel(r, i));

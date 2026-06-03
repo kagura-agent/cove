@@ -38,7 +38,7 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
 export class MessagesRepo {
   constructor(private db: Database.Database) {}
 
-  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }): DiscordMessage[] | null {
+  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }): DiscordMessage[] {
     const { limit, before, after, around } = opts;
     let rows: MessageRow[];
 

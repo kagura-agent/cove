@@ -7,6 +7,8 @@ import { MembersRepo } from "./members.js";
 
 export { MessagesRepo, ChannelsRepo, StateRepo, UsersRepo, MembersRepo };
 
+export const DEFAULT_GUILD_ID = "cove";
+
 export interface Repos {
   messages: MessagesRepo;
   channels: ChannelsRepo;

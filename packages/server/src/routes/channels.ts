@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import type Database from "better-sqlite3";
 import type { Repos } from "../repos/index.js";
+import { DEFAULT_GUILD_ID } from "../repos/index.js";
 import type { BroadcastFn } from "./messages.js";
 import { requireBotAuth } from "../auth.js";
-
-const GUILD_ID = "cove";
 
 export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: BroadcastFn): Hono {
   const app = new Hono();
@@ -12,7 +11,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
 
   app.get("/api/v10/guilds/:guildId/channels", (c) => {
     const guildId = c.req.param("guildId");
-    if (guildId !== GUILD_ID) {
+    if (guildId !== DEFAULT_GUILD_ID) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     return c.json(repos.channels.list(guildId));
@@ -47,7 +46,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
 
   app.post("/api/v10/guilds/:guildId/channels", async (c) => {
     const guildId = c.req.param("guildId");
-    if (guildId !== GUILD_ID) {
+    if (guildId !== DEFAULT_GUILD_ID) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
@@ -78,6 +77,11 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
       icon?: string;
       cove_position?: { x: number; y: number };
     }>();
+
+    const { name, topic, icon, cove_position } = body;
+    if (name === undefined && topic === undefined && icon === undefined && cove_position === undefined) {
+      return c.json(repos.channels.getById(id));
+    }
 
     const channel = repos.channels.update(id, body)!;
 
