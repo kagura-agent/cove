@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 
 const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" };
-const listStyle: CSSProperties = { flex: 1, overflowY: "auto", padding: "0", display: "flex", flexDirection: "column", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" };
+const listStyle: CSSProperties = { flex: 1, overflowY: "auto", paddingTop: 8, paddingBottom: 0, paddingLeft: 0, paddingRight: 0, display: "flex", flexDirection: "column", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" };
 const typingBarStyle: CSSProperties = {
   padding: "4px 20px", fontSize: 12, color: "var(--text-muted)",
   minHeight: 24, display: "flex", alignItems: "center", gap: 4,

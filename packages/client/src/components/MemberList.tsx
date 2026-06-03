@@ -12,7 +12,7 @@ const styles = {
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
   username: { fontSize: 14, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
-  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: 4, flexShrink: 0 } as CSSProperties,
+  badge: { fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: 4, flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
 };
 

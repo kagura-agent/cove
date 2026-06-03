@@ -44,7 +44,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
     <div style={styles.wrapper}>
       <div style={styles.header}>
         {onMenuClick && <Button type="text" icon={<MenuOutlined />} onClick={onMenuClick} className="mobile-only" style={styles.menuBtn} />}
-        <span style={{ fontSize: 28 }}>{getChannelIcon(channel)}</span>
+        <span style={{ fontSize: 22, display: "flex", alignItems: "center" }}>{getChannelIcon(channel)}</span>
         <div style={{ flex: 1 }}>
           <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)" }}>{channel.name}</Typography.Title>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>{channel.topic || "A cozy scene"}</Typography.Text>
