@@ -57,23 +57,10 @@ export function MemberList() {
     );
   }
 
-  const humans = members.filter((m) => !m.user.bot);
-  const bots = members.filter((m) => m.user.bot);
-
   return (
     <div style={styles.root} className="member-list">
-      {humans.length > 0 && (
-        <>
-          <div style={styles.header}>Online — {humans.length}</div>
-          {humans.map((m) => <MemberRow key={m.user.id} member={m} />)}
-        </>
-      )}
-      {bots.length > 0 && (
-        <>
-          <div style={{ ...styles.header, marginTop: humans.length > 0 ? 12 : 0 }}>Bots — {bots.length}</div>
-          {bots.map((m) => <MemberRow key={m.user.id} member={m} />)}
-        </>
-      )}
+      <div style={styles.header}>Members — {members.length}</div>
+      {members.map((m) => <MemberRow key={m.user.id} member={m} />)}
     </div>
   );
 }
