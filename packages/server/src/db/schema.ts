@@ -54,7 +54,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
 
     CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
-      guild_id    TEXT NOT NULL DEFAULT 'cove' REFERENCES guilds(id),
+      guild_id    TEXT NOT NULL REFERENCES guilds(id),
       name        TEXT NOT NULL,
       icon        TEXT,
       type        TEXT CHECK(type IN ('open', 'indoor', 'object', 'structure')),
@@ -76,7 +76,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS guild_members (
-      guild_id    TEXT NOT NULL DEFAULT 'cove',
+      guild_id    TEXT NOT NULL,
       user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
       nick        TEXT,
       roles       TEXT DEFAULT '[]',
@@ -132,43 +132,43 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   // Migration: add edited_timestamp to existing messages tables
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
 
   // Migration: add sender_name to store display name alongside sender ID
   try {
     db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
 
   // Migration: add token column to users table (older DBs lack it)
   try {
     db.exec("ALTER TABLE users ADD COLUMN token TEXT");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
   // Migration: add guild_id to channels table
   try {
-    db.exec("ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT 'cove' REFERENCES guilds(id)");
-  } catch (_) {
-    // Column already exists
+    db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${DEFAULT_GUILD_ID}'`);
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
 
   // Post-create migrations: rename columns in already-renamed tables
   try {
     db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
-  } catch (_) {
-    // Column already named channel_id
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
 
   try {
     db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
-  } catch (_) {
-    // Column already named channel_id
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
 
   return db;
@@ -183,13 +183,13 @@ const SEED_CHANNELS = [
 
 export function seedChannels(db: Database.Database): void {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO channels (id, name, icon, type, channel_id, description, position_x, position_y)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
     for (const s of SEED_CHANNELS) {
-      insert.run(s.id, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
+      insert.run(s.id, DEFAULT_GUILD_ID, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
     }
   });
   tx();

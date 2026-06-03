@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { DiscordChannel } from "@cove/shared";
 
@@ -43,7 +44,7 @@ export class ChannelsRepo {
   }
 
   create(guildId: string, name: string, icon?: string, topic?: string): DiscordChannel {
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const id = randomUUID();
 
     this.db.prepare(
       "INSERT INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
