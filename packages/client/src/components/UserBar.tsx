@@ -29,14 +29,12 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
         <Avatar style={{ ...avatarStyle, backgroundColor: pickAvatarColor(username), color: getContrastTextColor(pickAvatarColor(username)) }} size={28}>
           {username.charAt(0).toUpperCase()}
         </Avatar>
-        {online && (
-          <div style={{
-            width: 10, height: 10, borderRadius: "50%",
-            background: "var(--status-online)",
-            border: "2px solid var(--bg-overlay)",
-            position: "absolute", bottom: -1, right: -1,
-          }} />
-        )}
+        <div style={{
+          width: 10, height: 10, borderRadius: "50%",
+          background: online ? "var(--status-online)" : "var(--status-offline)",
+          border: "3px solid var(--bg-overlay)",
+          position: "absolute", bottom: -2, left: -2,
+        }} />
       </div>
       <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
       <Button type="text" icon={<SettingOutlined />} onClick={handleSettingsClick} style={settingsBtnStyle} />

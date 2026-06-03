@@ -24,10 +24,10 @@ function statusDotStyle(online: boolean): CSSProperties {
     height: 10,
     borderRadius: "50%",
     background: online ? "var(--status-online)" : "var(--status-offline)",
-    border: "2px solid var(--bg-secondary)",
+    border: "3px solid var(--bg-secondary)",
     position: "absolute",
-    bottom: -1,
-    right: -1,
+    bottom: -2,
+    left: -2,
   };
 }
 
