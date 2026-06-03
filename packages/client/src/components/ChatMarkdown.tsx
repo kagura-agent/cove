@@ -7,6 +7,8 @@ interface ChatMarkdownProps {
   style?: CSSProperties;
 }
 
+const SAFE_PROTO = /^(https?:|mailto:)/i;
+
 function renderTokens(tokens: Token[], key = ""): ReactNode[] {
   return tokens.map((token, i) => {
     const k = `${key}${i}`;
@@ -52,18 +54,26 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
             </tbody>
           </table>
         );
-      case "link":
+      case "link": {
+        if (!SAFE_PROTO.test(token.href)) {
+          return <span key={k}>{token.text}</span>;
+        }
         return (
           <a key={k} href={token.href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
             {token.text}
           </a>
         );
-      case "autolink":
+      }
+      case "autolink": {
+        if (!SAFE_PROTO.test(token.href)) {
+          return <span key={k}>{token.href}</span>;
+        }
         return (
           <a key={k} href={token.href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-link)" }}>
             {token.href}
           </a>
         );
+      }
       case "blockquote":
         return (
           <div key={k} style={{ borderLeft: "3px solid var(--text-muted)", paddingLeft: "var(--space-sm)", margin: "var(--space-xs) 0", color: "var(--text-muted)" }}>
@@ -87,9 +97,9 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
 function ChatMarkdownInner({ content, className, style }: ChatMarkdownProps) {
   const tokens = parseChatMarkdown(content);
   return (
-    <span className={className} style={style}>
+    <div className={className} style={{ display: "inline", ...style }}>
       {renderTokens(tokens)}
-    </span>
+    </div>
   );
 }
 

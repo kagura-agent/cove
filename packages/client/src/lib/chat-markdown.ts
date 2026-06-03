@@ -149,12 +149,13 @@ export function parseChatMarkdown(content: string): Token[] {
           continue;
         }
 
-        if (line !== "" && tokens.length > 0) {
+        if (i > 0 && tokens.length > 0) {
           tokens.push({ type: "br" });
         }
-        if (line !== "" || tokens.length === 0) {
-          tokens.push(...parseInline(line));
+        if (line === "") {
+          continue;
         }
+        tokens.push(...parseInline(line));
         i++;
       }
     }
