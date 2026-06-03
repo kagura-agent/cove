@@ -12,6 +12,24 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
 import type { CSSProperties } from "react";
 
+function useVisualViewport() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const offset = window.innerHeight - vv.height;
+      document.documentElement.style.setProperty("--keyboard-offset", `${Math.max(0, offset)}px`);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      document.documentElement.style.setProperty("--keyboard-offset", "0px");
+    };
+  }, []);
+}
+
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
   // Read accent-brand from CSS custom property so Ant Design follows our theme system
@@ -24,7 +42,8 @@ function useAntdThemeConfig() {
 
 const styles = {
   fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
-  overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20 } as CSSProperties,
+  overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
+  overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
   layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
   chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-primary)" } as CSSProperties,
   connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
@@ -107,6 +126,7 @@ function LoginPage() {
 
 export default function App() {
   const themeConfig = useAntdThemeConfig();
+  useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
   const { channels, activeChannelId, setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
@@ -192,7 +212,7 @@ export default function App() {
   return (
     <ConfigProvider theme={themeConfig}>
       <div style={styles.fullHeight}>
-        {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={styles.overlay} />}
+        {<div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />}
 
         <div style={styles.layout} className={sidebarOpen ? "sidebar-open" : ""}>
           <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} onSettingsOpen={() => setSettingsOpen(true)} />

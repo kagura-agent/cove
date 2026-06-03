@@ -11,7 +11,7 @@ import type { CSSProperties } from "react";
 const styles = {
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: 12, opacity: 0.6 } as CSSProperties,
   wrapper: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" } as CSSProperties,
-  header: { display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", minHeight: 52 } as CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", minHeight: 52 } as CSSProperties,
   menuBtn: { color: "var(--text-normal)" } as CSSProperties,
   clearBtn: { color: "var(--interactive-normal)", opacity: 0.5 } as CSSProperties,
   membersBtn: { color: "var(--interactive-normal)" } as CSSProperties,
