@@ -4,8 +4,9 @@ import { SettingOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
-  display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-md) var(--space-sm)",
+  display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "0 var(--space-sm)",
   borderTop: "1px solid var(--border-subtle)", background: "var(--bg-overlay)",
+  height: "var(--footer-height)", flexShrink: 0,
 };
 const avatarStyle: CSSProperties = { backgroundColor: "var(--accent-brand)", color: "var(--bg-tertiary)", fontWeight: 700, flexShrink: 0 };
 const nameStyle: CSSProperties = { flex: 1, fontSize: 13, fontWeight: 500, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };

@@ -8,6 +8,7 @@
 /* ── Layout Constants ─────────────────────────────────── */
 :root {
   --header-height: 48px;
+  --footer-height: 52px;
   --sidebar-width: 240px;
   --member-list-width: 240px;
 

@@ -6,9 +6,10 @@ import type { CSSProperties } from "react";
 
 const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: "var(--space-sm)",
-  padding: "var(--space-md) var(--content-pad)", background: "var(--bg-secondary)",
+  padding: "0 var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  paddingBottom: "calc(var(--space-md) + env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
+  height: "var(--footer-height)", flexShrink: 0,
+  paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
 };
 const inputStyle: CSSProperties = { borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none" };
 
