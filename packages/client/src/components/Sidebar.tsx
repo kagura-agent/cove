@@ -22,8 +22,8 @@ const styles = {
   addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
 };
 
-function ChannelItem({ id, name, isActive, onSelect, onDelete }: {
-  id: string; name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
+function ChannelItem({ name, isActive, onSelect, onDelete }: {
+  name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -96,7 +96,6 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
             {channels.map((ch) => (
               <ChannelItem
                 key={ch.id}
-                id={ch.id}
                 name={ch.name}
                 isActive={ch.id === activeChannelId}
                 onSelect={() => handleSelectChannel(ch.id)}

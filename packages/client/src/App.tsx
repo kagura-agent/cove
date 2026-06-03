@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { ConfigProvider, theme, Button, Input, message } from "antd";
-import { GoogleOutlined, TeamOutlined } from "@ant-design/icons";
+import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
@@ -30,13 +30,15 @@ function useVisualViewport() {
   }, []);
 }
 
+const ACCENT_BRAND: Record<string, string> = {
+  light: "#e07828", dark: "#f4a261", midnight: "#f4a261",
+};
+
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
-  // Read accent-brand from CSS custom property so Ant Design follows our theme system
-  const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim();
   return {
     algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
-    token: { colorPrimary: accentBrand, colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+    token: { colorPrimary: ACCENT_BRAND[currentTheme] || "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
   };
 }
 
@@ -128,7 +130,7 @@ export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { channels, activeChannelId, setChannels, setActiveChannel } = useChannelStore();
+  const { setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);

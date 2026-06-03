@@ -87,15 +87,16 @@ export function MessageList({ channelId }: { channelId: string }) {
       requestAnimationFrame(() => scrollToBottom());
     }
     prevCountRef.current = messages.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages?.length, scrollToBottom]);
 
-  // Message content updated (streaming edits) → keep following if was near bottom.
   const lastMessageContent = messages?.[messages.length - 1]?.content;
   useEffect(() => {
     if (!messages) return;
     if (wasNearBottomRef.current) {
       requestAnimationFrame(() => scrollToBottom());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessageContent, scrollToBottom]);
 
   if (!messages) {

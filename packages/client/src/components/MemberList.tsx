@@ -51,7 +51,7 @@ export function MemberList() {
 
   if (loading) {
     return (
-      <div style={styles.root}>
+      <div style={styles.root} className="member-list">
         <div style={styles.loading}><Spin /></div>
       </div>
     );

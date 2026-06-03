@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useUserStore } from "../stores/useUserStore";
-import { useThemeStore, type ThemePreset } from "../stores/useThemeStore";
+import { useThemeStore } from "../stores/useThemeStore";
 import { BotManagement } from "./BotManagement";
 import { THEME_PRESETS, type ThemePreviewData } from "../lib/theme-previews";
 

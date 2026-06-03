@@ -24,6 +24,8 @@
 
   /* ── Content Alignment ────────────────────────────────── */
   --content-pad: var(--space-lg);
+  --message-right-pad: 48px;
+  --compact-ts-width: 56px;
   --avatar-size: 40px;
   --avatar-size-sm: 32px;
   --avatar-size-xs: 28px;
@@ -268,7 +270,7 @@ textarea:focus-visible {
 
 .discord-msg-row { position: relative; transition: background-color 0.1s ease; }
 .discord-msg-row:hover { background: var(--bg-modifier-hover); }
-.discord-msg-row .compact-ts { position: absolute; left: 0; width: 56px; text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-muted); line-height: 22px; opacity: 0; user-select: none; top: 4px; transition: opacity 0.1s ease; }
+.discord-msg-row .compact-ts { position: absolute; left: 0; width: var(--compact-ts-width); text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-muted); line-height: 22px; opacity: 0; user-select: none; top: 4px; transition: opacity 0.1s ease; }
 .discord-msg-row:hover .compact-ts { opacity: 1; }
 
 /* ── Settings modal ───────────────────────────────────────── */

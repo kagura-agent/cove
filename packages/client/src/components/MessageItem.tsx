@@ -71,7 +71,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           display: "flex",
           alignItems: "flex-start",
           gap: "var(--content-gap)",
-          padding: "var(--space-xs) 48px 0 var(--content-pad)",
+          padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-pad)",
           marginTop: "var(--content-gap)",
         }}
       >
@@ -143,7 +143,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
       style={{
         display: "flex",
         alignItems: "flex-start",
-        padding: "var(--space-xxs) 48px 0 var(--content-start)",
+        padding: "var(--space-xxs) var(--message-right-pad) 0 var(--content-start)",
       }}
     >
       <span className="compact-ts">
