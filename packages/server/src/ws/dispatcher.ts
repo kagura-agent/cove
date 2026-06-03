@@ -3,13 +3,39 @@ import type { GatewaySession } from "./session.js";
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
+  private userSessions = new Map<string, Set<string>>();
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
+    if (session.user) {
+      const userId = session.user.id;
+      if (!this.userSessions.has(userId)) {
+        this.userSessions.set(userId, new Set());
+      }
+      this.userSessions.get(userId)!.add(session.id);
+      if (this.userSessions.get(userId)!.size === 1) {
+        this.presenceUpdate(userId, "online");
+      }
+    }
   }
 
   removeSession(session: GatewaySession): void {
     this.sessions.delete(session);
+    if (session.user) {
+      const userId = session.user.id;
+      const sessions = this.userSessions.get(userId);
+      if (sessions) {
+        sessions.delete(session.id);
+        if (sessions.size === 0) {
+          this.userSessions.delete(userId);
+          this.presenceUpdate(userId, "offline");
+        }
+      }
+    }
+  }
+
+  getOnlineUserIds(): string[] {
+    return Array.from(this.userSessions.keys());
   }
 
   messageCreate(message: DiscordMessage): void {
@@ -42,6 +68,13 @@ export class GatewayDispatcher {
       user_id: user.id,
       username: user.username,
       timestamp: Date.now(),
+    });
+  }
+
+  private presenceUpdate(userId: string, status: "online" | "offline"): void {
+    this.broadcast("PRESENCE_UPDATE", {
+      user: { id: userId },
+      status,
     });
   }
 

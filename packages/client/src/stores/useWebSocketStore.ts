@@ -3,6 +3,7 @@ import type { Message } from "../types";
 import { useUserStore } from "./useUserStore";
 import { useMessageStore } from "./useMessageStore";
 import { useChannelStore } from "./useChannelStore";
+import { usePresenceStore } from "./usePresenceStore";
 
 type WsStatus = "connected" | "connecting" | "disconnected";
 
@@ -71,6 +72,14 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
         if (payload.op === 11) {
           return;
         }
+        if (payload.t === "READY") {
+          const data = payload.d as { presences?: Array<{ user: { id: string }; status: string }> };
+          if (data.presences) {
+            usePresenceStore.getState().initPresences(
+              data.presences.filter((p) => p.status === "online").map((p) => p.user.id),
+            );
+          }
+        }
         const msgStore = useMessageStore.getState();
         const activeId = useChannelStore.getState().activeChannelId;
         if (payload.t === "MESSAGE_CREATE") {
@@ -99,6 +108,13 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
               },
             };
           });
+        } else if (payload.t === "PRESENCE_UPDATE") {
+          const data = payload.d as { user: { id: string }; status: "online" | "offline" };
+          if (data.status === "online") {
+            usePresenceStore.getState().setOnline(data.user.id);
+          } else {
+            usePresenceStore.getState().setOffline(data.user.id);
+          }
         }
       } catch { /* ignore non-JSON */ }
     };

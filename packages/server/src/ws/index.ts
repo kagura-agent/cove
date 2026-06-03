@@ -55,7 +55,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, dispatcher: G
 
             const user = { id: row.id, username: row.username, bot: row.bot };
 
-            session.identify(user);
+            session.identify(user, dispatcher);
             dispatcher.addSession(session);
             break;
           }
