@@ -3,6 +3,7 @@ import type { Repos } from "../repos/index.js";
 import { DEFAULT_GUILD_ID } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { requireAuth, type AppEnv } from "../auth.js";
+import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
 
 export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -32,7 +33,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
   app.put("/api/v10/channels/:id/state", async (c) => {
     const channelId = c.req.param("id");
-    const body = await c.req.json<{ key: string; value: string }>();
+    const body = await parseJsonBody<{ key: string; value: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    let err = validateString(body.key, "key", { required: true });
+    if (err) return validationError(c, err);
+    err = validateString(body.value, "value", { required: true });
+    if (err) return validationError(c, err);
 
     const entry = repos.state.upsert(channelId, body.key, body.value);
 
@@ -47,11 +54,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
-    const body = await c.req.json<{ name: string; icon?: string; topic?: string }>();
-    const name = body.name?.trim();
-    if (!name) {
-      return c.json({ message: "Name is required" }, 400);
-    }
+    const body = await parseJsonBody<{ name: string; icon?: string; topic?: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.name, "name", { required: true, maxLength: 100 });
+    if (err) return validationError(c, err);
+
+    const name = body.name.trim();
 
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     if (repos.channels.exists(id)) {
@@ -68,12 +77,26 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    const body = await c.req.json<{
+    const body = await parseJsonBody<{
       name?: string;
       topic?: string;
       icon?: string;
       cove_position?: { x: number; y: number };
-    }>();
+    }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const errors: string[] = [];
+    let err = validateString(body.name, "name", { maxLength: 100 });
+    if (err) errors.push(err);
+    err = validateString(body.topic, "topic", { maxLength: 1024 });
+    if (err) errors.push(err);
+    if (body.cove_position !== undefined) {
+      err = validateFiniteNumber(body.cove_position?.x, "cove_position.x");
+      if (err) errors.push(err);
+      err = validateFiniteNumber(body.cove_position?.y, "cove_position.y");
+      if (err) errors.push(err);
+    }
+    if (errors.length > 0) return validationError(c, errors[0]);
 
     const { name, topic, icon, cove_position } = body;
     if (name === undefined && topic === undefined && icon === undefined && cove_position === undefined) {

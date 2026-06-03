@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
+import { validateString, validationError, parseJsonBody } from "../validation.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -13,7 +14,8 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10), 100);
+    const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
+    const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? 50 : Math.min(rawLimit, 100);
     const before = c.req.query("before");
     const after = c.req.query("after");
     const around = c.req.query("around");
@@ -40,7 +42,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    const body = await c.req.json<{ content: string; username?: string }>();
+    const body = await parseJsonBody<{ content: string; username?: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
+    if (err) return validationError(c, err);
+
     const author = c.get("botUser");
 
     const message = repos.messages.create(channelId, author, body.content);
@@ -53,7 +60,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.patch("/api/v10/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
-    const body = await c.req.json<{ content: string }>();
+
+    const body = await parseJsonBody<{ content: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
+    if (err) return validationError(c, err);
 
     const updated = repos.messages.update(channelId, msgId, body.content);
     if (!updated) {

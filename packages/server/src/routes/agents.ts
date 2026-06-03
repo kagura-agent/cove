@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import { requireAuth, type AppEnv } from "../auth.js";
+import { validateString, validationError, parseJsonBody } from "../validation.js";
 
 const GUILD_ID = "cove";
 
@@ -9,18 +10,19 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
   const auth = requireAuth(repos.users);
 
   app.post("/api/v10/users", auth, async (c) => {
-    const body = await c.req.json<{
+    const body = await parseJsonBody<{
       id?: string;
       username: string;
       avatar?: string;
       bot?: boolean;
       bio?: string;
-    }>();
+    }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
 
-    const username = body.username?.trim();
-    if (!username) {
-      return c.json({ message: "Username is required" }, 400);
-    }
+    const err = validateString(body.username, "username", { required: true, maxLength: 80 });
+    if (err) return validationError(c, err);
+
+    const username = body.username.trim();
 
     const id = body.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     if (repos.users.exists(id)) {
@@ -56,11 +58,15 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
     }
 
-    const body = await c.req.json<{
+    const body = await parseJsonBody<{
       username?: string;
       avatar?: string | null;
       bio?: string | null;
-    }>();
+    }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.username, "username", { maxLength: 80 });
+    if (err) return validationError(c, err);
 
     const updated = repos.users.update(id!, body)!;
     return c.json(updated);
