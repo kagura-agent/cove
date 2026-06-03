@@ -7,10 +7,19 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("foreign_keys = ON");
 
   // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
+  // Handle case where both old (scenes) and new (channels) tables exist
+  // (can happen if a buggy deploy created empty channels before rename)
   const hasScenes = db.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='scenes'"
   ).get();
   if (hasScenes) {
+    const hasChannels = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='channels'"
+    ).get();
+    if (hasChannels) {
+      // Drop the empty channels table so rename can proceed
+      db.exec("DROP TABLE channels");
+    }
     db.exec("ALTER TABLE scenes RENAME TO channels");
   }
 
@@ -18,6 +27,12 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='scene_state'"
   ).get();
   if (hasSceneState) {
+    const hasChannelState = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='channel_state'"
+    ).get();
+    if (hasChannelState) {
+      db.exec("DROP TABLE channel_state");
+    }
     db.exec("ALTER TABLE scene_state RENAME TO channel_state");
   }
 
