@@ -2,6 +2,7 @@ import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, MESSAGE_AVATAR_COLORS } from "../lib/avatar-palette";
+import { MessageContent } from "./MessageContent";
 
 function formatTime(ts: string): string {
   try {
@@ -120,6 +121,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
 
           {/* Message body */}
           <div
+            
             style={{
               whiteSpace: "pre-wrap",
               color: "var(--text-normal)",
@@ -128,7 +130,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
               wordBreak: "break-word",
             }}
           >
-            {message.content}
+            <MessageContent content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           </div>
         </div>
@@ -151,6 +153,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
+          
           style={{
             whiteSpace: "pre-wrap",
             color: "var(--text-normal)",
@@ -159,7 +162,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             wordBreak: "break-word",
           }}
         >
-          {message.content}
+          <MessageContent content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
         </div>
       </div>

@@ -49,6 +49,7 @@
   --bg-secondary: #111113;
   --bg-tertiary: #0c0c0e;
   --bg-input: #222226;
+  --bg-code: rgba(255, 255, 255, 0.06);
   --bg-modifier-hover: rgba(79,84,92,0.16);
   --bg-modifier-active: rgba(79,84,92,0.24);
   --bg-overlay: rgba(0,0,0,0.15);
@@ -111,6 +112,7 @@
   --bg-secondary: #f2f3f5;
   --bg-tertiary: #e3e5e8;
   --bg-input: #ebedef;
+  --bg-code: rgba(0, 0, 0, 0.06);
   --bg-modifier-hover: rgba(116,127,141,0.08);
   --bg-modifier-active: rgba(116,127,141,0.16);
   --bg-overlay: rgba(0,0,0,0.08);
@@ -161,6 +163,7 @@
   --bg-secondary: #2b2d31;
   --bg-tertiary: #232428;
   --bg-input: #383a40;
+  --bg-code: rgba(255, 255, 255, 0.06);
   --bg-modifier-hover: rgba(116,127,141,0.06);
   --bg-modifier-active: #404249;
   --bg-overlay: rgba(0,0,0,0.15);
@@ -262,7 +265,7 @@ textarea:focus-visible {
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ── Discord-style message hover ──────────────────────────── */
+/* ── Message hover ──────────────────────────── */
 
 .discord-msg-row { position: relative; transition: background-color 0.1s ease; }
 .discord-msg-row:hover { background: var(--bg-modifier-hover); }
@@ -494,3 +497,7 @@ textarea:focus-visible {
     width: 120px;
   }
 }
+
+/* ── Markdown message content ────────────────────────────── */
+
+
