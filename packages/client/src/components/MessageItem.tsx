@@ -1,7 +1,7 @@
 import { Typography } from "antd";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
-import { pickAvatarColor } from "../lib/avatar-palette";
+import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { MessageContent } from "./MessageContent";
 
 function formatTime(ts: string): string {
@@ -36,7 +36,7 @@ function roleColor(isBot: boolean): string {
 const botBadgeStyle: CSSProperties = {
   fontSize: "var(--font-size-xs)",
   fontWeight: 600,
-  color: "var(--header-primary)",
+  color: "#ffffff",
   background: "var(--accent)",
   borderRadius: 3,
   padding: "1px 5px",
@@ -63,6 +63,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
   const isBot = message.author.bot;
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
+  const textColor = getContrastTextColor(bgColor);
 
   if (isGroupStart) {
     return (
@@ -88,7 +89,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             justifyContent: "center",
             fontSize: 18,
             fontWeight: 600,
-            color: "var(--header-primary)",
+            color: textColor,
             flexShrink: 0,
             cursor: "pointer",
           }}

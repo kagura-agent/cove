@@ -3,7 +3,7 @@ import { Avatar, Spin } from "antd";
 import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
-import { pickAvatarColor } from "../lib/avatar-palette";
+import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 
 const styles = {
   root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
@@ -12,7 +12,7 @@ const styles = {
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
   username: { fontSize: "var(--font-size-md)", color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
-  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
+  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "#ffffff", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
 };
 
@@ -29,7 +29,7 @@ function MemberRow({ member }: { member: GuildMember }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Avatar size="small" style={{ backgroundColor: hashColor(user.username), color: "var(--header-primary)", fontWeight: 700, ...styles.avatar }}>
+      <Avatar size="small" style={{ backgroundColor: hashColor(user.username), color: getContrastTextColor(hashColor(user.username)), fontWeight: 700, ...styles.avatar }}>
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
       <span style={styles.username}>{member.nick || user.username}</span>
