@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 
 const styles = {
   root: { display: "flex", flexDirection: "column", height: "100%", width: 240, minWidth: 240, background: "var(--bg-secondary)", borderRight: "none" } as CSSProperties,
-  header: { padding: "12px 16px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", gap: 8, minHeight: 52 } as CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--border-subtle)", height: 48, flexShrink: 0 } as CSSProperties,
   title: { fontSize: 16, fontWeight: 700, margin: 0, color: "var(--header-primary)" } as CSSProperties,
   list: { flex: 1, overflowY: "auto", padding: "0 8px" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
