@@ -503,8 +503,9 @@ textarea:focus-visible {
 .msg-content p { margin: 0; }
 .msg-content div { margin: 0; }
 .msg-content ul, .msg-content ol { margin: var(--space-xs) 0; padding-left: var(--space-xl); }
-.msg-content li { margin: 0; }
-.msg-content li > div { display: inline; }
+.msg-content li { margin: 0; line-height: 1.375; }
+.msg-content li div { display: inline; }
+.msg-content blockquote div { margin: 0; }
 .msg-content pre { margin: var(--space-xs) 0; }
 .msg-content pre code { font-size: var(--font-size-sm); font-family: "Consolas", "Monaco", monospace; }
 .msg-content code { font-family: "Consolas", "Monaco", monospace; }
