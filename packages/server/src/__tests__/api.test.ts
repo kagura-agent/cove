@@ -3,18 +3,43 @@ import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import type Database from "better-sqlite3";
 import type { DiscordChannel, DiscordMessage, ChannelState, CoveAgent, CoveGuildMember } from "@cove/shared";
+import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Cove API — Discord-compatible", () => {
   let db: Database.Database;
   let app: ReturnType<typeof createApp>;
-  const broadcastEvents: unknown[] = [];
+  const broadcastEvents: { t: string; d: unknown }[] = [];
   let adminToken: string;
+
+  class TestDispatcher extends GatewayDispatcher {
+    override messageCreate(message: DiscordMessage): void {
+      broadcastEvents.push({ t: "MESSAGE_CREATE", d: message });
+    }
+    override messageUpdate(message: DiscordMessage): void {
+      broadcastEvents.push({ t: "MESSAGE_UPDATE", d: message });
+    }
+    override messageDelete(channelId: string, messageId: string): void {
+      broadcastEvents.push({ t: "MESSAGE_DELETE", d: { id: messageId, channel_id: channelId } });
+    }
+    override channelUpdate(channel: DiscordChannel): void {
+      broadcastEvents.push({ t: "CHANNEL_UPDATE", d: channel });
+    }
+    override stateUpdate(state: ChannelState): void {
+      broadcastEvents.push({ t: "STATE_UPDATE", d: state });
+    }
+    override stateDelete(channelId: string, key: string): void {
+      broadcastEvents.push({ t: "STATE_DELETE", d: { channel_id: channelId, key } });
+    }
+    override typingStart(channelId: string, user: { id: string; username: string }): void {
+      broadcastEvents.push({ t: "TYPING_START", d: { channel_id: channelId, user_id: user.id, username: user.username, timestamp: Date.now() } });
+    }
+  }
 
   beforeEach(() => {
     db = initDb(":memory:");
     seedChannels(db);
     broadcastEvents.length = 0;
-    app = createApp(db, (event) => broadcastEvents.push(event));
+    app = createApp(db, new TestDispatcher());
 
     // Bootstrap an admin bot directly in DB for auth
     adminToken = "test-admin-token";
@@ -179,8 +204,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: DiscordMessage };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: DiscordMessage };
       expect(event.t).toBe("MESSAGE_CREATE");
       expect(event.d.content).toBe("test broadcast");
     });
@@ -242,8 +266,7 @@ describe("Cove API — Discord-compatible", () => {
 
       // Verify MESSAGE_DELETE broadcast
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: { id: string; channel_id: string } };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: { id: string; channel_id: string } };
       expect(event.t).toBe("MESSAGE_DELETE");
       expect(event.d.id).toBe(created.id);
       expect(event.d.channel_id).toBe("garden");
@@ -289,8 +312,7 @@ describe("Cove API — Discord-compatible", () => {
 
       // Verify MESSAGE_UPDATE broadcast
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: DiscordMessage };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: DiscordMessage };
       expect(event.t).toBe("MESSAGE_UPDATE");
       expect(event.d.content).toBe("edited");
     });
@@ -318,8 +340,7 @@ describe("Cove API — Discord-compatible", () => {
       expect(res.status).toBe(204);
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: { channel_id: string; user_id: string; timestamp: number } };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: { channel_id: string; user_id: string; timestamp: number } };
       expect(event.t).toBe("TYPING_START");
       expect(event.d.channel_id).toBe("garden");
       expect(event.d.user_id).toBe("kagura");
@@ -436,8 +457,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: ChannelState };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: ChannelState };
       expect(event.t).toBe("STATE_UPDATE");
       expect(event.d.channelId).toBe("garden");
       expect(event.d.key).toBe("mood");
@@ -493,8 +513,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: DiscordChannel };
-      expect(event.op).toBe(0);
+      const event = broadcastEvents[0] as { t: string; d: DiscordChannel };
       expect(event.t).toBe("CHANNEL_UPDATE");
       expect(event.d.topic).toBe("updated");
     });
@@ -540,7 +559,7 @@ describe("Cove API — Discord-compatible", () => {
 
       // Verify STATE_DELETE broadcast
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { op: number; t: string; d: { channel_id: string; key: string } };
+      const event = broadcastEvents[0] as { t: string; d: { channel_id: string; key: string } };
       expect(event.t).toBe("STATE_DELETE");
       expect(event.d.channel_id).toBe("garden");
       expect(event.d.key).toBe("temp");

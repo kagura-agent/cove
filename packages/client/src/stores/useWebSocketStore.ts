@@ -47,18 +47,28 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     set({ status: "connecting" });
     ws = new WebSocket(getWsUrl());
 
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
     ws.onopen = () => {
       set({ status: "connected" });
       reconnectDelay = 1000;
-      const user = useUserStore.getState();
-      ws?.send(JSON.stringify({ op: 2, d: { token: "user", user: { id: user.id, username: user.username } } }));
     };
 
     ws.onmessage = (evt) => {
       try {
         const payload = JSON.parse(evt.data) as { t?: string; op?: number; d?: unknown };
-        if (payload.op === 1 || payload.op === 10) {
-          ws?.send(JSON.stringify({ op: 1, d: null }));
+        if (payload.op === 10) {
+          const token = localStorage.getItem("cove-token");
+          if (!token) { ws?.close(); return; }
+          ws?.send(JSON.stringify({ op: 2, d: { token } }));
+          const interval = (payload.d as { heartbeat_interval?: number })?.heartbeat_interval ?? 41250;
+          if (heartbeatInterval) clearInterval(heartbeatInterval);
+          heartbeatInterval = setInterval(() => {
+            ws?.send(JSON.stringify({ op: 1, d: null }));
+          }, interval);
+          return;
+        }
+        if (payload.op === 11) {
           return;
         }
         const msgStore = useMessageStore.getState();
@@ -94,6 +104,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     };
 
     ws.onclose = () => {
+      if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
       const { typingUsers, clearTyping } = get();
       for (const channelId of Object.keys(typingUsers)) {
         for (const entry of typingUsers[channelId] ?? []) {

@@ -2,10 +2,10 @@ import { Hono } from "hono";
 import type Database from "better-sqlite3";
 import type { Repos } from "../repos/index.js";
 import { DEFAULT_GUILD_ID } from "../repos/index.js";
-import type { BroadcastFn } from "./messages.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { requireBotAuth } from "../auth.js";
 
-export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: BroadcastFn): Hono {
+export function channelRoutes(db: Database.Database, repos: Repos, dispatcher?: GatewayDispatcher): Hono {
   const app = new Hono();
   const auth = requireBotAuth(db);
 
@@ -37,9 +37,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
 
     const entry = repos.state.upsert(channelId, body.key, body.value);
 
-    if (broadcast) {
-      broadcast({ op: 0, t: "STATE_UPDATE", d: entry, s: null });
-    }
+    dispatcher?.stateUpdate(entry);
 
     return c.json(entry);
   });
@@ -85,9 +83,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
 
     const channel = repos.channels.update(id, body)!;
 
-    if (broadcast) {
-      broadcast({ op: 0, t: "CHANNEL_UPDATE", d: channel, s: null });
-    }
+    dispatcher?.channelUpdate(channel);
 
     return c.json(channel);
   });
@@ -100,9 +96,7 @@ export function channelRoutes(db: Database.Database, repos: Repos, broadcast?: B
       return c.json({ message: "State key not found" }, 404);
     }
 
-    if (broadcast) {
-      broadcast({ op: 0, t: "STATE_DELETE", d: { channel_id: channelId, key }, s: null });
-    }
+    dispatcher?.stateDelete(channelId, key);
 
     return c.body(null, 204);
   });

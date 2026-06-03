@@ -1,39 +1,35 @@
 import type { Server as HttpServer } from "node:http";
-import { WebSocketServer, WebSocket } from "ws";
-import { randomUUID } from "node:crypto";
+import { WebSocketServer } from "ws";
 import type Database from "better-sqlite3";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
+import { GatewaySession } from "./session.js";
+import { GatewayDispatcher } from "./dispatcher.js";
 
-/** Set of identified (authenticated) WebSocket clients. */
-const identifiedClients = new Set<WebSocket>();
-
-/** Map from WebSocket to the user who identified on that connection. */
-const connectedUsers = new Map<WebSocket, { id: string; username: string; bot: boolean }>();
-
-/** Heartbeat interval in milliseconds (Discord default-ish). */
 const HEARTBEAT_INTERVAL = 41250;
+const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
 
-/**
- * Set up Discord-compatible Gateway WebSocket server.
- *
- * Protocol:
- * 1. Client connects → server sends HELLO (op 10) with heartbeat_interval
- * 2. Client sends IDENTIFY (op 2) with token → server sends DISPATCH READY (op 0)
- * 3. Client sends HEARTBEAT (op 1) → server responds HEARTBEAT_ACK (op 11)
- * 4. Server broadcasts DISPATCH events (MESSAGE_CREATE, CHANNEL_UPDATE) to identified clients
- */
-export function setupGateway(server: HttpServer, db: Database.Database): void {
+export function setupGateway(server: HttpServer, db: Database.Database, dispatcher: GatewayDispatcher): void {
   const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
-    // Send HELLO
-    const hello: GatewayPayload = {
+    const session = new GatewaySession(ws);
+    let lastHeartbeat = Date.now();
+    let heartbeatCheck: ReturnType<typeof setInterval> | null = null;
+
+    session.send({
       op: GatewayOpcode.HELLO,
       d: { heartbeat_interval: HEARTBEAT_INTERVAL },
       s: null,
       t: null,
-    };
-    ws.send(JSON.stringify(hello));
+    });
+
+    // Start heartbeat timeout check after HELLO
+    heartbeatCheck = setInterval(() => {
+      if (Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
+        if (heartbeatCheck) clearInterval(heartbeatCheck);
+        session.close(4009, "Session timed out");
+      }
+    }, HEARTBEAT_INTERVAL);
 
     ws.on("message", (raw) => {
       try {
@@ -41,79 +37,49 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
 
         switch (payload.op) {
           case GatewayOpcode.IDENTIFY: {
-            const data = payload.d as { token?: string; user?: { id: string; username: string } } | null;
+            const data = payload.d as { token?: string } | null;
             const token = data?.token;
 
-            let user: { id: string; username: string; bot: boolean } | undefined;
-
-            if (token && token !== "user") {
-              const row = db.prepare("SELECT id, username FROM users WHERE token = ?").get(token) as { id: string; username: string } | undefined;
-              if (!row) {
-                ws.close(4004, "Authentication failed");
-                return;
-              }
-              user = { id: row.id, username: row.username, bot: true };
-            } else if (data?.user?.id && data?.user?.username) {
-              user = { id: data.user.id, username: data.user.username, bot: false };
-            }
-
-            if (!user) {
-              ws.close(4001, "Token or user info required");
+            if (!token) {
+              if (heartbeatCheck) clearInterval(heartbeatCheck);
+              session.close(4001, "Token required");
               return;
             }
 
-            identifiedClients.add(ws);
-            connectedUsers.set(ws, user);
+            const row = db.prepare("SELECT id, username, bot FROM users WHERE token = ?").get(token) as { id: string; username: string; bot: number } | undefined;
+            if (!row) {
+              if (heartbeatCheck) clearInterval(heartbeatCheck);
+              session.close(4004, "Authentication failed");
+              return;
+            }
 
-            // Send READY dispatch
-            const ready: GatewayPayload = {
-              op: GatewayOpcode.DISPATCH,
-              s: 1,
-              t: "READY",
-              d: {
-                v: 10,
-                user,
-                guilds: [{ id: "cove" }],
-                session_id: randomUUID(),
-              },
-            };
-            ws.send(JSON.stringify(ready));
+            const user = { id: row.id, username: row.username, bot: row.bot === 1 };
+
+            session.identify(user);
+            dispatcher.addSession(session);
             break;
           }
 
           case GatewayOpcode.HEARTBEAT: {
-            const ack: GatewayPayload = {
+            lastHeartbeat = Date.now();
+            session.send({
               op: GatewayOpcode.HEARTBEAT_ACK,
               d: null,
               s: null,
               t: null,
-            };
-            ws.send(JSON.stringify(ack));
-            break;
-          }
-
-          case GatewayOpcode.REQUEST_TYPING: {
-            // TODO: validate channel membership (acceptable for now with small trusted user base)
-            const user = connectedUsers.get(ws);
-            if (!user) break;
-            const d = payload.d as { channel_id?: string } | null;
-            if (!d?.channel_id) break;
-            broadcastGatewayEvent({
-              op: GatewayOpcode.DISPATCH,
-              s: null,
-              t: "TYPING_START",
-              d: {
-                channel_id: d.channel_id,
-                user_id: user.id,
-                username: user.username,
-                timestamp: Date.now(),
-              },
             });
             break;
           }
 
+          case GatewayOpcode.REQUEST_TYPING: {
+            if (!session.isIdentified || !session.user) break;
+            const d = payload.d as { channel_id?: string } | null;
+            if (!d?.channel_id) break;
+            dispatcher.typingStart(d.channel_id, session.user);
+            break;
+          }
+
           default:
-            // Ignore unknown opcodes
             break;
         }
       } catch {
@@ -122,21 +88,11 @@ export function setupGateway(server: HttpServer, db: Database.Database): void {
     });
 
     ws.on("close", () => {
-      identifiedClients.delete(ws);
-      connectedUsers.delete(ws);
+      if (heartbeatCheck) clearInterval(heartbeatCheck);
+      dispatcher.removeSession(session);
     });
   });
 }
 
-/**
- * Broadcast a Gateway event to all identified clients.
- * The event should already be a full GatewayPayload (op 0 DISPATCH).
- */
-export function broadcastGatewayEvent(event: unknown): void {
-  const data = JSON.stringify(event);
-  for (const ws of identifiedClients) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(data);
-    }
-  }
-}
+export { GatewayDispatcher } from "./dispatcher.js";
+export { GatewaySession } from "./session.js";

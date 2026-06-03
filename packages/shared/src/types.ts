@@ -45,6 +45,7 @@ export enum GatewayOpcode {
   HEARTBEAT = 1,
   IDENTIFY = 2,
   REQUEST_TYPING = 4,
+  RESUME = 6,
   HELLO = 10,
   HEARTBEAT_ACK = 11,
 }
