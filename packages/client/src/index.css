@@ -501,6 +501,7 @@ textarea:focus-visible {
 /* ── Markdown message content ────────────────────────────── */
 
 .msg-content p { margin: 0; }
+.msg-content div { margin: 0; }
 .msg-content ul, .msg-content ol { margin: var(--space-xs) 0; padding-left: var(--space-xl); }
 .msg-content li { margin: 0; }
 .msg-content li > div { display: inline; }
@@ -508,3 +509,9 @@ textarea:focus-visible {
 .msg-content pre code { font-size: var(--font-size-sm); font-family: "Consolas", "Monaco", monospace; }
 .msg-content code { font-family: "Consolas", "Monaco", monospace; }
 .msg-content strong { color: var(--text-normal); font-weight: 700; }
+.msg-content table { border-collapse: collapse; margin: var(--space-xs) 0; font-size: var(--font-size-sm); }
+.msg-content th, .msg-content td { border: 1px solid var(--border-subtle); padding: var(--space-xs) var(--space-sm); text-align: left; }
+.msg-content th { background: var(--bg-code); font-weight: 600; }
+.msg-content img { max-width: 100%; border-radius: var(--input-radius); }
+.msg-content hr { border: none; border-top: 1px solid var(--border-subtle); margin: var(--space-sm) 0; }
+.msg-content blockquote { margin: var(--space-xs) 0; }
