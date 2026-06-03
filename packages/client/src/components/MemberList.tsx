@@ -6,9 +6,9 @@ import type { CSSProperties } from "react";
 import { pickAvatarColor, MEMBER_AVATAR_COLORS } from "../lib/avatar-palette";
 
 const styles = {
-  root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
+  root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
   header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
-  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px var(--space-lg)", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
+  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-lg)", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
   username: { fontSize: "var(--font-size-md)", color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
