@@ -1,4 +1,5 @@
 import { useUserStore } from "../stores/useUserStore";
+import { usePresenceStore } from "../stores/usePresenceStore";
 import { Avatar, Button, Typography } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
@@ -14,7 +15,8 @@ const nameStyle: CSSProperties = { flex: 1, fontSize: 13, fontWeight: 500, color
 const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)", fontSize: "var(--font-size-md)" };
 
 export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: () => void; onSettingsOpen?: () => void }) {
-  const { username } = useUserStore();
+  const { id, username } = useUserStore();
+  const online = usePresenceStore((s) => s.isOnline(id));
 
   const handleSettingsClick = () => {
     onCloseSidebar?.();
@@ -23,9 +25,19 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
 
   return (
     <div style={barStyle}>
-      <Avatar style={{ ...avatarStyle, backgroundColor: pickAvatarColor(username), color: getContrastTextColor(pickAvatarColor(username)) }} size={28}>
-        {username.charAt(0).toUpperCase()}
-      </Avatar>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <Avatar style={{ ...avatarStyle, backgroundColor: pickAvatarColor(username), color: getContrastTextColor(pickAvatarColor(username)) }} size={28}>
+          {username.charAt(0).toUpperCase()}
+        </Avatar>
+        {online && (
+          <div style={{
+            width: 10, height: 10, borderRadius: "50%",
+            background: "var(--status-online)",
+            border: "2px solid var(--bg-overlay)",
+            position: "absolute", bottom: -1, right: -1,
+          }} />
+        )}
+      </div>
       <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
       <Button type="text" icon={<SettingOutlined />} onClick={handleSettingsClick} style={settingsBtnStyle} />
     </div>
