@@ -265,7 +265,16 @@ textarea:focus-visible {
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ── Message hover ──────────────────────────── */
+/* ── Discord-style hidden scrollbar ──────────────────────── */
+
+.scroll-container { scrollbar-width: none; }
+.scroll-container::-webkit-scrollbar { width: 8px; }
+.scroll-container::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background 0.15s ease; }
+.scroll-container:hover { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
+.scroll-container:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); }
+.scroll-container:hover::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thin-thumb-hover); }
+
+/* ── Discord-style message hover ──────────────────────────── */
 
 .discord-msg-row { position: relative; transition: background-color 0.1s ease; }
 .discord-msg-row:hover { background: var(--bg-modifier-hover); }
@@ -307,14 +316,26 @@ textarea:focus-visible {
   flex-direction: column;
   padding: 16px 12px;
   overflow-y: auto;
+  scrollbar-width: none;
 }
+
+.settings-sidebar::-webkit-scrollbar { width: 8px; }
+.settings-sidebar::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.settings-sidebar:hover { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
+.settings-sidebar:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); }
 
 .settings-content {
   flex: 1;
   background: var(--bg-primary);
   padding: 32px 40px;
   overflow-y: auto;
+  scrollbar-width: none;
 }
+
+.settings-content::-webkit-scrollbar { width: 8px; }
+.settings-content::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.settings-content:hover { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
+.settings-content:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); }
 
 .settings-nav-item {
   display: block;

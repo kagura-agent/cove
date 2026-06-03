@@ -3,7 +3,7 @@ import { Avatar, Spin } from "antd";
 import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
-import { pickAvatarColor, MEMBER_AVATAR_COLORS } from "../lib/avatar-palette";
+import { pickAvatarColor } from "../lib/avatar-palette";
 
 const styles = {
   root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
@@ -17,7 +17,7 @@ const styles = {
 };
 
 function hashColor(name: string): string {
-  return pickAvatarColor(name, MEMBER_AVATAR_COLORS);
+  return pickAvatarColor(name);
 }
 
 function MemberRow({ member }: { member: GuildMember }) {
@@ -33,7 +33,7 @@ function MemberRow({ member }: { member: GuildMember }) {
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
       <span style={styles.username}>{member.nick || user.username}</span>
-      {user.bot && <span style={styles.badge}>BOT</span>}
+      {user.bot && <span style={styles.badge}>APP</span>}
     </div>
   );
 }
@@ -51,14 +51,14 @@ export function MemberList() {
 
   if (loading) {
     return (
-      <div style={styles.root} className="member-list">
+      <div style={styles.root} className="member-list scroll-container">
         <div style={styles.loading}><Spin /></div>
       </div>
     );
   }
 
   return (
-    <div style={styles.root} className="member-list">
+    <div style={styles.root} className="member-list scroll-container">
       <div style={styles.header}>Online — {members.length}</div>
       {members.map((m) => <MemberRow key={m.user.id} member={m} />)}
     </div>
