@@ -228,7 +228,7 @@ export default function App() {
             <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
           </div>
 
-          <MemberList />
+          {membersOpen && <MemberList />}
         </div>
 
         <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

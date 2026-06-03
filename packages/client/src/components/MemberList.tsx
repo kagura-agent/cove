@@ -59,7 +59,7 @@ export function MemberList() {
 
   return (
     <div style={styles.root} className="member-list">
-      <div style={styles.header}>Members — {members.length}</div>
+      <div style={styles.header}>Online — {members.length}</div>
       {members.map((m) => <MemberRow key={m.user.id} member={m} />)}
     </div>
   );
