@@ -10,7 +10,7 @@ export function TokenDisplay({ token, onClose }: { token: string; onClose: () =>
   return (
     <Modal open onCancel={onClose} title="Bot Token Created" footer={null} centered>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Copy this token now. You won't be able to see it again.</p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Copy this token now. You won't be able to see it again.</p>
         <Input.Search
           value={token}
           readOnly

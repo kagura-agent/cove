@@ -7,23 +7,23 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { display: "flex", flexDirection: "column", height: "100%", width: 240, minWidth: 240, background: "var(--bg-surface)", borderRight: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
-  header: { padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 8 } as CSSProperties,
-  title: { fontSize: 16, fontWeight: 700, margin: 0, color: "var(--text-primary)" } as CSSProperties,
-  list: { flex: 1, overflowY: "auto", padding: "0 8px" } as CSSProperties,
-  loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
-  categoryHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 8px 4px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)", cursor: "default" } as CSSProperties,
-  channelItem: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 4, cursor: "pointer", transition: "background 0.15s", fontSize: 14, color: "var(--text-secondary)" } as CSSProperties,
-  channelActive: { background: "rgba(255,255,255,0.08)", color: "var(--text-primary)" } as CSSProperties,
-  channelHover: { background: "rgba(255,255,255,0.04)", color: "var(--text-primary)" } as CSSProperties,
-  hash: { fontSize: 18, fontWeight: 600, opacity: 0.5, width: 20, textAlign: "center", flexShrink: 0 } as CSSProperties,
+  root: { display: "flex", flexDirection: "column", height: "100%", width: "var(--sidebar-width)", minWidth: "var(--sidebar-width)", background: "var(--bg-secondary)", borderRight: "none" } as CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-md) var(--space-lg)", borderBottom: "1px solid var(--border-subtle)", height: "var(--header-height)", flexShrink: 0 } as CSSProperties,
+  title: { fontSize: "var(--font-size-lg)", fontWeight: 700, margin: 0, color: "var(--header-primary)" } as CSSProperties,
+  list: { flex: 1, overflowY: "auto", padding: "0 var(--space-sm)" } as CSSProperties,
+  loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
+  categoryHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px var(--space-sm) var(--space-xs)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)", cursor: "default" } as CSSProperties,
+  channelItem: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px var(--space-sm)", borderRadius: 4, cursor: "pointer", transition: "background 0.15s", fontSize: "var(--font-size-md)", color: "var(--interactive-normal)" } as CSSProperties,
+  channelActive: { background: "var(--bg-modifier-active)", color: "var(--interactive-active)" } as CSSProperties,
+  channelHover: { background: "var(--bg-modifier-hover)", color: "var(--interactive-hover)" } as CSSProperties,
+  hash: { fontSize: 18, fontWeight: 600, opacity: 0.5, width: "var(--space-xl)", textAlign: "center", flexShrink: 0 } as CSSProperties,
   channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
-  deleteBtn: { opacity: 0, fontSize: 12, transition: "opacity 0.15s" } as CSSProperties,
-  addBtn: { margin: "4px 8px 8px", opacity: 0.5, fontSize: 12 } as CSSProperties,
+  deleteBtn: { opacity: 0, fontSize: "var(--font-size-sm)", transition: "opacity 0.15s" } as CSSProperties,
+  addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
 };
 
-function ChannelItem({ id, name, isActive, onSelect, onDelete }: {
-  id: string; name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
+function ChannelItem({ name, isActive, onSelect, onDelete }: {
+  name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -49,7 +49,7 @@ function ChannelItem({ id, name, isActive, onSelect, onDelete }: {
   );
 }
 
-export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: boolean }) {
+export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -80,7 +80,7 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
   return (
     <div style={styles.root} className="sidebar-panel">
       <div style={styles.header}>
-        <span style={{ fontSize: 20 }}>🏝️</span>
+        <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
         <h1 style={styles.title}>Cove</h1>
       </div>
 
@@ -91,12 +91,11 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
           <>
             <div style={styles.categoryHeader}>
               <span>Scenes</span>
-              <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--text-secondary)", fontSize: 12, opacity: 0.6 }} />
+              <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)", opacity: 0.6 }} />
             </div>
             {channels.map((ch) => (
               <ChannelItem
                 key={ch.id}
-                id={ch.id}
                 name={ch.name}
                 isActive={ch.id === activeChannelId}
                 onSelect={() => handleSelectChannel(ch.id)}
@@ -104,9 +103,9 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
               />
             ))}
             {adding && (
-              <form onSubmit={handleAddChannel} style={{ padding: "4px 8px" }}>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="channel-name" autoFocus size="small" style={{ marginBottom: 4 }} />
-                <div style={{ display: "flex", gap: 4 }}>
+              <form onSubmit={handleAddChannel} style={{ padding: "var(--space-xs) var(--space-sm)" }}>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="channel-name" autoFocus size="small" style={{ marginBottom: "var(--space-xs)" }} />
+                <div style={{ display: "flex", gap: "var(--space-xs)" }}>
                   <Button type="primary" htmlType="submit" size="small" style={{ flex: 1 }}>Create</Button>
                   <Button size="small" onClick={() => setAdding(false)}>Cancel</Button>
                 </div>
@@ -116,7 +115,7 @@ export function Sidebar({ onClose, loading }: { onClose?: () => void; loading?: 
         )}
       </div>
 
-      <UserBar />
+      <UserBar onCloseSidebar={onClose} onSettingsOpen={onSettingsOpen} />
     </div>
   );
 }

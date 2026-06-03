@@ -1,17 +1,18 @@
 import { useRef, useState, useCallback } from "react";
-import { Input, Button } from "antd";
-import type { InputRef } from "antd";
+import { Button, Input } from "antd";
 import { SendOutlined } from "@ant-design/icons";
+import type { InputRef } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 
 const wrapperStyle: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8,
-  padding: "12px 16px", background: "var(--bg-surface)",
-  borderTop: "1px solid rgba(255,255,255,0.08)",
-  paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+  display: "flex", alignItems: "center", gap: "var(--space-sm)",
+  padding: "0 var(--content-pad)", background: "var(--bg-secondary)",
+  borderTop: "1px solid var(--border-subtle)",
+  height: "var(--footer-height)", flexShrink: 0,
+  paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
 };
-const inputStyle: CSSProperties = { borderRadius: 24, background: "rgba(255,255,255,0.08)", border: "none" };
+const inputStyle: CSSProperties = { borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none" };
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
@@ -57,7 +58,14 @@ export function MessageInput({ channelId }: { channelId: string }) {
         size="large"
         style={inputStyle}
       />
-      <Button type="primary" shape="circle" size="large" icon={<SendOutlined />} onClick={handleSubmit} />
+      <Button
+        type="text"
+        shape="circle"
+        icon={<SendOutlined />}
+        onClick={handleSubmit}
+        className="mobile-only"
+        style={{ color: content.trim() ? "var(--accent)" : "var(--text-muted)" }}
+      />
     </div>
   );
 }

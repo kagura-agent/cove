@@ -1,33 +1,61 @@
 import { useEffect, useState, useCallback } from "react";
 import { ConfigProvider, theme, Button, Input, message } from "antd";
-import { GoogleOutlined, TeamOutlined } from "@ant-design/icons";
+import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
+import { useThemeStore } from "./stores/useThemeStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { MemberList } from "./components/MemberList";
+import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
 import type { CSSProperties } from "react";
 
-const themeConfig = {
-  algorithm: theme.darkAlgorithm,
-  token: { colorPrimary: "#f4a261", colorBgContainer: "var(--bg-surface)", colorBgElevated: "var(--bg-elevated)" },
+function useVisualViewport() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const offset = window.innerHeight - vv.height;
+      document.documentElement.style.setProperty("--keyboard-offset", `${Math.max(0, offset)}px`);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      document.documentElement.style.setProperty("--keyboard-offset", "0px");
+    };
+  }, []);
+}
+
+const ACCENT_BRAND: Record<string, string> = {
+  light: "#e07828", dark: "#f4a261", midnight: "#f4a261",
 };
 
+function useAntdThemeConfig() {
+  const currentTheme = useThemeStore((s) => s.theme);
+  return {
+    algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
+    token: { colorPrimary: ACCENT_BRAND[currentTheme] || "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+  };
+}
+
 const styles = {
-  fullHeight: { height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 20 } as CSSProperties,
+  fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
+  overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
+  overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
   layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
-  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-deep)" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-surface)", borderBottom: "1px solid rgba(255,255,255,0.08)" } as CSSProperties,
+  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-primary)" } as CSSProperties,
+  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
-  loginTitle: { fontSize: 32, fontWeight: 700, color: "#f4a261" } as CSSProperties,
+  loginTitle: { fontSize: 32, fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
 
 const connDot = (status: string): CSSProperties => ({
   width: 8, height: 8, borderRadius: "50%", display: "inline-block",
-  background: status === "connecting" ? "#faad14" : "#ff4d4f",
+  background: status === "connecting" ? "var(--warning)" : "var(--danger)",
 });
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -76,7 +104,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
         <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
           Submit
         </Button>
-        {error && <div style={{ color: "#ff4d4f", textAlign: "center" }}>{error}</div>}
+        {error && <div style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
       </div>
     </div>
   );
@@ -99,12 +127,15 @@ function LoginPage() {
 }
 
 export default function App() {
+  const themeConfig = useAntdThemeConfig();
+  useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { channels, activeChannelId, setChannels, setActiveChannel } = useChannelStore();
+  const { setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -183,10 +214,11 @@ export default function App() {
   return (
     <ConfigProvider theme={themeConfig}>
       <div style={styles.fullHeight}>
-        {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={styles.overlay} />}
+        <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
+        <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
-        <div style={styles.layout}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} />
+        <div style={styles.layout} className={`${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} onSettingsOpen={() => setSettingsOpen(true)} />
 
           <div style={styles.chatColumn}>
             {wsStatus !== "connected" && (
@@ -200,6 +232,8 @@ export default function App() {
 
           {membersOpen && <MemberList />}
         </div>
+
+        <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
     </ConfigProvider>
   );

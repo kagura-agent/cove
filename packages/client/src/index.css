@@ -1,30 +1,255 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ── Semantic Token System ────────────────────────────────── */
+/* ALL component colors reference these tokens. Zero hardcoded
+   hex/rgba values outside this block.                        */
+
+/* ── Theme: Midnight (default) ────────────────────────────── */
+/* ── Layout Constants ─────────────────────────────────── */
 :root {
-  --bg-deep: #1a1a2e;
-  --bg-surface: #22223a;
-  --bg-elevated: #2a2a4a;
-  --text-primary: #e0e0e0;
-  --text-secondary: #a0a0b8;
-  --accent: #f4a261;
-  --msg-own: #2e2a50;
-  --msg-other: #262640;
+  --header-height: 48px;
+  --footer-height: 52px;
+  --sidebar-width: 240px;
+  --member-list-width: 240px;
+
+  /* ── Spacing Scale (4px base) ─────────────────────────── */
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-3xl: 32px;
+
+  /* ── Content Alignment ────────────────────────────────── */
+  --content-pad: var(--space-lg);
+  --message-right-pad: 48px;
+  --compact-ts-width: 56px;
+  --avatar-size: 40px;
+  --avatar-size-sm: 32px;
+  --avatar-size-xs: 28px;
+  --content-gap: var(--space-lg);
+  --content-start: calc(var(--content-pad) + var(--avatar-size) + var(--content-gap));
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* ── Input ────────────────────────────────────────────── */
+  --input-radius: 8px;
 }
 
+[data-theme="midnight"], :root {
+  /* Backgrounds */
+  --bg-primary: #1a191d;
+  --bg-secondary: #111113;
+  --bg-tertiary: #0c0c0e;
+  --bg-input: #222226;
+  --bg-modifier-hover: rgba(79,84,92,0.16);
+  --bg-modifier-active: rgba(79,84,92,0.24);
+  --bg-overlay: rgba(0,0,0,0.15);
+  --bg-overlay-strong: rgba(0,0,0,0.5);
+
+  /* Borders */
+  --border-subtle: rgba(255,255,255,0.08);
+
+  /* Text */
+  --text-normal: #dbdee1;
+  --text-muted: #949ba4;
+  --text-link: #00aff4;
+  --header-primary: #f2f3f5;
+  --text-on-accent: #ffffff;
+
+  /* Roles */
+  --text-user: #f2f3f5;
+  --text-bot: #7289da;
+
+  /* Accent / Brand */
+  --accent: #5865f2;
+  --accent-brand: #f4a261;
+
+  /* Status */
+  --danger: #ff4d4f;
+  --warning: #faad14;
+  --success: #57f287;
+
+  /* Interactive */
+  --interactive-normal: #b5bac1;
+  --interactive-hover: #dbdee1;
+  --interactive-active: #f2f3f5;
+
+  /* Scrollbar */
+  --scrollbar-thin-thumb: rgba(255,255,255,0.1);
+  --scrollbar-thin-thumb-hover: rgba(255,255,255,0.2);
+
+  /* Input */
+  --channel-text-area-placeholder: #72767d;
+
+  /* Member list */
+  --member-hover: rgba(255,255,255,0.04);
+
+  /* Modal / Overlay */
+  --modal-backdrop: rgba(0,0,0,0.6);
+  --shadow-modal: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.3);
+
+  /* Focus */
+  --focus-ring: rgba(88,101,242,0.6);
+
+  /* Selection */
+  --selection-bg: rgba(88,101,242,0.3);
+  --selection-text: inherit;
+}
+
+/* ── Theme: Light ─────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f2f3f5;
+  --bg-tertiary: #e3e5e8;
+  --bg-input: #ebedef;
+  --bg-modifier-hover: rgba(116,127,141,0.08);
+  --bg-modifier-active: rgba(116,127,141,0.16);
+  --bg-overlay: rgba(0,0,0,0.08);
+  --bg-overlay-strong: rgba(0,0,0,0.4);
+
+  --border-subtle: rgba(0,0,0,0.08);
+
+  --text-normal: #313338;
+  --text-muted: #5c5e66;
+  --text-link: #006ce7;
+  --header-primary: #060607;
+  --text-on-accent: #ffffff;
+
+  --text-user: #060607;
+  --text-bot: #5865f2;
+
+  --accent: #5865f2;
+  --accent-brand: #e07828;
+
+  --danger: #da373c;
+  --warning: #d4880f;
+  --success: #248045;
+
+  --interactive-normal: #4e5058;
+  --interactive-hover: #313338;
+  --interactive-active: #060607;
+
+  --scrollbar-thin-thumb: rgba(0,0,0,0.15);
+  --scrollbar-thin-thumb-hover: rgba(0,0,0,0.25);
+
+  --channel-text-area-placeholder: #87898c;
+
+  --member-hover: rgba(0,0,0,0.04);
+
+  --modal-backdrop: rgba(0,0,0,0.5);
+  --shadow-modal: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.12);
+
+  --focus-ring: rgba(88,101,242,0.5);
+
+  --selection-bg: rgba(88,101,242,0.2);
+  --selection-text: inherit;
+}
+
+/* ── Theme: Dark (standard Discord dark) ──────────────────── */
+[data-theme="dark"] {
+  --bg-primary: #313338;
+  --bg-secondary: #2b2d31;
+  --bg-tertiary: #232428;
+  --bg-input: #383a40;
+  --bg-modifier-hover: rgba(116,127,141,0.06);
+  --bg-modifier-active: #404249;
+  --bg-overlay: rgba(0,0,0,0.15);
+  --bg-overlay-strong: rgba(0,0,0,0.5);
+
+  --border-subtle: rgba(255,255,255,0.08);
+
+  --text-normal: #dbdee1;
+  --text-muted: #949ba4;
+  --text-link: #00aff4;
+  --header-primary: #f2f3f5;
+  --text-on-accent: #ffffff;
+
+  --text-user: #f2f3f5;
+  --text-bot: #7289da;
+
+  --accent: #5865f2;
+  --accent-brand: #f4a261;
+
+  --danger: #ff4d4f;
+  --warning: #faad14;
+  --success: #57f287;
+
+  --interactive-normal: #b5bac1;
+  --interactive-hover: #dbdee1;
+  --interactive-active: #f2f3f5;
+
+  --scrollbar-thin-thumb: rgba(255,255,255,0.1);
+  --scrollbar-thin-thumb-hover: rgba(255,255,255,0.2);
+
+  --channel-text-area-placeholder: #72767d;
+
+  --member-hover: rgba(255,255,255,0.04);
+
+  --modal-backdrop: rgba(0,0,0,0.6);
+  --shadow-modal: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.3);
+
+  --focus-ring: rgba(88,101,242,0.6);
+
+  --selection-bg: rgba(88,101,242,0.3);
+  --selection-text: inherit;
+}
+
+/* ── Base styles ──────────────────────────────────────────── */
+
 html, body {
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
-  background: var(--bg-deep);
-  color: var(--text-primary);
+  background: var(--bg-primary);
+  color: var(--text-normal);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 #root { height: 100%; }
 
+/* ── Selection ────────────────────────────────────────────── */
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thin-thumb-hover); }
+
+/* ── Focus ────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── Animations ───────────────────────────────────────────── */
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -32,24 +257,240 @@ html, body {
 }
 .animate-fade-in { animation: fadeIn 0.2s ease; }
 
-/* Mobile responsive */
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Discord-style message hover ──────────────────────────── */
+
+.discord-msg-row { position: relative; transition: background-color 0.1s ease; }
+.discord-msg-row:hover { background: var(--bg-modifier-hover); }
+.discord-msg-row .compact-ts { position: absolute; left: 0; width: var(--compact-ts-width); text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-muted); line-height: 22px; opacity: 0; user-select: none; top: 4px; transition: opacity 0.1s ease; }
+.discord-msg-row:hover .compact-ts { opacity: 1; }
+
+/* ── Settings modal ───────────────────────────────────────── */
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--modal-backdrop);
+  backdrop-filter: blur(2px);
+}
+
+.settings-panel {
+  position: relative;
+  display: flex;
+  width: calc(100vw - 80px);
+  max-width: 960px;
+  height: calc(100vh - 80px);
+  max-height: 720px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-modal);
+  animation: modalFadeIn 0.2s ease;
+}
+
+.settings-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  overflow-y: auto;
+}
+
+.settings-content {
+  flex: 1;
+  background: var(--bg-primary);
+  padding: 32px 40px;
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background 0.1s ease, color 0.1s ease;
+  background: transparent;
+  color: var(--interactive-normal);
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--text-normal);
+}
+
+.settings-nav-item.active {
+  background: var(--bg-modifier-active);
+  color: var(--text-normal);
+  font-weight: 600;
+}
+
+.settings-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--text-muted);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 1;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-close-btn:hover {
+  border-color: var(--text-normal);
+  color: var(--text-normal);
+}
+
+.settings-sign-out {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 15px;
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 400;
+  transition: background 0.1s ease;
+}
+
+.settings-sign-out:hover {
+  background: var(--bg-modifier-hover);
+}
+
+.settings-mobile-sign-out {
+  display: none;
+}
+
+/* ── Theme swatch ─────────────────────────────────────────── */
+
+.theme-swatch {
+  width: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.theme-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.theme-swatch:hover:not(.active) {
+  border-color: var(--bg-modifier-active);
+}
+
+/* ── Mobile responsive ────────────────────────────────────── */
+
 .mobile-only { display: none !important; }
+.mobile-sidebar-backdrop,
+.mobile-members-backdrop { display: none; }
 
 @media (max-width: 640px) {
   .mobile-only { display: inline-flex !important; }
+  .mobile-sidebar-backdrop,
+  .mobile-members-backdrop { display: block; }
   .sidebar-panel {
-    display: none !important;
     position: fixed !important;
     z-index: 30 !important;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 240px !important;
+    width: var(--sidebar-width) !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
   }
   .sidebar-open .sidebar-panel {
-    display: flex !important;
+    transform: translateX(0);
   }
   .member-list {
-    display: none !important;
+    position: fixed !important;
+    z-index: 30 !important;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--member-list-width) !important;
+    min-width: var(--member-list-width) !important;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+  .members-open .member-list {
+    transform: translateX(0);
+  }
+
+  /* Settings panel mobile — full-screen like Discord mobile */
+  .settings-backdrop {
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: none;
+  }
+  .settings-panel {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    flex-direction: column;
+    border-radius: 0;
+  }
+  .settings-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px;
+    padding-right: 48px; /* leave space for close button */
+    gap: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .settings-sidebar .settings-profile-area,
+  .settings-sidebar .settings-divider,
+  .settings-sidebar .settings-category-header {
+    display: none;
+  }
+  .settings-nav-item {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .settings-sign-out {
+    display: none;
+  }
+  .settings-content {
+    padding: 20px 16px;
+  }
+  .settings-mobile-sign-out {
+    display: block;
+  }
+
+  /* Theme swatches stack on mobile */
+  .theme-swatch {
+    width: 120px;
   }
 }

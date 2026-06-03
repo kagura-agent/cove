@@ -1,32 +1,32 @@
-import { useState } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { Avatar, Button, Typography } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
-import { SettingsPanel } from "./SettingsPanel";
 import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 12, padding: 12,
-  borderTop: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.15)",
+  display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "0 var(--space-sm)",
+  borderTop: "1px solid var(--border-subtle)", background: "var(--bg-overlay)",
+  height: "var(--footer-height)", flexShrink: 0,
 };
-const avatarStyle: CSSProperties = { backgroundColor: "#f4a261", color: "#1a1a2e", fontWeight: 700, flexShrink: 0 };
-const nameStyle: CSSProperties = { flex: 1, fontSize: 14, fontWeight: 500, color: "var(--text-primary)" };
-const settingsBtnStyle: CSSProperties = { color: "var(--text-secondary)" };
+const avatarStyle: CSSProperties = { backgroundColor: "var(--accent-brand)", color: "var(--text-on-accent)", fontWeight: 700, flexShrink: 0 };
+const nameStyle: CSSProperties = { flex: 1, fontSize: 13, fontWeight: 500, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)", fontSize: "var(--font-size-md)" };
 
-export function UserBar() {
+export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: () => void; onSettingsOpen?: () => void }) {
   const { username } = useUserStore();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const handleSettingsClick = () => {
+    onCloseSidebar?.();
+    onSettingsOpen?.();
+  };
 
   return (
-    <>
-      <div style={barStyle}>
-        <Avatar style={avatarStyle} size={32}>
-          {username.charAt(0).toUpperCase()}
-        </Avatar>
-        <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
-        <Button type="text" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} style={settingsBtnStyle} />
-      </div>
-      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
-    </>
+    <div style={barStyle}>
+      <Avatar style={avatarStyle} size={28}>
+        {username.charAt(0).toUpperCase()}
+      </Avatar>
+      <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
+      <Button type="text" icon={<SettingOutlined />} onClick={handleSettingsClick} style={settingsBtnStyle} />
+    </div>
   );
 }

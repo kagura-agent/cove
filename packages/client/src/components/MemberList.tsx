@@ -3,24 +3,21 @@ import { Avatar, Spin } from "antd";
 import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
+import { pickAvatarColor, MEMBER_AVATAR_COLORS } from "../lib/avatar-palette";
 
 const styles = {
-  root: { width: 240, minWidth: 240, height: "100%", background: "var(--bg-surface)", borderLeft: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", overflowY: "auto" } as CSSProperties,
-  header: { padding: "12px 16px 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-secondary)" } as CSSProperties,
-  member: { display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
-  memberHover: { background: "rgba(255,255,255,0.04)" } as CSSProperties,
+  root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
+  header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
+  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-lg)", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
+  memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
-  username: { fontSize: 14, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
-  badge: { fontSize: 10, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "#5865f2", color: "#fff", marginLeft: 4, flexShrink: 0 } as CSSProperties,
-  loading: { display: "flex", justifyContent: "center", padding: 24 } as CSSProperties,
+  username: { fontSize: "var(--font-size-md)", color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
+  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--header-primary)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
+  loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
 };
 
-const avatarColors = ["#f4a261", "#e76f51", "#2a9d8f", "#264653", "#e9c46a", "#606c38", "#bc6c25"];
-
 function hashColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return avatarColors[Math.abs(h) % avatarColors.length];
+  return pickAvatarColor(name, MEMBER_AVATAR_COLORS);
 }
 
 function MemberRow({ member }: { member: GuildMember }) {
@@ -32,7 +29,7 @@ function MemberRow({ member }: { member: GuildMember }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Avatar size={32} style={{ backgroundColor: hashColor(user.username), color: "#fff", fontWeight: 700, ...styles.avatar }}>
+      <Avatar size="small" style={{ backgroundColor: hashColor(user.username), color: "var(--header-primary)", fontWeight: 700, ...styles.avatar }}>
         {user.username.charAt(0).toUpperCase()}
       </Avatar>
       <span style={styles.username}>{member.nick || user.username}</span>
@@ -54,29 +51,16 @@ export function MemberList() {
 
   if (loading) {
     return (
-      <div style={styles.root}>
+      <div style={styles.root} className="member-list">
         <div style={styles.loading}><Spin /></div>
       </div>
     );
   }
 
-  const humans = members.filter((m) => !m.user.bot);
-  const bots = members.filter((m) => m.user.bot);
-
   return (
     <div style={styles.root} className="member-list">
-      {humans.length > 0 && (
-        <>
-          <div style={styles.header}>Online — {humans.length}</div>
-          {humans.map((m) => <MemberRow key={m.user.id} member={m} />)}
-        </>
-      )}
-      {bots.length > 0 && (
-        <>
-          <div style={{ ...styles.header, marginTop: humans.length > 0 ? 12 : 0 }}>Bots — {bots.length}</div>
-          {bots.map((m) => <MemberRow key={m.user.id} member={m} />)}
-        </>
-      )}
+      <div style={styles.header}>Online — {members.length}</div>
+      {members.map((m) => <MemberRow key={m.user.id} member={m} />)}
     </div>
   );
 }
