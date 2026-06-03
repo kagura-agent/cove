@@ -50,7 +50,7 @@ export function createApp(
 
   app.get("/api/v10/guilds/:guildId/presences", (c) => {
     const onlineIds = dispatcher?.getOnlineUserIds() ?? [];
-    return c.json(onlineIds.map((id) => ({ user_id: id, status: "online" })));
+    return c.json(onlineIds.map((id) => ({ user: { id }, status: "online" })));
   });
 
   app.get("/api/v10/users/@me", (c) => {

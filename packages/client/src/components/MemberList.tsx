@@ -5,6 +5,7 @@ import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { usePresenceStore } from "../stores/usePresenceStore";
+import { StatusDot } from "./StatusDot";
 
 const styles = {
   root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
@@ -17,19 +18,6 @@ const styles = {
   badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--text-on-accent)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
 };
-
-function statusDotStyle(online: boolean): CSSProperties {
-  return {
-    width: 10,
-    height: 10,
-    borderRadius: "50%",
-    background: online ? "var(--status-online)" : "var(--status-offline)",
-    border: "2px solid var(--bg-secondary)",
-    position: "absolute",
-    bottom: -1,
-    right: -1,
-  };
-}
 
 function MemberRow({ member, online }: { member: GuildMember; online: boolean }) {
   const [hovered, setHovered] = useState(false);
@@ -45,7 +33,7 @@ function MemberRow({ member, online }: { member: GuildMember; online: boolean })
         <Avatar size="small" style={{ backgroundColor: color, color: getContrastTextColor(color), fontWeight: 700, ...styles.avatar }}>
           {user.username.charAt(0).toUpperCase()}
         </Avatar>
-        <div style={statusDotStyle(online)} />
+        <StatusDot online={online} />
       </div>
       <span style={styles.username}>{member.nick || user.username}</span>
       {user.bot && <span style={styles.badge}>APP</span>}

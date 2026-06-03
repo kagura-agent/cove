@@ -4,6 +4,7 @@ import { Avatar, Button, Typography } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
+import { StatusDot } from "./StatusDot";
 
 const barStyle: CSSProperties = {
   display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "0 var(--space-sm)",
@@ -29,12 +30,7 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
         <Avatar style={{ ...avatarStyle, backgroundColor: pickAvatarColor(username), color: getContrastTextColor(pickAvatarColor(username)) }} size={28}>
           {username.charAt(0).toUpperCase()}
         </Avatar>
-        <div style={{
-          width: 10, height: 10, borderRadius: "50%",
-          background: online ? "var(--status-online)" : "var(--status-offline)",
-          border: "2px solid var(--bg-secondary)",
-          position: "absolute", bottom: -1, right: -1,
-        }} />
+        <StatusDot online={online} />
       </div>
       <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
       <Button type="text" icon={<SettingOutlined />} onClick={handleSettingsClick} style={settingsBtnStyle} />
