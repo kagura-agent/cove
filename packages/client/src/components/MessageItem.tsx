@@ -36,7 +36,7 @@ function roleColor(isBot: boolean): string {
 const botBadgeStyle: CSSProperties = {
   fontSize: "var(--font-size-xs)",
   fontWeight: 600,
-  color: "#ffffff",
+  color: "var(--text-on-accent)",
   background: "var(--accent)",
   borderRadius: 3,
   padding: "1px 5px",
