@@ -7,6 +7,7 @@ interface ChannelState {
   setChannels: (channels: Channel[]) => void;
   setActiveChannel: (id: string | null) => void;
   addChannel: (channel: Channel) => void;
+  updateChannel: (channel: Channel) => void;
   removeChannel: (id: string) => void;
 }
 
@@ -15,7 +16,14 @@ export const useChannelStore = create<ChannelState>((set) => ({
   activeChannelId: null,
   setChannels: (channels) => set({ channels }),
   setActiveChannel: (id) => set({ activeChannelId: id }),
-  addChannel: (channel) => set((s) => ({ channels: [...s.channels, channel] })),
+  addChannel: (channel) => set((s) => (
+    s.channels.some((c) => c.id === channel.id)
+      ? s
+      : { channels: [...s.channels, channel] }
+  )),
+  updateChannel: (channel) => set((s) => ({
+    channels: s.channels.map((c) => c.id === channel.id ? channel : c),
+  })),
   removeChannel: (id) => set((s) => ({
     channels: s.channels.filter((c) => c.id !== id),
     activeChannelId: s.activeChannelId === id ? null : s.activeChannelId,

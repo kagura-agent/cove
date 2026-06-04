@@ -10,6 +10,7 @@ import { ChatArea } from "./components/ChatArea";
 import { MemberList } from "./components/MemberList";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
+import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
 import { API_PREFIX } from "@cove/shared";
 import type { CSSProperties } from "react";
 
@@ -179,7 +180,11 @@ export default function App() {
       if (chs.length > 0) setActiveChannel(chs[0].id);
     }).catch(() => message.error("Failed to load channels"))
       .finally(() => setChannelsLoading(false));
+    setupGatewaySubscriptions();
     connect();
+    return () => {
+      teardownGatewaySubscriptions();
+    };
   }, [needsSetup, authLoading, setChannels, setActiveChannel, connect]);
 
   if (authLoading) {

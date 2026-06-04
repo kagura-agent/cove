@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
-import { useWebSocketStore } from "../stores/useWebSocketStore";
+import { useTypingStore } from "../stores/useTypingStore";
 import { MessageItem } from "./MessageItem";
 import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
@@ -45,7 +45,7 @@ function isNearBottom(el: HTMLElement): boolean {
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
-  const typingUsersRaw = useWebSocketStore((s) => s.typingUsers[channelId]);
+  const typingUsersRaw = useTypingStore((s) => s.typingUsers[channelId]);
   const typingUsers = useMemo(() => typingUsersRaw ?? [], [typingUsersRaw]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
