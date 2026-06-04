@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { requireAuth, type AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 
-export function agentRoutes(repos: Repos): Hono<AppEnv> {
+export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
 
@@ -116,6 +117,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
 
     const body = await c.req.json<{ nick?: string; roles?: string[] }>().catch(() => ({} as { nick?: string; roles?: string[] }));
     const member = repos.members.add(guildId, userId, body.nick, body.roles);
+    dispatcher?.addGuildToUser(userId, guildId);
     return c.json(member, 201);
   });
 
@@ -137,6 +139,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     }
 
     repos.members.remove(guildId, userId);
+    dispatcher?.removeGuildFromUser(userId, guildId);
     return c.body(null, 204);
   });
 

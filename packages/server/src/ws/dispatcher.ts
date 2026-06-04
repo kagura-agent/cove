@@ -6,7 +6,7 @@ export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
 
-  constructor(private channelsRepo?: ChannelsRepo) {}
+  constructor(private channelsRepo: ChannelsRepo) {}
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
@@ -95,8 +95,25 @@ export class GatewayDispatcher {
     });
   }
 
+  addGuildToUser(userId: string, guildId: string): void {
+    for (const session of this.sessions) {
+      if (session.user?.id === userId) {
+        session.guildIds.add(guildId);
+      }
+    }
+  }
+
+  removeGuildFromUser(userId: string, guildId: string): void {
+    for (const session of this.sessions) {
+      if (session.user?.id === userId) {
+        session.guildIds.delete(guildId);
+      }
+    }
+  }
+
   private resolveGuildForChannel(channelId: string): string | null {
-    if (!this.channelsRepo) return null;
+    // TODO(#111): DM channels have guild_id == null. When DMs are implemented,
+    // add a broadcastToRecipients path that sends to DM participants directly.
     const channel = this.channelsRepo.getById(channelId);
     return channel?.guild_id ?? null;
   }

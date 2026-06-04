@@ -15,6 +15,9 @@ describe("Cove API — Discord-compatible", () => {
   let defaultGuildId: string;
 
   class TestDispatcher extends GatewayDispatcher {
+    constructor() {
+      super({ getById: () => null } as any);
+    }
     override messageCreate(message: Message): void {
       broadcastEvents.push({ t: "MESSAGE_CREATE", d: message });
     }

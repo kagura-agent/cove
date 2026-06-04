@@ -151,4 +151,32 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
       }
     });
   });
+
+  describe("live guild membership update", () => {
+    it("adds and removes guild visibility for a user at runtime", () => {
+      // user-2 starts in guild-b only, so should NOT receive guild-a messages
+      dispatcher.messageCreate({ id: "m1", channel_id: "chan-1", content: "before" } as any);
+      expect(sessionA.dispatch).toHaveBeenCalledWith("MESSAGE_CREATE", expect.objectContaining({ id: "m1" }));
+      expect(sessionB.dispatch).not.toHaveBeenCalled();
+
+      vi.mocked(sessionA.dispatch).mockClear();
+      vi.mocked(sessionB.dispatch).mockClear();
+
+      // Simulate user-2 joining guild-a
+      dispatcher.addGuildToUser("user-2", "guild-a");
+
+      dispatcher.messageCreate({ id: "m2", channel_id: "chan-1", content: "after join" } as any);
+      expect(sessionB.dispatch).toHaveBeenCalledWith("MESSAGE_CREATE", expect.objectContaining({ id: "m2" }));
+
+      vi.mocked(sessionA.dispatch).mockClear();
+      vi.mocked(sessionB.dispatch).mockClear();
+
+      // Simulate user-2 being kicked from guild-a
+      dispatcher.removeGuildFromUser("user-2", "guild-a");
+
+      dispatcher.messageCreate({ id: "m3", channel_id: "chan-1", content: "after kick" } as any);
+      expect(sessionA.dispatch).toHaveBeenCalledWith("MESSAGE_CREATE", expect.objectContaining({ id: "m3" }));
+      expect(sessionB.dispatch).not.toHaveBeenCalled();
+    });
+  });
 });
