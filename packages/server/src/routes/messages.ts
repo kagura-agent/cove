@@ -119,6 +119,21 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json({ deleted });
   });
 
+  app.put("/channels/:id/messages/:msgId/ack", (c) => {
+    const channelId = c.req.param("id");
+    const messageId = c.req.param("msgId");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+
+    repos.readStates.set(userId, channelId, messageId);
+    dispatcher?.messageAck(userId, channelId, messageId);
+
+    return c.body(null, 204);
+  });
+
   app.post("/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
     const author = c.get("botUser");

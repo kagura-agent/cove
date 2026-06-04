@@ -35,5 +35,5 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`🏝️  Cove server running on http://localhost:${info.port}`);
 });
 
-setupGateway(server as any, repos.users, repos.guilds, dispatcher, repos.channels);
+setupGateway(server as any, repos.users, repos.guilds, dispatcher, repos.channels, repos.readStates);
 console.log("🏝️  Gateway WebSocket ready on /gateway");

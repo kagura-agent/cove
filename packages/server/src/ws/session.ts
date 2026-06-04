@@ -3,6 +3,7 @@ import { WebSocket } from "ws";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
+import type { ReadStatesRepo } from "../repos/readStates.js";
 
 export class GatewaySession {
   readonly id: string;
@@ -35,7 +36,7 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo): void {
+  identify(user: { id: string; username: string; bot: boolean }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, readStatesRepo: ReadStatesRepo): void {
     this.user = user;
     this.identified = true;
 
@@ -45,6 +46,7 @@ export class GatewaySession {
     }
 
     const presences = dispatcher.getSharedGuildPresences(this.guildIds);
+    const readState = readStatesRepo.getAllForUser(user.id);
 
     this.seq++;
     this.ws.send(JSON.stringify({
@@ -57,6 +59,7 @@ export class GatewaySession {
         guilds,
         session_id: this.id,
         presences,
+        read_state: readState,
       },
     }));
   }

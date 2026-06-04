@@ -13,7 +13,7 @@ describe("versioned migration system", () => {
   it("fresh DB gets user_version = 1", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(1);
+    expect(version).toBe(2);
     db.close();
   });
 
@@ -116,7 +116,7 @@ describe("versioned migration system", () => {
       expect(msg).toBeDefined();
       expect(msg.content).toBe("hello");
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -140,7 +140,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -258,7 +258,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
 
       db2.close();
     } finally {

@@ -59,6 +59,9 @@ export function deleteBot(id: string) {
 export function sendTyping(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/typing`, { method: "POST" });
 }
+export function ackMessage(channelId: string, messageId: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/ack`, { method: "PUT" });
+}
 export function fetchMe() {
   return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");
 }
