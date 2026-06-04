@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 
 function migrateRenameTable(db: Database.Database, oldName: string, newName: string): void {
   const hasOld = db.prepare(
@@ -42,8 +43,18 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   migrateRenameTable(db, "scene_state", "channel_state");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS guilds (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      icon        TEXT,
+      owner_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS channels (
       id          TEXT PRIMARY KEY,
+      guild_id    TEXT NOT NULL REFERENCES guilds(id),
       name        TEXT NOT NULL,
       icon        TEXT,
       type        TEXT CHECK(type IN ('open', 'indoor', 'object', 'structure')),
@@ -65,7 +76,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS guild_members (
-      guild_id    TEXT NOT NULL DEFAULT 'cove',
+      guild_id    TEXT NOT NULL REFERENCES guilds(id),
       user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
       nick        TEXT,
       roles       TEXT DEFAULT '[]',
@@ -110,39 +121,62 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
   `);
 
+  // Seed default guild (must exist before FK references from channels)
+  const guildId = (() => {
+    const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+    if (existing) return existing.id;
+    const id = randomUUID();
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, "Cove", null, null, now, now);
+    return id;
+  })();
+
   // Migration: add edited_timestamp to existing messages tables
   try {
     db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
 
   // Migration: add sender_name to store display name alongside sender ID
   try {
     db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
 
   // Migration: add token column to users table (older DBs lack it)
   try {
     db.exec("ALTER TABLE users ADD COLUMN token TEXT");
-  } catch (_) {
-    // Column already exists
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
+
+  // Migration: add guild_id to channels table
+  // Disable FK checks so ALTER TABLE DEFAULT isn't validated against guilds table
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${guildId}'`);
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
 
   // Post-create migrations: rename columns in already-renamed tables
   try {
     db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
-  } catch (_) {
-    // Column already named channel_id
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
 
   try {
     db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
-  } catch (_) {
-    // Column already named channel_id
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
 
   return db;
@@ -155,21 +189,21 @@ const SEED_CHANNELS = [
   { id: "post-office", name: "Post Office", icon: "📧", type: "indoor", channelId: "kagura-mail", description: "Send and receive letters", x: 350, y: 200 },
 ] as const;
 
-export function seedChannels(db: Database.Database): void {
+export function seedChannels(db: Database.Database, guildId: string): void {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO channels (id, name, icon, type, channel_id, description, position_x, position_y)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
     for (const s of SEED_CHANNELS) {
-      insert.run(s.id, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
+      insert.run(s.id, guildId, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
     }
   });
   tx();
 }
 
-export function seedUsers(db: Database.Database): void {
+export function seedUsers(db: Database.Database, guildId: string): void {
   const token = process.env["COVE_ADMIN_TOKEN"];
   if (!token) return;
 
@@ -184,6 +218,6 @@ export function seedUsers(db: Database.Database): void {
   const addMember = db.prepare(
     "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
   );
-  addMember.run("cove", "luna", null, '[]', now);
-  addMember.run("cove", "ruantang", null, '[]', now);
+  addMember.run(guildId, "luna", null, '[]', now);
+  addMember.run(guildId, "ruantang", null, '[]', now);
 }

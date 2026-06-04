@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { DiscordChannel } from "@cove/shared";
 
-import { DEFAULT_GUILD_ID } from "./index.js";
-
 interface ChannelRow {
   id: string;
+  guild_id: string;
   name: string;
   icon: string;
   type: string;
@@ -19,7 +19,7 @@ function toDiscordChannel(row: ChannelRow, position: number): DiscordChannel {
     id: row.id,
     name: row.name,
     type: 0,
-    guild_id: DEFAULT_GUILD_ID,
+    guild_id: row.guild_id,
     topic: row.description ?? "",
     position,
     icon: row.icon,
@@ -31,27 +31,26 @@ function toDiscordChannel(row: ChannelRow, position: number): DiscordChannel {
 export class ChannelsRepo {
   constructor(private db: Database.Database) {}
 
-  // guildId accepted for API symmetry; unused until multi-guild support
   list(guildId: string): DiscordChannel[] {
-    const rows = this.db.prepare("SELECT * FROM channels ORDER BY name").all() as ChannelRow[];
+    const rows = this.db.prepare("SELECT * FROM channels WHERE guild_id = ? ORDER BY name").all(guildId) as ChannelRow[];
     return rows.map((r, i) => toDiscordChannel(r, i));
   }
 
   getById(id: string): DiscordChannel | null {
     const row = this.db.prepare(
-      "SELECT c.*, (SELECT COUNT(*) FROM channels c2 WHERE c2.name < c.name) AS position FROM channels c WHERE c.id = ?"
+      "SELECT c.*, (SELECT COUNT(*) FROM channels c2 WHERE c2.guild_id = c.guild_id AND c2.name < c.name) AS position FROM channels c WHERE c.id = ?"
     ).get(id) as (ChannelRow & { position: number }) | undefined;
     return row ? toDiscordChannel(row, row.position) : null;
   }
 
-  create(name: string, icon?: string, topic?: string): DiscordChannel {
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  create(guildId: string, name: string, icon?: string, topic?: string): DiscordChannel {
+    const id = randomUUID();
 
     this.db.prepare(
-      "INSERT INTO channels (id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, name, icon ?? "🏝️", "open", id, topic ?? "", 0, 0);
+      "INSERT INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, guildId, name, icon ?? "\u{1F3DD}\u{FE0F}", "open", id, topic ?? "", 0, 0);
 
-    const count = (this.db.prepare("SELECT COUNT(*) as c FROM channels").get() as any).c;
+    const count = (this.db.prepare("SELECT COUNT(*) as c FROM channels WHERE guild_id = ?").get(guildId) as any).c;
     const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow;
     return toDiscordChannel(row, count - 1);
   }

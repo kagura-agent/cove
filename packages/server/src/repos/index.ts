@@ -4,10 +4,9 @@ import { ChannelsRepo } from "./channels.js";
 import { StateRepo } from "./state.js";
 import { UsersRepo } from "./users.js";
 import { MembersRepo } from "./members.js";
+import { GuildsRepo } from "./guilds.js";
 
-export { MessagesRepo, ChannelsRepo, StateRepo, UsersRepo, MembersRepo };
-
-export const DEFAULT_GUILD_ID = "cove";
+export { MessagesRepo, ChannelsRepo, StateRepo, UsersRepo, MembersRepo, GuildsRepo };
 
 export interface Repos {
   messages: MessagesRepo;
@@ -15,6 +14,7 @@ export interface Repos {
   state: StateRepo;
   users: UsersRepo;
   members: MembersRepo;
+  guilds: GuildsRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -24,5 +24,6 @@ export function createRepos(db: Database.Database): Repos {
     state: new StateRepo(db),
     users: new UsersRepo(db),
     members: new MembersRepo(db),
+    guilds: new GuildsRepo(db),
   };
 }

@@ -58,6 +58,14 @@ export interface GatewayPayload {
   t?: string | null; // event name (DISPATCH only)
 }
 
+/** Discord guild object (subset relevant to Cove). */
+export interface DiscordGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner_id: string | null;
+}
+
 // ─── Cove extension types ───────────────────────────────────────────────────
 
 /** Key-value state entry for a channel (e.g. "flowers_watered_today": "3"). */

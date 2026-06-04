@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { CoveAgent } from "@cove/shared";
-import { DEFAULT_GUILD_ID } from "./index.js";
 
 interface UserRow {
   id: string;
@@ -32,7 +31,7 @@ export class UsersRepo {
     return row ? toUser(row) : null;
   }
 
-  create(opts: { id?: string; username: string; avatar?: string; bot?: boolean; bio?: string }): CoveAgent & { token: string } {
+  create(opts: { id?: string; username: string; avatar?: string; bot?: boolean; bio?: string }, guildId: string): CoveAgent & { token: string } {
     const username = opts.username;
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();
@@ -45,7 +44,7 @@ export class UsersRepo {
     // Auto-join the bot to the cove guild
     this.db.prepare(
       "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(DEFAULT_GUILD_ID, id, null, '[]', now);
+    ).run(guildId, id, null, '[]', now);
 
     const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
     return { ...toUser(row), token };

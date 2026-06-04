@@ -26,10 +26,10 @@ export function createApp(
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-  app.route("/", registerRoutes(db));
+  app.route("/", registerRoutes(db, repos.guilds));
 
   if (config?.oauth) {
-    app.route("/", authRoutes(db, config.oauth));
+    app.route("/", authRoutes(db, config.oauth, repos.guilds));
   }
 
   // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.
@@ -49,12 +49,25 @@ export function createApp(
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/guilds/:guildId/presences", (c) => {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+    const userId = c.get("botUser").id;
+    if (!repos.members.exists(guildId, userId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
     const onlineIds = dispatcher?.getOnlineUserIds() ?? [];
     return c.json(onlineIds.map((id) => ({ user: { id }, status: "online" })));
   });
 
   app.get("/api/v10/users/@me", (c) => {
     return c.json(c.get("botUser"));
+  });
+
+  app.get("/api/v10/users/@me/guilds", (c) => {
+    const user = c.get("botUser");
+    return c.json(repos.guilds.listForUser(user.id));
   });
 
   return app;

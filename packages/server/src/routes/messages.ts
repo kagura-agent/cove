@@ -3,14 +3,16 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
+import { requireGuildMember } from "./helpers.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.get("/api/v10/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
-
-    if (!repos.channels.exists(channelId)) {
+    const userId = c.get("botUser").id;
+    const channel = requireGuildMember(repos, channelId, userId);
+    if (!channel) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
@@ -27,6 +29,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.get("/api/v10/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
 
     const message = repos.messages.getById(channelId, msgId);
     if (!message) {
@@ -37,8 +44,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
   app.post("/api/v10/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
-
-    if (!repos.channels.exists(channelId)) {
+    const userId = c.get("botUser").id;
+    const channel = requireGuildMember(repos, channelId, userId);
+    if (!channel) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
@@ -60,6 +68,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.patch("/api/v10/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
 
     const body = await parseJsonBody<{ content: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -80,6 +93,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.delete("/api/v10/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
 
     if (!repos.messages.delete(channelId, msgId)) {
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
@@ -92,6 +110,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
   app.delete("/api/v10/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
     const deleted = repos.messages.deleteAll(channelId!);
     return c.json({ deleted });
   });
@@ -99,6 +122,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.post("/api/v10/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
     const author = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, author.id);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username });
 

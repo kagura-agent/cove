@@ -3,8 +3,6 @@ import type { Repos } from "../repos/index.js";
 import { requireAuth, type AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 
-const GUILD_ID = "cove";
-
 export function agentRoutes(repos: Repos): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
@@ -29,7 +27,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
       return c.json({ message: "User already exists", code: 10013 }, 409);
     }
 
-    const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio });
+    const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio }, repos.guilds.getDefaultId());
     return c.json(user, 201);
   });
 
@@ -82,19 +80,28 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
 
   // ─── Guild Members ─────────────────────────────────────────
 
-  app.get("/api/v10/guilds/:guildId/members", (c) => {
-    const guildId = c.req.param("guildId");
-    if (guildId !== GUILD_ID) {
+  app.get("/api/v10/guilds/:guildId/members", auth, (c) => {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+    const userId = c.get("botUser").id;
+    if (!repos.members.exists(guildId, userId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     return c.json(repos.members.list(guildId));
   });
 
-  app.put("/api/v10/guilds/:guildId/members/:userId", async (c) => {
-    const guildId = c.req.param("guildId");
-    const userId = c.req.param("userId");
+  app.put("/api/v10/guilds/:guildId/members/:userId", auth, async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const userId = c.req.param("userId")!;
 
-    if (guildId !== GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+
+    const actingUserId = c.get("botUser").id;
+    if (!repos.members.exists(guildId, actingUserId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
@@ -112,11 +119,16 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(member, 201);
   });
 
-  app.delete("/api/v10/guilds/:guildId/members/:userId", (c) => {
-    const guildId = c.req.param("guildId");
-    const userId = c.req.param("userId");
+  app.delete("/api/v10/guilds/:guildId/members/:userId", auth, (c) => {
+    const guildId = c.req.param("guildId")!;
+    const userId = c.req.param("userId")!;
 
-    if (guildId !== GUILD_ID) {
+    if (!repos.guilds.exists(guildId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+
+    const actingUserId = c.get("botUser").id;
+    if (!repos.members.exists(guildId, actingUserId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
