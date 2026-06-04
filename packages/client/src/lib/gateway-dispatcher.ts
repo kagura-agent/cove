@@ -15,7 +15,7 @@ export interface GatewayEventMap {
 type Handler<T> = (data: T) => void;
 
 class GatewayDispatcher {
-  private handlers: { [K in keyof GatewayEventMap]?: Array<Handler<GatewayEventMap[K]>> } = {};
+  private handlers: { [K in keyof GatewayEventMap]?: Array<Handler<GatewayEventMap[K]>> } = Object.create(null);
 
   on<K extends keyof GatewayEventMap>(event: K, handler: Handler<GatewayEventMap[K]>): void {
     const list = (this.handlers[event] ?? []) as Array<Handler<GatewayEventMap[K]>>;
