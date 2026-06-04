@@ -4,9 +4,7 @@ import { useMessageStore } from "../stores/useMessageStore";
 import { useChannelStore } from "../stores/useChannelStore";
 import { usePresenceStore } from "../stores/usePresenceStore";
 import { useUserStore } from "../stores/useUserStore";
-import { useWebSocketStore } from "../stores/useWebSocketStore";
-
-type Handler<K extends keyof GatewayEventMap> = (data: GatewayEventMap[K]) => void;
+import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
@@ -20,11 +18,8 @@ export function setupGatewaySubscriptions(): void {
   teardownGatewaySubscriptions();
 
   subscribe("MESSAGE_CREATE", (msg) => {
-    const activeId = useChannelStore.getState().activeChannelId;
-    if (msg.channel_id === activeId) {
-      useMessageStore.getState().addMessage(msg.channel_id, msg);
-    }
-    useWebSocketStore.getState().clearTyping(msg.channel_id, msg.author.id);
+    useMessageStore.getState().addMessage(msg.channel_id, msg);
+    useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
   });
 
   subscribe("MESSAGE_UPDATE", (msg) => {
@@ -38,12 +33,13 @@ export function setupGatewaySubscriptions(): void {
   subscribe("TYPING_START", (data) => {
     const selfId = useUserStore.getState().id;
     if (data.user_id === selfId) return;
-    const ws = useWebSocketStore.getState();
-    ws.clearTyping(data.channel_id, data.user_id);
+    useTypingStore.getState().clearTyping(data.channel_id, data.user_id);
     const timeout = setTimeout(() => {
-      useWebSocketStore.getState().clearTyping(data.channel_id, data.user_id);
+      typingTimeoutIds.delete(timeout);
+      useTypingStore.getState().clearTyping(data.channel_id, data.user_id);
     }, 8000);
-    useWebSocketStore.setState((s) => {
+    typingTimeoutIds.add(timeout);
+    useTypingStore.setState((s) => {
       const existing = s.typingUsers[data.channel_id] ?? [];
       return {
         typingUsers: {
@@ -92,4 +88,8 @@ export function teardownGatewaySubscriptions(): void {
     dispatcher.off(event as any, handler);
   }
   handlers = [];
+  for (const id of typingTimeoutIds) {
+    clearTimeout(id);
+  }
+  typingTimeoutIds.clear();
 }

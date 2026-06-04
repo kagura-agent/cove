@@ -1,21 +1,14 @@
 import { create } from "zustand";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import type { GatewayEventMap } from "../lib/gateway-dispatcher";
+import { useTypingStore } from "./useTypingStore";
 
 type WsStatus = "connected" | "connecting" | "disconnected";
 
-interface TypingUser {
-  userId: string;
-  username: string;
-  timeout: ReturnType<typeof setTimeout>;
-}
-
 interface WebSocketState {
   status: WsStatus;
-  typingUsers: Record<string, TypingUser[]>;
   connect: () => void;
   disconnect: () => void;
-  clearTyping: (channelId: string, userId: string) => void;
 }
 
 let ws: WebSocket | null = null;
@@ -29,16 +22,6 @@ function getWsUrl(): string {
 
 export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   status: "disconnected",
-  typingUsers: {},
-  clearTyping: (channelId, userId) =>
-    set((s) => {
-      const users = s.typingUsers[channelId];
-      if (!users) return s;
-      const user = users.find((u) => u.userId === userId);
-      if (user) clearTimeout(user.timeout);
-      const filtered = users.filter((u) => u.userId !== userId);
-      return { typingUsers: { ...s.typingUsers, [channelId]: filtered } };
-    }),
   connect: () => {
     if (ws?.readyState === WebSocket.OPEN) return;
     if (ws) { ws.onclose = null; ws.close(); }
@@ -77,7 +60,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
     ws.onclose = () => {
       if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
-      const { typingUsers, clearTyping } = get();
+      const { typingUsers, clearTyping } = useTypingStore.getState();
       for (const channelId of Object.keys(typingUsers)) {
         for (const entry of typingUsers[channelId] ?? []) {
           clearTyping(channelId, entry.userId);
