@@ -1,71 +1,61 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { DiscordChannel } from "@cove/shared";
+import type { Channel } from "@cove/shared";
 
 interface ChannelRow {
   id: string;
   guild_id: string;
   name: string;
-  icon: string;
-  type: string;
-  channel_id: string;
-  description: string;
-  position_x: number;
-  position_y: number;
+  type: number;
+  topic: string | null;
+  position: number;
 }
 
-function toDiscordChannel(row: ChannelRow, position: number): DiscordChannel {
+function toChannel(row: ChannelRow): Channel {
   return {
     id: row.id,
     name: row.name,
-    type: 0,
+    type: row.type,
     guild_id: row.guild_id,
-    topic: row.description ?? "",
-    position,
-    icon: row.icon,
-    channel_type: row.type,
-    cove_position: { x: row.position_x, y: row.position_y },
+    topic: row.topic,
+    position: row.position,
   };
 }
 
 export class ChannelsRepo {
   constructor(private db: Database.Database) {}
 
-  list(guildId: string): DiscordChannel[] {
-    const rows = this.db.prepare("SELECT * FROM channels WHERE guild_id = ? ORDER BY name").all(guildId) as ChannelRow[];
-    return rows.map((r, i) => toDiscordChannel(r, i));
+  list(guildId: string): Channel[] {
+    const rows = this.db.prepare("SELECT * FROM channels WHERE guild_id = ? ORDER BY position ASC").all(guildId) as ChannelRow[];
+    return rows.map(toChannel);
   }
 
-  getById(id: string): DiscordChannel | null {
-    const row = this.db.prepare(
-      "SELECT c.*, (SELECT COUNT(*) FROM channels c2 WHERE c2.guild_id = c.guild_id AND c2.name < c.name) AS position FROM channels c WHERE c.id = ?"
-    ).get(id) as (ChannelRow & { position: number }) | undefined;
-    return row ? toDiscordChannel(row, row.position) : null;
+  getById(id: string): Channel | null {
+    const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow | undefined;
+    return row ? toChannel(row) : null;
   }
 
-  create(guildId: string, name: string, icon?: string, topic?: string): DiscordChannel {
+  create(guildId: string, name: string, topic?: string, type?: number): Channel {
     const id = randomUUID();
+    const maxPos = (this.db.prepare("SELECT MAX(position) as m FROM channels WHERE guild_id = ?").get(guildId) as { m: number | null }).m;
+    const position = (maxPos ?? -1) + 1;
 
     this.db.prepare(
-      "INSERT INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, guildId, name, icon ?? "\u{1F3DD}\u{FE0F}", "open", id, topic ?? "", 0, 0);
+      "INSERT INTO channels (id, guild_id, name, type, topic, position) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, guildId, name, type ?? 0, topic ?? null, position);
 
-    const count = (this.db.prepare("SELECT COUNT(*) as c FROM channels WHERE guild_id = ?").get(guildId) as any).c;
     const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow;
-    return toDiscordChannel(row, count - 1);
+    return toChannel(row);
   }
 
-  update(id: string, fields: { name?: string; topic?: string; icon?: string; cove_position?: { x: number; y: number } }): DiscordChannel | null {
+  update(id: string, fields: { name?: string; topic?: string; position?: number; type?: number }): Channel | null {
     const updates: string[] = [];
     const params: unknown[] = [];
 
     if (fields.name !== undefined) { updates.push("name = ?"); params.push(fields.name); }
-    if (fields.topic !== undefined) { updates.push("description = ?"); params.push(fields.topic); }
-    if (fields.icon !== undefined) { updates.push("icon = ?"); params.push(fields.icon); }
-    if (fields.cove_position !== undefined) {
-      updates.push("position_x = ?, position_y = ?");
-      params.push(fields.cove_position.x, fields.cove_position.y);
-    }
+    if (fields.topic !== undefined) { updates.push("topic = ?"); params.push(fields.topic); }
+    if (fields.position !== undefined) { updates.push("position = ?"); params.push(fields.position); }
+    if (fields.type !== undefined) { updates.push("type = ?"); params.push(fields.type); }
 
     if (updates.length > 0) {
       params.push(id);
@@ -81,7 +71,6 @@ export class ChannelsRepo {
 
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(id);
-      this.db.prepare("DELETE FROM channel_state WHERE channel_id = ?").run(id);
       this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
     })();
     return true;

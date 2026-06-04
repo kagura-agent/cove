@@ -9,7 +9,7 @@
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import { GatewayOpcode } from "@cove/shared";
-import type { GatewayPayload, DiscordMessage } from "@cove/shared";
+import type { GatewayPayload, Message } from "@cove/shared";
 import type { GatewayEvents } from "./types.js";
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
@@ -128,7 +128,7 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
       }
 
       case "MESSAGE_CREATE": {
-        this.emit("messageCreate", payload.d as DiscordMessage);
+        this.emit("messageCreate", payload.d as Message);
         break;
       }
 

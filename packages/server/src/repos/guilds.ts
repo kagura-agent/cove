@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { type DiscordGuild } from "@cove/shared";
+import { type Guild } from "@cove/shared";
 
 interface GuildRow {
   id: string;
@@ -10,7 +10,7 @@ interface GuildRow {
   updated_at: number;
 }
 
-function toGuild(row: GuildRow): DiscordGuild {
+function toGuild(row: GuildRow): Guild {
   return {
     id: row.id,
     name: row.name,
@@ -24,12 +24,12 @@ export class GuildsRepo {
 
   constructor(private db: Database.Database) {}
 
-  getById(id: string): DiscordGuild | null {
+  getById(id: string): Guild | null {
     const row = this.db.prepare("SELECT * FROM guilds WHERE id = ?").get(id) as GuildRow | undefined;
     return row ? toGuild(row) : null;
   }
 
-  listForUser(userId: string): DiscordGuild[] {
+  listForUser(userId: string): Guild[] {
     const rows = this.db.prepare(`
       SELECT g.* FROM guilds g
       JOIN guild_members gm ON gm.guild_id = g.id

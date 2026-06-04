@@ -1,4 +1,4 @@
-import type { DiscordMessage, DiscordChannel, ChannelState } from "@cove/shared";
+import type { Message, Channel } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 
 export class GatewayDispatcher {
@@ -38,11 +38,11 @@ export class GatewayDispatcher {
     return Array.from(this.userSessions.keys());
   }
 
-  messageCreate(message: DiscordMessage): void {
+  messageCreate(message: Message): void {
     this.broadcast("MESSAGE_CREATE", message);
   }
 
-  messageUpdate(message: DiscordMessage): void {
+  messageUpdate(message: Message): void {
     this.broadcast("MESSAGE_UPDATE", message);
   }
 
@@ -50,16 +50,8 @@ export class GatewayDispatcher {
     this.broadcast("MESSAGE_DELETE", { id: messageId, channel_id: channelId });
   }
 
-  channelUpdate(channel: DiscordChannel): void {
+  channelUpdate(channel: Channel): void {
     this.broadcast("CHANNEL_UPDATE", channel);
-  }
-
-  stateUpdate(state: ChannelState): void {
-    this.broadcast("STATE_UPDATE", state);
-  }
-
-  stateDelete(channelId: string, key: string): void {
-    this.broadcast("STATE_DELETE", { channel_id: channelId, key });
   }
 
   typingStart(channelId: string, user: { id: string; username: string }): void {

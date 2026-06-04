@@ -1,8 +1,8 @@
-import type { DiscordChannel, DiscordMessage, DiscordUser, CoveAgent, CoveGuildMember } from "@cove/shared";
+import type { Channel, Message, User, CoveAgent, CoveGuildMember } from "@cove/shared";
 
-export type Channel = DiscordChannel;
-export type Author = DiscordUser;
-export type Message = DiscordMessage;
+export type { Channel };
+export type Author = User;
+export type { Message };
 export type Bot = CoveAgent;
 export type GuildMember = CoveGuildMember;
 

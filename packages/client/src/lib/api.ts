@@ -36,9 +36,9 @@ export function sendMessage(channelId: string, content: string) {
 export function clearMessages(channelId: string) {
   return api<void>(`/api/v10/channels/${channelId}/messages`, { method: "DELETE" });
 }
-export function createChannel(name: string, icon: string) {
+export function createChannel(name: string, topic?: string) {
   return api<Channel>("/api/v10/guilds/cove/channels", {
-    method: "POST", body: JSON.stringify({ name, icon }),
+    method: "POST", body: JSON.stringify({ name, topic }),
   });
 }
 export function deleteChannel(channelId: string) {

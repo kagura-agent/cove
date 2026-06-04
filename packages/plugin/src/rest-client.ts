@@ -5,7 +5,7 @@
  * All requests include the Bot token in the Authorization header.
  */
 
-import type { DiscordChannel, DiscordMessage } from "@cove/shared";
+import type { Channel, Message } from "@cove/shared";
 
 export class CoveRestClient {
   private readonly baseUrl: string;
@@ -49,31 +49,31 @@ export class CoveRestClient {
   }
 
   /** GET /api/v10/guilds/:guildId/channels — list all channels. */
-  async getChannels(guildId = "cove"): Promise<DiscordChannel[]> {
+  async getChannels(guildId = "cove"): Promise<Channel[]> {
     return this.request("GET", `/api/v10/guilds/${guildId}/channels`);
   }
 
   /** GET /api/v10/channels/:id — single channel detail. */
-  async getChannel(id: string): Promise<DiscordChannel> {
+  async getChannel(id: string): Promise<Channel> {
     return this.request("GET", `/api/v10/channels/${id}`);
   }
 
   /** POST /api/v10/channels/:id/messages — send a message. */
-  async sendMessage(channelId: string, content: string): Promise<DiscordMessage> {
+  async sendMessage(channelId: string, content: string): Promise<Message> {
     return this.request("POST", `/api/v10/channels/${channelId}/messages`, {
       content,
     });
   }
 
   /** PATCH /api/v10/channels/:id/messages/:msgId — edit a message. */
-  async editMessage(channelId: string, messageId: string, content: string): Promise<DiscordMessage> {
+  async editMessage(channelId: string, messageId: string, content: string): Promise<Message> {
     return this.request("PATCH", `/api/v10/channels/${channelId}/messages/${messageId}`, {
       content,
     });
   }
 
   /** GET /api/v10/channels/:id/messages — fetch recent messages. */
-  async getMessages(channelId: string, limit = 50): Promise<DiscordMessage[]> {
+  async getMessages(channelId: string, limit = 50): Promise<Message[]> {
     return this.request("GET", `/api/v10/channels/${channelId}/messages?limit=${limit}`);
   }
 

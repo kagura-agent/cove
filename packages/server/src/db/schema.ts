@@ -37,10 +37,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("foreign_keys = ON");
 
   // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
-  // Handle case where both old (scenes) and new (channels) tables exist
-  // (can happen if a buggy deploy created empty channels before rename)
   migrateRenameTable(db, "scenes", "channels");
-  migrateRenameTable(db, "scene_state", "channel_state");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS guilds (
@@ -56,12 +53,9 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       id          TEXT PRIMARY KEY,
       guild_id    TEXT NOT NULL REFERENCES guilds(id),
       name        TEXT NOT NULL,
-      icon        TEXT,
-      type        TEXT CHECK(type IN ('open', 'indoor', 'object', 'structure')),
-      channel_id  TEXT,
-      description TEXT,
-      position_x  REAL,
-      position_y  REAL
+      type        INTEGER NOT NULL DEFAULT 0,
+      topic       TEXT,
+      position    INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -92,14 +86,6 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       timestamp        INTEGER,
       metadata         TEXT,
       edited_timestamp INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS channel_state (
-      channel_id TEXT REFERENCES channels(id),
-      key        TEXT,
-      value      TEXT,
-      updated_at INTEGER,
-      PRIMARY KEY (channel_id, key)
     );
 
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -156,7 +142,6 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
   // Migration: add guild_id to channels table
-  // Disable FK checks so ALTER TABLE DEFAULT isn't validated against guilds table
   db.pragma('foreign_keys = OFF');
   try {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${guildId}'`);
@@ -166,6 +151,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     db.pragma('foreign_keys = ON');
   }
 
+  // Migration: rebuild channels table if it has old island-specific columns
+  migrateChannelsToDiscordSchema(db, guildId);
+
+  // Migration: drop channel_state table if it exists
+  db.exec("DROP TABLE IF EXISTS channel_state");
+  db.exec("DROP TABLE IF EXISTS scene_state");
+
   // Post-create migrations: rename columns in already-renamed tables
   try {
     db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
@@ -173,31 +165,71 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
 
-  try {
-    db.exec("ALTER TABLE channel_state RENAME COLUMN scene_id TO channel_id");
-  } catch (e: unknown) {
-    if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
-  }
-
   return db;
 }
 
+/**
+ * Migrate channels table from island schema to Discord schema.
+ * Old schema had: icon, type (TEXT), channel_id, description, position_x, position_y
+ * New schema has: type (INTEGER), topic, position (INTEGER)
+ */
+function migrateChannelsToDiscordSchema(db: Database.Database, _guildId: string): void {
+  // Check if old schema exists by looking for position_x column
+  const tableInfo = db.prepare("PRAGMA table_info(channels)").all() as Array<{ name: string }>;
+  const hasPositionX = tableInfo.some(col => col.name === "position_x");
+  if (!hasPositionX) return; // Already new schema
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE channels_new (
+          id          TEXT PRIMARY KEY,
+          guild_id    TEXT NOT NULL REFERENCES guilds(id),
+          name        TEXT NOT NULL,
+          type        INTEGER NOT NULL DEFAULT 0,
+          topic       TEXT,
+          position    INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+
+      // Copy data, mapping description→topic, dropping removed columns
+      // type becomes 0 (GUILD_TEXT) for all existing channels
+      db.exec(`
+        INSERT INTO channels_new (id, guild_id, name, type, topic, position)
+        SELECT id, guild_id, name, 0, description, 0
+        FROM channels
+      `);
+
+      // Assign positions based on rowid order
+      db.exec(`
+        UPDATE channels_new SET position = (
+          SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
+        )
+      `);
+
+      db.exec("DROP TABLE channels");
+      db.exec("ALTER TABLE channels_new RENAME TO channels");
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 const SEED_CHANNELS = [
-  { id: "home", name: "Home", icon: "🏠", type: "indoor", channelId: "kagura-dm", description: "Living room — your cozy home base", x: 300, y: 300 },
-  { id: "garden", name: "Garden", icon: "🌱", type: "open", channelId: "garden", description: "Tend your plants and watch them grow", x: 200, y: 200 },
-  { id: "workshop", name: "Workshop", icon: "🔨", type: "indoor", channelId: "github-contribution", description: "Where code gets built", x: 500, y: 250 },
-  { id: "post-office", name: "Post Office", icon: "📧", type: "indoor", channelId: "kagura-mail", description: "Send and receive letters", x: 350, y: 200 },
+  { id: "general", name: "general", type: 0, topic: "General discussion", position: 0 },
+  { id: "random", name: "random", type: 0, topic: "Off-topic chat", position: 1 },
 ] as const;
 
 export function seedChannels(db: Database.Database, guildId: string): void {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO channels (id, guild_id, name, icon, type, channel_id, description, position_x, position_y)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO channels (id, guild_id, name, type, topic, position)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const tx = db.transaction(() => {
-    for (const s of SEED_CHANNELS) {
-      insert.run(s.id, guildId, s.name, s.icon, s.type, s.channelId, s.description, s.x, s.y);
+    for (const ch of SEED_CHANNELS) {
+      insert.run(ch.id, guildId, ch.name, ch.type, ch.topic, ch.position);
     }
   });
   tx();

@@ -178,10 +178,10 @@ describe("POST /api/v10/resources", () => {
 ## Type Definitions
 
 - All shared types in `packages/shared/src/types.ts`
-- Discord-compatible types: prefix-free (`DiscordUser`, `DiscordChannel`, `DiscordMessage`)
+- Discord-compatible types: prefix-free (`User`, `Channel`, `Message`)
 - Cove extensions: prefixed with `Cove` (`CoveAgent`, `CoveGuildMember`)
 - DB row interfaces: defined locally in route files (not exported)
-- Conversion functions: `toUser(row)`, `toDiscordChannel(row)` etc. in route files
+- Conversion functions: `toUser(row)`, `toChannel(row)` etc. in route files
 
 ## Naming
 
