@@ -15,6 +15,9 @@ describe("Cove API — Discord-compatible", () => {
   let defaultGuildId: string;
 
   class TestDispatcher extends GatewayDispatcher {
+    constructor() {
+      super({ getById: () => null } as any);
+    }
     override messageCreate(message: Message): void {
       broadcastEvents.push({ t: "MESSAGE_CREATE", d: message });
     }
@@ -27,7 +30,7 @@ describe("Cove API — Discord-compatible", () => {
     override channelUpdate(channel: Channel): void {
       broadcastEvents.push({ t: "CHANNEL_UPDATE", d: channel });
     }
-    override typingStart(channelId: string, user: { id: string; username: string }): void {
+    override typingStart(channelId: string, user: { id: string; username: string }, _guildId?: string): void {
       broadcastEvents.push({ t: "TYPING_START", d: { channel_id: channelId, user_id: user.id, username: user.username, timestamp: Date.now() } });
     }
   }

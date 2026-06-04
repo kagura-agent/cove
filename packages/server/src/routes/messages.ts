@@ -127,7 +127,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
-    dispatcher?.typingStart(channelId, { id: author.id, username: author.username });
+    dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id);
 
     return c.body(null, 204);
   });
