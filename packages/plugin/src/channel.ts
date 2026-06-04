@@ -13,7 +13,7 @@ import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 
-const DISPATCH_TIMEOUT_MS = 120_000;
+const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
 
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
@@ -233,6 +233,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
 
+        // Register controller synchronously BEFORE any await to prevent ordering race:
+        // two same-channel messages overlapping on await boundaries could abort the wrong one.
+        const existingDispatch = pendingDispatches.get(channelId);
+        if (existingDispatch) {
+          log?.warn?.(`cove: aborting pending dispatch for [${channelId}] (superseded by new message)`);
+          existingDispatch.abort();
+        }
+        const abortController = new AbortController();
+        pendingDispatches.set(channelId, abortController);
+
         // Fire-and-forget early typing cue via WebSocket (instant, no TLS overhead)
         gatewayClient.send({ op: 4, d: { channel_id: channelId } });
 
@@ -262,6 +272,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // full gateway config; the cove channel entry lives under
           // `channels.cove`.
           const channelEntry = cfg?.channels?.["cove"] ?? {};
+          const dispatchTimeoutMs = (channelEntry as any).dispatchTimeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
           const toolProgress = createToolProgressTracker(channelEntry, {
             seed: message.id ?? String(Date.now()),
             onProgressUpdate: () => {
@@ -437,14 +448,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // Yield event loop so WS typing frame flushes before heavy bootstrap work
           await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
-          // Cancel any existing dispatch for this channel
-          const existing = pendingDispatches.get(channelId);
-          if (existing) {
-            log?.warn?.(`cove: new message in [${channelId}] — aborting previous pending dispatch`);
-            existing.abort();
-          }
-          const abortController = new AbortController();
-          pendingDispatches.set(channelId, abortController);
+          // Controller already registered synchronously in the prologue above.
+          // isCurrent() uses the controller registered at message entry.
 
           try {
             await createAbortableDispatch(
@@ -482,13 +487,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
             },
           }),
-              DISPATCH_TIMEOUT_MS,
+              dispatchTimeoutMs,
               abortController.signal,
             );
           } catch (err: any) {
             if (err instanceof DispatchTimeoutError) {
               typingCallbacks.onCleanup?.();
-              log?.warn?.(`cove: dispatch timed out after ${DISPATCH_TIMEOUT_MS}ms in [${channelId}]`);
+              log?.warn?.(`cove: dispatch timed out after ${dispatchTimeoutMs}ms in [${channelId}]`);
             } else if (err instanceof DispatchAbortedError) {
               typingCallbacks.onCleanup?.();
               log?.info?.(`cove: dispatch aborted in [${channelId}]`);
@@ -516,6 +521,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       ctx.abortSignal.addEventListener("abort", () => {
+        // Abort all pending dispatches on plugin shutdown
+        for (const c of pendingDispatches.values()) c.abort();
+        pendingDispatches.clear();
         gatewayClient.destroy();
       });
 
