@@ -57,6 +57,7 @@ export function createAbortableDispatch(
 
     if (signal.aborted) {
       clearTimeout(timer);
+      dispatch.catch(() => {}); // Prevent unhandled rejection from orphaned dispatch
       reject(new DispatchAbortedError());
       return;
     }
@@ -280,8 +281,11 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           const gen = (channelGeneration.get(channelId) ?? 0) + 1;
           channelGeneration.set(channelId, gen);
 
+          /** Returns true if this dispatch is still the current one for this channel. */
+          const isCurrent = () => channelGeneration.get(channelId) === gen;
+
           const sendOrEdit = async (text: string): Promise<boolean> => {
-            if (channelGeneration.get(channelId) !== gen) return false;
+            if (!isCurrent()) return false;
             return new Promise<boolean>((resolve) => {
               editQueue = editQueue.then(async () => {
                 if (draftState.stopped && !draftState.final) { resolve(false); return; }
@@ -344,7 +348,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       ...params.dispatcherOptions,
                       typingCallbacks,
                       deliver: async (payload: any, _info: { kind: string }) => {
-                        if (channelGeneration.get(channelId) !== gen) return;
+                        if (!isCurrent()) return;
                         typingCallbacks.onCleanup?.();
                         const text = payload.text ?? "";
                         if (!text) return;
@@ -378,13 +382,14 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       disableBlockStreaming: true,
                       suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {
-                        if (channelGeneration.get(channelId) !== gen) return;
+                        if (!isCurrent()) return;
                         if (payload?.text) {
                           toolProgress.onPartialReply(payload.text);
                           draft.update(payload.text);
                         }
                       },
                       onToolStart: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onToolStart({
                           name: payload?.name ?? payload?.toolName,
                           args: payload?.args,
@@ -393,29 +398,37 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         });
                       },
                       onItemEvent: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onItemEvent(payload);
                       },
                       onPlanUpdate: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onPlanUpdate(payload);
                       },
                       onApprovalEvent: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onApprovalEvent(payload);
                       },
                       onCommandOutput: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onCommandOutput(payload);
                       },
                       onPatchSummary: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onPatchSummary(payload);
                       },
                       onCompactionStart: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onCompactionStart();
                         const combined = toolProgress.getCombinedText();
                         if (combined) draft.update(combined);
                       },
                       onCompactionEnd: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onCompactionEnd();
                       },
                       onAssistantMessageStart: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onAssistantMessageStart();
                       },
                     },
@@ -491,6 +504,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             // Only remove if this is still our controller (not replaced by a newer dispatch)
             if (pendingDispatches.get(channelId) === abortController) {
               pendingDispatches.delete(channelId);
+              channelGeneration.delete(channelId);
             }
           }
         } catch (err: any) {
