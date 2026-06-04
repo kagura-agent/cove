@@ -281,6 +281,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             if (!isCurrent()) return false;
             return new Promise<boolean>((resolve) => {
               editQueue = editQueue.then(async () => {
+                if (!isCurrent()) { resolve(false); return; }
                 if (draftState.stopped && !draftState.final) { resolve(false); return; }
                 const trimmed = text.trimEnd();
                 if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
@@ -348,6 +349,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
                         draftState.final = true;
                         await draft.seal();
+
+                        // Re-check after async seal — dispatch may have been superseded
+                        if (!isCurrent()) return;
 
                         // If streaming was stopped due to an earlier API error,
                         // the draftMessageId may be stale or absent. Fall back
