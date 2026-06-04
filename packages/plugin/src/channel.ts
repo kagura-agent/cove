@@ -31,8 +31,8 @@ export class DispatchAbortedError extends Error {
  *
  * Note: this is release-only, not cancellation — the underlying dispatch
  * continues running but side effects (message delivery, streaming edits,
- * typing indicators) are guarded by per-channel generation tokens so stale
- * dispatches cannot send messages.
+ * typing indicators) are guarded by per-channel AbortController reference
+ * equality so stale dispatches cannot send messages.
  */
 export function createAbortableDispatch(
   dispatch: Promise<unknown>,
@@ -202,14 +202,10 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       /** Track in-flight dispatches per channel so we can cancel on reconnect or duplicate. */
       const pendingDispatches = new Map<string, AbortController>();
-      /** Per-channel generation counter — incremented on each new dispatch so stale callbacks become no-ops. */
-      const channelGeneration = new Map<string, number>();
 
       gatewayClient.on("reconnect", () => {
         log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
-        for (const [channelId, controller] of pendingDispatches) {
-          // Invalidate stale dispatch generation so lingering side-effects become no-ops
-          channelGeneration.set(channelId, (channelGeneration.get(channelId) ?? 0) + 1);
+        for (const controller of pendingDispatches.values()) {
           controller.abort();
         }
         pendingDispatches.clear();
@@ -278,11 +274,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
           let editQueue = Promise.resolve();
 
-          const gen = (channelGeneration.get(channelId) ?? 0) + 1;
-          channelGeneration.set(channelId, gen);
-
           /** Returns true if this dispatch is still the current one for this channel. */
-          const isCurrent = () => channelGeneration.get(channelId) === gen;
+          const isCurrent = () => pendingDispatches.get(channelId) === abortController;
 
           const sendOrEdit = async (text: string): Promise<boolean> => {
             if (!isCurrent()) return false;
@@ -490,8 +483,6 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             );
           } catch (err: any) {
             if (err instanceof DispatchTimeoutError) {
-              // Invalidate generation so lingering dispatch side-effects become no-ops
-              channelGeneration.set(channelId, (channelGeneration.get(channelId) ?? 0) + 1);
               typingCallbacks.onCleanup?.();
               log?.warn?.(`cove: dispatch timed out after ${DISPATCH_TIMEOUT_MS}ms in [${channelId}]`);
             } else if (err instanceof DispatchAbortedError) {
@@ -504,7 +495,6 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             // Only remove if this is still our controller (not replaced by a newer dispatch)
             if (pendingDispatches.get(channelId) === abortController) {
               pendingDispatches.delete(channelId);
-              channelGeneration.delete(channelId);
             }
           }
         } catch (err: any) {
