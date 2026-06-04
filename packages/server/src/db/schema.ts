@@ -12,6 +12,9 @@ const migrations: Record<number, MigrationFn> = {
 function runMigrations(db: Database.Database): void {
   const currentVersion = db.pragma("user_version", { simple: true }) as number;
 
+  if (currentVersion > LATEST_VERSION) {
+    throw new Error(`Database version ${currentVersion} is newer than supported version ${LATEST_VERSION}. Update the application.`);
+  }
   if (currentVersion >= LATEST_VERSION) return;
 
   for (let v = currentVersion + 1; v <= LATEST_VERSION; v++) {
@@ -153,36 +156,33 @@ function migrateChannelsToDiscordSchema(db: Database.Database, guildId: string):
   const hasPositionX = tableInfo.some(col => col.name === "position_x");
   if (!hasPositionX) return;
 
-  db.pragma('foreign_keys = OFF');
-  try {
-    db.exec(`
-      CREATE TABLE channels_new (
-        id          TEXT PRIMARY KEY,
-        guild_id    TEXT NOT NULL REFERENCES guilds(id),
-        name        TEXT NOT NULL,
-        type        INTEGER NOT NULL DEFAULT 0,
-        topic       TEXT,
-        position    INTEGER NOT NULL DEFAULT 0
-      )
-    `);
+  // FK is disabled at the initDb() level before runMigrations();
+  // do NOT toggle foreign_keys here (it's a no-op inside transactions).
+  db.exec(`
+    CREATE TABLE channels_new (
+      id          TEXT PRIMARY KEY,
+      guild_id    TEXT NOT NULL REFERENCES guilds(id),
+      name        TEXT NOT NULL,
+      type        INTEGER NOT NULL DEFAULT 0,
+      topic       TEXT,
+      position    INTEGER NOT NULL DEFAULT 0
+    )
+  `);
 
-    db.exec(`
-      INSERT INTO channels_new (id, guild_id, name, type, topic, position)
-      SELECT id, guild_id, name, 0, description, 0
-      FROM channels
-    `);
+  db.exec(`
+    INSERT INTO channels_new (id, guild_id, name, type, topic, position)
+    SELECT id, guild_id, name, 0, description, 0
+    FROM channels
+  `);
 
-    db.exec(`
-      UPDATE channels_new SET position = (
-        SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
-      )
-    `);
+  db.exec(`
+    UPDATE channels_new SET position = (
+      SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
+    )
+  `);
 
-    db.exec("DROP TABLE channels");
-    db.exec("ALTER TABLE channels_new RENAME TO channels");
-  } finally {
-    db.pragma('foreign_keys = ON');
-  }
+  db.exec("DROP TABLE channels");
+  db.exec("ALTER TABLE channels_new RENAME TO channels");
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
@@ -218,14 +218,11 @@ function migrateLegacyToV1(db: Database.Database): void {
   addColumnIfMissing(db, "users", "token", "TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
-  // Add guild_id to channels
-  db.pragma('foreign_keys = OFF');
+  // Add guild_id to channels (FK is OFF at initDb level)
   try {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${guildId}'`);
   } catch (e: unknown) {
     if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
-  } finally {
-    db.pragma('foreign_keys = ON');
   }
 
   // Migrate island-style channels to discord schema
@@ -247,9 +244,12 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   const db = new Database(dbPath);
 
   db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
 
+  // FK must be OFF during migrations — SQLite silently ignores
+  // PRAGMA foreign_keys changes inside transactions.
+  db.pragma("foreign_keys = OFF");
   runMigrations(db);
+  db.pragma("foreign_keys = ON");
 
   // Seed default guild if none exists
   const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
