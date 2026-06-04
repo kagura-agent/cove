@@ -40,7 +40,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }
@@ -71,6 +71,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder="Say something…"
+        aria-label="Message"
         maxLength={2000}
         autoComplete="off"
         rows={1}
