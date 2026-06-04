@@ -152,8 +152,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
   // Migration: add guild_id to channels table
-  // Disable FK checks so the DEFAULT value isn't validated against guilds table
-  // (the seed INSERT may not have run yet for old DBs)
+  // Disable FK checks so ALTER TABLE DEFAULT isn't validated against guilds table
   db.pragma('foreign_keys = OFF');
   try {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${DEFAULT_GUILD_ID}'`);

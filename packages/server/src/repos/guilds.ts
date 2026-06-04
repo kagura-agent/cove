@@ -20,6 +20,8 @@ function toGuild(row: GuildRow): DiscordGuild {
 }
 
 export class GuildsRepo {
+  private cachedDefaultId: string | null = null;
+
   constructor(private db: Database.Database) {}
 
   getById(id: string): DiscordGuild | null {
@@ -42,10 +44,12 @@ export class GuildsRepo {
   }
 
   getDefaultId(): string {
+    if (this.cachedDefaultId) return this.cachedDefaultId;
     const row = this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(DEFAULT_GUILD_ID) as { id: string } | undefined;
     if (!row) {
       throw new Error(`Default guild '${DEFAULT_GUILD_ID}' not found in database. Run migrations first.`);
     }
+    this.cachedDefaultId = row.id;
     return row.id;
   }
 }

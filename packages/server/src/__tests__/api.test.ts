@@ -877,6 +877,63 @@ describe("Cove API — Discord-compatible", () => {
       });
       expect(res.status).toBe(404);
     });
+
+    it("non-member cannot add guild member", async () => {
+      const res = await app.request("/api/v10/guilds/cove/members/someuser", {
+        method: "PUT",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot remove guild member", async () => {
+      const res = await app.request("/api/v10/guilds/cove/members/someuser", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot get single message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/msg123", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot edit message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/msg123", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
+        body: JSON.stringify({ content: "hacked" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot delete message", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages/msg123", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot put channel state", async () => {
+      const res = await app.request("/api/v10/channels/garden/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
+        body: JSON.stringify({ key: "k", value: "v" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot delete channel state key", async () => {
+      const res = await app.request("/api/v10/channels/garden/state/somekey", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
   });
 
   // ─── Gateway discovery ────────────────────────────────────────────────
