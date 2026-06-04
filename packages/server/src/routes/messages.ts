@@ -8,7 +8,7 @@ import { requireGuildMember } from "./helpers.js";
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
-  app.get("/api/v10/channels/:id/messages", (c) => {
+  app.get("/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, channelId, userId);
@@ -26,7 +26,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(messages);
   });
 
-  app.get("/api/v10/channels/:id/messages/:msgId", (c) => {
+  app.get("/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const userId = c.get("botUser").id;
@@ -42,7 +42,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(message);
   });
 
-  app.post("/api/v10/channels/:id/messages", async (c) => {
+  app.post("/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, channelId, userId);
@@ -65,7 +65,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(message, 201);
   });
 
-  app.patch("/api/v10/channels/:id/messages/:msgId", async (c) => {
+  app.patch("/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const userId = c.get("botUser").id;
@@ -90,7 +90,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(updated);
   });
 
-  app.delete("/api/v10/channels/:id/messages/:msgId", (c) => {
+  app.delete("/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const userId = c.get("botUser").id;
@@ -108,7 +108,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
-  app.delete("/api/v10/channels/:id/messages", (c) => {
+  app.delete("/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
@@ -119,7 +119,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json({ deleted });
   });
 
-  app.post("/api/v10/channels/:id/typing", (c) => {
+  app.post("/channels/:id/typing", (c) => {
     const channelId = c.req.param("id");
     const author = c.get("botUser");
     const ch = requireGuildMember(repos, channelId, author.id);

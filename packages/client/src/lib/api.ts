@@ -1,4 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
+import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
@@ -23,40 +24,40 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export function fetchChannels() {
-  return api<Channel[]>("/api/v10/guilds/cove/channels");
+  return api<Channel[]>(`${API_PREFIX}/guilds/cove/channels`);
 }
 export function fetchMessages(channelId: string) {
-  return api<Message[]>(`/api/v10/channels/${channelId}/messages?limit=50`);
+  return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?limit=50`);
 }
 export function sendMessage(channelId: string, content: string) {
-  return api<Message>(`/api/v10/channels/${channelId}/messages`, {
+  return api<Message>(`${API_PREFIX}/channels/${channelId}/messages`, {
     method: "POST", body: JSON.stringify({ content }),
   });
 }
 export function clearMessages(channelId: string) {
-  return api<void>(`/api/v10/channels/${channelId}/messages`, { method: "DELETE" });
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }
 export function createChannel(name: string, topic?: string) {
-  return api<Channel>("/api/v10/guilds/cove/channels", {
+  return api<Channel>(`${API_PREFIX}/guilds/cove/channels`, {
     method: "POST", body: JSON.stringify({ name, topic }),
   });
 }
 export function deleteChannel(channelId: string) {
-  return api<void>(`/api/v10/channels/${channelId}`, { method: "DELETE" });
+  return api<void>(`${API_PREFIX}/channels/${channelId}`, { method: "DELETE" });
 }
 export function fetchMembers() {
-  return api<GuildMember[]>("/api/v10/guilds/cove/members");
+  return api<GuildMember[]>(`${API_PREFIX}/guilds/cove/members`);
 }
 export function createBot(username: string, bio: string) {
-  return api<BotCreateResponse>("/api/v10/users", {
+  return api<BotCreateResponse>(`${API_PREFIX}/users`, {
     method: "POST", body: JSON.stringify({ username, bio }),
   });
 }
 export function deleteBot(id: string) {
-  return api<void>(`/api/v10/users/${id}`, { method: "DELETE" });
+  return api<void>(`${API_PREFIX}/users/${id}`, { method: "DELETE" });
 }
 export function sendTyping(channelId: string) {
-  return api<void>(`/api/v10/channels/${channelId}/typing`, { method: "POST" });
+  return api<void>(`${API_PREFIX}/channels/${channelId}/typing`, { method: "POST" });
 }
 export function fetchMe() {
   return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");

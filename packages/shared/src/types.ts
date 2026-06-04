@@ -5,6 +5,10 @@
  * by any client that speaks the Discord REST/Gateway protocol.
  */
 
+/** The versioned API prefix used by all Cove REST endpoints. */
+export const API_VERSION = 'v10';
+export const API_PREFIX = '/api/v10';
+
 // ─── Discord-compatible types ───────────────────────────────────────────────
 
 /** User object (Discord-compatible). */

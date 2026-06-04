@@ -7,7 +7,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
 
-  app.post("/api/v10/users", auth, async (c) => {
+  app.post("/users", auth, async (c) => {
     const body = await parseJsonBody<{
       id?: string;
       username: string;
@@ -31,7 +31,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(user, 201);
   });
 
-  app.post("/api/v10/users/:id/token", auth, (c) => {
+  app.post("/users/:id/token", auth, (c) => {
     const id = c.req.param("id");
     const token = repos.users.regenerateToken(id!);
     if (!token) {
@@ -40,7 +40,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json({ token });
   });
 
-  app.get("/api/v10/users/:id", (c, next) => {
+  app.get("/users/:id", (c, next) => {
     const id = c.req.param("id");
     if (id === "@me") return next();
     const user = repos.users.getById(id);
@@ -50,7 +50,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(user);
   });
 
-  app.patch("/api/v10/users/:id", auth, async (c) => {
+  app.patch("/users/:id", auth, async (c) => {
     const id = c.req.param("id");
     if (!repos.users.exists(id!)) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
@@ -70,7 +70,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(updated);
   });
 
-  app.delete("/api/v10/users/:id", auth, (c) => {
+  app.delete("/users/:id", auth, (c) => {
     const id = c.req.param("id");
     if (!repos.users.delete(id!)) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
@@ -80,7 +80,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
 
   // ─── Guild Members ─────────────────────────────────────────
 
-  app.get("/api/v10/guilds/:guildId/members", auth, (c) => {
+  app.get("/guilds/:guildId/members", auth, (c) => {
     const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
@@ -92,7 +92,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(repos.members.list(guildId));
   });
 
-  app.put("/api/v10/guilds/:guildId/members/:userId", auth, async (c) => {
+  app.put("/guilds/:guildId/members/:userId", auth, async (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 
@@ -119,7 +119,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(member, 201);
   });
 
-  app.delete("/api/v10/guilds/:guildId/members/:userId", auth, (c) => {
+  app.delete("/guilds/:guildId/members/:userId", auth, (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 

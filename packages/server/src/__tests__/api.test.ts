@@ -4,6 +4,7 @@ import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
 import type { Channel, Message, CoveAgent, CoveGuildMember } from "@cove/shared";
+import { API_PREFIX } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Cove API — Discord-compatible", () => {
@@ -56,7 +57,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // Helper to create a bot user and get its token
   async function createBotUser(id: string, username: string, extra?: Record<string, unknown>) {
-    const res = await app.request("/api/v10/users", {
+    const res = await app.request(`${API_PREFIX}/users`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ id, username, ...extra }),
@@ -66,16 +67,16 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channels ───────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/guilds/:guildId/channels", () => {
+  describe("GET ${API_PREFIX}/guilds/:guildId/channels", () => {
     it("returns all seeded channels in Discord format", async () => {
-      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
+      const res = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/channels`);
       expect(res.status).toBe(200);
       const channels: Channel[] = await res.json();
       expect(channels).toHaveLength(2);
     });
 
     it("each channel has Discord-required fields", async () => {
-      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
+      const res = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/channels`);
       const channels: Channel[] = await res.json();
       for (const ch of channels) {
         expect(ch.id).toBeTruthy();
@@ -87,7 +88,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("channels are ordered by position", async () => {
-      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
+      const res = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/channels`);
       const channels: Channel[] = await res.json();
       expect(channels[0].name).toBe("general");
       expect(channels[0].position).toBe(0);
@@ -96,14 +97,14 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for unknown guild", async () => {
-      const res = await authGet("/api/v10/guilds/unknown/channels");
+      const res = await authGet(`${API_PREFIX}/guilds/unknown/channels`);
       expect(res.status).toBe(404);
     });
   });
 
-  describe("GET /api/v10/channels/:id", () => {
+  describe("GET ${API_PREFIX}/channels/:id", () => {
     it("returns a specific channel in Discord format", async () => {
-      const res = await authGet("/api/v10/channels/general");
+      const res = await authGet(`${API_PREFIX}/channels/general`);
       expect(res.status).toBe(200);
       const ch: Channel = await res.json();
       expect(ch.id).toBe("general");
@@ -114,31 +115,31 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for unknown channel", async () => {
-      const res = await authGet("/api/v10/channels/nonexistent");
+      const res = await authGet(`${API_PREFIX}/channels/nonexistent`);
       expect(res.status).toBe(404);
     });
   });
 
   // ─── Messages ───────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/channels/:id/messages", () => {
+  describe("GET ${API_PREFIX}/channels/:id/messages", () => {
     it("returns empty array for channel with no messages", async () => {
-      const res = await authGet("/api/v10/channels/general/messages");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages`);
       expect(res.status).toBe(200);
       const messages: Message[] = await res.json();
       expect(messages).toEqual([]);
     });
 
     it("returns 404 for unknown channel", async () => {
-      const res = await authGet("/api/v10/channels/nonexistent/messages");
+      const res = await authGet(`${API_PREFIX}/channels/nonexistent/messages`);
       expect(res.status).toBe(404);
     });
   });
 
-  describe("POST /api/v10/channels/:id/messages", () => {
+  describe("POST ${API_PREFIX}/channels/:id/messages", () => {
     it("creates a message and returns Discord format", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -160,7 +161,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 401 when no auth header", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "Hello" }),
@@ -170,7 +171,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("message appears in channel messages list", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      await app.request("/api/v10/channels/general/messages", {
+      await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -179,7 +180,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ content: "Test message" }),
       });
 
-      const res = await authGet("/api/v10/channels/general/messages");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages`);
       const messages: Message[] = await res.json();
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toBe("Test message");
@@ -188,7 +189,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("broadcasts MESSAGE_CREATE event", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      await app.request("/api/v10/channels/general/messages", {
+      await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -204,7 +205,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for unknown channel", async () => {
-      const res = await app.request("/api/v10/channels/nonexistent/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/nonexistent/messages`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ content: "hello" }),
@@ -215,17 +216,17 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Single message ─────────────────────────────────────────────────────
 
-  describe("GET /api/v10/channels/:id/messages/:msgId", () => {
+  describe("GET ${API_PREFIX}/channels/:id/messages/:msgId", () => {
     it("returns a single message by ID", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      const createRes = await app.request("/api/v10/channels/general/messages", {
+      const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "find me" }),
       });
       const created: Message = await createRes.json();
 
-      const res = await authGet(`/api/v10/channels/general/messages/${created.id}`);
+      const res = await authGet(`${API_PREFIX}/channels/general/messages/${created.id}`);
       expect(res.status).toBe(200);
       const msg: Message = await res.json();
       expect(msg.id).toBe(created.id);
@@ -234,17 +235,17 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for nonexistent message", async () => {
-      const res = await authGet("/api/v10/channels/general/messages/nonexistent");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages/nonexistent`);
       expect(res.status).toBe(404);
     });
   });
 
   // ─── Delete single message ──────────────────────────────────────────────
 
-  describe("DELETE /api/v10/channels/:id/messages/:msgId", () => {
+  describe("DELETE ${API_PREFIX}/channels/:id/messages/:msgId", () => {
     it("deletes a message and returns 204", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      const createRes = await app.request("/api/v10/channels/general/messages", {
+      const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "delete me" }),
@@ -252,7 +253,7 @@ describe("Cove API — Discord-compatible", () => {
       const created: Message = await createRes.json();
       broadcastEvents.length = 0;
 
-      const delRes = await app.request(`/api/v10/channels/general/messages/${created.id}`, {
+      const delRes = await app.request(`${API_PREFIX}/channels/general/messages/${created.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
@@ -266,12 +267,12 @@ describe("Cove API — Discord-compatible", () => {
       expect(event.d.channel_id).toBe("general");
 
       // Verify message is gone
-      const getRes = await authGet(`/api/v10/channels/general/messages/${created.id}`);
+      const getRes = await authGet(`${API_PREFIX}/channels/general/messages/${created.id}`);
       expect(getRes.status).toBe(404);
     });
 
     it("returns 404 for nonexistent message", async () => {
-      const res = await app.request("/api/v10/channels/general/messages/nonexistent", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/nonexistent`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
@@ -281,10 +282,10 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Edit message ───────────────────────────────────────────────────────
 
-  describe("PATCH /api/v10/channels/:id/messages/:msgId", () => {
+  describe("PATCH ${API_PREFIX}/channels/:id/messages/:msgId", () => {
     it("edits a message and returns updated content with edited_timestamp", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      const createRes = await app.request("/api/v10/channels/general/messages", {
+      const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "original" }),
@@ -293,7 +294,7 @@ describe("Cove API — Discord-compatible", () => {
       expect(created.edited_timestamp).toBeNull();
       broadcastEvents.length = 0;
 
-      const patchRes = await app.request(`/api/v10/channels/general/messages/${created.id}`, {
+      const patchRes = await app.request(`${API_PREFIX}/channels/general/messages/${created.id}`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ content: "edited" }),
@@ -312,7 +313,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for nonexistent message", async () => {
-      const res = await app.request("/api/v10/channels/general/messages/nonexistent", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/nonexistent`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ content: "nope" }),
@@ -323,11 +324,11 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Typing indicator ──────────────────────────────────────────────────
 
-  describe("POST /api/v10/channels/:id/typing", () => {
+  describe("POST ${API_PREFIX}/channels/:id/typing", () => {
     it("returns 204 and broadcasts TYPING_START", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       broadcastEvents.length = 0;
-      const res = await app.request("/api/v10/channels/general/typing", {
+      const res = await app.request(`${API_PREFIX}/channels/general/typing`, {
         method: "POST",
         headers: { Authorization: `Bot ${bot.token}` },
       });
@@ -344,7 +345,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Pagination ────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/channels/:id/messages — pagination", () => {
+  describe("GET ${API_PREFIX}/channels/:id/messages — pagination", () => {
     let messageIds: string[];
 
     beforeEach(() => {
@@ -361,7 +362,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("before returns messages older than reference", async () => {
-      const res = await authGet("/api/v10/channels/general/messages?before=msg-3");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages?before=msg-3`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
@@ -372,7 +373,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("after returns messages newer than reference", async () => {
-      const res = await authGet("/api/v10/channels/general/messages?after=msg-1");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages?after=msg-1`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
@@ -383,7 +384,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("around returns messages around reference", async () => {
-      const res = await authGet("/api/v10/channels/general/messages?around=msg-2&limit=4");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages?around=msg-2&limit=4`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs.length).toBeGreaterThanOrEqual(3);
@@ -392,7 +393,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns empty array for unknown reference message", async () => {
-      const res = await authGet("/api/v10/channels/general/messages?before=nonexistent");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages?before=nonexistent`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toEqual([]);
@@ -401,9 +402,9 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel PATCH ──────────────────────────────────────────────────
 
-  describe("PATCH /api/v10/channels/:id", () => {
+  describe("PATCH ${API_PREFIX}/channels/:id", () => {
     it("updates channel name and topic", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ name: "announcements", topic: "Important updates" }),
@@ -416,7 +417,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("updates position", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ position: 5 }),
@@ -427,7 +428,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("updates type", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ type: 2 }),
@@ -439,7 +440,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("broadcasts CHANNEL_UPDATE event", async () => {
       broadcastEvents.length = 0;
-      await app.request("/api/v10/channels/general", {
+      await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ topic: "updated" }),
@@ -452,7 +453,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns current state for empty body", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -463,7 +464,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 404 for unknown channel", async () => {
-      const res = await app.request("/api/v10/channels/nonexistent", {
+      const res = await app.request(`${API_PREFIX}/channels/nonexistent`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ name: "nope" }),
@@ -474,9 +475,9 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel CREATE ─────────────────────────────────────────────────
 
-  describe("POST /api/v10/guilds/:guildId/channels", () => {
+  describe("POST ${API_PREFIX}/guilds/:guildId/channels", () => {
     it("creates a channel with auto-incremented position", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ name: "new-channel", topic: "A new channel" }),
@@ -492,9 +493,9 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel DELETE ─────────────────────────────────────────────────
 
-  describe("DELETE /api/v10/channels/:id", () => {
+  describe("DELETE ${API_PREFIX}/channels/:id", () => {
     it("deletes a channel", async () => {
-      const res = await app.request("/api/v10/channels/random", {
+      const res = await app.request(`${API_PREFIX}/channels/random`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
@@ -503,12 +504,12 @@ describe("Cove API — Discord-compatible", () => {
       expect(data.deleted).toBe(true);
 
       // Verify it's gone
-      const getRes = await authGet("/api/v10/channels/random");
+      const getRes = await authGet(`${API_PREFIX}/channels/random`);
       expect(getRes.status).toBe(404);
     });
 
     it("returns 404 for unknown channel", async () => {
-      const res = await app.request("/api/v10/channels/nonexistent", {
+      const res = await app.request(`${API_PREFIX}/channels/nonexistent`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
@@ -520,7 +521,7 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("User CRUD (Discord-compatible)", () => {
     it("POST /users creates a bot user and returns token", async () => {
-      const res = await app.request("/api/v10/users", {
+      const res = await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -541,7 +542,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST auto-generates ID from username", async () => {
-      const res = await app.request("/api/v10/users", {
+      const res = await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ username: "Test Bot" }),
@@ -552,12 +553,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST returns 409 for duplicate ID", async () => {
-      await app.request("/api/v10/users", {
+      await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ id: "dup", username: "First" }),
       });
-      const res = await app.request("/api/v10/users", {
+      const res = await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ id: "dup", username: "Second" }),
@@ -566,7 +567,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST returns 401 without auth", async () => {
-      const res = await app.request("/api/v10/users", {
+      const res = await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: "noauth", username: "NoAuth" }),
@@ -577,7 +578,7 @@ describe("Cove API — Discord-compatible", () => {
     it("GET /users/:id returns a user", async () => {
       await createBotUser("solo", "Solo");
 
-      const res = await authGet("/api/v10/users/solo");
+      const res = await authGet(`${API_PREFIX}/users/solo`);
       expect(res.status).toBe(200);
       const user: CoveAgent = await res.json();
       expect(user.id).toBe("solo");
@@ -585,14 +586,14 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("GET /users/:id returns 404 for unknown", async () => {
-      const res = await authGet("/api/v10/users/nonexistent");
+      const res = await authGet(`${API_PREFIX}/users/nonexistent`);
       expect(res.status).toBe(404);
     });
 
     it("PATCH updates user fields", async () => {
       await createBotUser("patchme", "Original");
 
-      const res = await app.request("/api/v10/users/patchme", {
+      const res = await app.request(`${API_PREFIX}/users/patchme`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ username: "Updated", bio: "New bio" }),
@@ -606,19 +607,19 @@ describe("Cove API — Discord-compatible", () => {
     it("DELETE removes a user", async () => {
       await createBotUser("deleteme", "Delete");
 
-      const res = await app.request("/api/v10/users/deleteme", {
+      const res = await app.request(`${API_PREFIX}/users/deleteme`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
       expect(res.status).toBe(204);
 
-      const getRes = await authGet("/api/v10/users/deleteme");
+      const getRes = await authGet(`${API_PREFIX}/users/deleteme`);
       expect(getRes.status).toBe(404);
     });
 
     it("DELETE returns 401 without auth", async () => {
       await createBotUser("protecteduser", "Protected");
-      const res = await app.request("/api/v10/users/protecteduser", { method: "DELETE" });
+      const res = await app.request(`${API_PREFIX}/users/protecteduser`, { method: "DELETE" });
       expect(res.status).toBe(401);
     });
   });
@@ -627,12 +628,12 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("Guild Members (Discord-compatible)", () => {
     beforeEach(async () => {
-      await app.request("/api/v10/users", {
+      await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ id: "bot-a", username: "Bot A" }),
       });
-      await app.request("/api/v10/users", {
+      await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ id: "bot-b", username: "Bot B" }),
@@ -640,7 +641,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PUT returns existing member for auto-joined bot", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -654,7 +655,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PUT with nick and roles on auto-joined member", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({ nick: "Gardener Bot", roles: ["gardener"] }),
@@ -665,12 +666,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PUT returns existing member for duplicate", async () => {
-      await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
+      await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
       });
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -679,34 +680,34 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("GET lists guild members (auto-joined on creation)", async () => {
-      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
+      const res = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/members`);
       expect(res.status).toBe(200);
       const members: CoveGuildMember[] = await res.json();
       expect(members).toHaveLength(3);
     });
 
     it("GET returns 404 for unknown guild", async () => {
-      const res = await authGet("/api/v10/guilds/unknown/members");
+      const res = await authGet(`${API_PREFIX}/guilds/unknown/members`);
       expect(res.status).toBe(404);
     });
 
     it("DELETE removes member from guild", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, { method: "DELETE", headers: { Authorization: `Bot ${adminToken}` } });
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, { method: "DELETE", headers: { Authorization: `Bot ${adminToken}` } });
       expect(res.status).toBe(204);
 
-      const listRes = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
+      const listRes = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/members`);
       const members: CoveGuildMember[] = await listRes.json();
       expect(members).toHaveLength(2);
       expect(members.find((m) => m.user.id === "bot-a")).toBeUndefined();
     });
 
     it("deleting user cascades to guild membership", async () => {
-      await app.request("/api/v10/users/bot-a", {
+      await app.request(`${API_PREFIX}/users/bot-a`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${adminToken}` },
       });
 
-      const listRes = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
+      const listRes = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/members`);
       const members: CoveGuildMember[] = await listRes.json();
       expect(members).toHaveLength(2);
       expect(members.find((m) => m.user.id === "bot-a")).toBeUndefined();
@@ -726,35 +727,35 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member GET /guilds/cove/channels returns 404", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member GET /guilds/cove/members returns 404", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member cannot access direct channel route", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member cannot read channel messages", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member cannot post message to channel", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
         body: JSON.stringify({ content: "sneaky message" }),
@@ -763,7 +764,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot update channel", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
         body: JSON.stringify({ name: "hacked" }),
@@ -772,7 +773,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot delete channel", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -780,7 +781,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot trigger typing", async () => {
-      const res = await app.request("/api/v10/channels/general/typing", {
+      const res = await app.request(`${API_PREFIX}/channels/general/typing`, {
         method: "POST",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -788,7 +789,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot add guild member", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/someuser`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/someuser`, {
         method: "PUT",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -796,7 +797,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot remove guild member", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/someuser`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/someuser`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -804,14 +805,14 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot get single message", async () => {
-      const res = await app.request("/api/v10/channels/general/messages/msg123", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/msg123`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member cannot edit message", async () => {
-      const res = await app.request("/api/v10/channels/general/messages/msg123", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/msg123`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
         body: JSON.stringify({ content: "hacked" }),
@@ -820,7 +821,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot delete message", async () => {
-      const res = await app.request("/api/v10/channels/general/messages/msg123", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/msg123`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -830,9 +831,9 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Gateway discovery ────────────────────────────────────────────────
 
-  describe("GET /api/v10/gateway", () => {
+  describe("GET ${API_PREFIX}/gateway", () => {
     it("returns WebSocket URL", async () => {
-      const res = await authGet("/api/v10/gateway");
+      const res = await authGet(`${API_PREFIX}/gateway`);
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.url).toBe("ws://localhost:3000/gateway");
@@ -841,9 +842,9 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Guilds ───────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/users/@me/guilds", () => {
+  describe("GET ${API_PREFIX}/users/@me/guilds", () => {
     it("returns guilds for authenticated user", async () => {
-      const res = await authGet("/api/v10/users/@me/guilds");
+      const res = await authGet(`${API_PREFIX}/users/@me/guilds`);
       expect(res.status).toBe(200);
       const guilds = await res.json();
       expect(guilds).toHaveLength(1);
@@ -854,17 +855,17 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 401 when no auth", async () => {
-      const res = await app.request("/api/v10/users/@me/guilds");
+      const res = await app.request(`${API_PREFIX}/users/@me/guilds`);
       expect(res.status).toBe(401);
     });
   });
 
   // ─── Users ────────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/users/@me", () => {
+  describe("GET ${API_PREFIX}/users/@me", () => {
     it("returns bot user info from auth header (token-based)", async () => {
       const bot = await createBotUser("kagura", "Kagura");
-      const res = await app.request("/api/v10/users/@me", {
+      const res = await app.request(`${API_PREFIX}/users/@me`, {
         headers: { Authorization: `Bot ${bot.token}` },
       });
       expect(res.status).toBe(200);
@@ -875,12 +876,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 401 when no auth", async () => {
-      const res = await app.request("/api/v10/users/@me");
+      const res = await app.request(`${API_PREFIX}/users/@me`);
       expect(res.status).toBe(401);
     });
 
     it("returns 401 for invalid token", async () => {
-      const res = await app.request("/api/v10/users/@me", {
+      const res = await app.request(`${API_PREFIX}/users/@me`, {
         headers: { Authorization: "Bot invalid-token-123" },
       });
       expect(res.status).toBe(401);
@@ -901,11 +902,11 @@ describe("Cove API — Discord-compatible", () => {
       ).run(id, token, `google-${id}`, email, username, null, Date.now());
     }
 
-    it("POST /api/v10/auth/register with valid invite code creates user", async () => {
+    it("POST ${API_PREFIX}/auth/register with valid invite code creates user", async () => {
       seedInviteCode("COVE-TEST-AA01");
       seedPending("p1", "tok-1", "newuser@example.com", "New User");
 
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-TEST-AA01", pendingToken: "tok-1" }),
@@ -924,7 +925,7 @@ describe("Cove API — Discord-compatible", () => {
       seedInviteCode("COVE-NORM-BB02");
       seedPending("p-norm", "tok-norm", "norm@example.com", "NormUser");
 
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "  cove-norm-bb02  ", pendingToken: "tok-norm" }),
@@ -935,7 +936,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns 400 for invalid code", async () => {
       seedPending("p2", "tok-2", "test@example.com", "Test");
 
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "tok-2" }),
@@ -947,14 +948,14 @@ describe("Cove API — Discord-compatible", () => {
       seedInviteCode("COVE-USED-CC03");
       seedPending("p3", "tok-3", "user1@example.com", "User1");
 
-      await app.request("/api/v10/auth/register", {
+      await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-3" }),
       });
 
       seedPending("p4", "tok-4", "user2@example.com", "User2");
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-4" }),
@@ -965,7 +966,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns 400 for invalid pending token", async () => {
       seedInviteCode("COVE-PEND-DD04");
 
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-PEND-DD04", pendingToken: "nonexistent" }),
@@ -974,7 +975,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("returns 400 when missing fields", async () => {
-      const res = await app.request("/api/v10/auth/register", {
+      const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: "COVE-XXXX-YYYY" }),
@@ -1005,7 +1006,7 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("Request body validation", () => {
     it("POST message rejects missing content", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -1014,7 +1015,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST message rejects content over 4000 chars", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ content: "x".repeat(4001) }),
@@ -1023,7 +1024,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST message rejects invalid JSON", async () => {
-      const res = await app.request("/api/v10/channels/general/messages", {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: "not json",
@@ -1033,14 +1034,14 @@ describe("Cove API — Discord-compatible", () => {
 
     it("PATCH message rejects empty content", async () => {
       const bot = await createBotUser("val-bot", "ValBot");
-      const createRes = await app.request("/api/v10/channels/general/messages", {
+      const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "original" }),
       });
       const msg: Message = await createRes.json();
 
-      const res = await app.request(`/api/v10/channels/general/messages/${msg.id}`, {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/${msg.id}`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ content: "" }),
@@ -1049,7 +1050,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST channel rejects name over 100 chars", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ name: "x".repeat(101) }),
@@ -1058,7 +1059,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST user rejects username over 80 chars", async () => {
-      const res = await app.request("/api/v10/users", {
+      const res = await app.request(`${API_PREFIX}/users`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ username: "x".repeat(81) }),
@@ -1067,7 +1068,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PATCH channel rejects non-integer position", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ position: 1.5 }),
@@ -1076,7 +1077,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PATCH channel rejects invalid type", async () => {
-      const res = await app.request("/api/v10/channels/general", {
+      const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({ type: 99 }),
@@ -1085,7 +1086,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST channel rejects invalid type", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ name: "test", type: 99 }),
@@ -1094,7 +1095,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST channel rejects non-string topic", async () => {
-      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ name: "test", topic: 123 }),
@@ -1103,7 +1104,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("GET messages handles NaN limit gracefully", async () => {
-      const res = await authGet("/api/v10/channels/general/messages?limit=abc");
+      const res = await authGet(`${API_PREFIX}/channels/general/messages?limit=abc`);
       expect(res.status).toBe(200);
     });
   });

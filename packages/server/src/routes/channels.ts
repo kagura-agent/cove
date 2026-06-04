@@ -9,7 +9,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   const app = new Hono<AppEnv>();
   const auth = requireAuth(repos.users);
 
-  app.get("/api/v10/guilds/:guildId/channels", auth, (c) => {
+  app.get("/guilds/:guildId/channels", auth, (c) => {
     const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
@@ -21,7 +21,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     return c.json(repos.channels.list(guildId));
   });
 
-  app.get("/api/v10/channels/:id", (c) => {
+  app.get("/channels/:id", (c) => {
     const id = c.req.param("id")!;
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, id, userId);
@@ -31,7 +31,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     return c.json(channel);
   });
 
-  app.post("/api/v10/guilds/:guildId/channels", auth, async (c) => {
+  app.post("/guilds/:guildId/channels", auth, async (c) => {
     const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
@@ -63,7 +63,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     return c.json(channel, 201);
   });
 
-  app.patch("/api/v10/channels/:id", async (c) => {
+  app.patch("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, id, userId);
@@ -110,7 +110,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     return c.json(updated);
   });
 
-  app.delete("/api/v10/channels/:id", auth, (c) => {
+  app.delete("/channels/:id", auth, (c) => {
     const id = c.req.param("id")!;
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, id, userId);
