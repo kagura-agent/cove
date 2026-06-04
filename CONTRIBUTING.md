@@ -73,9 +73,27 @@ chore: update dependencies
 ## Testing
 
 - All new features must include tests
-- All tests must pass before merging: `pnpm -r --filter @cove/server exec vitest run`
+- All tests must pass before merging
 - Test files go in `src/__tests__/` directories
-- Verify before claiming done — `pnpm build` + tests must pass
+
+### Local verification (must match CI)
+
+Before pushing, run **all** steps that CI checks:
+
+```bash
+# 1. Build all packages
+pnpm -r build
+
+# 2. Type check (catches errors that vitest/vite skip)
+pnpm -r exec tsc --noEmit
+
+# 3. Run tests
+npm test
+```
+
+⚠️ `npm test` alone is NOT sufficient — vitest uses esbuild which skips type checking, and `vite build` doesn't check types either. The `tsc --noEmit` step catches type errors that tests and builds miss.
+
+See `.github/workflows/ci.yml` for the authoritative CI pipeline.
 
 ## Development Setup
 
