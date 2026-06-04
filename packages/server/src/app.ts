@@ -49,6 +49,14 @@ export function createApp(
   app.get("/api/v10/gateway", (c) => c.json({ url: gwUrl }));
 
   app.get("/api/v10/guilds/:guildId/presences", (c) => {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
+    const userId = c.get("botUser").id;
+    if (!repos.members.exists(guildId, userId)) {
+      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+    }
     const onlineIds = dispatcher?.getOnlineUserIds() ?? [];
     return c.json(onlineIds.map((id) => ({ user: { id }, status: "online" })));
   });
