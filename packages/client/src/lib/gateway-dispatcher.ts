@@ -32,7 +32,7 @@ class GatewayDispatcher {
   emit<K extends keyof GatewayEventMap>(event: K, data: GatewayEventMap[K]): void {
     const list = this.handlers[event] as Array<Handler<GatewayEventMap[K]>> | undefined;
     if (!list) return;
-    for (const handler of list) {
+    for (const handler of [...list]) {
       handler(data);
     }
   }

@@ -69,7 +69,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
         if (payload.op === 11) {
           return;
         }
-        if (payload.t && payload.t in gatewayEvents) {
+        if (payload.t && gatewayEvents.has(payload.t)) {
           dispatcher.emit(payload.t as keyof GatewayEventMap, payload.d as GatewayEventMap[keyof GatewayEventMap]);
         }
       } catch { /* ignore non-JSON */ }
@@ -100,14 +100,14 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   },
 }));
 
-const gatewayEvents: Record<string, true> = {
-  MESSAGE_CREATE: true,
-  MESSAGE_UPDATE: true,
-  MESSAGE_DELETE: true,
-  TYPING_START: true,
-  PRESENCE_UPDATE: true,
-  READY: true,
-  CHANNEL_CREATE: true,
-  CHANNEL_UPDATE: true,
-  CHANNEL_DELETE: true,
-};
+const gatewayEvents = new Set([
+  "MESSAGE_CREATE",
+  "MESSAGE_UPDATE",
+  "MESSAGE_DELETE",
+  "TYPING_START",
+  "PRESENCE_UPDATE",
+  "READY",
+  "CHANNEL_CREATE",
+  "CHANNEL_UPDATE",
+  "CHANNEL_DELETE",
+]);
