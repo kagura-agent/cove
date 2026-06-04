@@ -1,0 +1,6 @@
+.message-textarea {
+  outline: none;
+}
+.message-textarea:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
