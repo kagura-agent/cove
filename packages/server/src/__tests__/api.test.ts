@@ -822,6 +822,61 @@ describe("Cove API — Discord-compatible", () => {
       });
       expect(res.status).toBe(404);
     });
+
+    it("non-member cannot access direct channel route", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot read channel messages", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot post message to channel", async () => {
+      const res = await app.request("/api/v10/channels/garden/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
+        body: JSON.stringify({ content: "sneaky message" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot read channel state", async () => {
+      const res = await app.request("/api/v10/channels/garden/state", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot update channel", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${outsiderToken}` },
+        body: JSON.stringify({ name: "hacked" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot delete channel", async () => {
+      const res = await app.request("/api/v10/channels/garden", {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot trigger typing", async () => {
+      const res = await app.request("/api/v10/channels/garden/typing", {
+        method: "POST",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
   });
 
   // ─── Gateway discovery ────────────────────────────────────────────────

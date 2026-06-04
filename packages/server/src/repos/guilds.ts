@@ -43,6 +43,9 @@ export class GuildsRepo {
 
   getDefaultId(): string {
     const row = this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(DEFAULT_GUILD_ID) as { id: string } | undefined;
-    return row?.id ?? DEFAULT_GUILD_ID;
+    if (!row) {
+      throw new Error(`Default guild '${DEFAULT_GUILD_ID}' not found in database. Run migrations first.`);
+    }
+    return row.id;
   }
 }

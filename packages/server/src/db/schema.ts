@@ -159,8 +159,9 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${DEFAULT_GUILD_ID}'`);
   } catch (e: unknown) {
     if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
-  db.pragma('foreign_keys = ON');
 
   // Post-create migrations: rename columns in already-renamed tables
   try {

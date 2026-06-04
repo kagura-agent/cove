@@ -18,6 +18,7 @@ const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
 
 const dispatcher = new GatewayDispatcher();
 const repos = createRepos(db);
+repos.guilds.getDefaultId(); // Fail-fast: verify default guild exists
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
