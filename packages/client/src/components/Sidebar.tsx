@@ -70,7 +70,7 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      const ch = await api.createChannel(newName.trim(), "#️⃣");
+      const ch = await api.createChannel(newName.trim());
       addChannel(ch);
       setNewName("");
       setAdding(false);

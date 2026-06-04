@@ -1,4 +1,4 @@
-import type { DiscordMessage, DiscordChannel, ChannelState } from "@cove/shared";
+import type { DiscordMessage, DiscordChannel } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 
 export class GatewayDispatcher {
@@ -52,14 +52,6 @@ export class GatewayDispatcher {
 
   channelUpdate(channel: DiscordChannel): void {
     this.broadcast("CHANNEL_UPDATE", channel);
-  }
-
-  stateUpdate(state: ChannelState): void {
-    this.broadcast("STATE_UPDATE", state);
-  }
-
-  stateDelete(channelId: string, key: string): void {
-    this.broadcast("STATE_DELETE", { channel_id: channelId, key });
   }
 
   typingStart(channelId: string, user: { id: string; username: string }): void {

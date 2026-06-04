@@ -20,12 +20,8 @@ export interface DiscordChannel {
   name: string;
   type: number; // 0 = GUILD_TEXT
   guild_id: string;
-  topic: string;
+  topic: string | null;
   position: number;
-  // Cove extensions
-  icon?: string;
-  channel_type?: string;
-  cove_position?: { x: number; y: number };
 }
 
 /** Discord message object. */
@@ -67,14 +63,6 @@ export interface DiscordGuild {
 }
 
 // ─── Cove extension types ───────────────────────────────────────────────────
-
-/** Key-value state entry for a channel (e.g. "flowers_watered_today": "3"). */
-export interface ChannelState {
-  channelId: string;
-  key: string;
-  value: string;
-  updatedAt: number;
-}
 
 /** An agent/character registered in Cove — Discord User compatible. */
 export interface CoveAgent {
