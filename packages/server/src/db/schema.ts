@@ -1,44 +1,56 @@
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 
-function migrateRenameTable(db: Database.Database, oldName: string, newName: string): void {
-  const hasOld = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
-  ).get(oldName);
-  if (!hasOld) return;
+const LATEST_VERSION = 1;
 
-  const hasNew = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
-  ).get(newName);
-  if (hasNew) {
-    const newCount = (db.prepare(`SELECT COUNT(*) as c FROM "${newName}"`).get() as { c: number }).c;
-    if (newCount > 0) {
-      const oldCount = (db.prepare(`SELECT COUNT(*) as c FROM "${oldName}"`).get() as { c: number }).c;
-      if (oldCount > 0) {
-        throw new Error(
-          `Migration conflict: both "${oldName}" (${oldCount} rows) and "${newName}" (${newCount} rows) contain data. ` +
-          `Manually resolve before starting the server.`
-        );
-      }
-      // New table has data, old is empty — drop old, keep new
-      db.exec(`DROP TABLE "${oldName}"`);
-      return;
+type MigrationFn = (db: Database.Database) => void;
+
+const migrations: Record<number, MigrationFn> = {
+  1: migrateV0ToV1,
+};
+
+function runMigrations(db: Database.Database): void {
+  const currentVersion = db.pragma("user_version", { simple: true }) as number;
+
+  if (currentVersion >= LATEST_VERSION) return;
+
+  for (let v = currentVersion + 1; v <= LATEST_VERSION; v++) {
+    const migration = migrations[v];
+    if (!migration) {
+      throw new Error(`Missing migration for version ${v}`);
     }
-    // New table is empty — safe to drop and rename
-    db.exec(`DROP TABLE "${newName}"`);
+    console.log(`Running migration V${v - 1} → V${v}...`);
+    db.transaction(() => {
+      migration(db);
+      db.pragma(`user_version = ${v}`);
+    })();
   }
-  db.exec(`ALTER TABLE "${oldName}" RENAME TO "${newName}"`);
 }
 
-export function initDb(dbPath: string = ":memory:"): Database.Database {
-  const db = new Database(dbPath);
+function tableExists(db: Database.Database, name: string): boolean {
+  return !!db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(name);
+}
 
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+function migrateV0ToV1(db: Database.Database): void {
+  // Detect if this is a legacy database (has existing tables) or fresh
+  const hasAnyTable = tableExists(db, "channels") ||
+    tableExists(db, "scenes") ||
+    tableExists(db, "messages") ||
+    tableExists(db, "users");
 
-  // Pre-create migrations: rename old tables BEFORE CREATE TABLE IF NOT EXISTS
-  migrateRenameTable(db, "scenes", "channels");
+  if (!hasAnyTable) {
+    // Fresh database: create all tables directly with final schema
+    createAllTables(db);
+    return;
+  }
 
+  // Legacy database: run all the old migrations
+  migrateLegacyToV1(db);
+}
+
+function createAllTables(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS guilds (
       id          TEXT PRIMARY KEY,
@@ -85,7 +97,8 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       content          TEXT,
       timestamp        INTEGER,
       metadata         TEXT,
-      edited_timestamp INTEGER
+      edited_timestamp INTEGER,
+      sender_name      TEXT
     );
 
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -106,8 +119,88 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
       created_at    INTEGER
     );
   `);
+}
 
-  // Seed default guild (must exist before FK references from channels)
+function migrateRenameTable(db: Database.Database, oldName: string, newName: string): void {
+  const hasOld = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(oldName);
+  if (!hasOld) return;
+
+  const hasNew = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(newName);
+  if (hasNew) {
+    const newCount = (db.prepare(`SELECT COUNT(*) as c FROM "${newName}"`).get() as { c: number }).c;
+    if (newCount > 0) {
+      const oldCount = (db.prepare(`SELECT COUNT(*) as c FROM "${oldName}"`).get() as { c: number }).c;
+      if (oldCount > 0) {
+        throw new Error(
+          `Migration conflict: both "${oldName}" (${oldCount} rows) and "${newName}" (${newCount} rows) contain data. ` +
+          `Manually resolve before starting the server.`
+        );
+      }
+      db.exec(`DROP TABLE "${oldName}"`);
+      return;
+    }
+    db.exec(`DROP TABLE "${newName}"`);
+  }
+  db.exec(`ALTER TABLE "${oldName}" RENAME TO "${newName}"`);
+}
+
+function migrateChannelsToDiscordSchema(db: Database.Database, guildId: string): void {
+  const tableInfo = db.prepare("PRAGMA table_info(channels)").all() as Array<{ name: string }>;
+  const hasPositionX = tableInfo.some(col => col.name === "position_x");
+  if (!hasPositionX) return;
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec(`
+      CREATE TABLE channels_new (
+        id          TEXT PRIMARY KEY,
+        guild_id    TEXT NOT NULL REFERENCES guilds(id),
+        name        TEXT NOT NULL,
+        type        INTEGER NOT NULL DEFAULT 0,
+        topic       TEXT,
+        position    INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
+    db.exec(`
+      INSERT INTO channels_new (id, guild_id, name, type, topic, position)
+      SELECT id, guild_id, name, 0, description, 0
+      FROM channels
+    `);
+
+    db.exec(`
+      UPDATE channels_new SET position = (
+        SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
+      )
+    `);
+
+    db.exec("DROP TABLE channels");
+    db.exec("ALTER TABLE channels_new RENAME TO channels");
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (e: unknown) {
+    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+  }
+}
+
+function migrateLegacyToV1(db: Database.Database): void {
+  // Rename scenes → channels
+  migrateRenameTable(db, "scenes", "channels");
+
+  // Ensure all tables exist (some may be missing in old DBs)
+  createAllTables(db);
+
+  // Seed a default guild if none exists (needed for guild_id column migration)
   const guildId = (() => {
     const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
     if (existing) return existing.id;
@@ -119,29 +212,13 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     return id;
   })();
 
-  // Migration: add edited_timestamp to existing messages tables
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN edited_timestamp INTEGER");
-  } catch (e: unknown) {
-    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
-  }
-
-  // Migration: add sender_name to store display name alongside sender ID
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN sender_name TEXT");
-  } catch (e: unknown) {
-    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
-  }
-
-  // Migration: add token column to users table (older DBs lack it)
-  try {
-    db.exec("ALTER TABLE users ADD COLUMN token TEXT");
-  } catch (e: unknown) {
-    if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
-  }
+  // Add missing columns
+  addColumnIfMissing(db, "messages", "edited_timestamp", "INTEGER");
+  addColumnIfMissing(db, "messages", "sender_name", "TEXT");
+  addColumnIfMissing(db, "users", "token", "TEXT");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
-  // Migration: add guild_id to channels table
+  // Add guild_id to channels
   db.pragma('foreign_keys = OFF');
   try {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${guildId}'`);
@@ -151,69 +228,40 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     db.pragma('foreign_keys = ON');
   }
 
-  // Migration: rebuild channels table if it has old island-specific columns
+  // Migrate island-style channels to discord schema
   migrateChannelsToDiscordSchema(db, guildId);
 
-  // Migration: drop channel_state table if it exists
+  // Drop obsolete tables
   db.exec("DROP TABLE IF EXISTS channel_state");
   db.exec("DROP TABLE IF EXISTS scene_state");
 
-  // Post-create migrations: rename columns in already-renamed tables
+  // Rename scene_id → channel_id in messages
   try {
     db.exec("ALTER TABLE messages RENAME COLUMN scene_id TO channel_id");
   } catch (e: unknown) {
     if (!(e instanceof Error && /no such column/i.test(e.message))) throw e;
   }
-
-  return db;
 }
 
-/**
- * Migrate channels table from island schema to Discord schema.
- * Old schema had: icon, type (TEXT), channel_id, description, position_x, position_y
- * New schema has: type (INTEGER), topic, position (INTEGER)
- */
-function migrateChannelsToDiscordSchema(db: Database.Database, _guildId: string): void {
-  // Check if old schema exists by looking for position_x column
-  const tableInfo = db.prepare("PRAGMA table_info(channels)").all() as Array<{ name: string }>;
-  const hasPositionX = tableInfo.some(col => col.name === "position_x");
-  if (!hasPositionX) return; // Already new schema
+export function initDb(dbPath: string = ":memory:"): Database.Database {
+  const db = new Database(dbPath);
 
-  db.pragma('foreign_keys = OFF');
-  try {
-    db.transaction(() => {
-      db.exec(`
-        CREATE TABLE channels_new (
-          id          TEXT PRIMARY KEY,
-          guild_id    TEXT NOT NULL REFERENCES guilds(id),
-          name        TEXT NOT NULL,
-          type        INTEGER NOT NULL DEFAULT 0,
-          topic       TEXT,
-          position    INTEGER NOT NULL DEFAULT 0
-        )
-      `);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
 
-      // Copy data, mapping description→topic, dropping removed columns
-      // type becomes 0 (GUILD_TEXT) for all existing channels
-      db.exec(`
-        INSERT INTO channels_new (id, guild_id, name, type, topic, position)
-        SELECT id, guild_id, name, 0, description, 0
-        FROM channels
-      `);
+  runMigrations(db);
 
-      // Assign positions based on rowid order
-      db.exec(`
-        UPDATE channels_new SET position = (
-          SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
-        )
-      `);
-
-      db.exec("DROP TABLE channels");
-      db.exec("ALTER TABLE channels_new RENAME TO channels");
-    })();
-  } finally {
-    db.pragma('foreign_keys = ON');
+  // Seed default guild if none exists
+  const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  if (!existing) {
+    const id = randomUUID();
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, "Cove", null, null, now, now);
   }
+
+  return db;
 }
 
 const SEED_CHANNELS = [
@@ -246,7 +294,6 @@ export function seedUsers(db: Database.Database, guildId: string): void {
   insert.run("luna", "Luna", null, 0, null, null, now, now);
   insert.run("ruantang", "ruantang", null, 1, null, token, now, now);
 
-  // Ensure seeded users are guild members
   const addMember = db.prepare(
     "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
   );
