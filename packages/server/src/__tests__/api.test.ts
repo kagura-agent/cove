@@ -67,7 +67,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channels ───────────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/guilds/:guildId/channels", () => {
+  describe(`GET ${API_PREFIX}/guilds/:guildId/channels`, () => {
     it("returns all seeded channels in Discord format", async () => {
       const res = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/channels`);
       expect(res.status).toBe(200);
@@ -102,7 +102,7 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
-  describe("GET ${API_PREFIX}/channels/:id", () => {
+  describe(`GET ${API_PREFIX}/channels/:id`, () => {
     it("returns a specific channel in Discord format", async () => {
       const res = await authGet(`${API_PREFIX}/channels/general`);
       expect(res.status).toBe(200);
@@ -122,7 +122,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Messages ───────────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/channels/:id/messages", () => {
+  describe(`GET ${API_PREFIX}/channels/:id/messages`, () => {
     it("returns empty array for channel with no messages", async () => {
       const res = await authGet(`${API_PREFIX}/channels/general/messages`);
       expect(res.status).toBe(200);
@@ -136,7 +136,7 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
-  describe("POST ${API_PREFIX}/channels/:id/messages", () => {
+  describe(`POST ${API_PREFIX}/channels/:id/messages`, () => {
     it("creates a message and returns Discord format", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       const res = await app.request(`${API_PREFIX}/channels/general/messages`, {
@@ -216,7 +216,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Single message ─────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/channels/:id/messages/:msgId", () => {
+  describe(`GET ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("returns a single message by ID", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
@@ -242,7 +242,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Delete single message ──────────────────────────────────────────────
 
-  describe("DELETE ${API_PREFIX}/channels/:id/messages/:msgId", () => {
+  describe(`DELETE ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("deletes a message and returns 204", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
@@ -282,7 +282,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Edit message ───────────────────────────────────────────────────────
 
-  describe("PATCH ${API_PREFIX}/channels/:id/messages/:msgId", () => {
+  describe(`PATCH ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("edits a message and returns updated content with edited_timestamp", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
@@ -324,7 +324,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Typing indicator ──────────────────────────────────────────────────
 
-  describe("POST ${API_PREFIX}/channels/:id/typing", () => {
+  describe(`POST ${API_PREFIX}/channels/:id/typing`, () => {
     it("returns 204 and broadcasts TYPING_START", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       broadcastEvents.length = 0;
@@ -345,7 +345,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Pagination ────────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/channels/:id/messages — pagination", () => {
+  describe(`GET ${API_PREFIX}/channels/:id/messages — pagination`, () => {
     let messageIds: string[];
 
     beforeEach(() => {
@@ -402,7 +402,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel PATCH ──────────────────────────────────────────────────
 
-  describe("PATCH ${API_PREFIX}/channels/:id", () => {
+  describe(`PATCH ${API_PREFIX}/channels/:id`, () => {
     it("updates channel name and topic", async () => {
       const res = await app.request(`${API_PREFIX}/channels/general`, {
         method: "PATCH",
@@ -475,7 +475,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel CREATE ─────────────────────────────────────────────────
 
-  describe("POST ${API_PREFIX}/guilds/:guildId/channels", () => {
+  describe(`POST ${API_PREFIX}/guilds/:guildId/channels`, () => {
     it("creates a channel with auto-incremented position", async () => {
       const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
         method: "POST",
@@ -493,7 +493,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channel DELETE ─────────────────────────────────────────────────
 
-  describe("DELETE ${API_PREFIX}/channels/:id", () => {
+  describe(`DELETE ${API_PREFIX}/channels/:id`, () => {
     it("deletes a channel", async () => {
       const res = await app.request(`${API_PREFIX}/channels/random`, {
         method: "DELETE",
@@ -831,7 +831,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Gateway discovery ────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/gateway", () => {
+  describe(`GET ${API_PREFIX}/gateway`, () => {
     it("returns WebSocket URL", async () => {
       const res = await authGet(`${API_PREFIX}/gateway`);
       expect(res.status).toBe(200);
@@ -842,7 +842,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Guilds ───────────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/users/@me/guilds", () => {
+  describe(`GET ${API_PREFIX}/users/@me/guilds`, () => {
     it("returns guilds for authenticated user", async () => {
       const res = await authGet(`${API_PREFIX}/users/@me/guilds`);
       expect(res.status).toBe(200);
@@ -862,7 +862,7 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Users ────────────────────────────────────────────────────────────
 
-  describe("GET ${API_PREFIX}/users/@me", () => {
+  describe(`GET ${API_PREFIX}/users/@me`, () => {
     it("returns bot user info from auth header (token-based)", async () => {
       const bot = await createBotUser("kagura", "Kagura");
       const res = await app.request(`${API_PREFIX}/users/@me`, {
