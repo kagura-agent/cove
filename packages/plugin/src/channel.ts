@@ -206,7 +206,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       gatewayClient.on("reconnect", () => {
         log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
-        for (const [, controller] of pendingDispatches) {
+        for (const [channelId, controller] of pendingDispatches) {
+          // Invalidate stale dispatch generation so lingering side-effects become no-ops
+          channelGeneration.set(channelId, (channelGeneration.get(channelId) ?? 0) + 1);
           controller.abort();
         }
         pendingDispatches.clear();
@@ -475,6 +477,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             );
           } catch (err: any) {
             if (err instanceof DispatchTimeoutError) {
+              // Invalidate generation so lingering dispatch side-effects become no-ops
+              channelGeneration.set(channelId, (channelGeneration.get(channelId) ?? 0) + 1);
               typingCallbacks.onCleanup?.();
               log?.warn?.(`cove: dispatch timed out after ${DISPATCH_TIMEOUT_MS}ms in [${channelId}]`);
             } else if (err instanceof DispatchAbortedError) {
