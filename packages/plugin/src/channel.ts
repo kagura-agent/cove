@@ -13,8 +13,49 @@ import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 
+const DISPATCH_TIMEOUT_MS = 120_000;
+
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
+
+/**
+ * Race a dispatch promise against a timeout and an AbortSignal.
+ * Resolves/rejects as soon as any of the three fires.
+ */
+export function createAbortableDispatch(
+  dispatch: Promise<unknown>,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (!settled) { settled = true; fn(); }
+    };
+
+    const timer = setTimeout(
+      () => settle(() => reject(new Error("dispatch timeout"))),
+      timeoutMs,
+    );
+
+    const onAbort = () => settle(() => {
+      clearTimeout(timer);
+      reject(new Error("dispatch aborted"));
+    });
+
+    if (signal.aborted) {
+      clearTimeout(timer);
+      reject(new Error("dispatch aborted"));
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    dispatch.then(
+      () => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve(); }),
+      (err) => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); reject(err); }),
+    );
+  });
+}
 
 const restClients = new Map<string, CoveRestClient>();
 
@@ -144,6 +185,17 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const gatewayClient = new CoveGatewayClient({
         url: wsUrl,
         token: account.token,
+      });
+
+      /** Track in-flight dispatches per channel so we can cancel on reconnect or duplicate. */
+      const pendingDispatches = new Map<string, AbortController>();
+
+      gatewayClient.on("reconnect", () => {
+        log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
+        for (const [, controller] of pendingDispatches) {
+          controller.abort();
+        }
+        pendingDispatches.clear();
       });
 
       gatewayClient.on("ready", (user) => {
@@ -353,7 +405,18 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // Yield event loop so WS typing frame flushes before heavy bootstrap work
           await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
-          await dispatchInboundDirectDmWithRuntime({
+          // Cancel any existing dispatch for this channel
+          const existing = pendingDispatches.get(channelId);
+          if (existing) {
+            log?.warn?.(`cove: new message in [${channelId}] — aborting previous pending dispatch`);
+            existing.abort();
+          }
+          const abortController = new AbortController();
+          pendingDispatches.set(channelId, abortController);
+
+          try {
+            await createAbortableDispatch(
+              dispatchInboundDirectDmWithRuntime({
             cfg,
             runtime: patchedRuntime as any,
             channel: "cove",
@@ -386,7 +449,24 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             onDispatchError: (err, info) => {
               log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
             },
-          });
+          }),
+              DISPATCH_TIMEOUT_MS,
+              abortController.signal,
+            );
+          } catch (err: any) {
+            if (err.message === "dispatch timeout") {
+              log?.warn?.(`cove: dispatch timed out after ${DISPATCH_TIMEOUT_MS}ms in [${channelId}]`);
+            } else if (err.message === "dispatch aborted") {
+              log?.info?.(`cove: dispatch aborted in [${channelId}]`);
+            } else {
+              throw err;
+            }
+          } finally {
+            // Only remove if this is still our controller (not replaced by a newer dispatch)
+            if (pendingDispatches.get(channelId) === abortController) {
+              pendingDispatches.delete(channelId);
+            }
+          }
         } catch (err: any) {
           typingCallbacks.onCleanup?.();
           log?.error?.(`cove: error in [${channelId}]: ${err.message}`);

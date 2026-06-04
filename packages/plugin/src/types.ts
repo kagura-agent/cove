@@ -33,4 +33,5 @@ export interface GatewayEvents {
   messageCreate: (message: Message) => void;
   error: (error: Error) => void;
   close: () => void;
+  reconnect: () => void;
 }
