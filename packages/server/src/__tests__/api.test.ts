@@ -1066,6 +1066,42 @@ describe("Cove API — Discord-compatible", () => {
       expect(res.status).toBe(400);
     });
 
+    it("PATCH channel rejects non-integer position", async () => {
+      const res = await app.request("/api/v10/channels/general", {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ position: 1.5 }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("PATCH channel rejects invalid type", async () => {
+      const res = await app.request("/api/v10/channels/general", {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ type: 99 }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST channel rejects invalid type", async () => {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ name: "test", type: 99 }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST channel rejects non-string topic", async () => {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ name: "test", topic: 123 }),
+      });
+      expect(res.status).toBe(400);
+    });
+
     it("GET messages handles NaN limit gracefully", async () => {
       const res = await authGet("/api/v10/channels/general/messages?limit=abc");
       expect(res.status).toBe(200);

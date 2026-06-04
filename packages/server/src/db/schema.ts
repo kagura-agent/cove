@@ -156,6 +156,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
 
   // Migration: drop channel_state table if it exists
   db.exec("DROP TABLE IF EXISTS channel_state");
+  db.exec("DROP TABLE IF EXISTS scene_state");
 
   // Post-create migrations: rename columns in already-renamed tables
   try {
@@ -179,37 +180,40 @@ function migrateChannelsToDiscordSchema(db: Database.Database, _guildId: string)
   if (!hasPositionX) return; // Already new schema
 
   db.pragma('foreign_keys = OFF');
-  db.transaction(() => {
-    db.exec(`
-      CREATE TABLE channels_new (
-        id          TEXT PRIMARY KEY,
-        guild_id    TEXT NOT NULL REFERENCES guilds(id),
-        name        TEXT NOT NULL,
-        type        INTEGER NOT NULL DEFAULT 0,
-        topic       TEXT,
-        position    INTEGER NOT NULL DEFAULT 0
-      )
-    `);
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE channels_new (
+          id          TEXT PRIMARY KEY,
+          guild_id    TEXT NOT NULL REFERENCES guilds(id),
+          name        TEXT NOT NULL,
+          type        INTEGER NOT NULL DEFAULT 0,
+          topic       TEXT,
+          position    INTEGER NOT NULL DEFAULT 0
+        )
+      `);
 
-    // Copy data, mapping description→topic, dropping removed columns
-    // type becomes 0 (GUILD_TEXT) for all existing channels
-    db.exec(`
-      INSERT INTO channels_new (id, guild_id, name, type, topic, position)
-      SELECT id, guild_id, name, 0, description, 0
-      FROM channels
-    `);
+      // Copy data, mapping description→topic, dropping removed columns
+      // type becomes 0 (GUILD_TEXT) for all existing channels
+      db.exec(`
+        INSERT INTO channels_new (id, guild_id, name, type, topic, position)
+        SELECT id, guild_id, name, 0, description, 0
+        FROM channels
+      `);
 
-    // Assign positions based on rowid order
-    db.exec(`
-      UPDATE channels_new SET position = (
-        SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
-      )
-    `);
+      // Assign positions based on rowid order
+      db.exec(`
+        UPDATE channels_new SET position = (
+          SELECT COUNT(*) FROM channels_new c2 WHERE c2.rowid < channels_new.rowid
+        )
+      `);
 
-    db.exec("DROP TABLE channels");
-    db.exec("ALTER TABLE channels_new RENAME TO channels");
-  })();
-  db.pragma('foreign_keys = ON');
+      db.exec("DROP TABLE channels");
+      db.exec("ALTER TABLE channels_new RENAME TO channels");
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
 }
 
 const SEED_CHANNELS = [
