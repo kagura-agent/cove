@@ -18,19 +18,19 @@ class GatewayDispatcher {
   private handlers: { [K in keyof GatewayEventMap]?: Array<Handler<GatewayEventMap[K]>> } = {};
 
   on<K extends keyof GatewayEventMap>(event: K, handler: Handler<GatewayEventMap[K]>): void {
-    const list = this.handlers[event] ?? [];
+    const list = (this.handlers[event] ?? []) as Array<Handler<GatewayEventMap[K]>>;
     list.push(handler);
-    this.handlers[event] = list as typeof this.handlers[K];
+    (this.handlers as Record<string, unknown>)[event] = list;
   }
 
   off<K extends keyof GatewayEventMap>(event: K, handler: Handler<GatewayEventMap[K]>): void {
-    const list = this.handlers[event];
+    const list = this.handlers[event] as Array<Handler<GatewayEventMap[K]>> | undefined;
     if (!list) return;
-    this.handlers[event] = list.filter((h) => h !== handler) as typeof this.handlers[K];
+    (this.handlers as Record<string, unknown>)[event] = list.filter((h) => h !== handler);
   }
 
   emit<K extends keyof GatewayEventMap>(event: K, data: GatewayEventMap[K]): void {
-    const list = this.handlers[event];
+    const list = this.handlers[event] as Array<Handler<GatewayEventMap[K]>> | undefined;
     if (!list) return;
     for (const handler of list) {
       handler(data);

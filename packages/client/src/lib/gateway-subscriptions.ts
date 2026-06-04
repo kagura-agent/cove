@@ -8,11 +8,12 @@ import { useWebSocketStore } from "../stores/useWebSocketStore";
 
 type Handler<K extends keyof GatewayEventMap> = (data: GatewayEventMap[K]) => void;
 
-let handlers: Array<{ event: keyof GatewayEventMap; handler: Handler<never> }> = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
 
-function subscribe<K extends keyof GatewayEventMap>(event: K, handler: Handler<K>): void {
+function subscribe<K extends keyof GatewayEventMap>(event: K, handler: (data: GatewayEventMap[K]) => void): void {
   dispatcher.on(event, handler);
-  handlers.push({ event, handler: handler as Handler<never> });
+  handlers.push({ event, handler });
 }
 
 export function setupGatewaySubscriptions(): void {
@@ -87,7 +88,8 @@ export function setupGatewaySubscriptions(): void {
 
 export function teardownGatewaySubscriptions(): void {
   for (const { event, handler } of handlers) {
-    dispatcher.off(event, handler);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dispatcher.off(event as any, handler);
   }
   handlers = [];
 }
