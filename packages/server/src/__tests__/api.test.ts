@@ -3,7 +3,7 @@ import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
-import type { DiscordChannel, DiscordMessage, CoveAgent, CoveGuildMember } from "@cove/shared";
+import type { Channel, Message, CoveAgent, CoveGuildMember } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Cove API — Discord-compatible", () => {
@@ -14,16 +14,16 @@ describe("Cove API — Discord-compatible", () => {
   let defaultGuildId: string;
 
   class TestDispatcher extends GatewayDispatcher {
-    override messageCreate(message: DiscordMessage): void {
+    override messageCreate(message: Message): void {
       broadcastEvents.push({ t: "MESSAGE_CREATE", d: message });
     }
-    override messageUpdate(message: DiscordMessage): void {
+    override messageUpdate(message: Message): void {
       broadcastEvents.push({ t: "MESSAGE_UPDATE", d: message });
     }
     override messageDelete(channelId: string, messageId: string): void {
       broadcastEvents.push({ t: "MESSAGE_DELETE", d: { id: messageId, channel_id: channelId } });
     }
-    override channelUpdate(channel: DiscordChannel): void {
+    override channelUpdate(channel: Channel): void {
       broadcastEvents.push({ t: "CHANNEL_UPDATE", d: channel });
     }
     override typingStart(channelId: string, user: { id: string; username: string }): void {
@@ -70,13 +70,13 @@ describe("Cove API — Discord-compatible", () => {
     it("returns all seeded channels in Discord format", async () => {
       const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
       expect(res.status).toBe(200);
-      const channels: DiscordChannel[] = await res.json();
+      const channels: Channel[] = await res.json();
       expect(channels).toHaveLength(2);
     });
 
     it("each channel has Discord-required fields", async () => {
       const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
-      const channels: DiscordChannel[] = await res.json();
+      const channels: Channel[] = await res.json();
       for (const ch of channels) {
         expect(ch.id).toBeTruthy();
         expect(ch.name).toBeTruthy();
@@ -88,7 +88,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("channels are ordered by position", async () => {
       const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
-      const channels: DiscordChannel[] = await res.json();
+      const channels: Channel[] = await res.json();
       expect(channels[0].name).toBe("general");
       expect(channels[0].position).toBe(0);
       expect(channels[1].name).toBe("random");
@@ -105,7 +105,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns a specific channel in Discord format", async () => {
       const res = await authGet("/api/v10/channels/general");
       expect(res.status).toBe(200);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.id).toBe("general");
       expect(ch.name).toBe("general");
       expect(ch.type).toBe(0);
@@ -125,7 +125,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns empty array for channel with no messages", async () => {
       const res = await authGet("/api/v10/channels/general/messages");
       expect(res.status).toBe(200);
-      const messages: DiscordMessage[] = await res.json();
+      const messages: Message[] = await res.json();
       expect(messages).toEqual([]);
     });
 
@@ -147,7 +147,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ content: "Hello world!" }),
       });
       expect(res.status).toBe(201);
-      const msg: DiscordMessage = await res.json();
+      const msg: Message = await res.json();
       expect(msg.channel_id).toBe("general");
       expect(msg.content).toBe("Hello world!");
       expect(msg.author.id).toBe("kagura");
@@ -180,7 +180,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       const res = await authGet("/api/v10/channels/general/messages");
-      const messages: DiscordMessage[] = await res.json();
+      const messages: Message[] = await res.json();
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toBe("Test message");
       expect(messages[0].channel_id).toBe("general");
@@ -198,7 +198,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { t: string; d: DiscordMessage };
+      const event = broadcastEvents[0] as { t: string; d: Message };
       expect(event.t).toBe("MESSAGE_CREATE");
       expect(event.d.content).toBe("test broadcast");
     });
@@ -223,11 +223,11 @@ describe("Cove API — Discord-compatible", () => {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "find me" }),
       });
-      const created: DiscordMessage = await createRes.json();
+      const created: Message = await createRes.json();
 
       const res = await authGet(`/api/v10/channels/general/messages/${created.id}`);
       expect(res.status).toBe(200);
-      const msg: DiscordMessage = await res.json();
+      const msg: Message = await res.json();
       expect(msg.id).toBe(created.id);
       expect(msg.content).toBe("find me");
       expect(msg.channel_id).toBe("general");
@@ -249,7 +249,7 @@ describe("Cove API — Discord-compatible", () => {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "delete me" }),
       });
-      const created: DiscordMessage = await createRes.json();
+      const created: Message = await createRes.json();
       broadcastEvents.length = 0;
 
       const delRes = await app.request(`/api/v10/channels/general/messages/${created.id}`, {
@@ -289,7 +289,7 @@ describe("Cove API — Discord-compatible", () => {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "original" }),
       });
-      const created: DiscordMessage = await createRes.json();
+      const created: Message = await createRes.json();
       expect(created.edited_timestamp).toBeNull();
       broadcastEvents.length = 0;
 
@@ -299,14 +299,14 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ content: "edited" }),
       });
       expect(patchRes.status).toBe(200);
-      const updated: DiscordMessage = await patchRes.json();
+      const updated: Message = await patchRes.json();
       expect(updated.content).toBe("edited");
       expect(updated.edited_timestamp).toBeTruthy();
       expect(new Date(updated.edited_timestamp!).toISOString()).toBe(updated.edited_timestamp);
 
       // Verify MESSAGE_UPDATE broadcast
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { t: string; d: DiscordMessage };
+      const event = broadcastEvents[0] as { t: string; d: Message };
       expect(event.t).toBe("MESSAGE_UPDATE");
       expect(event.d.content).toBe("edited");
     });
@@ -363,7 +363,7 @@ describe("Cove API — Discord-compatible", () => {
     it("before returns messages older than reference", async () => {
       const res = await authGet("/api/v10/channels/general/messages?before=msg-3");
       expect(res.status).toBe(200);
-      const msgs: DiscordMessage[] = await res.json();
+      const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
       // DESC order
       expect(msgs[0].id).toBe("msg-2");
@@ -374,7 +374,7 @@ describe("Cove API — Discord-compatible", () => {
     it("after returns messages newer than reference", async () => {
       const res = await authGet("/api/v10/channels/general/messages?after=msg-1");
       expect(res.status).toBe(200);
-      const msgs: DiscordMessage[] = await res.json();
+      const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
       // ASC order for after
       expect(msgs[0].id).toBe("msg-2");
@@ -385,7 +385,7 @@ describe("Cove API — Discord-compatible", () => {
     it("around returns messages around reference", async () => {
       const res = await authGet("/api/v10/channels/general/messages?around=msg-2&limit=4");
       expect(res.status).toBe(200);
-      const msgs: DiscordMessage[] = await res.json();
+      const msgs: Message[] = await res.json();
       expect(msgs.length).toBeGreaterThanOrEqual(3);
       const ids = msgs.map((m) => m.id);
       expect(ids).toContain("msg-2");
@@ -394,7 +394,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns empty array for unknown reference message", async () => {
       const res = await authGet("/api/v10/channels/general/messages?before=nonexistent");
       expect(res.status).toBe(200);
-      const msgs: DiscordMessage[] = await res.json();
+      const msgs: Message[] = await res.json();
       expect(msgs).toEqual([]);
     });
   });
@@ -409,7 +409,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ name: "announcements", topic: "Important updates" }),
       });
       expect(res.status).toBe(200);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.name).toBe("announcements");
       expect(ch.topic).toBe("Important updates");
       expect(ch.id).toBe("general");
@@ -422,7 +422,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ position: 5 }),
       });
       expect(res.status).toBe(200);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.position).toBe(5);
     });
 
@@ -433,7 +433,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ type: 2 }),
       });
       expect(res.status).toBe(200);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.type).toBe(2);
     });
 
@@ -446,7 +446,7 @@ describe("Cove API — Discord-compatible", () => {
       });
 
       expect(broadcastEvents).toHaveLength(1);
-      const event = broadcastEvents[0] as { t: string; d: DiscordChannel };
+      const event = broadcastEvents[0] as { t: string; d: Channel };
       expect(event.t).toBe("CHANNEL_UPDATE");
       expect(event.d.topic).toBe("updated");
     });
@@ -458,7 +458,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({}),
       });
       expect(res.status).toBe(200);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.id).toBe("general");
     });
 
@@ -482,7 +482,7 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ name: "new-channel", topic: "A new channel" }),
       });
       expect(res.status).toBe(201);
-      const ch: DiscordChannel = await res.json();
+      const ch: Channel = await res.json();
       expect(ch.name).toBe("new-channel");
       expect(ch.topic).toBe("A new channel");
       expect(ch.type).toBe(0);
@@ -1038,7 +1038,7 @@ describe("Cove API — Discord-compatible", () => {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "original" }),
       });
-      const msg: DiscordMessage = await createRes.json();
+      const msg: Message = await createRes.json();
 
       const res = await app.request(`/api/v10/channels/general/messages/${msg.id}`, {
         method: "PATCH",

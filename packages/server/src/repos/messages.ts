@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { DiscordMessage, DiscordUser } from "@cove/shared";
+import type { Message, User } from "@cove/shared";
 
 interface MessageRow {
   id: string;
@@ -17,7 +17,7 @@ interface MessageRow {
 
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
-function toDiscordMessage(row: MessageRow): DiscordMessage {
+function toMessage(row: MessageRow): Message {
   return {
     id: row.id,
     channel_id: row.channel_id,
@@ -38,7 +38,7 @@ function toDiscordMessage(row: MessageRow): DiscordMessage {
 export class MessagesRepo {
   constructor(private db: Database.Database) {}
 
-  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }): DiscordMessage[] {
+  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }): Message[] {
     const { limit, before, after, around } = opts;
     let rows: MessageRow[];
 
@@ -68,16 +68,16 @@ export class MessagesRepo {
         .all(channelId, limit) as MessageRow[];
     }
 
-    return rows.map(toDiscordMessage);
+    return rows.map(toMessage);
   }
 
-  getById(channelId: string, messageId: string): DiscordMessage | null {
+  getById(channelId: string, messageId: string): Message | null {
     const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow | undefined;
-    return row ? toDiscordMessage(row) : null;
+    return row ? toMessage(row) : null;
   }
 
-  create(channelId: string, author: DiscordUser, content: string): DiscordMessage {
+  create(channelId: string, author: User, content: string): Message {
     const now = Date.now();
     const id = randomUUID();
 
@@ -96,7 +96,7 @@ export class MessagesRepo {
     };
   }
 
-  update(channelId: string, messageId: string, content: string): DiscordMessage | null {
+  update(channelId: string, messageId: string, content: string): Message | null {
     const editedTimestamp = Date.now();
     const result = this.db.prepare(
       "UPDATE messages SET content = ?, edited_timestamp = ? WHERE id = ? AND channel_id = ?"
@@ -106,7 +106,7 @@ export class MessagesRepo {
 
     const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow;
-    return toDiscordMessage(row);
+    return toMessage(row);
   }
 
   delete(channelId: string, messageId: string): boolean {

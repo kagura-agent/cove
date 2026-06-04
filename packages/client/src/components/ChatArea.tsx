@@ -1,6 +1,5 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { useMessageStore } from "../stores/useMessageStore";
-import { getChannelIcon } from "../lib/icons";
 import { Typography, Button, Popconfirm } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
@@ -45,7 +44,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
     <div style={styles.wrapper}>
       <div style={styles.header}>
         {onMenuClick && <Button type="text" icon={<MenuOutlined />} onClick={onMenuClick} className="mobile-only" style={styles.menuBtn} />}
-        <span style={{ fontSize: "var(--font-size-xl)", display: "flex", alignItems: "center", justifyContent: "center", width: "var(--avatar-size)", flexShrink: 0, lineHeight: 1 }}>{getChannelIcon(channel)}</span>
+        <span style={{ fontSize: "var(--font-size-xl)", display: "flex", alignItems: "center", justifyContent: "center", width: "var(--avatar-size)", flexShrink: 0, lineHeight: 1 }}>#</span>
         <div style={{ flex: 1 }}>
           <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)" }}>{channel.name}</Typography.Title>
           <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)" }}>{channel.topic ? <ChatMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>

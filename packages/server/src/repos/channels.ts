@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { DiscordChannel } from "@cove/shared";
+import type { Channel } from "@cove/shared";
 
 interface ChannelRow {
   id: string;
@@ -11,7 +11,7 @@ interface ChannelRow {
   position: number;
 }
 
-function toDiscordChannel(row: ChannelRow): DiscordChannel {
+function toChannel(row: ChannelRow): Channel {
   return {
     id: row.id,
     name: row.name,
@@ -25,17 +25,17 @@ function toDiscordChannel(row: ChannelRow): DiscordChannel {
 export class ChannelsRepo {
   constructor(private db: Database.Database) {}
 
-  list(guildId: string): DiscordChannel[] {
+  list(guildId: string): Channel[] {
     const rows = this.db.prepare("SELECT * FROM channels WHERE guild_id = ? ORDER BY position ASC").all(guildId) as ChannelRow[];
-    return rows.map(toDiscordChannel);
+    return rows.map(toChannel);
   }
 
-  getById(id: string): DiscordChannel | null {
+  getById(id: string): Channel | null {
     const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow | undefined;
-    return row ? toDiscordChannel(row) : null;
+    return row ? toChannel(row) : null;
   }
 
-  create(guildId: string, name: string, topic?: string, type?: number): DiscordChannel {
+  create(guildId: string, name: string, topic?: string, type?: number): Channel {
     const id = randomUUID();
     const maxPos = (this.db.prepare("SELECT MAX(position) as m FROM channels WHERE guild_id = ?").get(guildId) as { m: number | null }).m;
     const position = (maxPos ?? -1) + 1;
@@ -45,10 +45,10 @@ export class ChannelsRepo {
     ).run(id, guildId, name, type ?? 0, topic ?? null, position);
 
     const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow;
-    return toDiscordChannel(row);
+    return toChannel(row);
   }
 
-  update(id: string, fields: { name?: string; topic?: string; position?: number; type?: number }): DiscordChannel | null {
+  update(id: string, fields: { name?: string; topic?: string; position?: number; type?: number }): Channel | null {
     const updates: string[] = [];
     const params: unknown[] = [];
 

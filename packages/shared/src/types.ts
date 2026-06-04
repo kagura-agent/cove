@@ -7,15 +7,15 @@
 
 // ─── Discord-compatible types ───────────────────────────────────────────────
 
-/** Discord user object (subset relevant to Cove). */
-export interface DiscordUser {
+/** User object (Discord-compatible). */
+export interface User {
   id: string;
   username: string;
   bot: boolean;
 }
 
-/** Discord channel object — channels are mapped to GUILD_TEXT. */
-export interface DiscordChannel {
+/** Channel object — channels are mapped to GUILD_TEXT. */
+export interface Channel {
   id: string;
   name: string;
   type: number; // 0 = GUILD_TEXT
@@ -24,12 +24,12 @@ export interface DiscordChannel {
   position: number;
 }
 
-/** Discord message object. */
-export interface DiscordMessage {
+/** Message object (Discord-compatible). */
+export interface Message {
   id: string;
   channel_id: string;
   content: string;
-  author: DiscordUser;
+  author: User;
   timestamp: string; // ISO 8601
   edited_timestamp?: string | null;
   type: number; // 0 = DEFAULT
@@ -54,8 +54,8 @@ export interface GatewayPayload {
   t?: string | null; // event name (DISPATCH only)
 }
 
-/** Discord guild object (subset relevant to Cove). */
-export interface DiscordGuild {
+/** Guild object (Discord-compatible). */
+export interface Guild {
   id: string;
   name: string;
   icon: string | null;
