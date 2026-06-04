@@ -9,7 +9,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   const auth = requireAuth(repos.users);
 
   app.get("/api/v10/guilds/:guildId/channels", auth, (c) => {
-    const guildId = c.req.param("guildId");
+    const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
@@ -21,7 +21,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.get("/api/v10/channels/:id", (c) => {
-    const id = c.req.param("id");
+    const id = c.req.param("id")!;
     const channel = repos.channels.getById(id);
     if (!channel) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
@@ -30,12 +30,12 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.get("/api/v10/channels/:id/state", (c) => {
-    const channelId = c.req.param("id");
+    const channelId = c.req.param("id")!;
     return c.json(repos.state.list(channelId));
   });
 
   app.put("/api/v10/channels/:id/state", async (c) => {
-    const channelId = c.req.param("id");
+    const channelId = c.req.param("id")!;
     const body = await parseJsonBody<{ key: string; value: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
@@ -52,7 +52,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.post("/api/v10/guilds/:guildId/channels", auth, async (c) => {
-    const guildId = c.req.param("guildId");
+    const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
@@ -74,7 +74,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.patch("/api/v10/channels/:id", async (c) => {
-    const id = c.req.param("id");
+    const id = c.req.param("id")!;
     if (!repos.channels.exists(id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
@@ -113,8 +113,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.delete("/api/v10/channels/:id/state/:key", (c) => {
-    const channelId = c.req.param("id");
-    const key = c.req.param("key");
+    const channelId = c.req.param("id")!;
+    const key = c.req.param("key")!;
 
     if (!repos.state.delete(channelId, key)) {
       return c.json({ message: "State key not found" }, 404);
@@ -126,8 +126,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.delete("/api/v10/channels/:id", auth, (c) => {
-    const id = c.req.param("id");
-    if (!repos.channels.delete(id!)) {
+    const id = c.req.param("id")!;
+    if (!repos.channels.delete(id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
     return c.json({ deleted: true });

@@ -81,7 +81,7 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
   // ─── Guild Members ─────────────────────────────────────────
 
   app.get("/api/v10/guilds/:guildId/members", auth, (c) => {
-    const guildId = c.req.param("guildId");
+    const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
@@ -93,8 +93,8 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
   });
 
   app.put("/api/v10/guilds/:guildId/members/:userId", auth, async (c) => {
-    const guildId = c.req.param("guildId");
-    const userId = c.req.param("userId");
+    const guildId = c.req.param("guildId")!;
+    const userId = c.req.param("userId")!;
 
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
@@ -120,8 +120,8 @@ export function agentRoutes(repos: Repos): Hono<AppEnv> {
   });
 
   app.delete("/api/v10/guilds/:guildId/members/:userId", auth, (c) => {
-    const guildId = c.req.param("guildId");
-    const userId = c.req.param("userId");
+    const guildId = c.req.param("guildId")!;
+    const userId = c.req.param("userId")!;
 
     if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
