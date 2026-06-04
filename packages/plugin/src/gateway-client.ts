@@ -36,6 +36,7 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
   private reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  private hasConnectedOnce = false;
 
   /** The bot user returned from the READY event. */
   public botUser: { id: string; username: string } | null = null;
@@ -123,6 +124,10 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
           session_id: string;
         };
         this.botUser = { id: data.user.id, username: data.user.username };
+        if (this.hasConnectedOnce) {
+          this.emit("reconnect");
+        }
+        this.hasConnectedOnce = true;
         this.emit("ready", this.botUser);
         break;
       }

@@ -13,8 +13,62 @@ import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 
+const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
+
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
+
+export class DispatchTimeoutError extends Error {
+  constructor() { super('dispatch timeout'); this.name = 'DispatchTimeoutError'; }
+}
+export class DispatchAbortedError extends Error {
+  constructor() { super('dispatch aborted'); this.name = 'DispatchAbortedError'; }
+}
+
+/**
+ * Race a dispatch promise against a timeout and an AbortSignal.
+ * Resolves/rejects as soon as any of the three fires.
+ *
+ * Note: this is release-only, not cancellation — the underlying dispatch
+ * continues running but side effects (message delivery, streaming edits,
+ * typing indicators) are guarded by per-channel AbortController reference
+ * equality so stale dispatches cannot send messages.
+ */
+export function createAbortableDispatch(
+  dispatch: Promise<unknown>,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (!settled) { settled = true; fn(); }
+    };
+
+    const timer = setTimeout(
+      () => settle(() => reject(new DispatchTimeoutError())),
+      timeoutMs,
+    );
+
+    const onAbort = () => settle(() => {
+      clearTimeout(timer);
+      reject(new DispatchAbortedError());
+    });
+
+    if (signal.aborted) {
+      clearTimeout(timer);
+      dispatch.catch(() => {}); // Prevent unhandled rejection from orphaned dispatch
+      reject(new DispatchAbortedError());
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    dispatch.then(
+      () => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve(); }),
+      (err) => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); reject(err); }),
+    );
+  });
+}
 
 const restClients = new Map<string, CoveRestClient>();
 
@@ -146,6 +200,17 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         token: account.token,
       });
 
+      /** Track in-flight dispatches per channel so we can cancel on reconnect or duplicate. */
+      const pendingDispatches = new Map<string, AbortController>();
+
+      gatewayClient.on("reconnect", () => {
+        log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
+        for (const controller of pendingDispatches.values()) {
+          controller.abort();
+        }
+        pendingDispatches.clear();
+      });
+
       gatewayClient.on("ready", (user) => {
         log?.info?.(`cove: connected as ${user.username} (${user.id})`);
         ctx.setStatus({
@@ -167,6 +232,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         const senderName = message.author.username;
 
         log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
+
+        // Register controller synchronously BEFORE any await to prevent ordering race:
+        // two same-channel messages overlapping on await boundaries could abort the wrong one.
+        const existingDispatch = pendingDispatches.get(channelId);
+        if (existingDispatch) {
+          log?.warn?.(`cove: aborting pending dispatch for [${channelId}] (superseded by new message)`);
+          existingDispatch.abort();
+        }
+        const abortController = new AbortController();
+        pendingDispatches.set(channelId, abortController);
 
         // Fire-and-forget early typing cue via WebSocket (instant, no TLS overhead)
         gatewayClient.send({ op: 4, d: { channel_id: channelId } });
@@ -197,6 +272,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // full gateway config; the cove channel entry lives under
           // `channels.cove`.
           const channelEntry = cfg?.channels?.["cove"] ?? {};
+          const dispatchTimeoutMs = (channelEntry as any).dispatchTimeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
           const toolProgress = createToolProgressTracker(channelEntry, {
             seed: message.id ?? String(Date.now()),
             onProgressUpdate: () => {
@@ -209,9 +285,14 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
           let editQueue = Promise.resolve();
 
+          /** Returns true if this dispatch is still the current one for this channel. */
+          const isCurrent = () => pendingDispatches.get(channelId) === abortController;
+
           const sendOrEdit = async (text: string): Promise<boolean> => {
+            if (!isCurrent()) return false;
             return new Promise<boolean>((resolve) => {
               editQueue = editQueue.then(async () => {
+                if (!isCurrent()) { resolve(false); return; }
                 if (draftState.stopped && !draftState.final) { resolve(false); return; }
                 const trimmed = text.trimEnd();
                 if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
@@ -272,12 +353,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       ...params.dispatcherOptions,
                       typingCallbacks,
                       deliver: async (payload: any, _info: { kind: string }) => {
+                        if (!isCurrent()) return;
                         typingCallbacks.onCleanup?.();
                         const text = payload.text ?? "";
                         if (!text) return;
 
                         draftState.final = true;
                         await draft.seal();
+
+                        // Re-check after async seal — dispatch may have been superseded
+                        if (!isCurrent()) return;
 
                         // If streaming was stopped due to an earlier API error,
                         // the draftMessageId may be stale or absent. Fall back
@@ -305,12 +390,14 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       disableBlockStreaming: true,
                       suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {
+                        if (!isCurrent()) return;
                         if (payload?.text) {
                           toolProgress.onPartialReply(payload.text);
                           draft.update(payload.text);
                         }
                       },
                       onToolStart: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onToolStart({
                           name: payload?.name ?? payload?.toolName,
                           args: payload?.args,
@@ -319,29 +406,37 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                         });
                       },
                       onItemEvent: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onItemEvent(payload);
                       },
                       onPlanUpdate: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onPlanUpdate(payload);
                       },
                       onApprovalEvent: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onApprovalEvent(payload);
                       },
                       onCommandOutput: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onCommandOutput(payload);
                       },
                       onPatchSummary: (payload: any) => {
+                        if (!isCurrent()) return;
                         toolProgress.onPatchSummary(payload);
                       },
                       onCompactionStart: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onCompactionStart();
                         const combined = toolProgress.getCombinedText();
                         if (combined) draft.update(combined);
                       },
                       onCompactionEnd: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onCompactionEnd();
                       },
                       onAssistantMessageStart: () => {
+                        if (!isCurrent()) return;
                         toolProgress.onAssistantMessageStart();
                       },
                     },
@@ -353,7 +448,12 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // Yield event loop so WS typing frame flushes before heavy bootstrap work
           await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
-          await dispatchInboundDirectDmWithRuntime({
+          // Controller already registered synchronously in the prologue above.
+          // isCurrent() uses the controller registered at message entry.
+
+          try {
+            await createAbortableDispatch(
+              dispatchInboundDirectDmWithRuntime({
             cfg,
             runtime: patchedRuntime as any,
             channel: "cove",
@@ -386,7 +486,26 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             onDispatchError: (err, info) => {
               log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
             },
-          });
+          }),
+              dispatchTimeoutMs,
+              abortController.signal,
+            );
+          } catch (err: any) {
+            if (err instanceof DispatchTimeoutError) {
+              typingCallbacks.onCleanup?.();
+              log?.warn?.(`cove: dispatch timed out after ${dispatchTimeoutMs}ms in [${channelId}]`);
+            } else if (err instanceof DispatchAbortedError) {
+              typingCallbacks.onCleanup?.();
+              log?.info?.(`cove: dispatch aborted in [${channelId}]`);
+            } else {
+              throw err;
+            }
+          } finally {
+            // Only remove if this is still our controller (not replaced by a newer dispatch)
+            if (pendingDispatches.get(channelId) === abortController) {
+              pendingDispatches.delete(channelId);
+            }
+          }
         } catch (err: any) {
           typingCallbacks.onCleanup?.();
           log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
@@ -402,6 +521,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       ctx.abortSignal.addEventListener("abort", () => {
+        // Abort all pending dispatches on plugin shutdown
+        for (const c of pendingDispatches.values()) c.abort();
+        pendingDispatches.clear();
         gatewayClient.destroy();
       });
 
