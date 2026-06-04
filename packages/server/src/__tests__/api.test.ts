@@ -795,6 +795,35 @@ describe("Cove API — Discord-compatible", () => {
     });
   });
 
+  // ─── Non-member guild access ──────────────────────────────────────────
+
+  describe("Non-member guild access", () => {
+    let outsiderToken: string;
+
+    beforeEach(() => {
+      // Create a user that is NOT a member of the 'cove' guild
+      const now = Date.now();
+      outsiderToken = "outsider-token";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("outsider", "Outsider", null, 1, null, outsiderToken, now, now);
+      // Deliberately NOT adding to guild_members
+    });
+
+    it("non-member GET /guilds/cove/channels returns 404", async () => {
+      const res = await app.request("/api/v10/guilds/cove/channels", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member GET /guilds/cove/members returns 404", async () => {
+      const res = await app.request("/api/v10/guilds/cove/members", {
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
   // ─── Gateway discovery ────────────────────────────────────────────────
 
   describe("GET /api/v10/gateway", () => {

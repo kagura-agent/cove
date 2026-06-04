@@ -34,13 +34,11 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean }, dispatcher?: GatewayDispatcher, guildsRepo?: GuildsRepo): void {
+  identify(user: { id: string; username: string; bot: boolean }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo): void {
     this.user = user;
     this.identified = true;
-    const presences = dispatcher
-      ? dispatcher.getOnlineUserIds().map((id) => ({ user: { id }, status: "online" as const }))
-      : [];
-    const guilds = guildsRepo?.listForUser(user.id) ?? [];
+    const presences = dispatcher.getOnlineUserIds().map((id) => ({ user: { id }, status: "online" as const }));
+    const guilds = guildsRepo.listForUser(user.id);
     this.seq++;
     this.ws.send(JSON.stringify({
       op: GatewayOpcode.DISPATCH,

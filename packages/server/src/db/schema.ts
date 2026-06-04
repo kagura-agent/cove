@@ -76,7 +76,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS guild_members (
-      guild_id    TEXT NOT NULL,
+      guild_id    TEXT NOT NULL REFERENCES guilds(id),
       user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
       nick        TEXT,
       roles       TEXT DEFAULT '[]',
@@ -152,11 +152,15 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)");
 
   // Migration: add guild_id to channels table
+  // Disable FK checks so the DEFAULT value isn't validated against guilds table
+  // (the seed INSERT may not have run yet for old DBs)
+  db.pragma('foreign_keys = OFF');
   try {
     db.exec(`ALTER TABLE channels ADD COLUMN guild_id TEXT NOT NULL DEFAULT '${DEFAULT_GUILD_ID}'`);
   } catch (e: unknown) {
     if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
   }
+  db.pragma('foreign_keys = ON');
 
   // Post-create migrations: rename columns in already-renamed tables
   try {
