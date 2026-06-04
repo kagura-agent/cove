@@ -43,6 +43,12 @@ export class GuildsRepo {
     return !!this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(id);
   }
 
+  /**
+   * TEMPORARY: Returns the first guild's ID as a stand-in for invite-based guild joining.
+   * Discord doesn't have a "default guild" — users join via invite links or create their own.
+   * Remove after #171 (invite system) + #111 (DMs) are implemented.
+   * At that point, registration should NOT auto-join any guild.
+   */
   getDefaultId(): string {
     if (this.cachedDefaultId) return this.cachedDefaultId;
     const row = this.db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
