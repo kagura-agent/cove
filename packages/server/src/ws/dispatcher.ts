@@ -1,12 +1,13 @@
 import type { Message, Channel } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
+import type { GuildsRepo } from "../repos/guilds.js";
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
 
-  constructor(private channelsRepo: ChannelsRepo) {}
+  constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
@@ -30,11 +31,12 @@ export class GatewayDispatcher {
         sessions.delete(session.id);
         if (sessions.size === 0) {
           this.userSessions.delete(userId);
-          // Broadcast before removing from sessions so guild IDs are still accessible
+          // Broadcast before removing from sessions so guild IDs are still accessible.
+          // Exclude the dying session so it doesn't receive its own offline event.
           this.broadcastToGuildMembers(userId, "PRESENCE_UPDATE", {
             user: { id: userId },
             status: "offline",
-          });
+          }, session.id);
         }
       }
     }
@@ -101,9 +103,16 @@ export class GatewayDispatcher {
         session.guildIds.add(guildId);
       }
     }
+    // Notify the user's sessions about the new guild membership
+    const guild = this.guildsRepo?.getById(guildId);
+    if (guild) {
+      this.sendToUser(userId, "GUILD_CREATE", guild);
+    }
   }
 
   removeGuildFromUser(userId: string, guildId: string): void {
+    // Notify the user's sessions BEFORE removing the guild from their set
+    this.sendToUser(userId, "GUILD_DELETE", { id: guildId });
     for (const session of this.sessions) {
       if (session.user?.id === userId) {
         session.guildIds.delete(guildId);
@@ -126,9 +135,35 @@ export class GatewayDispatcher {
     }
   }
 
-  private broadcastToGuildMembers(userId: string, event: string, data: unknown): void {
+  private sendToUser(userId: string, event: string, data: unknown): void {
+    for (const session of this.sessions) {
+      if (session.user?.id === userId) {
+        session.dispatch(event, data);
+      }
+    }
+  }
+
+  /** Get online users who share at least one guild with the given guild set. Single-pass O(sessions). */
+  getSharedGuildPresences(guildIds: Set<string>): { user: { id: string }; status: "online" }[] {
+    const seen = new Set<string>();
+    const presences: { user: { id: string }; status: "online" }[] = [];
+    for (const session of this.sessions) {
+      if (!session.user || seen.has(session.user.id)) continue;
+      for (const gid of session.guildIds) {
+        if (guildIds.has(gid)) {
+          seen.add(session.user.id);
+          presences.push({ user: { id: session.user.id }, status: "online" });
+          break;
+        }
+      }
+    }
+    return presences;
+  }
+
+  private broadcastToGuildMembers(userId: string, event: string, data: unknown, excludeSessionId?: string): void {
     const userGuildIds = this.getSessionGuildIds(userId);
     for (const session of this.sessions) {
+      if (excludeSessionId && session.id === excludeSessionId) continue;
       if (userGuildIds.some((gid) => session.guildIds.has(gid))) {
         session.dispatch(event, data);
       }

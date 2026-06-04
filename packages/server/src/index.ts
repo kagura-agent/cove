@@ -18,7 +18,7 @@ const googleClientId = process.env["GOOGLE_CLIENT_ID"];
 const googleClientSecret = process.env["GOOGLE_CLIENT_SECRET"];
 const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
 
-const dispatcher = new GatewayDispatcher(repos.channels);
+const dispatcher = new GatewayDispatcher(repos.channels, repos.guilds);
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,

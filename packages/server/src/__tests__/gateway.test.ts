@@ -18,11 +18,11 @@ function mockSession(id: string, userId: string, guilds: string[]): GatewaySessi
   } as unknown as GatewaySession & { dispatched: typeof dispatched };
 }
 
-function mockChannelsRepo(mapping: Record<string, string>): ChannelsRepo {
+function mockChannelsRepo(mapping: Record<string, string | null>): ChannelsRepo {
   return {
     getById(id: string): Channel | null {
+      if (!(id in mapping)) return null;
       const guildId = mapping[id];
-      if (!guildId) return null;
       return { id, guild_id: guildId, name: "test", type: 0, topic: null, position: 0 } as Channel;
     },
   } as ChannelsRepo;
@@ -37,6 +37,7 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
     const channels = mockChannelsRepo({
       "chan-1": "guild-a",
       "chan-2": "guild-b",
+      "dm-chan": null,
     });
     dispatcher = new GatewayDispatcher(channels);
 
@@ -105,18 +106,39 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
       expect(sessionB.dispatch).not.toHaveBeenCalledWith("PRESENCE_UPDATE", expect.objectContaining({ user: { id: "user-3" } }));
     });
 
-    it("sends offline only to sessions sharing a guild", () => {
+    it("does not send the offline event to the dying session itself", () => {
       const sessionA2 = mockSession("s3", "user-3", ["guild-a"]);
       dispatcher.addSession(sessionA2);
 
-      // Clear mocks from the online event
       vi.mocked(sessionA.dispatch).mockClear();
-      vi.mocked(sessionB.dispatch).mockClear();
+      vi.mocked(sessionA2.dispatch).mockClear();
 
       dispatcher.removeSession(sessionA2);
 
       expect(sessionA.dispatch).toHaveBeenCalledWith("PRESENCE_UPDATE", { user: { id: "user-3" }, status: "offline" });
+      // The dying session should NOT receive its own offline event
+      expect(sessionA2.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("DM channels (#111)", () => {
+    // DM channels have guild_id == null and must not be broadcast to guild members.
+    // See #111 for the DM implementation plan.
+    it("does not broadcast messages in non-guild (DM) channels", () => {
+      dispatcher.messageCreate({ id: "dm1", channel_id: "dm-chan", content: "secret" } as any);
+
+      expect(sessionA.dispatch).not.toHaveBeenCalled();
       expect(sessionB.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("GUILD_CREATE / GUILD_DELETE events", () => {
+    it("sends GUILD_DELETE to user sessions before removing guild", () => {
+      dispatcher.removeGuildFromUser("user-2", "guild-b");
+
+      expect(sessionB.dispatch).toHaveBeenCalledWith("GUILD_DELETE", { id: "guild-b" });
+      // sessionA is a different user and should not receive it
+      expect(sessionA.dispatch).not.toHaveBeenCalled();
     });
   });
 
@@ -173,6 +195,11 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
 
       // Simulate user-2 being kicked from guild-a
       dispatcher.removeGuildFromUser("user-2", "guild-a");
+
+      // GUILD_DELETE was sent to sessionB — verify it, then clear for message assertions
+      expect(sessionB.dispatch).toHaveBeenCalledWith("GUILD_DELETE", { id: "guild-a" });
+      vi.mocked(sessionA.dispatch).mockClear();
+      vi.mocked(sessionB.dispatch).mockClear();
 
       dispatcher.messageCreate({ id: "m3", channel_id: "chan-1", content: "after kick" } as any);
       expect(sessionA.dispatch).toHaveBeenCalledWith("MESSAGE_CREATE", expect.objectContaining({ id: "m3" }));

@@ -44,10 +44,7 @@ export class GatewaySession {
       this.guildIds.add(guild.id);
     }
 
-    const onlineUserIds = dispatcher.getOnlineUserIds();
-    const presences = onlineUserIds
-      .filter((id) => dispatcher.getSessionGuildIds(id).some((gid) => this.guildIds.has(gid)))
-      .map((id) => ({ user: { id }, status: "online" as const }));
+    const presences = dispatcher.getSharedGuildPresences(this.guildIds);
 
     this.seq++;
     this.ws.send(JSON.stringify({
