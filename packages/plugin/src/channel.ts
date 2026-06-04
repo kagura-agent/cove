@@ -18,9 +18,21 @@ const DISPATCH_TIMEOUT_MS = 120_000;
 // Use dynamic import to access the direct-dm helper
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
 
+export class DispatchTimeoutError extends Error {
+  constructor() { super('dispatch timeout'); this.name = 'DispatchTimeoutError'; }
+}
+export class DispatchAbortedError extends Error {
+  constructor() { super('dispatch aborted'); this.name = 'DispatchAbortedError'; }
+}
+
 /**
  * Race a dispatch promise against a timeout and an AbortSignal.
  * Resolves/rejects as soon as any of the three fires.
+ *
+ * Note: this is release-only, not cancellation — the underlying dispatch
+ * continues running but side effects (message delivery, streaming edits,
+ * typing indicators) are guarded by per-channel generation tokens so stale
+ * dispatches cannot send messages.
  */
 export function createAbortableDispatch(
   dispatch: Promise<unknown>,
@@ -34,18 +46,18 @@ export function createAbortableDispatch(
     };
 
     const timer = setTimeout(
-      () => settle(() => reject(new Error("dispatch timeout"))),
+      () => settle(() => reject(new DispatchTimeoutError())),
       timeoutMs,
     );
 
     const onAbort = () => settle(() => {
       clearTimeout(timer);
-      reject(new Error("dispatch aborted"));
+      reject(new DispatchAbortedError());
     });
 
     if (signal.aborted) {
       clearTimeout(timer);
-      reject(new Error("dispatch aborted"));
+      reject(new DispatchAbortedError());
       return;
     }
     signal.addEventListener("abort", onAbort, { once: true });
@@ -189,6 +201,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       /** Track in-flight dispatches per channel so we can cancel on reconnect or duplicate. */
       const pendingDispatches = new Map<string, AbortController>();
+      /** Per-channel generation counter — incremented on each new dispatch so stale callbacks become no-ops. */
+      const channelGeneration = new Map<string, number>();
 
       gatewayClient.on("reconnect", () => {
         log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
@@ -261,7 +275,11 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
           let editQueue = Promise.resolve();
 
+          const gen = (channelGeneration.get(channelId) ?? 0) + 1;
+          channelGeneration.set(channelId, gen);
+
           const sendOrEdit = async (text: string): Promise<boolean> => {
+            if (channelGeneration.get(channelId) !== gen) return false;
             return new Promise<boolean>((resolve) => {
               editQueue = editQueue.then(async () => {
                 if (draftState.stopped && !draftState.final) { resolve(false); return; }
@@ -324,6 +342,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       ...params.dispatcherOptions,
                       typingCallbacks,
                       deliver: async (payload: any, _info: { kind: string }) => {
+                        if (channelGeneration.get(channelId) !== gen) return;
                         typingCallbacks.onCleanup?.();
                         const text = payload.text ?? "";
                         if (!text) return;
@@ -357,6 +376,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                       disableBlockStreaming: true,
                       suppressDefaultToolProgressMessages: true,
                       onPartialReply: (payload: any) => {
+                        if (channelGeneration.get(channelId) !== gen) return;
                         if (payload?.text) {
                           toolProgress.onPartialReply(payload.text);
                           draft.update(payload.text);
@@ -454,9 +474,11 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               abortController.signal,
             );
           } catch (err: any) {
-            if (err.message === "dispatch timeout") {
+            if (err instanceof DispatchTimeoutError) {
+              typingCallbacks.onCleanup?.();
               log?.warn?.(`cove: dispatch timed out after ${DISPATCH_TIMEOUT_MS}ms in [${channelId}]`);
-            } else if (err.message === "dispatch aborted") {
+            } else if (err instanceof DispatchAbortedError) {
+              typingCallbacks.onCleanup?.();
               log?.info?.(`cove: dispatch aborted in [${channelId}]`);
             } else {
               throw err;
