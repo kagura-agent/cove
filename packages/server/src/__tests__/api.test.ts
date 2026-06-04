@@ -11,6 +11,7 @@ describe("Cove API — Discord-compatible", () => {
   let app: ReturnType<typeof createApp>;
   const broadcastEvents: { t: string; d: unknown }[] = [];
   let adminToken: string;
+  let defaultGuildId: string;
 
   class TestDispatcher extends GatewayDispatcher {
     override messageCreate(message: DiscordMessage): void {
@@ -38,7 +39,8 @@ describe("Cove API — Discord-compatible", () => {
 
   beforeEach(() => {
     db = initDb(":memory:");
-    seedChannels(db);
+    defaultGuildId = (db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string }).id;
+    seedChannels(db, defaultGuildId);
     broadcastEvents.length = 0;
     app = createApp(db, createRepos(db), new TestDispatcher());
 
@@ -48,7 +50,7 @@ describe("Cove API — Discord-compatible", () => {
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run("admin", "Admin", null, 1, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
-      .run("cove", "admin", null, "[]", now);
+      .run(defaultGuildId, "admin", null, "[]", now);
   });
 
   const authHeaders = () => ({
@@ -70,29 +72,29 @@ describe("Cove API — Discord-compatible", () => {
 
   // ─── Channels ───────────────────────────────────────────────────────────
 
-  describe("GET /api/v10/guilds/cove/channels", () => {
+  describe("GET /api/v10/guilds/:guildId/channels", () => {
     it("returns all seeded channels in Discord format", async () => {
-      const res = await authGet("/api/v10/guilds/cove/channels");
+      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
       expect(res.status).toBe(200);
       const channels: DiscordChannel[] = await res.json();
       expect(channels).toHaveLength(4);
     });
 
     it("each channel has Discord-required fields", async () => {
-      const res = await authGet("/api/v10/guilds/cove/channels");
+      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
       const channels: DiscordChannel[] = await res.json();
       for (const ch of channels) {
         expect(ch.id).toBeTruthy();
         expect(ch.name).toBeTruthy();
         expect(ch.type).toBe(0);
-        expect(ch.guild_id).toBe("cove");
+        expect(ch.guild_id).toBe(defaultGuildId);
         expect(typeof ch.topic).toBe("string");
         expect(typeof ch.position).toBe("number");
       }
     });
 
     it("includes Cove extension fields", async () => {
-      const res = await authGet("/api/v10/guilds/cove/channels");
+      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/channels`);
       const channels: DiscordChannel[] = await res.json();
       const garden = channels.find((c) => c.id === "garden");
       expect(garden).toBeDefined();
@@ -115,7 +117,7 @@ describe("Cove API — Discord-compatible", () => {
       expect(ch.id).toBe("garden");
       expect(ch.name).toBe("Garden");
       expect(ch.type).toBe(0);
-      expect(ch.guild_id).toBe("cove");
+      expect(ch.guild_id).toBe(defaultGuildId);
       expect(ch.topic).toBe("Tend your plants and watch them grow");
     });
 
@@ -718,7 +720,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("PUT returns existing member for auto-joined bot", async () => {
       // Bots auto-join guild on creation, so PUT returns 200 (already a member)
-      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -733,7 +735,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("PUT with nick and roles on auto-joined member", async () => {
       // Bot already in guild from creation — PUT returns existing member
-      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({ nick: "Gardener Bot", roles: ["gardener"] }),
@@ -744,12 +746,12 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PUT returns existing member for duplicate", async () => {
-      await app.request("/api/v10/guilds/cove/members/bot-a", {
+      await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
       });
-      const res = await app.request("/api/v10/guilds/cove/members/bot-a", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -759,7 +761,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("GET lists guild members (auto-joined on creation)", async () => {
       // admin + bot-a + bot-b = 3 members
-      const res = await authGet("/api/v10/guilds/cove/members");
+      const res = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
       expect(res.status).toBe(200);
       const members: CoveGuildMember[] = await res.json();
       expect(members).toHaveLength(3);
@@ -771,10 +773,10 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("DELETE removes member from guild", async () => {
-      const res = await app.request("/api/v10/guilds/cove/members/bot-a", { method: "DELETE", headers: { Authorization: `Bot ${adminToken}` } });
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/bot-a`, { method: "DELETE", headers: { Authorization: `Bot ${adminToken}` } });
       expect(res.status).toBe(204);
 
-      const listRes = await authGet("/api/v10/guilds/cove/members");
+      const listRes = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
       const members: CoveGuildMember[] = await listRes.json();
       // admin + bot-b remain
       expect(members).toHaveLength(2);
@@ -787,7 +789,7 @@ describe("Cove API — Discord-compatible", () => {
         headers: { Authorization: `Bot ${adminToken}` },
       });
 
-      const listRes = await authGet("/api/v10/guilds/cove/members");
+      const listRes = await authGet(`/api/v10/guilds/${defaultGuildId}/members`);
       const members: CoveGuildMember[] = await listRes.json();
       // admin + bot-b remain
       expect(members).toHaveLength(2);
@@ -810,14 +812,14 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member GET /guilds/cove/channels returns 404", async () => {
-      const res = await app.request("/api/v10/guilds/cove/channels", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
     });
 
     it("non-member GET /guilds/cove/members returns 404", async () => {
-      const res = await app.request("/api/v10/guilds/cove/members", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members`, {
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);
@@ -879,7 +881,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot add guild member", async () => {
-      const res = await app.request("/api/v10/guilds/cove/members/someuser", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/someuser`, {
         method: "PUT",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -887,7 +889,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("non-member cannot remove guild member", async () => {
-      const res = await app.request("/api/v10/guilds/cove/members/someuser", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/members/someuser`, {
         method: "DELETE",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
@@ -955,7 +957,7 @@ describe("Cove API — Discord-compatible", () => {
       expect(res.status).toBe(200);
       const guilds = await res.json();
       expect(guilds).toHaveLength(1);
-      expect(guilds[0].id).toBe("cove");
+      expect(guilds[0].id).toBe(defaultGuildId);
       expect(guilds[0].name).toBe("Cove");
       expect(guilds[0]).toHaveProperty("icon");
       expect(guilds[0]).toHaveProperty("owner_id");
@@ -1163,7 +1165,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("POST channel rejects name over 100 chars", async () => {
-      const res = await app.request("/api/v10/guilds/cove/channels", {
+      const res = await app.request(`/api/v10/guilds/${defaultGuildId}/channels`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ name: "x".repeat(101) }),

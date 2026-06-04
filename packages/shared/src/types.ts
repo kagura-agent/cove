@@ -5,8 +5,6 @@
  * by any client that speaks the Discord REST/Gateway protocol.
  */
 
-export const DEFAULT_GUILD_ID = "cove";
-
 // ─── Discord-compatible types ───────────────────────────────────────────────
 
 /** Discord user object (subset relevant to Cove). */

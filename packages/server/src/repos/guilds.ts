@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { DEFAULT_GUILD_ID, type DiscordGuild } from "@cove/shared";
+import { type DiscordGuild } from "@cove/shared";
 
 interface GuildRow {
   id: string;
@@ -45,9 +45,9 @@ export class GuildsRepo {
 
   getDefaultId(): string {
     if (this.cachedDefaultId) return this.cachedDefaultId;
-    const row = this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(DEFAULT_GUILD_ID) as { id: string } | undefined;
+    const row = this.db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
     if (!row) {
-      throw new Error(`Default guild '${DEFAULT_GUILD_ID}' not found in database. Run migrations first.`);
+      throw new Error("No guilds found in database. Run migrations first.");
     }
     this.cachedDefaultId = row.id;
     return row.id;
