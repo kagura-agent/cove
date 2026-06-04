@@ -151,7 +151,7 @@ function migrateRenameTable(db: Database.Database, oldName: string, newName: str
   db.exec(`ALTER TABLE "${oldName}" RENAME TO "${newName}"`);
 }
 
-function migrateChannelsToDiscordSchema(db: Database.Database, guildId: string): void {
+function migrateChannelsToDiscordSchema(db: Database.Database): void {
   const tableInfo = db.prepare("PRAGMA table_info(channels)").all() as Array<{ name: string }>;
   const hasPositionX = tableInfo.some(col => col.name === "position_x");
   if (!hasPositionX) return;
@@ -226,7 +226,7 @@ function migrateLegacyToV1(db: Database.Database): void {
   }
 
   // Migrate island-style channels to discord schema
-  migrateChannelsToDiscordSchema(db, guildId);
+  migrateChannelsToDiscordSchema(db);
 
   // Drop obsolete tables
   db.exec("DROP TABLE IF EXISTS channel_state");
@@ -250,6 +250,12 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   db.pragma("foreign_keys = OFF");
   runMigrations(db);
   db.pragma("foreign_keys = ON");
+
+  // Verify no orphaned FK references after migration
+  const fkViolations = db.pragma("foreign_key_check") as unknown[];
+  if (fkViolations.length > 0) {
+    throw new Error(`Foreign key violations detected after migration: ${JSON.stringify(fkViolations)}`);
+  }
 
   // Seed default guild if none exists
   const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;

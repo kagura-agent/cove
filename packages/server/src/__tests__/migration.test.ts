@@ -62,19 +62,59 @@ describe("versioned migration system", () => {
     db.close();
   });
 
-  it("future version throws on missing migration", () => {
+  it("throws on future DB version (newer than supported)", () => {
     const tmpFile = tmpDb();
     try {
       const setup = new Database(tmpFile);
       setup.pragma("journal_mode = WAL");
-      // Set version beyond latest to simulate a downgrade scenario
-      // This won't trigger runMigrations since current >= LATEST_VERSION
-      // Instead, test that a gap in migrations would throw
+      setup.pragma("user_version = 999");
       setup.close();
 
-      // For this test, we verify the system works by confirming
-      // a DB at LATEST_VERSION doesn't attempt further migrations
+      expect(() => initDb(tmpFile)).toThrow(/newer than supported/);
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+
+  it("legacy DB with FK-bearing messages migrates successfully", () => {
+    const tmpFile = tmpDb();
+    try {
+      const setup = new Database(tmpFile);
+      setup.exec(`
+        CREATE TABLE guilds (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT,
+          owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        )
+      `);
+      setup.exec("INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('g1', 'Test', 1000, 1000)");
+      setup.exec(`
+        CREATE TABLE channels (
+          id TEXT PRIMARY KEY, guild_id TEXT NOT NULL,
+          name TEXT NOT NULL, icon TEXT, type TEXT, channel_id TEXT,
+          description TEXT, position_x REAL, position_y REAL
+        )
+      `);
+      setup.exec("INSERT INTO channels (id, guild_id, name, type, description, position_x, position_y) VALUES ('ch1', 'g1', 'General', 'open', 'Main channel', 100, 200)");
+      setup.exec(`
+        CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL, discriminator TEXT DEFAULT '0',
+          avatar TEXT, bot INTEGER DEFAULT 0, token TEXT, google_id TEXT, created_at INTEGER)
+      `);
+      setup.exec("INSERT INTO users (id, username, created_at) VALUES ('u1', 'TestUser', 1000)");
+      setup.exec(`
+        CREATE TABLE messages (
+          id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id),
+          content TEXT NOT NULL, author_id TEXT NOT NULL REFERENCES users(id),
+          timestamp TEXT NOT NULL, edited_timestamp TEXT, type INTEGER DEFAULT 0
+        )
+      `);
+      setup.exec("INSERT INTO messages (id, channel_id, content, author_id, timestamp) VALUES ('m1', 'ch1', 'hello', 'u1', '2026-01-01T00:00:00Z')");
+      setup.close();
+
+      // This should NOT throw — FK is disabled during migration
       const db = initDb(tmpFile);
+      const msg = db.prepare("SELECT * FROM messages WHERE id = 'm1'").get() as Record<string, unknown>;
+      expect(msg).toBeDefined();
+      expect(msg.content).toBe("hello");
       const version = db.pragma("user_version", { simple: true });
       expect(version).toBe(1);
       db.close();
