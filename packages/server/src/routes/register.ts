@@ -11,7 +11,7 @@ import type { GuildsRepo } from "../repos/guilds.js";
 export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): Hono {
   const app = new Hono();
 
-  app.post("/api/v10/auth/register", async (c) => {
+  app.post("/auth/register", async (c) => {
     const body = await c.req.json<{ inviteCode?: string; pendingToken?: string }>();
     const { inviteCode, pendingToken } = body;
 

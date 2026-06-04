@@ -10,6 +10,7 @@ import { ChatArea } from "./components/ChatArea";
 import { MemberList } from "./components/MemberList";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
+import { API_PREFIX } from "@cove/shared";
 import type { CSSProperties } from "react";
 
 function useVisualViewport() {
@@ -69,7 +70,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v10/auth/register`, {
+      const res = await fetch(`${API_BASE}${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), pendingToken }),
