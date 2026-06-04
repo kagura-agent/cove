@@ -1,9 +1,6 @@
 import { create } from "zustand";
-import type { Message } from "../types";
-import { useUserStore } from "./useUserStore";
-import { useMessageStore } from "./useMessageStore";
-import { useChannelStore } from "./useChannelStore";
-import { usePresenceStore } from "./usePresenceStore";
+import { dispatcher } from "../lib/gateway-dispatcher";
+import type { GatewayEventMap } from "../lib/gateway-dispatcher";
 
 type WsStatus = "connected" | "connecting" | "disconnected";
 
@@ -72,49 +69,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
         if (payload.op === 11) {
           return;
         }
-        if (payload.t === "READY") {
-          const data = payload.d as { presences?: Array<{ user: { id: string }; status: string }> };
-          if (data.presences) {
-            usePresenceStore.getState().initPresences(
-              data.presences.filter((p) => p.status === "online").map((p) => p.user.id),
-            );
-          }
-        }
-        const msgStore = useMessageStore.getState();
-        const activeId = useChannelStore.getState().activeChannelId;
-        if (payload.t === "MESSAGE_CREATE") {
-          const msg = payload.d as Message;
-          if (msg.channel_id === activeId) msgStore.addMessage(msg.channel_id, msg);
-          get().clearTyping(msg.channel_id, msg.author.id);
-        } else if (payload.t === "MESSAGE_UPDATE") {
-          const msg = payload.d as Message;
-          msgStore.updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp);
-        } else if (payload.t === "MESSAGE_DELETE") {
-          const data = payload.d as { id: string; channel_id: string };
-          msgStore.removeMessage(data.channel_id, data.id);
-        } else if (payload.t === "TYPING_START") {
-          const data = payload.d as { channel_id: string; user_id: string; username?: string };
-          const selfId = useUserStore.getState().id;
-          if (data.user_id === selfId) return;
-          const { clearTyping } = get();
-          clearTyping(data.channel_id, data.user_id);
-          const timeout = setTimeout(() => clearTyping(data.channel_id, data.user_id), 8000);
-          set((s) => {
-            const existing = s.typingUsers[data.channel_id] ?? [];
-            return {
-              typingUsers: {
-                ...s.typingUsers,
-                [data.channel_id]: [...existing, { userId: data.user_id, username: data.username ?? data.user_id, timeout }],
-              },
-            };
-          });
-        } else if (payload.t === "PRESENCE_UPDATE") {
-          const data = payload.d as { user: { id: string }; status: "online" | "offline" };
-          if (data.status === "online") {
-            usePresenceStore.getState().setOnline(data.user.id);
-          } else {
-            usePresenceStore.getState().setOffline(data.user.id);
-          }
+        if (payload.t && payload.t in gatewayEvents) {
+          dispatcher.emit(payload.t as keyof GatewayEventMap, payload.d as GatewayEventMap[keyof GatewayEventMap]);
         }
       } catch { /* ignore non-JSON */ }
     };
@@ -143,3 +99,15 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     set({ status: "disconnected" });
   },
 }));
+
+const gatewayEvents: Record<string, true> = {
+  MESSAGE_CREATE: true,
+  MESSAGE_UPDATE: true,
+  MESSAGE_DELETE: true,
+  TYPING_START: true,
+  PRESENCE_UPDATE: true,
+  READY: true,
+  CHANNEL_CREATE: true,
+  CHANNEL_UPDATE: true,
+  CHANNEL_DELETE: true,
+};
