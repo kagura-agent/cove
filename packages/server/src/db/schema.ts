@@ -81,7 +81,7 @@ function migrateV2ToV3(db: Database.Database): void {
   };
 
   // Guilds: use created_at for snowflake timestamp
-  const guilds = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM guilds", "guilds");
+  const guilds = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM guilds", "guilds");
   for (let i = 0; i < guilds.length; i++) {
     const g = guilds[i];
     if (!isUUID(g.id)) continue;
@@ -97,7 +97,7 @@ function migrateV2ToV3(db: Database.Database): void {
   }
 
   // Users: use created_at
-  const users = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM users", "users");
+  const users = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM users", "users");
   for (let i = 0; i < users.length; i++) {
     const u = users[i];
     if (!isUUID(u.id)) continue;
@@ -105,7 +105,7 @@ function migrateV2ToV3(db: Database.Database): void {
   }
 
   // Messages: use timestamp
-  const messages = safeQuery<{ id: string; timestamp: number }>("SELECT id, timestamp FROM messages ORDER BY timestamp ASC", "messages");
+  const messages = safeQuery<{ id: string; timestamp: string | number }>("SELECT id, timestamp FROM messages ORDER BY timestamp ASC", "messages");
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     if (!isUUID(m.id)) continue;
@@ -113,14 +113,14 @@ function migrateV2ToV3(db: Database.Database): void {
   }
 
   // Invite codes / pending registrations: use created_at
-  const invites = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM invite_codes", "invite_codes");
+  const invites = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM invite_codes", "invite_codes");
   for (let i = 0; i < invites.length; i++) {
     const inv = invites[i];
     if (!isUUID(inv.id)) continue;
     idMap.set(inv.id, snowflakeFromTimestamp(inv.created_at, i));
   }
 
-  const pendings = safeQuery<{ id: string; created_at: number | null }>("SELECT id, created_at FROM pending_registrations", "pending_registrations");
+  const pendings = safeQuery<{ id: string; created_at: string | number | null }>("SELECT id, created_at FROM pending_registrations", "pending_registrations");
   for (let i = 0; i < pendings.length; i++) {
     const p = pendings[i];
     if (!isUUID(p.id)) continue;
@@ -159,6 +159,32 @@ function migrateV2ToV3(db: Database.Database): void {
   update("read_states", "channel_id");
   update("read_states", "last_read_message_id");
   update("invite_codes", "used_by");
+
+  // Convert TEXT timestamps to INTEGER (ms epoch) across all tables.
+  // Old databases stored timestamps as ISO strings (e.g. '2026-06-05T02:21:13.160Z').
+  const convertTimestamps = (table: string, columns: string[]) => {
+    if (!tableExists(db, table)) return;
+    for (const col of columns) {
+      if (!hasColumn(table, col)) continue;
+      const rows = db.prepare(`SELECT rowid, "${col}" FROM "${table}" WHERE "${col}" IS NOT NULL`).all() as Array<{ rowid: number; [key: string]: unknown }>;
+      const stmt = db.prepare(`UPDATE "${table}" SET "${col}" = ? WHERE rowid = ?`);
+      for (const row of rows) {
+        const val = row[col];
+        if (typeof val === "number") continue; // already integer
+        if (typeof val === "string") {
+          const ms = new Date(val).getTime();
+          if (!isNaN(ms)) stmt.run(ms, row.rowid);
+        }
+      }
+    }
+  };
+
+  convertTimestamps("guilds", ["created_at", "updated_at"]);
+  convertTimestamps("users", ["created_at", "updated_at"]);
+  convertTimestamps("messages", ["timestamp", "edited_timestamp"]);
+  convertTimestamps("guild_members", ["joined_at"]);
+  convertTimestamps("invite_codes", ["created_at", "used_at"]);
+  convertTimestamps("pending_registrations", ["created_at"]);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

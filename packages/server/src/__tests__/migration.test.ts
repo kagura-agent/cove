@@ -448,4 +448,80 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
   });
+
+  it("converts TEXT timestamps to INTEGER during migration", () => {
+    const tmpFile = tmpDb();
+    try {
+      const setup = new Database(tmpFile);
+      setup.pragma("journal_mode = WAL");
+      setup.pragma("foreign_keys = OFF");
+      // Real old databases have INTEGER-affinity columns (from createAllTables)
+      // but contain TEXT values (ISO strings) because old code inserted strings.
+      setup.exec(`
+        CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE channels (id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL, avatar TEXT, bot INTEGER NOT NULL DEFAULT 1, bio TEXT, token TEXT UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE guild_members (guild_id TEXT NOT NULL, user_id TEXT, nick TEXT, roles TEXT DEFAULT '[]', joined_at INTEGER NOT NULL, PRIMARY KEY (guild_id, user_id));
+        CREATE TABLE messages (id TEXT PRIMARY KEY, channel_id TEXT, sender TEXT, content TEXT, timestamp INTEGER, metadata TEXT, edited_timestamp INTEGER, sender_name TEXT);
+        CREATE TABLE invite_codes (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, created_at INTEGER NOT NULL, used_at INTEGER, used_by TEXT);
+        CREATE TABLE pending_registrations (id TEXT PRIMARY KEY, pending_token TEXT UNIQUE NOT NULL, google_id TEXT, email TEXT, username TEXT, avatar TEXT, created_at INTEGER);
+        CREATE TABLE read_states (user_id TEXT NOT NULL, channel_id TEXT NOT NULL, last_read_message_id TEXT, PRIMARY KEY (user_id, channel_id));
+      `);
+
+      const guildIso = "2024-11-14T22:13:20.000Z";
+      const userIso = "2024-11-14T22:13:21.000Z";
+      const msgIso = "2024-11-14T22:13:22.000Z";
+      const editIso = "2024-11-14T22:13:23.000Z";
+      const joinIso = "2024-11-14T22:13:21.500Z";
+      const inviteIso = "2024-11-14T22:13:24.000Z";
+      const usedAtIso = "2024-11-14T22:13:25.000Z";
+      const pendingIso = "2024-11-14T22:13:26.000Z";
+
+      setup.exec(`INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'TG', '${guildIso}', '${guildIso}')`);
+      setup.exec(`INSERT INTO channels (id, guild_id, name) VALUES ('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'general')`);
+      setup.exec(`INSERT INTO users (id, username, bot, token, created_at, updated_at) VALUES ('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'U1', 1, 'tok', '${userIso}', '${userIso}')`);
+      setup.exec(`INSERT INTO guild_members (guild_id, user_id, joined_at) VALUES ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', '${joinIso}')`);
+      setup.exec(`INSERT INTO messages (id, channel_id, sender, content, timestamp, edited_timestamp) VALUES ('d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'hello', '${msgIso}', '${editIso}')`);
+      setup.exec(`INSERT INTO invite_codes (id, code, created_at, used_at) VALUES ('e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55', 'ABC', '${inviteIso}', '${usedAtIso}')`);
+      setup.exec(`INSERT INTO pending_registrations (id, pending_token, created_at) VALUES ('f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a66', 'ptok', '${pendingIso}')`);
+      setup.pragma("user_version = 2");
+      setup.close();
+
+      const db = initDb(tmpFile);
+
+      // All timestamp columns should now be integers
+      const guild = db.prepare("SELECT created_at, updated_at FROM guilds WHERE name = 'TG'").get() as { created_at: unknown; updated_at: unknown };
+      expect(typeof guild.created_at).toBe("number");
+      expect(guild.created_at).toBe(new Date(guildIso).getTime());
+      expect(typeof guild.updated_at).toBe("number");
+
+      const user = db.prepare("SELECT created_at, updated_at FROM users WHERE username = 'U1'").get() as { created_at: unknown; updated_at: unknown };
+      expect(typeof user.created_at).toBe("number");
+      expect(user.created_at).toBe(new Date(userIso).getTime());
+
+      const msg = db.prepare("SELECT timestamp, edited_timestamp FROM messages WHERE content = 'hello'").get() as { timestamp: unknown; edited_timestamp: unknown };
+      expect(typeof msg.timestamp).toBe("number");
+      expect(msg.timestamp).toBe(new Date(msgIso).getTime());
+      expect(typeof msg.edited_timestamp).toBe("number");
+      expect(msg.edited_timestamp).toBe(new Date(editIso).getTime());
+
+      const member = db.prepare("SELECT joined_at FROM guild_members").get() as { joined_at: unknown };
+      expect(typeof member.joined_at).toBe("number");
+      expect(member.joined_at).toBe(new Date(joinIso).getTime());
+
+      const invite = db.prepare("SELECT created_at, used_at FROM invite_codes WHERE code = 'ABC'").get() as { created_at: unknown; used_at: unknown };
+      expect(typeof invite.created_at).toBe("number");
+      expect(invite.created_at).toBe(new Date(inviteIso).getTime());
+      expect(typeof invite.used_at).toBe("number");
+      expect(invite.used_at).toBe(new Date(usedAtIso).getTime());
+
+      const pending = db.prepare("SELECT created_at FROM pending_registrations WHERE pending_token = 'ptok'").get() as { created_at: unknown };
+      expect(typeof pending.created_at).toBe("number");
+      expect(pending.created_at).toBe(new Date(pendingIso).getTime());
+
+      db.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
 });
