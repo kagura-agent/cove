@@ -43,6 +43,12 @@ export class GuildsRepo {
     return !!this.db.prepare("SELECT id FROM guilds WHERE id = ?").get(id);
   }
 
+  /** Resolve guild ID — accepts snowflake ID or "cove" alias for default guild */
+  resolveId(idOrAlias: string): string | null {
+    if (idOrAlias === "cove") return this.getDefaultId();
+    return this.exists(idOrAlias) ? idOrAlias : null;
+  }
+
   /**
    * TEMPORARY: Returns the first guild's ID as a stand-in for invite-based guild joining.
    * Discord doesn't have a "default guild" — users join via invite links or create their own.
