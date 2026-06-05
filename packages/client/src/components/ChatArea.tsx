@@ -33,7 +33,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
   if (!channel) {
     return (
       <div style={styles.empty}>
-        <span style={{ fontSize: "var(--avatar-size)" }}>🌴</span>
+        <span style={{ fontSize: "var(--icon-emoji-size)" }}>🌴</span>
         <p style={{ fontSize: "var(--font-size-lg)" }}>Select a channel from the sidebar</p>
       </div>
     );

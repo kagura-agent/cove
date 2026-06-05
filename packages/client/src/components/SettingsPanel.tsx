@@ -27,12 +27,12 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
 }) {
   const previewStyle: CSSProperties = {
     display: "flex",
-    height: 80, /* swatch preview dimensions */
+    height: 80, /* decorative preview — intentionally literal */
     background: preset.preview.bg,
   };
 
   const sidebarStyle: CSSProperties = {
-    width: 36, /* swatch preview dimensions */
+    width: 36, /* decorative preview — intentionally literal */
     background: preset.preview.sidebar,
     borderRight: `1px solid ${preset.preview.borderColor}`,
   };

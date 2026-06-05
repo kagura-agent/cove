@@ -52,6 +52,11 @@
   --control-height-lg: 44px;
   --icon-button-size-sm: 28px;
   --icon-button-size-md: 36px;
+
+  /* ── Component-specific Sizing ──────────────────────────── */
+  --status-dot-size: 10px;
+  --icon-emoji-size: 48px;
+  --icon-size-lg: 24px;
 }
 
 [data-theme="midnight"], :root {
@@ -466,10 +471,6 @@ textarea:focus-visible {
   .app-layout {
     grid-template-columns: 1fr !important;
   }
-  .app-layout > [style*="grid-column: 1"] {
-    /* Sidebar body and footer are hidden from grid flow on mobile */
-  }
-
   .sidebar-panel {
     position: fixed !important;
     z-index: 30 !important;
