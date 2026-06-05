@@ -14,7 +14,7 @@ export function BotManagement() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-xxl)" }}>
         <Spin tip="Loading bots…" />
       </div>
     );
@@ -34,13 +34,13 @@ export function BotManagement() {
               ]}
             >
               <List.Item.Meta
-                avatar={<span style={{ fontSize: 24 }}>🤖</span>}
+                avatar={<span style={{ fontSize: "var(--space-xxl)" }}>🤖</span>}
                 title={bot.username}
                 description={bot.bio}
               />
             </List.Item>
           )}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: "var(--space-lg)" }}
         />
       )}
       <BotCreateForm />

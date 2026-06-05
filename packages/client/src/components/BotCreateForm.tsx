@@ -25,12 +25,12 @@ export function BotCreateForm() {
   return (
     <>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Bot Name</label>
+        <div style={{ marginBottom: "var(--space-md)" }}>
+          <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, display: "block", marginBottom: "var(--space-sm)" }}>Bot Name</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Bot" />
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 8 }}>Bio</label>
+        <div style={{ marginBottom: "var(--space-md)" }}>
+          <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, display: "block", marginBottom: "var(--space-sm)" }}>Bio</label>
           <Input.TextArea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What does this bot do?" rows={1} style={{ resize: "none" }} />
         </div>
         <Button type="primary" htmlType="submit" loading={loading} disabled={!name.trim()} block>

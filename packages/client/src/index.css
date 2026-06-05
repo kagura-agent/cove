@@ -41,6 +41,13 @@
 
   /* ── Input ────────────────────────────────────────────── */
   --input-radius: 8px;
+
+  /* ── Control Sizing ─────────────────────────────────── */
+  --control-height-sm: 28px;
+  --control-height-md: 36px;
+  --control-height-lg: 44px;
+  --icon-button-size-sm: 28px;
+  --icon-button-size-md: 36px;
 }
 
 [data-theme="midnight"], :root {

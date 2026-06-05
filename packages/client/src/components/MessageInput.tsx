@@ -17,10 +17,10 @@ const wrapperStyle: CSSProperties = {
 };
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
-  flex: 1, resize: "none", minHeight: 35, maxHeight: 200, overflowY: "auto",
-  padding: "8px 11px", fontSize: 14, lineHeight: "1.5", color: "inherit",
+  flex: 1, resize: "none", minHeight: "var(--control-height-md)", maxHeight: 200, overflowY: "auto",
+  padding: "var(--space-sm) var(--space-md)", fontSize: "var(--font-size-md)", lineHeight: "1.5", color: "inherit",
   fontFamily: "inherit", boxSizing: "border-box",
-  margin: "8px 0",
+  margin: "var(--space-sm) 0",
 };
 
 export function MessageInput({ channelId }: { channelId: string }) {
@@ -94,9 +94,9 @@ export function MessageInput({ channelId }: { channelId: string }) {
         onClick={handleSubmit}
         style={{
           color: content.trim() ? "var(--accent)" : "var(--text-muted)",
-          width: 35, height: 35, minWidth: 35,
+          width: "var(--icon-button-size-md)", height: "var(--icon-button-size-md)", minWidth: "var(--icon-button-size-md)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "8px 0", flexShrink: 0,
+          margin: "var(--space-sm) 0", flexShrink: 0,
         }}
       />
     </div>

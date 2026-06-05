@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 const styles = {
-  empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: 12, opacity: 0.6 } as CSSProperties,
+  empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "var(--space-md)", opacity: 0.6 } as CSSProperties,
   wrapper: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" } as CSSProperties,
   header: { display: "flex", alignItems: "center", gap: "var(--content-gap)", padding: "0 var(--content-pad)", paddingTop: "env(safe-area-inset-top, 0px)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", height: "var(--header-height)", flexShrink: 0 } as CSSProperties,
   menuBtn: { color: "var(--text-normal)" } as CSSProperties,
@@ -33,8 +33,8 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
   if (!channel) {
     return (
       <div style={styles.empty}>
-        <span style={{ fontSize: 48 }}>🌴</span>
-        <p style={{ fontSize: 15 }}>Select a channel from the sidebar</p>
+        <span style={{ fontSize: "var(--avatar-size)" }}>🌴</span>
+        <p style={{ fontSize: "var(--font-size-lg)" }}>Select a channel from the sidebar</p>
       </div>
     );
   }

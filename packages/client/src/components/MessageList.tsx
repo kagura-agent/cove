@@ -11,7 +11,7 @@ const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "cent
 const listStyle: CSSProperties = { flex: 1, overflowY: "auto", paddingTop: "var(--space-sm)", paddingBottom: 0, paddingLeft: 0, paddingRight: 0, display: "flex", flexDirection: "column", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" };
 const typingBarStyle: CSSProperties = {
   padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
-  minHeight: 24, display: "flex", alignItems: "center", gap: "var(--space-xs)",
+  minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)",
 };
 
 const NEAR_BOTTOM_THRESHOLD = 100;
@@ -29,10 +29,10 @@ function TypingDots() {
   return (
     <>
       <style>{dotKeyframes}</style>
-      <span style={{ display: "inline-flex", gap: 2, marginRight: 4 }}>
+      <span style={{ display: "inline-flex", gap: "var(--space-xxs)", marginRight: "var(--space-xs)" }}>
         {[0, 1, 2].map((i) => (
           <span key={i} style={{
-            width: 6, height: 6, borderRadius: "50%", background: "currentColor",
+            width: "var(--space-xs)", height: "var(--space-xs)", borderRadius: "50%", background: "currentColor",
             display: "inline-block", animation: `typingDot 1.4s infinite ease-in-out`,
             animationDelay: `${i * 0.2}s`,
           }} />

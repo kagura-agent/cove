@@ -9,13 +9,13 @@ import { StatusDot } from "./StatusDot";
 
 const styles = {
   root: { gridRow: "1 / -1", width: "var(--member-list-width)", minWidth: "var(--member-list-width)", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
-  header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
-  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-lg)", borderRadius: 4, cursor: "default", transition: "background 0.15s" } as CSSProperties,
+  header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: "var(--font-size-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
+  member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-lg)", borderRadius: "var(--space-xs)", cursor: "default", transition: "background 0.15s" } as CSSProperties,
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
   avatar: { flexShrink: 0 } as CSSProperties,
   avatarWrapper: { position: "relative", flexShrink: 0 } as CSSProperties,
   username: { fontSize: "var(--font-size-md)", color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 } as CSSProperties,
-  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: "var(--accent)", color: "var(--text-on-accent)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "14px", display: "inline-block" } as CSSProperties,
+  badge: { fontSize: "var(--font-size-xs)", fontWeight: 600, padding: "1px var(--space-xs)", borderRadius: "var(--space-xxs)", background: "var(--accent)", color: "var(--text-on-accent)", marginLeft: "var(--space-xs)", flexShrink: 0, lineHeight: "var(--font-size-md)", display: "inline-block" } as CSSProperties,
   loading: { display: "flex", justifyContent: "center", padding: "var(--space-xxl)" } as CSSProperties,
 };
 

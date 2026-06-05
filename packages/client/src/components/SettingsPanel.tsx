@@ -39,23 +39,23 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
 
   const contentStyle: CSSProperties = {
     flex: 1,
-    padding: 8,
+    padding: "var(--space-sm)",
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-xs)",
     justifyContent: "center",
   };
 
   const lineStyle = (width: string): CSSProperties => ({
-    height: 4,
-    borderRadius: 2,
+    height: "var(--space-xs)",
+    borderRadius: "var(--space-xxs)",
     width,
     background: preset.preview.lineColor,
   });
 
   const accentLineStyle: CSSProperties = {
-    height: 4,
-    borderRadius: 2,
+    height: "var(--space-xs)",
+    borderRadius: "var(--space-xxs)",
     width: "60%",
     background: preset.preview.accent,
     opacity: 0.7,
@@ -63,8 +63,8 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
 
   const labelStyle: CSSProperties = {
     textAlign: "center",
-    padding: "8px 0",
-    fontSize: 13,
+    padding: "var(--space-sm) 0",
+    fontSize: "var(--font-size-sm)",
     fontWeight: isActive ? 600 : 400,
     color: preset.preview.labelColor,
     background: preset.preview.sidebar,
@@ -190,7 +190,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
         <div className="settings-sidebar">
           <div className="settings-profile-area" style={profileAreaStyle}>
             <div style={avatarStyle}>{avatarLetter}</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+          <div style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
           </div>
           <div className="settings-divider" style={dividerStyle} />
           <div className="settings-category-header" style={categoryHeaderStyle}>USER SETTINGS</div>
@@ -218,16 +218,16 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             {SECTION_COMPONENTS[activeSection]()}
             {/* Mobile-only sign out at bottom of content */}
             <div className="settings-mobile-sign-out">
-              <div style={{ ...dividerStyle, margin: "24px 0 16px" }} />
+              <div style={{ ...dividerStyle, margin: "var(--space-xxl) 0 var(--space-lg)" }} />
               <button
                 onClick={() => { logout(); close(); }}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "var(--danger)",
-                  fontSize: 15,
+                  fontSize: "var(--font-size-lg)",
                   cursor: "pointer",
-                  padding: "8px 0",
+                  padding: "var(--space-sm) 0",
                 }}
               >
                 Sign Out
@@ -250,8 +250,8 @@ const profileAreaStyle: CSSProperties = {
 };
 
 const avatarStyle: CSSProperties = {
-  width: 36,
-  height: 36,
+  width: "var(--icon-button-size-md)",
+  height: "var(--icon-button-size-md)",
   borderRadius: "50%",
   background: "var(--accent)",
   color: "var(--text-on-accent)",
@@ -269,7 +269,7 @@ const categoryHeaderStyle: CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.02em",
   color: "var(--text-muted)",
-  padding: "6px var(--space-sm)",
+  padding: "var(--space-xs) var(--space-sm)",
   marginBottom: "var(--space-xxs)",
 };
 

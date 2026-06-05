@@ -12,7 +12,7 @@ const barStyle: CSSProperties = {
   height: "100%", boxSizing: "border-box",
 };
 const avatarStyle: CSSProperties = { color: "var(--text-on-accent)", fontWeight: 700, flexShrink: 0 };
-const nameStyle: CSSProperties = { flex: 1, fontSize: 13, fontWeight: 500, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const nameStyle: CSSProperties = { flex: 1, fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--text-normal)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)", fontSize: "var(--font-size-md)" };
 
 export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: () => void; onSettingsOpen?: () => void }) {
