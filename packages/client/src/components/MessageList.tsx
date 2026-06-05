@@ -1,6 +1,5 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
-import { useTypingStore } from "../stores/useTypingStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { MessageItem } from "./MessageItem";
 import { Spin, Empty } from "antd";
@@ -9,38 +8,11 @@ import type { CSSProperties } from "react";
 
 const centerStyle: CSSProperties = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" };
 const listStyle: CSSProperties = { flex: 1, overflowY: "auto", paddingTop: "var(--space-sm)", paddingBottom: 0, paddingLeft: 0, paddingRight: 0, display: "flex", flexDirection: "column", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" };
-const typingBarStyle: CSSProperties = {
-  padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
-  minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)",
-};
 
 const NEAR_BOTTOM_THRESHOLD = 100;
 
 /** Persists across mounts so revisiting a channel with no new messages skips the ack call. */
 const lastAckedIds = new Map<string, string>();
-
-const dotKeyframes = `
-@keyframes typingDot {
-  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
-  40% { opacity: 1; transform: translateY(-3px); }
-}`;
-
-function TypingDots() {
-  return (
-    <>
-      <style>{dotKeyframes}</style>
-      <span style={{ display: "inline-flex", gap: "var(--space-xxs)", marginRight: "var(--space-xs)" }}>
-        {[0, 1, 2].map((i) => (
-          <span key={i} style={{
-            width: "var(--space-xs)", height: "var(--space-xs)", borderRadius: "50%", background: "currentColor",
-            display: "inline-block", animation: `typingDot 1.4s infinite ease-in-out`,
-            animationDelay: `${i * 0.2}s`,
-          }} />
-        ))}
-      </span>
-    </>
-  );
-}
 
 function isNearBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_THRESHOLD;
@@ -49,8 +21,6 @@ function isNearBottom(el: HTMLElement): boolean {
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
-  const typingUsersRaw = useTypingStore((s) => s.typingUsers[channelId]);
-  const typingUsers = useMemo(() => typingUsersRaw ?? [], [typingUsersRaw]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
@@ -125,28 +95,15 @@ export function MessageList({ channelId }: { channelId: string }) {
     );
   }
 
-  const typingLabel = typingUsers.length === 1
-    ? `${typingUsers[0].username} is typing`
-    : typingUsers.length === 2
-    ? `${typingUsers[0].username} and ${typingUsers[1].username} are typing`
-    : typingUsers.length > 2
-    ? "Several people are typing"
-    : null;
-
   return (
-    <>
-      <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
-        {messages.map((msg, i) => {
-          const prev = i > 0 ? messages[i - 1] : null;
-          const isGroupStart = !prev || prev.author.id !== msg.author.id ||
-            (new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime() > 7 * 60 * 1000);
-          return <MessageItem key={msg.id} message={msg} isGroupStart={isGroupStart} />;
-        })}
-        <div ref={bottomRef} />
-      </div>
-      <div style={typingBarStyle}>
-        {typingLabel && <><TypingDots />{typingLabel}…</>}
-      </div>
-    </>
+    <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
+      {messages.map((msg, i) => {
+        const prev = i > 0 ? messages[i - 1] : null;
+        const isGroupStart = !prev || prev.author.id !== msg.author.id ||
+          (new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime() > 7 * 60 * 1000);
+        return <MessageItem key={msg.id} message={msg} isGroupStart={isGroupStart} />;
+      })}
+      <div ref={bottomRef} />
+    </div>
   );
 }

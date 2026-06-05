@@ -16,9 +16,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:openclaw --alias:@cove/shared=../shared/src/index.ts",
     "check": "tsc --noEmit",
-    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:openclaw",
     "test": "vitest run"
   },
   "dependencies": {
