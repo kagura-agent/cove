@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
@@ -68,7 +69,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     const existing = db.prepare("SELECT id, token FROM users WHERE id = ?").get(userId) as { id: string; token: string | null } | undefined;
 
     if (existing) {
-      const token = existing.token ?? generateSnowflake();
+      const token = existing.token ?? crypto.randomUUID();
       db.prepare("UPDATE users SET username = ?, avatar = ?, token = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, token, now, userId);
       // Ensure user is in default guild
@@ -78,7 +79,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     }
 
     // New user: store in pending_registrations, require invite code
-    const pendingToken = generateSnowflake();
+    const pendingToken = crypto.randomUUID();
     db.prepare(
       "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, now);

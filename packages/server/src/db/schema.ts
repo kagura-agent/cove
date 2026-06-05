@@ -84,7 +84,7 @@ function migrateV2ToV3(db: Database.Database): void {
   const guilds = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM guilds", "guilds");
   for (let i = 0; i < guilds.length; i++) {
     const g = guilds[i];
-    if (!isUUID(g.id)) continue;
+    if (isSnowflake(g.id)) continue;
     idMap.set(g.id, snowflakeFromTimestamp(g.created_at, i));
   }
 
@@ -92,7 +92,7 @@ function migrateV2ToV3(db: Database.Database): void {
   const channels = safeQuery<{ id: string; guild_id: string }>("SELECT id, guild_id FROM channels ORDER BY position ASC", "channels");
   for (let i = 0; i < channels.length; i++) {
     const ch = channels[i];
-    if (!isUUID(ch.id)) continue;
+    if (isSnowflake(ch.id)) continue;
     idMap.set(ch.id, snowflakeFromTimestamp(now, i));
   }
 
@@ -100,7 +100,7 @@ function migrateV2ToV3(db: Database.Database): void {
   const users = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM users", "users");
   for (let i = 0; i < users.length; i++) {
     const u = users[i];
-    if (!isUUID(u.id)) continue;
+    if (isSnowflake(u.id)) continue;
     idMap.set(u.id, snowflakeFromTimestamp(u.created_at, i));
   }
 
@@ -108,7 +108,7 @@ function migrateV2ToV3(db: Database.Database): void {
   const messages = safeQuery<{ id: string; timestamp: string | number }>("SELECT id, timestamp FROM messages ORDER BY timestamp ASC", "messages");
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
-    if (!isUUID(m.id)) continue;
+    if (isSnowflake(m.id)) continue;
     idMap.set(m.id, snowflakeFromTimestamp(m.timestamp, i));
   }
 
@@ -116,14 +116,14 @@ function migrateV2ToV3(db: Database.Database): void {
   const invites = safeQuery<{ id: string; created_at: string | number }>("SELECT id, created_at FROM invite_codes", "invite_codes");
   for (let i = 0; i < invites.length; i++) {
     const inv = invites[i];
-    if (!isUUID(inv.id)) continue;
+    if (isSnowflake(inv.id)) continue;
     idMap.set(inv.id, snowflakeFromTimestamp(inv.created_at, i));
   }
 
   const pendings = safeQuery<{ id: string; created_at: string | number | null }>("SELECT id, created_at FROM pending_registrations", "pending_registrations");
   for (let i = 0; i < pendings.length; i++) {
     const p = pendings[i];
-    if (!isUUID(p.id)) continue;
+    if (isSnowflake(p.id)) continue;
     idMap.set(p.id, snowflakeFromTimestamp(p.created_at ?? now, i));
   }
 
@@ -153,6 +153,7 @@ function migrateV2ToV3(db: Database.Database): void {
   update("channels", "guild_id");
   update("messages", "channel_id");
   update("messages", "sender");
+  update("messages", "author_id"); // legacy schema used author_id instead of sender
   update("guild_members", "guild_id");
   update("guild_members", "user_id");
   update("read_states", "user_id");
@@ -187,9 +188,9 @@ function migrateV2ToV3(db: Database.Database): void {
   convertTimestamps("pending_registrations", ["created_at"]);
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isUUID(id: string): boolean {
-  return UUID_RE.test(id);
+const SNOWFLAKE_RE = /^[0-9]+$/;
+function isSnowflake(id: string): boolean {
+  return SNOWFLAKE_RE.test(id);
 }
 
 function createAllTables(db: Database.Database): void {
@@ -417,8 +418,8 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
 }
 
 const SEED_CHANNELS = [
-  { id: "general", name: "general", type: 0, topic: "General discussion", position: 0 },
-  { id: "random", name: "random", type: 0, topic: "Off-topic chat", position: 1 },
+  { name: "general", type: 0, topic: "General discussion", position: 0 },
+  { name: "random", type: 0, topic: "Off-topic chat", position: 1 },
 ] as const;
 
 export function seedChannels(db: Database.Database, guildId: string): void {
@@ -427,9 +428,15 @@ export function seedChannels(db: Database.Database, guildId: string): void {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
+  // Check if channels already exist by name (to preserve OR IGNORE semantics)
+  const exists = db.prepare("SELECT id FROM channels WHERE guild_id = ? AND name = ?");
+
   const tx = db.transaction(() => {
     for (const ch of SEED_CHANNELS) {
-      insert.run(ch.id, guildId, ch.name, ch.type, ch.topic, ch.position);
+      const existing = exists.get(guildId, ch.name);
+      if (!existing) {
+        insert.run(generateSnowflake(), guildId, ch.name, ch.type, ch.topic, ch.position);
+      }
     }
   });
   tx();
@@ -440,15 +447,33 @@ export function seedUsers(db: Database.Database, guildId: string): void {
   if (!token) return;
 
   const now = Date.now();
+
+  // Find or create users by username (don't use hardcoded string IDs)
+  const findByUsername = db.prepare("SELECT id FROM users WHERE username = ?");
   const insert = db.prepare(
-    "INSERT OR REPLACE INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   );
-  insert.run("luna", "Luna", null, 0, null, null, now, now);
-  insert.run("ruantang", "ruantang", null, 1, null, token, now, now);
+  const upsertToken = db.prepare(
+    "UPDATE users SET token = ?, updated_at = ? WHERE id = ?"
+  );
+
+  const ensureUser = (username: string, bot: boolean, userToken: string | null): string => {
+    const existing = findByUsername.get(username) as { id: string } | undefined;
+    if (existing) {
+      if (userToken) upsertToken.run(userToken, now, existing.id);
+      return existing.id;
+    }
+    const id = generateSnowflake();
+    insert.run(id, username, null, bot ? 1 : 0, null, userToken, now, now);
+    return id;
+  };
+
+  const lunaId = ensureUser("Luna", false, null);
+  const ruantangId = ensureUser("ruantang", true, token);
 
   const addMember = db.prepare(
     "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
   );
-  addMember.run(guildId, "luna", null, '[]', now);
-  addMember.run(guildId, "ruantang", null, '[]', now);
+  addMember.run(guildId, lunaId, null, '[]', now);
+  addMember.run(guildId, ruantangId, null, '[]', now);
 }

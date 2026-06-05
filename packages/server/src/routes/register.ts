@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
@@ -35,7 +36,7 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
 
     const userId = generateSnowflake();
     const now = Date.now();
-    const token = generateSnowflake();
+    const token = crypto.randomUUID();
 
     const register = db.transaction(() => {
       db.prepare(

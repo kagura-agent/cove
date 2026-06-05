@@ -18,6 +18,12 @@ const PROCESS_ID = 0n;
 export function generateSnowflake(): string {
   let now = BigInt(Date.now());
 
+  if (now < lastTimestamp) {
+    // Clock went backward (NTP sync) — hold at last known timestamp to
+    // maintain monotonicity and prevent duplicate/lower IDs.
+    now = lastTimestamp;
+  }
+
   if (now === lastTimestamp) {
     increment = (increment + 1n) & 0xFFFn; // 12-bit wrap
     if (increment === 0n) {
@@ -44,12 +50,13 @@ export function generateSnowflake(): string {
 /** Generate a Snowflake from a specific timestamp (for migrations). Accepts ms epoch or ISO string. */
 export function snowflakeFromTimestamp(timestamp: number | string, seq = 0): string {
   const ms = typeof timestamp === "string" ? new Date(timestamp).getTime() : timestamp;
-  const ts = BigInt(ms);
+  const ts = BigInt(ms) + BigInt(Math.floor(seq / 4096));
+  const wrappedSeq = BigInt(seq % 4096);
   const id =
     ((ts - COVE_EPOCH) << 22n) |
     (WORKER_ID << 17n) |
     (PROCESS_ID << 12n) |
-    (BigInt(seq) & 0xFFFn);
+    wrappedSeq;
   return id.toString();
 }
 

@@ -153,9 +153,11 @@ describe("versioned migration system", () => {
 
       // This should NOT throw — FK is disabled during migration
       const db = initDb(tmpFile);
-      const msg = db.prepare("SELECT * FROM messages WHERE id = 'm1'").get() as Record<string, unknown>;
+      const msg = db.prepare("SELECT * FROM messages WHERE content = 'hello'").get() as Record<string, unknown>;
       expect(msg).toBeDefined();
       expect(msg.content).toBe("hello");
+      // ID should now be a snowflake
+      expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
       expect(version).toBe(3);
       db.close();
@@ -176,7 +178,7 @@ describe("scenes→channels migration guard", () => {
       setup.close();
 
       const db2 = initDb(tmpFile);
-      const rows = db2.prepare("SELECT id, name FROM channels WHERE id = 's1'").all() as { id: string; name: string }[];
+      const rows = db2.prepare("SELECT id, name FROM channels WHERE name = 'Scene1'").all() as { id: string; name: string }[];
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("Scene1");
 
@@ -216,7 +218,7 @@ describe("scenes→channels migration guard", () => {
       setup.close();
 
       const db2 = initDb(tmpFile);
-      const rows = db2.prepare("SELECT id, name FROM channels WHERE id = 'c1'").all() as { id: string; name: string }[];
+      const rows = db2.prepare("SELECT id, name FROM channels WHERE name = 'NewData'").all() as { id: string; name: string }[];
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("NewData");
       db2.close();
@@ -236,7 +238,7 @@ describe("scenes→channels migration guard", () => {
       setup.close();
 
       const db2 = initDb(tmpFile);
-      const rows = db2.prepare("SELECT id, name FROM channels WHERE id = 's1'").all() as { id: string; name: string }[];
+      const rows = db2.prepare("SELECT id, name FROM channels WHERE name = 'OldData'").all() as { id: string; name: string }[];
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("OldData");
       db2.close();
@@ -405,7 +407,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
     }
   });
 
-  it("skips non-UUID IDs during migration", () => {
+  it("converts non-UUID text IDs to snowflakes during migration", () => {
     const tmpFile = tmpDb();
     try {
       const setup = new Database(tmpFile);
@@ -432,16 +434,21 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
 
       const db = initDb(tmpFile);
 
-      // Non-UUID IDs should be unchanged
+      // Non-UUID text IDs should now be converted to snowflakes
       const guild = db.prepare("SELECT id FROM guilds WHERE name = 'TestGuild'").get() as { id: string };
-      expect(guild.id).toBe("my-guild");
+      expect(guild.id).toMatch(/^\d+$/);
 
       const ch = db.prepare("SELECT id, guild_id FROM channels WHERE name = 'general'").get() as { id: string; guild_id: string };
-      expect(ch.id).toBe("general");
-      expect(ch.guild_id).toBe("my-guild");
+      expect(ch.id).toMatch(/^\d+$/);
+      expect(ch.guild_id).toBe(guild.id);
 
       const user = db.prepare("SELECT id FROM users WHERE username = 'Luna'").get() as { id: string };
-      expect(user.id).toBe("luna");
+      expect(user.id).toMatch(/^\d+$/);
+
+      // guild_members FKs should also be updated
+      const member = db.prepare("SELECT guild_id, user_id FROM guild_members").get() as { guild_id: string; user_id: string };
+      expect(member.guild_id).toBe(guild.id);
+      expect(member.user_id).toBe(user.id);
 
       db.close();
     } finally {
