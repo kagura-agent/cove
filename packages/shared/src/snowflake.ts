@@ -41,9 +41,10 @@ export function generateSnowflake(): string {
   return id.toString();
 }
 
-/** Generate a Snowflake from a specific timestamp (for migrations). */
-export function snowflakeFromTimestamp(timestamp: number, seq = 0): string {
-  const ts = BigInt(timestamp);
+/** Generate a Snowflake from a specific timestamp (for migrations). Accepts ms epoch or ISO string. */
+export function snowflakeFromTimestamp(timestamp: number | string, seq = 0): string {
+  const ms = typeof timestamp === "string" ? new Date(timestamp).getTime() : timestamp;
+  const ts = BigInt(ms);
   const id =
     ((ts - COVE_EPOCH) << 22n) |
     (WORKER_ID << 17n) |
