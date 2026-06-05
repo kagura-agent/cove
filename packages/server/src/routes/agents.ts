@@ -81,9 +81,14 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
   // ─── Guild Members ─────────────────────────────────────────
 
+  app.get("/users/@me/guilds", auth, (c) => {
+    const userId = c.get("botUser").id;
+    return c.json(repos.guilds.listForUser(userId));
+  });
+
   app.get("/guilds/:guildId/members", auth, (c) => {
-    const guildId = repos.guilds.resolveId(c.req.param("guildId")!);
-    if (!guildId) {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     const userId = c.get("botUser").id;
@@ -94,10 +99,10 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.put("/guilds/:guildId/members/:userId", auth, async (c) => {
-    const guildId = repos.guilds.resolveId(c.req.param("guildId")!);
+    const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 
-    if (!guildId) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
@@ -122,10 +127,10 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.delete("/guilds/:guildId/members/:userId", auth, (c) => {
-    const guildId = repos.guilds.resolveId(c.req.param("guildId")!);
+    const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 
-    if (!guildId) {
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 

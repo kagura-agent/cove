@@ -10,8 +10,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   const auth = requireAuth(repos.users);
 
   app.get("/guilds/:guildId/channels", auth, (c) => {
-    const guildId = repos.guilds.resolveId(c.req.param("guildId")!);
-    if (!guildId) {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     const userId = c.get("botUser").id;
@@ -32,8 +32,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   });
 
   app.post("/guilds/:guildId/channels", auth, async (c) => {
-    const guildId = repos.guilds.resolveId(c.req.param("guildId")!);
-    if (!guildId) {
+    const guildId = c.req.param("guildId")!;
+    if (!repos.guilds.exists(guildId)) {
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
     const userId = c.get("botUser").id;

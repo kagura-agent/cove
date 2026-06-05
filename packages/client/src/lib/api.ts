@@ -3,6 +3,8 @@ import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
+let _guildId: string | null = null;
+
 function getToken(): string | null {
   return localStorage.getItem("cove-token");
 }
@@ -23,8 +25,23 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function fetchChannels() {
-  return api<Channel[]>(`${API_PREFIX}/guilds/cove/channels`);
+/** Fetch the user's first guild ID (cached after first call) */
+export async function getGuildId(): Promise<string> {
+  if (_guildId) return _guildId;
+  const guilds = await api<Array<{ id: string }>>(`${API_PREFIX}/users/@me/guilds`);
+  if (!guilds.length) throw new Error("No guilds available");
+  _guildId = guilds[0].id;
+  return _guildId;
+}
+
+/** Reset cached guild ID (call on logout) */
+export function resetGuildId(): void {
+  _guildId = null;
+}
+
+export async function fetchChannels() {
+  const guildId = await getGuildId();
+  return api<Channel[]>(`${API_PREFIX}/guilds/${guildId}/channels`);
 }
 export function fetchMessages(channelId: string) {
   return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?limit=50`);
@@ -37,16 +54,18 @@ export function sendMessage(channelId: string, content: string) {
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }
-export function createChannel(name: string, topic?: string) {
-  return api<Channel>(`${API_PREFIX}/guilds/cove/channels`, {
+export async function createChannel(name: string, topic?: string) {
+  const guildId = await getGuildId();
+  return api<Channel>(`${API_PREFIX}/guilds/${guildId}/channels`, {
     method: "POST", body: JSON.stringify({ name, topic }),
   });
 }
 export function deleteChannel(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}`, { method: "DELETE" });
 }
-export function fetchMembers() {
-  return api<GuildMember[]>(`${API_PREFIX}/guilds/cove/members`);
+export async function fetchMembers() {
+  const guildId = await getGuildId();
+  return api<GuildMember[]>(`${API_PREFIX}/guilds/${guildId}/members`);
 }
 export function createBot(username: string, bio: string) {
   return api<BotCreateResponse>(`${API_PREFIX}/users`, {
