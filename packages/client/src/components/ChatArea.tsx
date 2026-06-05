@@ -44,9 +44,9 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
       <div style={styles.header}>
         {onMenuClick && <Button type="text" icon={<MenuOutlined />} onClick={onMenuClick} className="mobile-only" style={styles.menuBtn} />}
         <span style={{ fontSize: "var(--font-size-xl)", display: "flex", alignItems: "center", justifyContent: "center", width: "var(--avatar-size)", flexShrink: 0, lineHeight: 1 }}>#</span>
-        <div style={{ flex: 1 }}>
-          <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)" }}>{channel.name}</Typography.Title>
-          <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)" }}>{channel.topic ? <ChatMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Typography.Title level={5} style={{ margin: 0, color: "var(--header-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{channel.name}</Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{channel.topic ? <ChatMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
         </div>
         <Popconfirm title="Clear all messages in this channel?" onConfirm={handleClear} okText="Clear" cancelText="Cancel" okButtonProps={{ danger: true }}>
           <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />

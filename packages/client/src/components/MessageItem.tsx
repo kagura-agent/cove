@@ -29,9 +29,6 @@ function avatarColor(name: string): string {
   return pickAvatarColor(name);
 }
 
-function roleColor(isBot: boolean): string {
-  return isBot ? "var(--text-bot)" : "var(--text-user)";
-}
 
 const botBadgeStyle: CSSProperties = {
   fontSize: "var(--font-size-xs)",
@@ -105,7 +102,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
               style={{
                 fontSize: "var(--font-size-lg)",
                 fontWeight: 500,
-                color: roleColor(isBot),
+                color: "var(--header-primary)",
                 cursor: "pointer",
               }}
             >
