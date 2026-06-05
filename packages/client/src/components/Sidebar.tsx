@@ -1,10 +1,11 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
+import { useMessageStore } from "../stores/useMessageStore";
 import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { UserBar } from "./UserBar";
 import * as api from "../lib/api";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
@@ -30,16 +31,13 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
 
   return (
     <div
-      style={{ ...styles.channelItem, ...(isActive ? styles.channelActive : hovered ? styles.channelHover : {}), ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}
+      style={{ ...styles.channelItem, ...(isActive ? styles.channelActive : hovered ? styles.channelHover : {}) }}
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <span style={styles.hash}>#</span>
-      <span style={styles.channelName}>{name}</span>
-      {isUnread && !isActive && (
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--interactive-active)", flexShrink: 0 }} />
-      )}
+      <span style={{ ...styles.channelName, ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}>{name}</span>
       <Popconfirm title={`Delete #${name}?`} description="All messages will be lost." onConfirm={(e) => { e?.stopPropagation(); onDelete(); }} onCancel={(e) => e?.stopPropagation()} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
         <Button
           type="text"
@@ -55,9 +53,26 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
 
 export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
-  const unreadChannels = useReadStateStore((s) => s.unreadChannels);
+  const { unreadChannels, clearUnread } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const prevActiveRef = useRef<string | null>(null);
+
+  // Auto-ack when switching to a channel
+  useEffect(() => {
+    if (!activeChannelId || activeChannelId === prevActiveRef.current) return;
+    prevActiveRef.current = activeChannelId;
+
+    // Clear local unread immediately
+    clearUnread(activeChannelId);
+
+    // Find the latest message in this channel and ack it
+    const messages = useMessageStore.getState().messages[activeChannelId];
+    if (messages && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      api.ackMessage(activeChannelId, lastMsg.id).catch(() => {});
+    }
+  }, [activeChannelId, clearUnread]);
 
   function handleSelectChannel(id: string) {
     setActiveChannel(id);
