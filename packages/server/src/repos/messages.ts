@@ -42,22 +42,22 @@ export class MessagesRepo {
     let rows: MessageRow[];
 
     if (before) {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) < CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`)
         .all(channelId, before, limit) as MessageRow[];
     } else if (after) {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) ASC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id > ? ORDER BY m.id ASC LIMIT ?`)
         .all(channelId, after, limit) as MessageRow[];
     } else if (around) {
       const half = Math.floor(limit / 2);
-      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) < CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
+      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`)
         .all(channelId, around, half) as MessageRow[];
       const centerRow = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id = ?`)
         .get(channelId, around) as MessageRow | undefined;
-      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) ASC LIMIT ?`)
+      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id > ? ORDER BY m.id ASC LIMIT ?`)
         .all(channelId, around, half) as MessageRow[];
       rows = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
     } else {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT ?`)
         .all(channelId, limit) as MessageRow[];
     }
 
