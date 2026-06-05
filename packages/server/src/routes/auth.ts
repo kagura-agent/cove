@@ -28,7 +28,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
   app.get("/api/auth/callback", async (c) => {
     const code = c.req.query("code");
     if (!code) {
-      return c.json({ message: "Missing authorization code" }, 400);
+      return c.json({ message: "Missing authorization code", code: 50035 }, 400);
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -44,7 +44,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     });
 
     if (!tokenRes.ok) {
-      return c.json({ message: "Failed to exchange authorization code" }, 400);
+      return c.json({ message: "Failed to exchange authorization code", code: 50035 }, 400);
     }
 
     const tokenData = await tokenRes.json() as { access_token: string };
@@ -54,7 +54,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     });
 
     if (!userRes.ok) {
-      return c.json({ message: "Failed to fetch user info" }, 400);
+      return c.json({ message: "Failed to fetch user info", code: 50035 }, 400);
     }
 
     const googleUser = await userRes.json() as {

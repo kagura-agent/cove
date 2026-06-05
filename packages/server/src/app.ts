@@ -48,6 +48,11 @@ export function createApp(
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get(`${API_PREFIX}/gateway`, (c) => c.json({ url: gwUrl }));
+  app.get(`${API_PREFIX}/gateway/bot`, (c) => c.json({
+    url: gwUrl,
+    shards: 1,
+    session_start_limit: { total: 1000, remaining: 1000, reset_after: 0, max_concurrency: 1 },
+  }));
 
   app.get(`${API_PREFIX}/guilds/:guildId/presences`, (c) => {
     const guildId = c.req.param("guildId")!;

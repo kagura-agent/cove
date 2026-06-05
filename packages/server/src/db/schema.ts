@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { generateSnowflake, snowflakeFromTimestamp } from "@cove/shared";
 
-const LATEST_VERSION = 4;
+const LATEST_VERSION = 5;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -10,6 +10,7 @@ const migrations: Record<number, MigrationFn> = {
   2: migrateV1ToV2,
   3: migrateV2ToV3,
   4: migrateV3ToV4,
+  5: migrateV4ToV5,
 };
 
 function runMigrations(db: Database.Database): void {
@@ -325,6 +326,18 @@ function migrateV3ToV4(db: Database.Database): void {
   `);
 }
 
+function migrateV4ToV5(db: Database.Database): void {
+  // #198: Add last_message_id column to channels table
+  addColumnIfMissing(db, "channels", "last_message_id", "TEXT");
+
+  // Backfill last_message_id from existing messages
+  db.exec(`
+    UPDATE channels SET last_message_id = (
+      SELECT m.id FROM messages m WHERE m.channel_id = channels.id ORDER BY m.id DESC LIMIT 1
+    )
+  `);
+}
+
 function createAllTables(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS guilds (
@@ -337,12 +350,13 @@ function createAllTables(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS channels (
-      id          TEXT PRIMARY KEY,
-      guild_id    TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
-      name        TEXT NOT NULL,
-      type        INTEGER NOT NULL DEFAULT 0,
-      topic       TEXT,
-      position    INTEGER NOT NULL DEFAULT 0
+      id               TEXT PRIMARY KEY,
+      guild_id         TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+      name             TEXT NOT NULL,
+      type             INTEGER NOT NULL DEFAULT 0,
+      topic            TEXT,
+      position         INTEGER NOT NULL DEFAULT 0,
+      last_message_id  TEXT
     );
 
     CREATE TABLE IF NOT EXISTS users (

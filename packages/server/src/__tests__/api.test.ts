@@ -32,6 +32,12 @@ describe("Cove API — Discord-compatible", () => {
     override channelUpdate(channel: Channel): void {
       broadcastEvents.push({ t: "CHANNEL_UPDATE", d: channel });
     }
+    override channelCreate(channel: Channel): void {
+      broadcastEvents.push({ t: "CHANNEL_CREATE", d: channel });
+    }
+    override channelDelete(guildId: string, channelId: string): void {
+      broadcastEvents.push({ t: "CHANNEL_DELETE", d: { id: channelId, guild_id: guildId } });
+    }
     override typingStart(channelId: string, user: { id: string; username: string }, _guildId?: string): void {
       broadcastEvents.push({ t: "TYPING_START", d: { channel_id: channelId, user_id: user.id, username: user.username, timestamp: Date.now() } });
     }
@@ -270,7 +276,7 @@ describe("Cove API — Discord-compatible", () => {
 
       const delRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${created.id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bot ${bot.token}` },
       });
       expect(delRes.status).toBe(204);
 
@@ -311,7 +317,7 @@ describe("Cove API — Discord-compatible", () => {
 
       const patchRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${created.id}`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "edited" }),
       });
       expect(patchRes.status).toBe(200);
@@ -417,10 +423,12 @@ describe("Cove API — Discord-compatible", () => {
 
   describe("READY payload read_state", () => {
     it("includes last_message_id for channels with messages", () => {
-      // Insert a message directly
+      // Insert a message directly and update channel's last_message_id
       const now = Date.now();
       db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run("100001", generalId, "admin", "test message", now, null, null);
+      db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?")
+        .run("100001", generalId);
 
       // Set a read state
       const repos = createRepos(db);
@@ -437,6 +445,8 @@ describe("Cove API — Discord-compatible", () => {
       const now = Date.now();
       db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run("100002", generalId, "admin", "unread msg", now, null, null);
+      db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?")
+        .run("100002", generalId);
 
       const repos = createRepos(db);
       const readState = repos.readStates.getAllForUserWithLastMessage("admin");
@@ -613,8 +623,9 @@ describe("Cove API — Discord-compatible", () => {
         headers: { Authorization: `Bot ${adminToken}` },
       });
       expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.deleted).toBe(true);
+      const data: Channel = await res.json();
+      expect(data.id).toBe(randomId);
+      expect(data.name).toBe("random");
 
       // Verify it's gone
       const getRes = await authGet(`${API_PREFIX}/channels/${randomId}`);
@@ -704,25 +715,25 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("PATCH updates user fields", async () => {
-      await createBotUser("patchme", "Original");
+      const user = await createBotUser("patchme", "Original");
 
       const res = await app.request(`${API_PREFIX}/users/patchme`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${user.token}` },
         body: JSON.stringify({ username: "Updated", bio: "New bio" }),
       });
       expect(res.status).toBe(200);
-      const user: CoveAgent = await res.json();
-      expect(user.username).toBe("Updated");
-      expect(user.bio).toBe("New bio");
+      const updated: CoveAgent = await res.json();
+      expect(updated.username).toBe("Updated");
+      expect(updated.bio).toBe("New bio");
     });
 
     it("DELETE removes a user", async () => {
-      await createBotUser("deleteme", "Delete");
+      const user = await createBotUser("deleteme", "Delete");
 
       const res = await app.request(`${API_PREFIX}/users/deleteme`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bot ${user.token}` },
       });
       expect(res.status).toBe(204);
 
@@ -815,15 +826,21 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("deleting user cascades to guild membership", async () => {
-      await app.request(`${API_PREFIX}/users/bot-a`, {
+      const botA = await app.request(`${API_PREFIX}/users`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ id: "bot-cascade", username: "Bot Cascade" }),
+      });
+      const botAData = await botA.json() as CoveAgent & { token: string };
+
+      await app.request(`${API_PREFIX}/users/bot-cascade`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bot ${botAData.token}` },
       });
 
       const listRes = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/members`);
       const members: CoveGuildMember[] = await listRes.json();
-      expect(members).toHaveLength(2);
-      expect(members.find((m) => m.user.id === "bot-a")).toBeUndefined();
+      expect(members.find((m) => m.user.id === "bot-cascade")).toBeUndefined();
     });
   });
 
@@ -1164,7 +1181,7 @@ describe("Cove API — Discord-compatible", () => {
 
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${msg.id}`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
         body: JSON.stringify({ content: "" }),
       });
       expect(res.status).toBe(400);

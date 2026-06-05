@@ -2,7 +2,6 @@ import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { UsersRepo } from "../repos/users.js";
 import type { GuildsRepo } from "../repos/guilds.js";
-import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import { GatewaySession } from "./session.js";
@@ -11,7 +10,7 @@ import { GatewayDispatcher } from "./dispatcher.js";
 const HEARTBEAT_INTERVAL = 41250;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
 
-export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, dispatcher: GatewayDispatcher, channels: ChannelsRepo, readStates: ReadStatesRepo): void {
+export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, dispatcher: GatewayDispatcher, readStates: ReadStatesRepo): void {
   const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
@@ -76,17 +75,6 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
               s: null,
               t: null,
             });
-            break;
-          }
-
-          case GatewayOpcode.REQUEST_TYPING: {
-            if (!session.isIdentified || !session.user) break;
-            const d = payload.d as { channel_id?: string } | null;
-            if (!d?.channel_id) break;
-            const channel = channels.getById(d.channel_id);
-            if (!channel) break;
-            if (!session.guildIds.has(channel.guild_id)) break;
-            dispatcher.typingStart(d.channel_id, session.user, channel.guild_id);
             break;
           }
 

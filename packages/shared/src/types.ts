@@ -26,6 +26,7 @@ export interface Channel {
   guild_id: string;
   topic: string | null;
   position: number;
+  last_message_id: string | null;
 }
 
 /** Message object (Discord-compatible). */
@@ -44,7 +45,6 @@ export enum GatewayOpcode {
   DISPATCH = 0,
   HEARTBEAT = 1,
   IDENTIFY = 2,
-  REQUEST_TYPING = 4,
   RESUME = 6,
   HELLO = 10,
   HEARTBEAT_ACK = 11,

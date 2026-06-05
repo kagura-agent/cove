@@ -60,6 +60,9 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     const name = body.name.trim();
 
     const channel = repos.channels.create(guildId, name, body.topic, body.type ?? 0);
+
+    dispatcher?.channelCreate(channel);
+
     return c.json(channel, 201);
   });
 
@@ -120,7 +123,10 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     if (!repos.channels.delete(id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
-    return c.json({ deleted: true });
+
+    dispatcher?.channelDelete(ch.guild_id, id);
+
+    return c.json(ch);
   });
 
   return app;
