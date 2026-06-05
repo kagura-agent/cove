@@ -9,7 +9,6 @@ const barStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "var(--space-xs)",
-  minHeight: "var(--space-xxl)",
 };
 
 const dotKeyframes = `
@@ -47,9 +46,11 @@ export function TypingIndicator({ channelId }: { channelId: string }) {
     ? "Several people are typing"
     : null;
 
+  if (!typingLabel) return null;
+
   return (
     <div style={barStyle}>
-      {typingLabel && <><TypingDots />{typingLabel}…</>}
+      <TypingDots />{typingLabel}…
     </div>
   );
 }
