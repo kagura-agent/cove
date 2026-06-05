@@ -166,6 +166,29 @@ To test your changes:
 
 ⚠️ Manual SSH deploys will overwrite CI-deployed versions and cause confusion. Don't do it.
 
+### Plugin Build & Deploy
+
+The OpenClaw plugin (`packages/plugin/`) must be built with **esbuild bundle**, not tsc.
+
+```bash
+# 1. Install dependencies (ws must be available for bundling)
+cd /path/to/cove && pnpm install
+
+# 2. Build the plugin bundle
+cd packages/plugin && npm run build
+# This runs: esbuild src/index.ts --bundle --platform=node --format=esm \
+#   --outfile=dist/index.js --external:openclaw \
+#   --alias:@cove/shared=../shared/src/index.ts
+
+# 3. Deploy to OpenClaw extensions
+cp dist/index.js ~/.openclaw/extensions/cove/dist/index.js
+
+# 4. Restart gateway
+openclaw gateway restart
+```
+
+⚠️ **Do NOT use `tsc` to build the plugin.** tsc produces individual files with bare `import` statements that fail at runtime. The plugin must be a single esbuild bundle with `ws` inlined and `openclaw/*` as external.
+
 ### Generating Invite Codes (Staging)
 
 SSH to VM1, then run:
