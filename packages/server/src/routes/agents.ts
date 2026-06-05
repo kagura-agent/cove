@@ -33,8 +33,9 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.post("/users/:id/token", auth, (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
 
     // Only the user themselves can regenerate their token
     if (id !== actorId) {
@@ -59,8 +60,9 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.patch("/users/:id", auth, async (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
 
     // Only the user themselves can update their profile
     if (id !== actorId) {
@@ -86,8 +88,9 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.delete("/users/:id", auth, (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
 
     // Only the user themselves can delete their account
     if (id !== actorId) {

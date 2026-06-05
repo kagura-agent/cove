@@ -142,6 +142,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
+  // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
   app.post("/channels/:id/messages/bulk-delete", async (c) => {
     const channelId = c.req.param("id");
     const userId = c.get("botUser").id;
