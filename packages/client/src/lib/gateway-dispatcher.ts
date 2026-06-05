@@ -6,10 +6,11 @@ export interface GatewayEventMap {
   MESSAGE_DELETE: { id: string; channel_id: string };
   TYPING_START: { channel_id: string; user_id: string; username?: string };
   PRESENCE_UPDATE: { user: { id: string }; status: "online" | "offline" };
-  READY: { presences?: Array<{ user: { id: string }; status: string }> };
+  READY: { presences?: Array<{ user: { id: string }; status: string }>; read_state?: Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }> };
   CHANNEL_CREATE: Channel;
   CHANNEL_UPDATE: Channel;
   CHANNEL_DELETE: { id: string };
+  MESSAGE_ACK: { channel_id: string; message_id: string };
 }
 
 type Handler<T> = (data: T) => void;

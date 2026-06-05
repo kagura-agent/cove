@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import type { UsersRepo } from "../repos/users.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 import type { ChannelsRepo } from "../repos/channels.js";
+import type { ReadStatesRepo } from "../repos/readStates.js";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import { GatewaySession } from "./session.js";
 import { GatewayDispatcher } from "./dispatcher.js";
@@ -10,7 +11,7 @@ import { GatewayDispatcher } from "./dispatcher.js";
 const HEARTBEAT_INTERVAL = 41250;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
 
-export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, dispatcher: GatewayDispatcher, channels: ChannelsRepo): void {
+export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, dispatcher: GatewayDispatcher, channels: ChannelsRepo, readStates: ReadStatesRepo): void {
   const wss = new WebSocketServer({ server, path: "/gateway" });
 
   wss.on("connection", (ws) => {
@@ -62,7 +63,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
             const user = { id: row.id, username: row.username, bot: row.bot };
 
-            session.identify(user, dispatcher, guilds);
+            session.identify(user, dispatcher, guilds, readStates);
             dispatcher.addSession(session);
             break;
           }

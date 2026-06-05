@@ -10,10 +10,10 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 1", () => {
+  it("fresh DB gets user_version = 2", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(1);
+    expect(version).toBe(2);
     db.close();
   });
 
@@ -51,6 +51,7 @@ describe("versioned migration system", () => {
     expect(names).toContain("messages");
     expect(names).toContain("invite_codes");
     expect(names).toContain("pending_registrations");
+    expect(names).toContain("read_states");
     db.close();
   });
 
@@ -71,6 +72,45 @@ describe("versioned migration system", () => {
       setup.close();
 
       expect(() => initDb(tmpFile)).toThrow(/newer than supported/);
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+
+  it("V1→V2 migration creates read_states table", () => {
+    const tmpFile = tmpDb();
+    try {
+      // Create a V1 database manually
+      const setup = new Database(tmpFile);
+      setup.pragma("journal_mode = WAL");
+      setup.pragma("foreign_keys = OFF");
+      setup.exec(`
+        CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE channels (id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL, avatar TEXT, bot INTEGER NOT NULL DEFAULT 1, bio TEXT, token TEXT UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE guild_members (guild_id TEXT NOT NULL, user_id TEXT, nick TEXT, roles TEXT DEFAULT '[]', joined_at INTEGER NOT NULL, PRIMARY KEY (guild_id, user_id));
+        CREATE TABLE messages (id TEXT PRIMARY KEY, channel_id TEXT, sender TEXT, content TEXT, timestamp INTEGER, metadata TEXT, edited_timestamp INTEGER, sender_name TEXT);
+        CREATE TABLE invite_codes (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, created_at INTEGER NOT NULL, used_at INTEGER, used_by TEXT);
+        CREATE TABLE pending_registrations (id TEXT PRIMARY KEY, pending_token TEXT UNIQUE NOT NULL, google_id TEXT, email TEXT, username TEXT, avatar TEXT, created_at INTEGER);
+      `);
+      setup.exec("INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('g1', 'Cove', 1000, 1000)");
+      setup.pragma("user_version = 1");
+      setup.close();
+
+      const db = initDb(tmpFile);
+      const version = db.pragma("user_version", { simple: true });
+      expect(version).toBe(2);
+
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
+      expect(tables).toHaveLength(1);
+
+      // Verify the table works
+      db.prepare("INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?)").run("u1", "ch1", "msg1");
+      const row = db.prepare("SELECT * FROM read_states WHERE user_id = 'u1'").get() as Record<string, unknown>;
+      expect(row).toBeDefined();
+      expect(row.last_read_message_id).toBe("msg1");
+
+      db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
@@ -116,7 +156,7 @@ describe("versioned migration system", () => {
       expect(msg).toBeDefined();
       expect(msg.content).toBe("hello");
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -140,7 +180,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -258,7 +298,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(1);
+      expect(version).toBe(2);
 
       db2.close();
     } finally {

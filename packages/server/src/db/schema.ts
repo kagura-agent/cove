@@ -1,12 +1,13 @@
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 
-const LATEST_VERSION = 1;
+const LATEST_VERSION = 2;
 
 type MigrationFn = (db: Database.Database) => void;
 
 const migrations: Record<number, MigrationFn> = {
   1: migrateV0ToV1,
+  2: migrateV1ToV2,
 };
 
 function runMigrations(db: Database.Database): void {
@@ -51,6 +52,17 @@ function migrateV0ToV1(db: Database.Database): void {
 
   // Legacy database: run all the old migrations
   migrateLegacyToV1(db);
+}
+
+function migrateV1ToV2(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS read_states (
+      user_id              TEXT NOT NULL,
+      channel_id           TEXT NOT NULL,
+      last_read_message_id TEXT,
+      PRIMARY KEY (user_id, channel_id)
+    )
+  `);
 }
 
 function createAllTables(db: Database.Database): void {
@@ -120,6 +132,13 @@ function createAllTables(db: Database.Database): void {
       username      TEXT,
       avatar        TEXT,
       created_at    INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS read_states (
+      user_id              TEXT NOT NULL,
+      channel_id           TEXT NOT NULL,
+      last_read_message_id TEXT,
+      PRIMARY KEY (user_id, channel_id)
     );
   `);
 }

@@ -3,8 +3,10 @@ import type { GatewayEventMap } from "./gateway-dispatcher";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useChannelStore } from "../stores/useChannelStore";
 import { usePresenceStore } from "../stores/usePresenceStore";
+import { useReadStateStore } from "../stores/useReadStateStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
+import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
@@ -20,6 +22,18 @@ export function setupGatewaySubscriptions(): void {
   subscribe("MESSAGE_CREATE", (msg) => {
     useMessageStore.getState().addMessage(msg.channel_id, msg);
     useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
+
+    // Mark channel unread if the message is from someone else and not the active channel
+    const selfId = useUserStore.getState().id;
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (msg.author.id !== selfId && msg.channel_id !== activeChannelId) {
+      useReadStateStore.getState().setUnread(msg.channel_id);
+    }
+
+    // Auto-ack incoming messages in the active channel from other users
+    if (msg.author.id !== selfId && msg.channel_id === activeChannelId) {
+      api.ackMessage(msg.channel_id, msg.id).catch(() => {});
+    }
   });
 
   subscribe("MESSAGE_UPDATE", (msg) => {
@@ -67,6 +81,13 @@ export function setupGatewaySubscriptions(): void {
         data.presences.filter((p) => p.status === "online").map((p) => p.user.id),
       );
     }
+    if (data.read_state) {
+      useReadStateStore.getState().initReadStates(data.read_state);
+    }
+  });
+
+  subscribe("MESSAGE_ACK", (data) => {
+    useReadStateStore.getState().markRead(data.channel_id, data.message_id);
   });
 
   subscribe("CHANNEL_CREATE", (channel) => {

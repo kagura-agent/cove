@@ -93,4 +93,5 @@ const gatewayEvents = new Set([
   "CHANNEL_CREATE",
   "CHANNEL_UPDATE",
   "CHANNEL_DELETE",
+  "MESSAGE_ACK",
 ]);

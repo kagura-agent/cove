@@ -140,6 +140,40 @@ UI ←→ Cove Backend ←→ OpenClaw Gateway
 
 The agent layer stays untouched. Cron, delivery, allowlist — all reused from OpenClaw. Cove only adds the UI and the channel bridge.
 
+## Deployment
+
+### Staging — Automatic via CI
+
+**Do NOT manually deploy to staging.** The `deploy-staging.yml` workflow handles everything:
+
+- **On PR open/push**: CI builds client + server → deploys to VM1 staging (port 3501)
+- **On PR close**: CI tears down the staging service
+- **On push to main**: CI deploys the latest main to staging
+
+Staging URL: `https://staging.cove.kagura-agent.com`
+
+To test your changes:
+1. Push to your PR branch
+2. Wait for CI deploy to complete (check PR comments for preview URL)
+3. Hard-refresh the staging URL (`Ctrl+Shift+R`)
+
+⚠️ Manual SSH deploys will overwrite CI-deployed versions and cause confusion. Don't do it.
+
+### Generating Invite Codes (Staging)
+
+SSH to VM1, then run:
+
+```bash
+cd /home/azureuser/cove-staging && node -e "
+const db=require('better-sqlite3')('./cove-staging.db');
+const crypto=require('crypto');
+const code=crypto.randomBytes(4).toString('hex').toUpperCase();
+const id=crypto.randomUUID();
+db.prepare('INSERT INTO invite_codes (id, code, created_at) VALUES (?, ?, ?)').run(id, code, new Date().toISOString());
+console.log(code);
+"
+```
+
 ## Need Help?
 
 Open an issue with your question — we're happy to help.

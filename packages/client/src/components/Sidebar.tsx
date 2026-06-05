@@ -1,4 +1,5 @@
 import { useChannelStore } from "../stores/useChannelStore";
+import { useReadStateStore } from "../stores/useReadStateStore";
 import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { UserBar } from "./UserBar";
@@ -22,8 +23,8 @@ const styles = {
   addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
 };
 
-function ChannelItem({ name, isActive, onSelect, onDelete }: {
-  name: string; isActive: boolean; onSelect: () => void; onDelete: () => void;
+function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
+  name: string; isActive: boolean; isUnread: boolean; onSelect: () => void; onDelete: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -35,7 +36,7 @@ function ChannelItem({ name, isActive, onSelect, onDelete }: {
       onMouseLeave={() => setHovered(false)}
     >
       <span style={styles.hash}>#</span>
-      <span style={styles.channelName}>{name}</span>
+      <span style={{ ...styles.channelName, ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}>{name}</span>
       <Popconfirm title={`Delete #${name}?`} description="All messages will be lost." onConfirm={(e) => { e?.stopPropagation(); onDelete(); }} onCancel={(e) => e?.stopPropagation()} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
         <Button
           type="text"
@@ -51,6 +52,7 @@ function ChannelItem({ name, isActive, onSelect, onDelete }: {
 
 export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
+  const { unreadChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
 
@@ -98,6 +100,7 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
                 key={ch.id}
                 name={ch.name}
                 isActive={ch.id === activeChannelId}
+                isUnread={!!unreadChannels[ch.id]}
                 onSelect={() => handleSelectChannel(ch.id)}
                 onDelete={() => handleDeleteChannel(ch.id)}
               />

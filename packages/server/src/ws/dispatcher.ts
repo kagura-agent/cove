@@ -90,6 +90,10 @@ export class GatewayDispatcher {
     });
   }
 
+  messageAck(userId: string, channelId: string, messageId: string): void {
+    this.sendToUser(userId, "MESSAGE_ACK", { channel_id: channelId, message_id: messageId });
+  }
+
   private presenceUpdate(userId: string, status: "online" | "offline"): void {
     this.broadcastToGuildMembers(userId, "PRESENCE_UPDATE", {
       user: { id: userId },

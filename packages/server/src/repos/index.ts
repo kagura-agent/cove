@@ -4,8 +4,9 @@ import { ChannelsRepo } from "./channels.js";
 import { UsersRepo } from "./users.js";
 import { MembersRepo } from "./members.js";
 import { GuildsRepo } from "./guilds.js";
+import { ReadStatesRepo } from "./readStates.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo };
 
 export interface Repos {
   messages: MessagesRepo;
@@ -13,6 +14,7 @@ export interface Repos {
   users: UsersRepo;
   members: MembersRepo;
   guilds: GuildsRepo;
+  readStates: ReadStatesRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -22,5 +24,6 @@ export function createRepos(db: Database.Database): Repos {
     users: new UsersRepo(db),
     members: new MembersRepo(db),
     guilds: new GuildsRepo(db),
+    readStates: new ReadStatesRepo(db),
   };
 }
