@@ -16,6 +16,9 @@ const typingBarStyle: CSSProperties = {
 
 const NEAR_BOTTOM_THRESHOLD = 100;
 
+/** Persists across mounts so revisiting a channel with no new messages skips the ack call. */
+const lastAckedIds = new Map<string, string>();
+
 const dotKeyframes = `
 @keyframes typingDot {
   0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
@@ -52,7 +55,6 @@ export function MessageList({ channelId }: { channelId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
   const wasNearBottomRef = useRef(true);
-  const lastAckedIdRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -62,7 +64,6 @@ export function MessageList({ channelId }: { channelId: string }) {
     let cancelled = false;
     prevCountRef.current = 0;
     wasNearBottomRef.current = true;
-    lastAckedIdRef.current = null;
     api.fetchMessages(channelId).then((msgs) => {
       if (!cancelled) {
         const reversed = msgs.reverse();
@@ -73,8 +74,8 @@ export function MessageList({ channelId }: { channelId: string }) {
         // Auto-ack: now that messages are loaded, ack the last one (skip if already acked)
         if (reversed.length > 0) {
           const lastMsg = reversed[reversed.length - 1];
-          if (lastMsg.id !== lastAckedIdRef.current) {
-            lastAckedIdRef.current = lastMsg.id;
+          if (lastMsg.id !== lastAckedIds.get(channelId)) {
+            lastAckedIds.set(channelId, lastMsg.id);
             useReadStateStore.getState().clearUnread(channelId);
             api.ackMessage(channelId, lastMsg.id).catch(() => {});
           }

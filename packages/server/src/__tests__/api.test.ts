@@ -204,10 +204,15 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ content: "test broadcast" }),
       });
 
-      expect(broadcastEvents).toHaveLength(1);
+      expect(broadcastEvents).toHaveLength(2);
       const event = broadcastEvents[0] as { t: string; d: Message };
       expect(event.t).toBe("MESSAGE_CREATE");
       expect(event.d.content).toBe("test broadcast");
+      const ackEvent = broadcastEvents[1] as { t: string; d: { user_id: string; channel_id: string; message_id: string } };
+      expect(ackEvent.t).toBe("MESSAGE_ACK");
+      expect(ackEvent.d.channel_id).toBe("general");
+      expect(ackEvent.d.message_id).toBe(event.d.id);
+      expect(ackEvent.d.user_id).toBe(bot.id);
     });
 
     it("returns 404 for unknown channel", async () => {

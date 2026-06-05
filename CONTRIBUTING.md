@@ -161,8 +161,9 @@ To test your changes:
 
 ### Generating Invite Codes (Staging)
 
+SSH to VM1, then run:
+
 ```bash
-ssh to VM1, then:
 cd /home/azureuser/cove-staging && node -e "
 const db=require('better-sqlite3')('./cove-staging.db');
 const crypto=require('crypto');

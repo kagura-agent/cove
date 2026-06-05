@@ -61,9 +61,14 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const message = repos.messages.create(channelId, author, body.content);
 
     // Update sender's read state so their own message doesn't show unread on reload
-    repos.readStates.set(userId, channelId, message.id);
+    const acked = repos.readStates.set(userId, channelId, message.id);
 
     dispatcher?.messageCreate(message);
+
+    // Notify sender's other sessions so unread badges clear everywhere
+    if (acked) {
+      dispatcher?.messageAck(userId, channelId, message.id);
+    }
 
     return c.json(message, 201);
   });
@@ -135,8 +140,8 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
     }
 
-    repos.readStates.set(userId, channelId, messageId);
-    dispatcher?.messageAck(userId, channelId, messageId);
+    repos.readStates.set(userId, channelId, messageId) &&
+      dispatcher?.messageAck(userId, channelId, messageId);
 
     return c.body(null, 204);
   });
