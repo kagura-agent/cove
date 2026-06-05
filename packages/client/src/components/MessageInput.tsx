@@ -92,7 +92,12 @@ export function MessageInput({ channelId }: { channelId: string }) {
         shape="circle"
         icon={<SendOutlined />}
         onClick={handleSubmit}
-        style={{ color: content.trim() ? "var(--accent)" : "var(--text-muted)" }}
+        style={{
+          color: content.trim() ? "var(--accent)" : "var(--text-muted)",
+          width: 35, height: 35, minWidth: 35,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "8px 0", flexShrink: 0,
+        }}
       />
     </div>
   );
