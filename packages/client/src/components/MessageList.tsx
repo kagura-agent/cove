@@ -120,7 +120,7 @@ export function MessageList({ channelId }: { channelId: string }) {
   if (messages.length === 0) {
     return (
       <div style={centerStyle}>
-        <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" }} description="No messages yet — be the first!" />
+        <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" /* decorative one-off */ }} description="No messages yet — be the first!" />
       </div>
     );
   }

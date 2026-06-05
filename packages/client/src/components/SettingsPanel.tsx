@@ -27,12 +27,12 @@ function ThemeSwatch({ preset, isActive, onSelect }: {
 }) {
   const previewStyle: CSSProperties = {
     display: "flex",
-    height: 80,
+    height: 80, /* swatch preview dimensions */
     background: preset.preview.bg,
   };
 
   const sidebarStyle: CSSProperties = {
-    width: 36,
+    width: 36, /* swatch preview dimensions */
     background: preset.preview.sidebar,
     borderRight: `1px solid ${preset.preview.borderColor}`,
   };
@@ -280,6 +280,6 @@ const dividerStyle: CSSProperties = {
 };
 
 const contentInnerStyle: CSSProperties = {
-  maxWidth: 660,
+  maxWidth: "var(--settings-content-max-width)",
   width: "100%",
 };

@@ -38,6 +38,10 @@
   --font-size-md: 14px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
+  --font-size-xxl: 32px;
+
+  /* ── Settings ────────────────────────────────────────── */
+  --settings-content-max-width: 660px;
 
   /* ── Input ────────────────────────────────────────────── */
   --input-radius: 8px;

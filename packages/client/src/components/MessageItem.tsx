@@ -100,7 +100,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Header: username + badge + timestamp */}
-          <div style={{ display: "flex", alignItems: "baseline", lineHeight: "22px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", lineHeight: 1.375 }}>
             <span
               style={{
                 fontSize: "var(--font-size-lg)",

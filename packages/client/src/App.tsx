@@ -55,13 +55,13 @@ const styles = {
   sidebarFooter: { gridColumn: 1, gridRow: 2 } as CSSProperties,
   chatBody: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
   chatFooter: { gridColumn: 2, gridRow: 2, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
-  loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
-  loginTitle: { fontSize: 32, fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
+  connStatus: { display: "flex", alignItems: "center", gap: "var(--space-xs)", padding: "var(--space-xs) var(--space-md)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
+  loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
+  loginTitle: { fontSize: "var(--font-size-xxl)", fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
 
 const connDot = (status: string): CSSProperties => ({
-  width: 8, height: 8, borderRadius: "50%", display: "inline-block",
+  width: "var(--space-sm)", height: "var(--space-sm)", borderRadius: "50%", display: "inline-block",
   background: status === "connecting" ? "var(--warning)" : "var(--danger)",
 });
 
