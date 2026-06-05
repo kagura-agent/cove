@@ -17,7 +17,7 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
     const { inviteCode, pendingToken } = body;
 
     if (!inviteCode || !pendingToken) {
-      return c.json({ message: "inviteCode and pendingToken are required" }, 400);
+      return c.json({ message: "inviteCode and pendingToken are required", code: 50035 }, 400);
     }
 
     const normalizedCode = inviteCode.trim().toUpperCase();
@@ -26,7 +26,7 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
       "SELECT id, google_id, email, username, avatar FROM pending_registrations WHERE pending_token = ?"
     ).get(pendingToken) as { id: string; google_id: string; email: string; username: string; avatar: string } | undefined;
     if (!pending) {
-      return c.json({ message: "Invalid pending token" }, 400);
+      return c.json({ message: "Invalid pending token", code: 50035 }, 400);
     }
 
     const userId = generateSnowflake();
@@ -69,7 +69,7 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
     const result = register();
 
     if (result === null) {
-      return c.json({ message: "Invalid or already used invite code" }, 400);
+      return c.json({ message: "Invalid or already used invite code", code: 50035 }, 400);
     }
 
     return c.json({ token: result });

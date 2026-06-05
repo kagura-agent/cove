@@ -87,6 +87,7 @@ const gatewayEvents = new Set([
   "MESSAGE_CREATE",
   "MESSAGE_UPDATE",
   "MESSAGE_DELETE",
+  "MESSAGE_DELETE_BULK",
   "TYPING_START",
   "PRESENCE_UPDATE",
   "READY",

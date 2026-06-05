@@ -25,7 +25,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     const id = body.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     if (repos.users.exists(id)) {
-      return c.json({ message: "User already exists", code: 10013 }, 409);
+      return c.json({ message: "User already exists" }, 409);
     }
 
     const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio }, repos.guilds.getDefaultId());
@@ -33,7 +33,15 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.post("/users/:id/token", auth, (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
+    const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
+
+    // Only the user themselves can regenerate their token
+    if (id !== actorId) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
+
     const token = repos.users.regenerateToken(id!);
     if (!token) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
@@ -52,7 +60,15 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.patch("/users/:id", auth, async (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
+    const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
+
+    // Only the user themselves can update their profile
+    if (id !== actorId) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
+
     if (!repos.users.exists(id!)) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
     }
@@ -72,7 +88,15 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   });
 
   app.delete("/users/:id", auth, (c) => {
-    const id = c.req.param("id");
+    const rawId = c.req.param("id");
+    const actorId = c.get("botUser").id;
+    const id = rawId === "@me" ? actorId : rawId;
+
+    // Only the user themselves can delete their account
+    if (id !== actorId) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
+
     if (!repos.users.delete(id!)) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
     }
@@ -140,7 +164,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     }
 
     if (!repos.members.exists(guildId, userId)) {
-      return c.json({ message: "Member not found" }, 404);
+      return c.json({ message: "Unknown Member", code: 10007 }, 404);
     }
 
     repos.members.remove(guildId, userId);

@@ -8,6 +8,7 @@ interface ChannelRow {
   type: number;
   topic: string | null;
   position: number;
+  last_message_id: string | null;
 }
 
 function toChannel(row: ChannelRow): Channel {
@@ -18,6 +19,7 @@ function toChannel(row: ChannelRow): Channel {
     guild_id: row.guild_id,
     topic: row.topic,
     position: row.position,
+    last_message_id: row.last_message_id,
   };
 }
 
@@ -71,5 +73,14 @@ export class ChannelsRepo {
 
   exists(id: string): boolean {
     return !!this.db.prepare("SELECT id FROM channels WHERE id = ?").get(id);
+  }
+
+  updateLastMessageId(channelId: string, messageId: string): void {
+    this.db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?").run(messageId, channelId);
+  }
+
+  recomputeLastMessageId(channelId: string): void {
+    const row = this.db.prepare("SELECT id FROM messages WHERE channel_id = ? ORDER BY id DESC LIMIT 1").get(channelId) as { id: string } | undefined;
+    this.db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?").run(row?.id ?? null, channelId);
   }
 }

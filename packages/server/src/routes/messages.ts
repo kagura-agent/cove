@@ -60,6 +60,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     const message = repos.messages.create(channelId, author, body.content);
 
+    // Update channel's last_message_id
+    repos.channels.updateLastMessageId(channelId, message.id);
+
     // Update sender's read state so their own message doesn't show unread on reload
     const acked = repos.readStates.set(userId, channelId, message.id);
 
@@ -80,6 +83,16 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+
+    const existing = repos.messages.getById(channelId, msgId);
+    if (!existing) {
+      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+    }
+
+    // Only the message author can edit their own message
+    if (existing.author.id !== userId) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const body = await parseJsonBody<{ content: string }>(c);
@@ -107,8 +120,21 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
+    const existing = repos.messages.getById(channelId, msgId);
+    if (!existing) {
+      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+    }
+
+    // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
+    // For now, any guild member can delete any message in channels they have access to
+
     if (!repos.messages.delete(channelId, msgId)) {
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
+    }
+
+    // Recompute last_message_id if we just deleted the latest message
+    if (ch.last_message_id === msgId) {
+      repos.channels.recomputeLastMessageId(channelId);
     }
 
     dispatcher?.messageDelete(channelId, msgId);
@@ -116,6 +142,41 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
+  // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
+  app.post("/channels/:id/messages/bulk-delete", async (c) => {
+    const channelId = c.req.param("id");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+
+    const body = await parseJsonBody<{ messages: string[] }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+    if (!Array.isArray(body.messages) || body.messages.length < 2) {
+      return validationError(c, "messages must contain between 2 and 100 items");
+    }
+    if (body.messages.length > 100) {
+      return validationError(c, "messages must contain between 2 and 100 items");
+    }
+
+    const deleted: string[] = [];
+    repos.db.transaction(() => {
+      for (const msgId of body.messages) {
+        if (repos.messages.delete(channelId, msgId)) {
+          deleted.push(msgId);
+        }
+      }
+    })();
+    if (deleted.length > 0) {
+      repos.channels.recomputeLastMessageId(channelId);
+      dispatcher?.messageDeleteBulk(channelId, deleted, ch.guild_id);
+    }
+
+    return c.body(null, 204);
+  });
+
+  // Cove-specific: clear all messages in a channel
   app.delete("/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
     const userId = c.get("botUser").id;
@@ -123,8 +184,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!ch) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
-    const deleted = repos.messages.deleteAll(channelId!);
-    return c.json({ deleted });
+
+    const count = repos.messages.deleteAll(channelId);
+    if (count > 0) {
+      repos.channels.recomputeLastMessageId(channelId);
+    }
+
+    return c.body(null, 204);
   });
 
   app.put("/channels/:id/messages/:msgId/ack", (c) => {

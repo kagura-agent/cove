@@ -243,13 +243,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         const abortController = new AbortController();
         pendingDispatches.set(channelId, abortController);
 
-        // Fire-and-forget early typing cue via WebSocket (instant, no TLS overhead)
-        gatewayClient.send({ op: 4, d: { channel_id: channelId } });
+        // Fire-and-forget early typing cue via REST endpoint
+        const restClient = getRestClient(account.baseUrl, account.token);
+        restClient.sendTyping(channelId).catch(() => {});
 
         const typingCallbacks = createTypingCallbacks({
           start: () => {
-            gatewayClient.send({ op: 4, d: { channel_id: channelId } });
-            return Promise.resolve();
+            return restClient.sendTyping(channelId);
           },
           keepaliveIntervalMs: 5000,
           maxDurationMs: 60000,
@@ -257,7 +257,6 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         });
 
         try {
-          const restClient = getRestClient(account.baseUrl, account.token);
           const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
 
           const targetAgent = account.agentId;
