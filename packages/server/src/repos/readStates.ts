@@ -17,15 +17,14 @@ export class ReadStatesRepo {
   }
 
   set(userId: string, channelId: string, messageId: string): void {
-    this.db.prepare(
-      "INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?) ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_message_id = excluded.last_read_message_id"
-    ).run(userId, channelId, messageId);
-  }
-
-  getAllForUser(userId: string): Array<{ channel_id: string; last_read_message_id: string | null }> {
-    return this.db.prepare(
-      "SELECT channel_id, last_read_message_id FROM read_states WHERE user_id = ?"
-    ).all(userId) as Array<{ channel_id: string; last_read_message_id: string | null }>;
+    // Only advance the cursor forward — a delayed ack must not overwrite a newer one.
+    // Compare by message timestamp since IDs are UUIDs (not sequential).
+    this.db.prepare(`
+      INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?)
+      ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_message_id = excluded.last_read_message_id
+      WHERE (SELECT timestamp FROM messages WHERE id = excluded.last_read_message_id)
+            >= COALESCE((SELECT timestamp FROM messages WHERE id = read_states.last_read_message_id), 0)
+    `).run(userId, channelId, messageId);
   }
 
   getAllForUserWithLastMessage(userId: string): Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }> {

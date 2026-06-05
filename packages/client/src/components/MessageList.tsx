@@ -52,6 +52,7 @@ export function MessageList({ channelId }: { channelId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
   const wasNearBottomRef = useRef(true);
+  const lastAckedIdRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -61,6 +62,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     let cancelled = false;
     prevCountRef.current = 0;
     wasNearBottomRef.current = true;
+    lastAckedIdRef.current = null;
     api.fetchMessages(channelId).then((msgs) => {
       if (!cancelled) {
         const reversed = msgs.reverse();
@@ -68,11 +70,14 @@ export function MessageList({ channelId }: { channelId: string }) {
         prevCountRef.current = reversed.length;
         requestAnimationFrame(() => scrollToBottom("instant"));
 
-        // Auto-ack: now that messages are loaded, ack the last one
+        // Auto-ack: now that messages are loaded, ack the last one (skip if already acked)
         if (reversed.length > 0) {
           const lastMsg = reversed[reversed.length - 1];
-          useReadStateStore.getState().clearUnread(channelId);
-          api.ackMessage(channelId, lastMsg.id).catch(() => {});
+          if (lastMsg.id !== lastAckedIdRef.current) {
+            lastAckedIdRef.current = lastMsg.id;
+            useReadStateStore.getState().clearUnread(channelId);
+            api.ackMessage(channelId, lastMsg.id).catch(() => {});
+          }
         }
       }
     }).catch((err) => console.error("loadMessages:", err));
