@@ -34,15 +34,13 @@ function useVisualViewport() {
   }, []);
 }
 
-const ACCENT_BRAND: Record<string, string> = {
-  light: "#e07828", dark: "#f4a261", midnight: "#f4a261",
-};
-
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
+  // Read --accent-brand from CSS so Antd stays in sync with our token system
+  const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim() || "#f4a261";
   return {
     algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
-    token: { colorPrimary: ACCENT_BRAND[currentTheme] || "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+    token: { colorPrimary: accentBrand, colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
   };
 }
 
