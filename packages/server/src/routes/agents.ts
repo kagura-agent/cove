@@ -25,7 +25,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     const id = body.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     if (repos.users.exists(id)) {
-      return c.json({ message: "User already exists", code: 40002 }, 409);
+      return c.json({ message: "User already exists" }, 409);
     }
 
     const user = repos.users.create({ id: body.id, username, avatar: body.avatar, bot: body.bot, bio: body.bio }, repos.guilds.getDefaultId());

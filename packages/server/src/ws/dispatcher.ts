@@ -77,6 +77,10 @@ export class GatewayDispatcher {
     this.broadcastToGuild(guildId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId });
   }
 
+  messageDeleteBulk(channelId: string, messageIds: string[], guildId: string): void {
+    this.broadcastToGuild(guildId, "MESSAGE_DELETE_BULK", { ids: messageIds, channel_id: channelId, guild_id: guildId });
+  }
+
   channelCreate(channel: Channel): void {
     this.broadcastToGuild(channel.guild_id, "CHANNEL_CREATE", channel);
   }

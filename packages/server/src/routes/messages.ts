@@ -125,10 +125,8 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
     }
 
-    // Only the message author can delete their own message
-    if (existing.author.id !== userId) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
+    // For now, any guild member can delete any message in channels they have access to
 
     if (!repos.messages.delete(channelId, msgId)) {
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
@@ -149,17 +147,21 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     const body = await parseJsonBody<{ messages: string[] }>(c);
     if (!body) return validationError(c, "Invalid JSON");
-    if (!Array.isArray(body.messages) || body.messages.length === 0) {
-      return validationError(c, "messages must be a non-empty array");
+    if (!Array.isArray(body.messages) || body.messages.length < 2) {
+      return validationError(c, "messages must contain between 2 and 100 items");
     }
     if (body.messages.length > 100) {
-      return validationError(c, "messages must contain 100 or fewer items");
+      return validationError(c, "messages must contain between 2 and 100 items");
     }
 
+    const deleted: string[] = [];
     for (const msgId of body.messages) {
       if (repos.messages.delete(channelId, msgId)) {
-        dispatcher?.messageDelete(channelId, msgId);
+        deleted.push(msgId);
       }
+    }
+    if (deleted.length > 0) {
+      dispatcher?.messageDeleteBulk(channelId, deleted, ch.guild_id);
     }
 
     return c.body(null, 204);
