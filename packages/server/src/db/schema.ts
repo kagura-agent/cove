@@ -499,26 +499,10 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   runMigrations(db);
   db.pragma("foreign_keys = ON");
 
-  // Clean up orphaned FK references after migration
-  const fkViolations = db.pragma("foreign_key_check") as Array<{ table: string; rowid: number; parent: string; fkid: number }>;
+  // Verify no orphaned FK references after migration
+  const fkViolations = db.pragma("foreign_key_check") as unknown[];
   if (fkViolations.length > 0) {
-    console.log(`Cleaning ${fkViolations.length} orphaned FK references...`);
-    // Group by table and clean up
-    const tables = new Set(fkViolations.map(v => v.table));
-    for (const table of tables) {
-      const rowids = fkViolations.filter(v => v.table === table).map(v => v.rowid);
-      // Delete orphan rows in batches
-      for (let i = 0; i < rowids.length; i += 100) {
-        const batch = rowids.slice(i, i + 100);
-        db.prepare(`DELETE FROM "${table}" WHERE rowid IN (${batch.join(',')})`).run();
-      }
-    }
-    // Verify cleanup succeeded
-    const remaining = db.pragma("foreign_key_check") as unknown[];
-    if (remaining.length > 0) {
-      throw new Error(`Foreign key violations remain after cleanup: ${JSON.stringify(remaining)}`);
-    }
-    console.log(`Cleaned orphaned FK references from: ${[...tables].join(', ')}`);
+    throw new Error(`Foreign key violations detected after migration: ${JSON.stringify(fkViolations)}`);
   }
 
   // Seed default guild if none exists
