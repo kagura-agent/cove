@@ -39,7 +39,7 @@ jobs:
             --bundle --platform=node --format=esm \
             --outfile=server-bundle.js \
             --external:better-sqlite3 --external:ws \
-            --alias:@cove/shared=./packages/shared/src/types.ts
+            --alias:@cove/shared=./packages/shared/src/index.ts
 
       - name: Deploy to VM1 (staging)
         env:

@@ -34,3 +34,11 @@ jobs:
 
       - name: Test
         run: pnpm -r --filter @cove/server exec vitest run
+
+      - name: Bundle check (verify deploy bundle builds)
+        run: |
+          npx esbuild packages/server/dist/index.js \
+            --bundle --platform=node --format=esm \
+            --outfile=/dev/null \
+            --external:better-sqlite3 --external:ws \
+            --alias:@cove/shared=./packages/shared/src/index.ts

@@ -89,6 +89,13 @@ pnpm -r exec tsc --noEmit
 
 # 3. Run tests
 npm test
+
+# 4. Bundle check (catches deploy-time import failures)
+npx esbuild packages/server/dist/index.js \
+  --bundle --platform=node --format=esm \
+  --outfile=/dev/null \
+  --external:better-sqlite3 --external:ws \
+  --alias:@cove/shared=./packages/shared/src/index.ts
 ```
 
 ⚠️ `npm test` alone is NOT sufficient — vitest uses esbuild which skips type checking, and `vite build` doesn't check types either. The `tsc --noEmit` step catches type errors that tests and builds miss.

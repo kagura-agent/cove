@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { randomUUID } from "node:crypto";
+import crypto from "node:crypto";
+import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 
@@ -21,11 +22,6 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
 
     const normalizedCode = inviteCode.trim().toUpperCase();
 
-    const code = db.prepare("SELECT id FROM invite_codes WHERE code = ? AND used_at IS NULL").get(normalizedCode) as { id: string } | undefined;
-    if (!code) {
-      return c.json({ message: "Invalid or already used invite code" }, 400);
-    }
-
     const pending = db.prepare(
       "SELECT id, google_id, email, username, avatar FROM pending_registrations WHERE pending_token = ?"
     ).get(pendingToken) as { id: string; google_id: string; email: string; username: string; avatar: string } | undefined;
@@ -33,26 +29,50 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
       return c.json({ message: "Invalid pending token" }, 400);
     }
 
-    const userId = randomUUID();
+    const userId = generateSnowflake();
     const now = Date.now();
-    const token = randomUUID();
+    const token = crypto.randomUUID();
 
     const register = db.transaction(() => {
+      // Verify invite code is valid and unused (without consuming yet)
+      const invite = db.prepare(
+        "SELECT id FROM invite_codes WHERE code = ? AND used_at IS NULL"
+      ).get(normalizedCode) as { id: string } | undefined;
+
+      if (!invite) {
+        return null; // code invalid or already used
+      }
+
       db.prepare(
-        "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(userId, pending.username, pending.avatar, 0, null, token, now, now);
+        "INSERT INTO users (id, username, avatar, bot, bio, token, google_id, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(userId, pending.username, pending.avatar, 0, null, token, pending.google_id, pending.email, now, now);
 
       // Add new user to default guild
       db.prepare(
         "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
       ).run(guildsRepo.getDefaultId(), userId, null, "[]", now);
 
-      db.prepare("UPDATE invite_codes SET used_at = ?, used_by = ? WHERE id = ?").run(now, userId, code.id);
-      db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
-    });
-    register();
+      // #209: Atomic invite consumption — conditional UPDATE (race-safe within transaction)
+      const inviteResult = db.prepare(
+        "UPDATE invite_codes SET used_at = ?, used_by = ? WHERE code = ? AND used_at IS NULL"
+      ).run(now, userId, normalizedCode);
 
-    return c.json({ token });
+      if (inviteResult.changes === 0) {
+        // Shouldn't happen within transaction, but guard anyway
+        return null;
+      }
+
+      db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
+
+      return token;
+    });
+    const result = register();
+
+    if (result === null) {
+      return c.json({ message: "Invalid or already used invite code" }, 400);
+    }
+
+    return c.json({ token: result });
   });
 
   return app;

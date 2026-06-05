@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import crypto from "node:crypto";
 import type { CoveAgent } from "@cove/shared";
 
 interface UserRow {
@@ -35,7 +35,7 @@ export class UsersRepo {
     const username = opts.username;
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();
-    const token = randomUUID();
+    const token = crypto.randomUUID();
 
     this.db.prepare(
       "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -69,17 +69,14 @@ export class UsersRepo {
   }
 
   delete(id: string): boolean {
-    const row = this.db.prepare("SELECT id FROM users WHERE id = ?").get(id);
-    if (!row) return false;
-    this.db.prepare("DELETE FROM guild_members WHERE user_id = ?").run(id);
-    this.db.prepare("DELETE FROM users WHERE id = ?").run(id);
-    return true;
+    const result = this.db.prepare("DELETE FROM users WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   regenerateToken(id: string): string | null {
     const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
     if (!row) return null;
-    const token = randomUUID();
+    const token = crypto.randomUUID();
     this.db.prepare("UPDATE users SET token = ?, updated_at = ? WHERE id = ?").run(token, Date.now(), id);
     return token;
   }

@@ -81,6 +81,11 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
   // ─── Guild Members ─────────────────────────────────────────
 
+  app.get("/users/@me/guilds", auth, (c) => {
+    const userId = c.get("botUser").id;
+    return c.json(repos.guilds.listForUser(userId));
+  });
+
   app.get("/guilds/:guildId/members", auth, (c) => {
     const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {

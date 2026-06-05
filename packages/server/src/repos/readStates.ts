@@ -13,12 +13,11 @@ export class ReadStatesRepo {
   /** Returns true when the cursor actually advanced, false when skipped by monotonicity guard. */
   set(userId: string, channelId: string, messageId: string): boolean {
     // Only advance the cursor forward — a delayed ack must not overwrite a newer one.
-    // Compare by message timestamp since IDs are UUIDs (not sequential).
+    // Snowflake IDs are fixed-width numeric strings; lexicographic >= is equivalent to numeric >=.
     const result = this.db.prepare(`
       INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?)
       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_message_id = excluded.last_read_message_id
-      WHERE (SELECT timestamp FROM messages WHERE id = excluded.last_read_message_id)
-            >= COALESCE((SELECT timestamp FROM messages WHERE id = read_states.last_read_message_id), 0)
+      WHERE excluded.last_read_message_id >= COALESCE(read_states.last_read_message_id, '0')
     `).run(userId, channelId, messageId);
     return result.changes > 0;
   }
@@ -29,7 +28,7 @@ export class ReadStatesRepo {
     return this.db.prepare(`
       SELECT c.id AS channel_id,
         rs.last_read_message_id,
-        (SELECT m.id FROM messages m WHERE m.channel_id = c.id ORDER BY m.timestamp DESC LIMIT 1) AS last_message_id
+        (SELECT m.id FROM messages m WHERE m.channel_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_message_id
       FROM channels c
       JOIN guild_members gm ON gm.guild_id = c.guild_id AND gm.user_id = ?
       LEFT JOIN read_states rs ON rs.channel_id = c.id AND rs.user_id = ?

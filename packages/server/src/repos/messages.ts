@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { Message, User } from "@cove/shared";
+import { generateSnowflake, type Message, type User } from "@cove/shared";
 
 interface MessageRow {
   id: string;
@@ -43,28 +42,22 @@ export class MessagesRepo {
     let rows: MessageRow[];
 
     if (before) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(before) as { timestamp: number } | undefined;
-      if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
-        .all(channelId, ref.timestamp, limit) as MessageRow[];
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`)
+        .all(channelId, before, limit) as MessageRow[];
     } else if (after) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(after) as { timestamp: number } | undefined;
-      if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
-        .all(channelId, ref.timestamp, limit) as MessageRow[];
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id > ? ORDER BY m.id ASC LIMIT ?`)
+        .all(channelId, after, limit) as MessageRow[];
     } else if (around) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(around) as { timestamp: number } | undefined;
-      if (!ref) return [];
       const half = Math.floor(limit / 2);
-      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
-        .all(channelId, ref.timestamp, half) as MessageRow[];
+      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`)
+        .all(channelId, around, half) as MessageRow[];
       const centerRow = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id = ?`)
         .get(channelId, around) as MessageRow | undefined;
-      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
-        .all(channelId, ref.timestamp, half) as MessageRow[];
+      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id > ? ORDER BY m.id ASC LIMIT ?`)
+        .all(channelId, around, half) as MessageRow[];
       rows = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
     } else {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT ?`)
         .all(channelId, limit) as MessageRow[];
     }
 
@@ -79,7 +72,7 @@ export class MessagesRepo {
 
   create(channelId: string, author: User, content: string): Message {
     const now = Date.now();
-    const id = randomUUID();
+    const id = generateSnowflake();
 
     this.db.prepare(
       "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"

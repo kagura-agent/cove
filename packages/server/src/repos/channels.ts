@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { Channel } from "@cove/shared";
+import { generateSnowflake, type Channel } from "@cove/shared";
 
 interface ChannelRow {
   id: string;
@@ -36,7 +35,7 @@ export class ChannelsRepo {
   }
 
   create(guildId: string, name: string, topic?: string, type?: number): Channel {
-    const id = randomUUID();
+    const id = generateSnowflake();
     const maxPos = (this.db.prepare("SELECT MAX(position) as m FROM channels WHERE guild_id = ?").get(guildId) as { m: number | null }).m;
     const position = (maxPos ?? -1) + 1;
 
@@ -66,14 +65,8 @@ export class ChannelsRepo {
   }
 
   delete(id: string): boolean {
-    const row = this.db.prepare("SELECT id FROM channels WHERE id = ?").get(id);
-    if (!row) return false;
-
-    this.db.transaction(() => {
-      this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(id);
-      this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
-    })();
-    return true;
+    const result = this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   exists(id: string): boolean {
