@@ -90,7 +90,7 @@ export class GatewayDispatcher {
   }
 
   channelDelete(guildId: string, channelId: string): void {
-    this.broadcastToGuild(guildId, "CHANNEL_DELETE", { id: channelId });
+    this.broadcastToGuild(guildId, "CHANNEL_DELETE", { id: channelId, guild_id: guildId });
   }
 
   typingStart(channelId: string, user: { id: string; username: string }, guildId: string): void {

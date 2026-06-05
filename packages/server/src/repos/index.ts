@@ -9,6 +9,7 @@ import { ReadStatesRepo } from "./readStates.js";
 export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo };
 
 export interface Repos {
+  db: Database.Database;
   messages: MessagesRepo;
   channels: ChannelsRepo;
   users: UsersRepo;
@@ -19,6 +20,7 @@ export interface Repos {
 
 export function createRepos(db: Database.Database): Repos {
   return {
+    db,
     messages: new MessagesRepo(db),
     channels: new ChannelsRepo(db),
     users: new UsersRepo(db),

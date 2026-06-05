@@ -78,4 +78,9 @@ export class ChannelsRepo {
   updateLastMessageId(channelId: string, messageId: string): void {
     this.db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?").run(messageId, channelId);
   }
+
+  recomputeLastMessageId(channelId: string): void {
+    const row = this.db.prepare("SELECT id FROM messages WHERE channel_id = ? ORDER BY id DESC LIMIT 1").get(channelId) as { id: string } | undefined;
+    this.db.prepare("UPDATE channels SET last_message_id = ? WHERE id = ?").run(row?.id ?? null, channelId);
+  }
 }

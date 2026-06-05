@@ -132,6 +132,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Message", code: 10008 }, 404);
     }
 
+    // Recompute last_message_id if we just deleted the latest message
+    if (ch.last_message_id === msgId) {
+      repos.channels.recomputeLastMessageId(channelId);
+    }
+
     dispatcher?.messageDelete(channelId, msgId);
 
     return c.body(null, 204);
@@ -155,13 +160,33 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
 
     const deleted: string[] = [];
-    for (const msgId of body.messages) {
-      if (repos.messages.delete(channelId, msgId)) {
-        deleted.push(msgId);
+    repos.db.transaction(() => {
+      for (const msgId of body.messages) {
+        if (repos.messages.delete(channelId, msgId)) {
+          deleted.push(msgId);
+        }
       }
-    }
+    })();
     if (deleted.length > 0) {
+      repos.channels.recomputeLastMessageId(channelId);
       dispatcher?.messageDeleteBulk(channelId, deleted, ch.guild_id);
+    }
+
+    return c.body(null, 204);
+  });
+
+  // Cove-specific: clear all messages in a channel
+  app.delete("/channels/:id/messages", (c) => {
+    const channelId = c.req.param("id");
+    const userId = c.get("botUser").id;
+    const ch = requireGuildMember(repos, channelId, userId);
+    if (!ch) {
+      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+
+    const count = repos.messages.deleteAll(channelId);
+    if (count > 0) {
+      repos.channels.recomputeLastMessageId(channelId);
     }
 
     return c.body(null, 204);

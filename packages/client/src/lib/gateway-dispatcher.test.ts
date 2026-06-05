@@ -36,7 +36,7 @@ describe("GatewayDispatcher", () => {
 
   it("emit with no handlers registered does not crash", () => {
     expect(() => {
-      dispatcher.emit("CHANNEL_DELETE", { id: "x" });
+      dispatcher.emit("CHANNEL_DELETE", { id: "x", guild_id: "g1" });
     }).not.toThrow();
   });
 });

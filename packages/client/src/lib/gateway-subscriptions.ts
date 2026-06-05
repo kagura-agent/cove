@@ -44,6 +44,13 @@ export function setupGatewaySubscriptions(): void {
     useMessageStore.getState().removeMessage(data.channel_id, data.id);
   });
 
+  subscribe("MESSAGE_DELETE_BULK", (data) => {
+    const store = useMessageStore.getState();
+    for (const id of data.ids) {
+      store.removeMessage(data.channel_id, id);
+    }
+  });
+
   subscribe("TYPING_START", (data) => {
     const selfId = useUserStore.getState().id;
     if (data.user_id === selfId) return;
