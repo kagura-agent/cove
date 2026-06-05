@@ -7,6 +7,8 @@ import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
+import { UserBar } from "./components/UserBar";
+import { MessageInput } from "./components/MessageInput";
 import { MemberList } from "./components/MemberList";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
@@ -32,15 +34,13 @@ function useVisualViewport() {
   }, []);
 }
 
-const ACCENT_BRAND: Record<string, string> = {
-  light: "#e07828", dark: "#f4a261", midnight: "#f4a261",
-};
-
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
+  // Read --accent-brand from CSS so Antd stays in sync with our token system
+  const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim() || "#f4a261";
   return {
     algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
-    token: { colorPrimary: ACCENT_BRAND[currentTheme] || "#f4a261", colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+    token: { colorPrimary: accentBrand, colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
   };
 }
 
@@ -48,15 +48,18 @@ const styles = {
   fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
   overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
-  layout: { display: "flex", height: "100%", overflow: "hidden" } as CSSProperties,
-  chatColumn: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, height: "100%", background: "var(--bg-primary)" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
-  loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 } as CSSProperties,
-  loginTitle: { fontSize: 32, fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
+  layout: { display: "grid", gridTemplateRows: "1fr minmax(var(--footer-height), auto)", height: "100%", overflow: "hidden" } as CSSProperties,
+  sidebarBody: { gridColumn: 1, gridRow: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-secondary)" } as CSSProperties,
+  sidebarFooter: { gridColumn: 1, gridRow: 2 } as CSSProperties,
+  chatBody: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
+  chatFooter: { gridColumn: 2, gridRow: 2, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
+  connStatus: { display: "flex", alignItems: "center", gap: "var(--space-xs)", padding: "var(--space-xs) var(--space-md)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
+  loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
+  loginTitle: { fontSize: "var(--font-size-xxl)", fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
 
 const connDot = (status: string): CSSProperties => ({
-  width: 8, height: 8, borderRadius: "50%", display: "inline-block",
+  width: "var(--status-dot-size)", height: "var(--status-dot-size)", borderRadius: "50%", display: "inline-block",
   background: status === "connecting" ? "var(--warning)" : "var(--danger)",
 });
 
@@ -132,7 +135,7 @@ export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { setChannels, setActiveChannel } = useChannelStore();
+  const { activeChannelId, setChannels, setActiveChannel } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -223,10 +226,13 @@ export default function App() {
         <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
-        <div style={styles.layout} className={`${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} onSettingsOpen={() => setSettingsOpen(true)} />
+        <div style={{ ...styles.layout, gridTemplateColumns: membersOpen ? "var(--sidebar-width) 1fr var(--member-list-width)" : "var(--sidebar-width) 1fr" }} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} style={styles.sidebarBody} />
+          <div style={styles.sidebarFooter} className="sidebar-footer-cell">
+            <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
+          </div>
 
-          <div style={styles.chatColumn}>
+          <div style={styles.chatBody} className="chat-body-cell">
             {wsStatus !== "connected" && (
               <div style={styles.connStatus}>
                 <span style={connDot(wsStatus)} />
@@ -234,6 +240,9 @@ export default function App() {
               </div>
             )}
             <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
+          </div>
+          <div style={styles.chatFooter} className="chat-footer-cell">
+            {activeChannelId && <MessageInput channelId={activeChannelId} />}
           </div>
 
           {membersOpen && <MemberList />}

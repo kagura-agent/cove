@@ -23,7 +23,7 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
         return <del key={k}>{renderTokens(token.children, `${k}-`)}</del>;
       case "code":
         return (
-          <code key={k} style={{ background: "var(--bg-code)", padding: "1px 4px", borderRadius: 3, fontSize: "0.85em" }}>
+          <code key={k} style={{ background: "var(--bg-code)", padding: "1px var(--space-xs)", borderRadius: "var(--space-xxs)", fontSize: "0.85em" }}>
             {token.text}
           </code>
         );
@@ -82,7 +82,7 @@ function renderTokens(tokens: Token[], key = ""): ReactNode[] {
         );
       case "spoiler":
         return (
-          <span key={k} className="spoiler" style={{ background: "var(--bg-code)", borderRadius: 3, padding: "0 2px", cursor: "pointer" }}>
+          <span key={k} className="spoiler" style={{ background: "var(--bg-code)", borderRadius: "var(--space-xxs)", padding: "0 var(--space-xxs)", cursor: "pointer" }}>
             {renderTokens(token.children, `${k}-`)}
           </span>
         );

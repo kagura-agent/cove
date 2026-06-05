@@ -29,20 +29,17 @@ function avatarColor(name: string): string {
   return pickAvatarColor(name);
 }
 
-function roleColor(isBot: boolean): string {
-  return isBot ? "var(--text-bot)" : "var(--text-user)";
-}
 
 const botBadgeStyle: CSSProperties = {
   fontSize: "var(--font-size-xs)",
   fontWeight: 600,
   color: "var(--text-on-accent)",
   background: "var(--accent)",
-  borderRadius: 3,
-  padding: "1px 5px",
-  marginLeft: 6,
+  borderRadius: "var(--space-xxs)",
+  padding: "1px var(--space-xs)",
+  marginLeft: "var(--space-xs)",
   verticalAlign: "middle",
-  lineHeight: "14px",
+  lineHeight: "var(--font-size-md)",
   display: "inline-block",
 };
 
@@ -87,7 +84,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 18,
+            fontSize: "var(--font-size-lg)",
             fontWeight: 600,
             color: textColor,
             flexShrink: 0,
@@ -100,12 +97,12 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Header: username + badge + timestamp */}
-          <div style={{ display: "flex", alignItems: "baseline", lineHeight: "22px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", lineHeight: 1.375 }}>
             <span
               style={{
                 fontSize: "var(--font-size-lg)",
                 fontWeight: 500,
-                color: roleColor(isBot),
+                color: "var(--header-primary)",
                 cursor: "pointer",
               }}
             >
