@@ -2,13 +2,12 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
-import { UserBar } from "./UserBar";
 import * as api from "../lib/api";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
-  root: { display: "flex", flexDirection: "column", height: "100%", width: "var(--sidebar-width)", minWidth: "var(--sidebar-width)", background: "var(--bg-secondary)", borderRight: "none" } as CSSProperties,
+  root: { display: "flex", flexDirection: "column", background: "var(--bg-secondary)", borderRight: "none", minHeight: 0, overflow: "hidden" } as CSSProperties,
   header: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-md) var(--space-lg)", borderBottom: "1px solid var(--border-subtle)", height: "var(--header-height)", flexShrink: 0 } as CSSProperties,
   title: { fontSize: "var(--font-size-lg)", fontWeight: 700, margin: 0, color: "var(--header-primary)" } as CSSProperties,
   list: { flex: 1, overflowY: "auto", padding: "0 var(--space-sm)" } as CSSProperties,
@@ -50,7 +49,7 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
   );
 }
 
-export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
+export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
   const { unreadChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
@@ -80,7 +79,7 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
   }
 
   return (
-    <div style={styles.root} className="sidebar-panel">
+    <div style={{ ...styles.root, ...style }} className="sidebar-panel">
       <div style={styles.header}>
         <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
         <h1 style={styles.title}>Cove</h1>
@@ -117,8 +116,6 @@ export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => 
           </>
         )}
       </div>
-
-      <UserBar onCloseSidebar={onClose} onSettingsOpen={onSettingsOpen} />
     </div>
   );
 }

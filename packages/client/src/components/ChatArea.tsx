@@ -3,7 +3,6 @@ import { useMessageStore } from "../stores/useMessageStore";
 import { Typography, Button, Popconfirm } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
-import { MessageInput } from "./MessageInput";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -55,7 +54,6 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
       <MessageList channelId={channel.id} />
-      <MessageInput channelId={channel.id} />
     </div>
   );
 }

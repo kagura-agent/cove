@@ -13,8 +13,7 @@ const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "flex-end", gap: "var(--space-sm)",
   padding: "0 var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  flexShrink: 0, minHeight: "var(--footer-height)", boxSizing: "border-box",
-  paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))",
+  minHeight: "100%", boxSizing: "border-box",
 };
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
