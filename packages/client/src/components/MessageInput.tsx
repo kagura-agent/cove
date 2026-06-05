@@ -19,7 +19,7 @@ const wrapperStyle: CSSProperties = {
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
   flex: 1, resize: "none", minHeight: 35, maxHeight: 200, overflowY: "auto",
-  padding: "8px 11px", fontSize: 14, lineHeight: "1.5", color: "inherit",
+  padding: "7px 11px", fontSize: 14, lineHeight: "1.5", color: "inherit",
   fontFamily: "inherit",
 };
 
