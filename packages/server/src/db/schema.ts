@@ -229,7 +229,8 @@ function migrateV3ToV4(db: Database.Database): void {
     `);
     db.exec(`
       INSERT INTO messages_new (id, channel_id, sender, content, timestamp, metadata, edited_timestamp, sender_name)
-      SELECT id, channel_id, ${senderCol},
+      SELECT id, channel_id,
+        CASE WHEN ${senderCol} IN (SELECT id FROM users) THEN ${senderCol} ELSE NULL END,
         COALESCE(content, ''),
         COALESCE(timestamp, 0),
         ${metadataCol}, ${editedCol}, ${senderNameCol}
@@ -256,6 +257,7 @@ function migrateV3ToV4(db: Database.Database): void {
       INSERT INTO channels_new (id, guild_id, name, type, topic, position)
       SELECT id, guild_id, name, type, topic, position
       FROM channels
+      WHERE guild_id IN (SELECT id FROM guilds)
     `);
     db.exec("DROP TABLE channels");
     db.exec("ALTER TABLE channels_new RENAME TO channels");
@@ -275,6 +277,8 @@ function migrateV3ToV4(db: Database.Database): void {
       INSERT INTO read_states_new (user_id, channel_id, last_read_message_id)
       SELECT user_id, channel_id, last_read_message_id
       FROM read_states
+      WHERE user_id IN (SELECT id FROM users)
+        AND channel_id IN (SELECT id FROM channels)
     `);
     db.exec("DROP TABLE read_states");
     db.exec("ALTER TABLE read_states_new RENAME TO read_states");
