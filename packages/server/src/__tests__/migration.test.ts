@@ -11,10 +11,10 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 3", () => {
+  it("fresh DB gets user_version = 4", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(3);
+    expect(version).toBe(4);
     db.close();
   });
 
@@ -100,16 +100,28 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(3);
+      expect(version).toBe(4);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
 
-      // Verify the table works
-      db.prepare("INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?)").run("u1", "ch1", "msg1");
-      const row = db.prepare("SELECT * FROM read_states WHERE user_id = 'u1'").get() as Record<string, unknown>;
-      expect(row).toBeDefined();
-      expect(row.last_read_message_id).toBe("msg1");
+      // Verify the table works — use existing guild/user/channel data
+      const guild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+      const ch = db.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string } | undefined;
+      if (ch) {
+        // Need a user to satisfy FK
+        const userId = "test-u1";
+        const now = Date.now();
+        db.prepare("INSERT INTO users (id, username, bot, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(userId, "Test", 0, now, now);
+        db.prepare("INSERT INTO read_states (user_id, channel_id, last_read_message_id) VALUES (?, ?, ?)").run(userId, ch.id, "msg1");
+        const row = db.prepare("SELECT * FROM read_states WHERE user_id = ?").get(userId) as Record<string, unknown>;
+        expect(row).toBeDefined();
+        expect(row.last_read_message_id).toBe("msg1");
+      } else {
+        // No channels seeded — just verify the table schema exists
+        const columns = db.prepare("PRAGMA table_info(read_states)").all() as Array<{ name: string }>;
+        expect(columns.map(c => c.name)).toContain("user_id");
+      }
 
       db.close();
     } finally {
@@ -159,7 +171,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(3);
+      expect(version).toBe(4);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -173,6 +185,8 @@ describe("scenes→channels migration guard", () => {
 
     try {
       const setup = new Database(tmpFile);
+      setup.exec(`CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
+      setup.exec(`INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('g1', 'Test', 1000, 1000)`);
       setup.exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, guild_id TEXT, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0)`);
       setup.exec(`INSERT INTO scenes (id, guild_id, name) VALUES ('s1', 'g1', 'Scene1')`);
       setup.close();
@@ -183,7 +197,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(3);
+      expect(version).toBe(4);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -212,6 +226,8 @@ describe("scenes→channels migration guard", () => {
 
     try {
       const setup = new Database(tmpFile);
+      setup.exec(`CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
+      setup.exec(`INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('g1', 'Test', 1000, 1000)`);
       setup.exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, guild_id TEXT, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0)`);
       setup.exec(`CREATE TABLE channels (id TEXT PRIMARY KEY, guild_id TEXT, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0)`);
       setup.exec(`INSERT INTO channels (id, guild_id, name) VALUES ('c1', 'g1', 'NewData')`);
@@ -232,6 +248,8 @@ describe("scenes→channels migration guard", () => {
 
     try {
       const setup = new Database(tmpFile);
+      setup.exec(`CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, owner_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
+      setup.exec(`INSERT INTO guilds (id, name, created_at, updated_at) VALUES ('g1', 'Test', 1000, 1000)`);
       setup.exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, guild_id TEXT, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0)`);
       setup.exec(`CREATE TABLE channels (id TEXT PRIMARY KEY, guild_id TEXT, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, topic TEXT, position INTEGER NOT NULL DEFAULT 0)`);
       setup.exec(`INSERT INTO scenes (id, guild_id, name) VALUES ('s1', 'g1', 'OldData')`);
@@ -301,7 +319,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(3);
+      expect(version).toBe(4);
 
       db2.close();
     } finally {
@@ -373,7 +391,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(3);
+      expect(db.pragma("user_version", { simple: true })).toBe(4);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };

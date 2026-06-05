@@ -30,7 +30,7 @@ export class ReadStatesRepo {
     return this.db.prepare(`
       SELECT c.id AS channel_id,
         rs.last_read_message_id,
-        (SELECT m.id FROM messages m WHERE m.channel_id = c.id ORDER BY m.timestamp DESC LIMIT 1) AS last_message_id
+        (SELECT m.id FROM messages m WHERE m.channel_id = c.id ORDER BY CAST(m.id AS INTEGER) DESC LIMIT 1) AS last_message_id
       FROM channels c
       JOIN guild_members gm ON gm.guild_id = c.guild_id AND gm.user_id = ?
       LEFT JOIN read_states rs ON rs.channel_id = c.id AND rs.user_id = ?

@@ -12,6 +12,14 @@ const repos = createRepos(db);
 const defaultGuildId = repos.guilds.getDefaultId(); // Fail-fast: verify default guild exists
 seedChannels(db, defaultGuildId);
 seedUsers(db, defaultGuildId);
+
+// #208: TTL cleanup for stale records
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const USED_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const now = Date.now();
+db.prepare("DELETE FROM pending_registrations WHERE created_at < ?").run(now - PENDING_TTL_MS);
+db.prepare("DELETE FROM invite_codes WHERE used_at IS NOT NULL AND used_at < ?").run(now - USED_INVITE_TTL_MS);
+
 console.log("🏝️  Database initialized and seeded");
 
 const googleClientId = process.env["GOOGLE_CLIENT_ID"];

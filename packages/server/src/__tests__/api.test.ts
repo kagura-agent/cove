@@ -420,30 +420,30 @@ describe("Cove API — Discord-compatible", () => {
       // Insert a message directly
       const now = Date.now();
       db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run("msg-rs-1", generalId, "admin", "test message", now, null, null);
+        .run("100001", generalId, "admin", "test message", now, null, null);
 
       // Set a read state
       const repos = createRepos(db);
-      repos.readStates.set("admin", generalId, "msg-rs-1");
+      repos.readStates.set("admin", generalId, "100001");
 
       const readState = repos.readStates.getAllForUserWithLastMessage("admin");
       const general = readState.find((rs) => rs.channel_id === generalId);
       expect(general).toBeDefined();
-      expect(general!.last_read_message_id).toBe("msg-rs-1");
-      expect(general!.last_message_id).toBe("msg-rs-1");
+      expect(general!.last_read_message_id).toBe("100001");
+      expect(general!.last_message_id).toBe("100001");
     });
 
     it("includes channels with no read_state (unread)", () => {
       const now = Date.now();
       db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run("msg-rs-2", generalId, "admin", "unread msg", now, null, null);
+        .run("100002", generalId, "admin", "unread msg", now, null, null);
 
       const repos = createRepos(db);
       const readState = repos.readStates.getAllForUserWithLastMessage("admin");
       const general = readState.find((rs) => rs.channel_id === generalId);
       expect(general).toBeDefined();
       expect(general!.last_read_message_id).toBeNull();
-      expect(general!.last_message_id).toBe("msg-rs-2");
+      expect(general!.last_message_id).toBe("100002");
     });
 
     it("returns null last_message_id for empty channels", () => {
@@ -461,51 +461,52 @@ describe("Cove API — Discord-compatible", () => {
     let messageIds: string[];
 
     beforeEach(() => {
-      // Insert 5 messages with incrementing timestamps
+      // Insert 5 messages with incrementing snowflake-like IDs
       messageIds = [];
       const insert = db.prepare(
         "INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
       );
       for (let i = 0; i < 5; i++) {
-        const id = `msg-${i}`;
-        insert.run(id, generalId, "kagura", `message ${i}`, 1000000 + i * 1000, null, null);
+        const id = String(1000000 + i);
+        insert.run(id, generalId, "admin", `message ${i}`, 1000000 + i * 1000, null, null);
         messageIds.push(id);
       }
     });
 
     it("before returns messages older than reference", async () => {
-      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?before=msg-3`);
+      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?before=${messageIds[3]}`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
       // DESC order
-      expect(msgs[0].id).toBe("msg-2");
-      expect(msgs[1].id).toBe("msg-1");
-      expect(msgs[2].id).toBe("msg-0");
+      expect(msgs[0].id).toBe(messageIds[2]);
+      expect(msgs[1].id).toBe(messageIds[1]);
+      expect(msgs[2].id).toBe(messageIds[0]);
     });
 
     it("after returns messages newer than reference", async () => {
-      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?after=msg-1`);
+      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?after=${messageIds[1]}`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toHaveLength(3);
       // ASC order for after
-      expect(msgs[0].id).toBe("msg-2");
-      expect(msgs[1].id).toBe("msg-3");
-      expect(msgs[2].id).toBe("msg-4");
+      expect(msgs[0].id).toBe(messageIds[2]);
+      expect(msgs[1].id).toBe(messageIds[3]);
+      expect(msgs[2].id).toBe(messageIds[4]);
     });
 
     it("around returns messages around reference", async () => {
-      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?around=msg-2&limit=4`);
+      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?around=${messageIds[2]}&limit=4`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs.length).toBeGreaterThanOrEqual(3);
       const ids = msgs.map((m) => m.id);
-      expect(ids).toContain("msg-2");
+      expect(ids).toContain(messageIds[2]);
     });
 
-    it("returns empty array for unknown reference message", async () => {
-      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?before=nonexistent`);
+    it("returns empty array for unknown reference message (before non-existent ID)", async () => {
+      // With ID-based pagination, before=0 returns nothing since no IDs are less than 0
+      const res = await authGet(`${API_PREFIX}/channels/${generalId}/messages?before=0`);
       expect(res.status).toBe(200);
       const msgs: Message[] = await res.json();
       expect(msgs).toEqual([]);

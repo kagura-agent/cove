@@ -69,11 +69,8 @@ export class UsersRepo {
   }
 
   delete(id: string): boolean {
-    const row = this.db.prepare("SELECT id FROM users WHERE id = ?").get(id);
-    if (!row) return false;
-    this.db.prepare("DELETE FROM guild_members WHERE user_id = ?").run(id);
-    this.db.prepare("DELETE FROM users WHERE id = ?").run(id);
-    return true;
+    const result = this.db.prepare("DELETE FROM users WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   regenerateToken(id: string): string | null {

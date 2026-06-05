@@ -65,14 +65,8 @@ export class ChannelsRepo {
   }
 
   delete(id: string): boolean {
-    const row = this.db.prepare("SELECT id FROM channels WHERE id = ?").get(id);
-    if (!row) return false;
-
-    this.db.transaction(() => {
-      this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(id);
-      this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
-    })();
-    return true;
+    const result = this.db.prepare("DELETE FROM channels WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   exists(id: string): boolean {

@@ -42,28 +42,22 @@ export class MessagesRepo {
     let rows: MessageRow[];
 
     if (before) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(before) as { timestamp: number } | undefined;
-      if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
-        .all(channelId, ref.timestamp, limit) as MessageRow[];
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) < CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
+        .all(channelId, before, limit) as MessageRow[];
     } else if (after) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(after) as { timestamp: number } | undefined;
-      if (!ref) return [];
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
-        .all(channelId, ref.timestamp, limit) as MessageRow[];
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) ASC LIMIT ?`)
+        .all(channelId, after, limit) as MessageRow[];
     } else if (around) {
-      const ref = this.db.prepare("SELECT timestamp FROM messages WHERE id = ?").get(around) as { timestamp: number } | undefined;
-      if (!ref) return [];
       const half = Math.floor(limit / 2);
-      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp < ? ORDER BY m.timestamp DESC LIMIT ?`)
-        .all(channelId, ref.timestamp, half) as MessageRow[];
+      const beforeRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) < CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
+        .all(channelId, around, half) as MessageRow[];
       const centerRow = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.id = ?`)
         .get(channelId, around) as MessageRow | undefined;
-      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND m.timestamp > ? ORDER BY m.timestamp ASC LIMIT ?`)
-        .all(channelId, ref.timestamp, half) as MessageRow[];
+      const afterRows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? AND CAST(m.id AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(m.id AS INTEGER) ASC LIMIT ?`)
+        .all(channelId, around, half) as MessageRow[];
       rows = [...beforeRows.reverse(), ...(centerRow ? [centerRow] : []), ...afterRows];
     } else {
-      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY m.timestamp DESC LIMIT ?`)
+      rows = this.db.prepare(`${MSG_SELECT} WHERE m.channel_id = ? ORDER BY CAST(m.id AS INTEGER) DESC LIMIT ?`)
         .all(channelId, limit) as MessageRow[];
     }
 

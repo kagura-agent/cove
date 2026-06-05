@@ -64,17 +64,21 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       picture: string;
     };
 
-    const userId = googleUser.email.split("@")[0];
     const now = Date.now();
-    const existing = db.prepare("SELECT id, token FROM users WHERE id = ?").get(userId) as { id: string; token: string | null } | undefined;
+
+    // Look up existing user by google_id first, then by email
+    const existing = (
+      db.prepare("SELECT id, token FROM users WHERE google_id = ?").get(googleUser.id) ??
+      db.prepare("SELECT id, token FROM users WHERE email = ?").get(googleUser.email)
+    ) as { id: string; token: string | null } | undefined;
 
     if (existing) {
       const token = existing.token ?? crypto.randomUUID();
-      db.prepare("UPDATE users SET username = ?, avatar = ?, token = ?, updated_at = ? WHERE id = ?")
-        .run(googleUser.name, googleUser.picture, token, now, userId);
+      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ? WHERE id = ?")
+        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, existing.id);
       // Ensure user is in default guild
       db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
-        .run(guildsRepo.getDefaultId(), userId, null, "[]", now);
+        .run(guildsRepo.getDefaultId(), existing.id, null, "[]", now);
       return c.redirect(`/?token=${token}`);
     }
 
