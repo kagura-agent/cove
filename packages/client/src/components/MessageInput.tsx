@@ -13,12 +13,12 @@ const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "flex-end", gap: "var(--space-sm)",
   padding: "var(--space-sm) var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  flexShrink: 0,
+  flexShrink: 0, minHeight: "var(--footer-height)", boxSizing: "border-box",
   paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px) + var(--space-sm))",
 };
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
-  flex: 1, resize: "none", minHeight: 40, maxHeight: 200, overflowY: "auto",
+  flex: 1, resize: "none", minHeight: 35, maxHeight: 200, overflowY: "auto",
   padding: "8px 11px", fontSize: 14, lineHeight: "1.5", color: "inherit",
   fontFamily: "inherit",
 };
