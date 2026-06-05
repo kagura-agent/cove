@@ -128,6 +128,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
 
+    if (!repos.messages.getById(channelId, messageId)) {
+      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+    }
+
     repos.readStates.set(userId, channelId, messageId);
     dispatcher?.messageAck(userId, channelId, messageId);
 

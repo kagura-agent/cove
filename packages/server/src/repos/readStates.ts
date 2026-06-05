@@ -27,4 +27,17 @@ export class ReadStatesRepo {
       "SELECT channel_id, last_read_message_id FROM read_states WHERE user_id = ?"
     ).all(userId) as Array<{ channel_id: string; last_read_message_id: string | null }>;
   }
+
+  getAllForUserWithLastMessage(userId: string): Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }> {
+    // Return every channel the user belongs to, with their read cursor and the latest message ID.
+    // Channels with no read_state row will have last_read_message_id = null (unread).
+    return this.db.prepare(`
+      SELECT c.id AS channel_id,
+        rs.last_read_message_id,
+        (SELECT m.id FROM messages m WHERE m.channel_id = c.id ORDER BY m.timestamp DESC LIMIT 1) AS last_message_id
+      FROM channels c
+      JOIN guild_members gm ON gm.guild_id = c.guild_id AND gm.user_id = ?
+      LEFT JOIN read_states rs ON rs.channel_id = c.id AND rs.user_id = ?
+    `).all(userId, userId) as Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }>;
+  }
 }

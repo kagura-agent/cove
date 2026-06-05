@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useTypingStore } from "../stores/useTypingStore";
+import { useReadStateStore } from "../stores/useReadStateStore";
 import { MessageItem } from "./MessageItem";
 import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
@@ -66,6 +67,13 @@ export function MessageList({ channelId }: { channelId: string }) {
         setMessages(channelId, reversed);
         prevCountRef.current = reversed.length;
         requestAnimationFrame(() => scrollToBottom("instant"));
+
+        // Auto-ack: now that messages are loaded, ack the last one
+        if (reversed.length > 0) {
+          const lastMsg = reversed[reversed.length - 1];
+          useReadStateStore.getState().clearUnread(channelId);
+          api.ackMessage(channelId, lastMsg.id).catch(() => {});
+        }
       }
     }).catch((err) => console.error("loadMessages:", err));
     return () => { cancelled = true; };

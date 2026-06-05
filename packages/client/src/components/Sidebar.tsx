@@ -1,11 +1,10 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
-import { useMessageStore } from "../stores/useMessageStore";
 import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { UserBar } from "./UserBar";
 import * as api from "../lib/api";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 
 const styles = {
@@ -53,26 +52,9 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
 
 export function Sidebar({ onClose, loading, onSettingsOpen }: { onClose?: () => void; loading?: boolean; onSettingsOpen?: () => void }) {
   const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
-  const { unreadChannels, clearUnread } = useReadStateStore();
+  const { unreadChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
-  const prevActiveRef = useRef<string | null>(null);
-
-  // Auto-ack when switching to a channel
-  useEffect(() => {
-    if (!activeChannelId || activeChannelId === prevActiveRef.current) return;
-    prevActiveRef.current = activeChannelId;
-
-    // Clear local unread immediately
-    clearUnread(activeChannelId);
-
-    // Find the latest message in this channel and ack it
-    const messages = useMessageStore.getState().messages[activeChannelId];
-    if (messages && messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      api.ackMessage(activeChannelId, lastMsg.id).catch(() => {});
-    }
-  }, [activeChannelId, clearUnread]);
 
   function handleSelectChannel(id: string) {
     setActiveChannel(id);

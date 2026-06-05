@@ -33,6 +33,9 @@ describe("Cove API — Discord-compatible", () => {
     override typingStart(channelId: string, user: { id: string; username: string }, _guildId?: string): void {
       broadcastEvents.push({ t: "TYPING_START", d: { channel_id: channelId, user_id: user.id, username: user.username, timestamp: Date.now() } });
     }
+    override messageAck(userId: string, channelId: string, messageId: string): void {
+      broadcastEvents.push({ t: "MESSAGE_ACK", d: { user_id: userId, channel_id: channelId, message_id: messageId } });
+    }
   }
 
   beforeEach(() => {
@@ -343,6 +346,103 @@ describe("Cove API — Discord-compatible", () => {
       expect(event.d.channel_id).toBe("general");
       expect(event.d.user_id).toBe("kagura");
       expect(typeof event.d.timestamp).toBe("number");
+    });
+  });
+
+  // ─── Message Ack ──────────────────────────────────────────────────────
+
+  describe(`PUT ${API_PREFIX}/channels/:id/messages/:msgId/ack`, () => {
+    it("acks a message — persists read state and dispatches MESSAGE_ACK", async () => {
+      const bot = await createBotUser("kagura", "Kagura");
+      const createRes = await app.request(`${API_PREFIX}/channels/general/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
+        body: JSON.stringify({ content: "hello" }),
+      });
+      const msg: Message = await createRes.json();
+      broadcastEvents.length = 0;
+
+      const ackRes = await app.request(`${API_PREFIX}/channels/general/messages/${msg.id}/ack`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${bot.token}` },
+      });
+      expect(ackRes.status).toBe(204);
+
+      // Verify read state persisted
+      const repos = createRepos(db);
+      const rs = repos.readStates.get("kagura", "general");
+      expect(rs).toBeDefined();
+      expect(rs!.last_read_message_id).toBe(msg.id);
+
+      // Verify MESSAGE_ACK dispatched
+      expect(broadcastEvents).toHaveLength(1);
+      const event = broadcastEvents[0] as { t: string; d: { user_id: string; channel_id: string; message_id: string } };
+      expect(event.t).toBe("MESSAGE_ACK");
+      expect(event.d.channel_id).toBe("general");
+      expect(event.d.message_id).toBe(msg.id);
+    });
+
+    it("returns 404 for non-member channel", async () => {
+      const now = Date.now();
+      const outsiderToken = "outsider-ack-token";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("outsider-ack", "Outsider", null, 1, null, outsiderToken, now, now);
+
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/some-msg/ack`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 404 for nonexistent message", async () => {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/nonexistent/ack`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${adminToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // ─── READY payload read_state ─────────────────────────────────────────
+
+  describe("READY payload read_state", () => {
+    it("includes last_message_id for channels with messages", () => {
+      // Insert a message directly
+      const now = Date.now();
+      db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run("msg-rs-1", "general", "admin", "test message", now, null, null);
+
+      // Set a read state
+      const repos = createRepos(db);
+      repos.readStates.set("admin", "general", "msg-rs-1");
+
+      const readState = repos.readStates.getAllForUserWithLastMessage("admin");
+      const general = readState.find((rs) => rs.channel_id === "general");
+      expect(general).toBeDefined();
+      expect(general!.last_read_message_id).toBe("msg-rs-1");
+      expect(general!.last_message_id).toBe("msg-rs-1");
+    });
+
+    it("includes channels with no read_state (unread)", () => {
+      const now = Date.now();
+      db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run("msg-rs-2", "general", "admin", "unread msg", now, null, null);
+
+      const repos = createRepos(db);
+      const readState = repos.readStates.getAllForUserWithLastMessage("admin");
+      const general = readState.find((rs) => rs.channel_id === "general");
+      expect(general).toBeDefined();
+      expect(general!.last_read_message_id).toBeNull();
+      expect(general!.last_message_id).toBe("msg-rs-2");
+    });
+
+    it("returns null last_message_id for empty channels", () => {
+      const repos = createRepos(db);
+      const readState = repos.readStates.getAllForUserWithLastMessage("admin");
+      const general = readState.find((rs) => rs.channel_id === "general");
+      expect(general).toBeDefined();
+      expect(general!.last_message_id).toBeNull();
     });
   });
 
@@ -826,6 +926,14 @@ describe("Cove API — Discord-compatible", () => {
     it("non-member cannot delete message", async () => {
       const res = await app.request(`${API_PREFIX}/channels/general/messages/msg123`, {
         method: "DELETE",
+        headers: { Authorization: `Bot ${outsiderToken}` },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("non-member cannot ack message", async () => {
+      const res = await app.request(`${API_PREFIX}/channels/general/messages/msg123/ack`, {
+        method: "PUT",
         headers: { Authorization: `Bot ${outsiderToken}` },
       });
       expect(res.status).toBe(404);

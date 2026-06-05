@@ -46,7 +46,7 @@ export class GatewaySession {
     }
 
     const presences = dispatcher.getSharedGuildPresences(this.guildIds);
-    const readState = readStatesRepo.getAllForUser(user.id);
+    const readState = readStatesRepo.getAllForUserWithLastMessage(user.id);
 
     this.seq++;
     this.ws.send(JSON.stringify({

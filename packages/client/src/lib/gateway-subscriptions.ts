@@ -6,6 +6,7 @@ import { usePresenceStore } from "../stores/usePresenceStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
+import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
@@ -27,6 +28,11 @@ export function setupGatewaySubscriptions(): void {
     const activeChannelId = useChannelStore.getState().activeChannelId;
     if (msg.author.id !== selfId && msg.channel_id !== activeChannelId) {
       useReadStateStore.getState().setUnread(msg.channel_id);
+    }
+
+    // Auto-ack incoming messages in the active channel from other users
+    if (msg.author.id !== selfId && msg.channel_id === activeChannelId) {
+      api.ackMessage(msg.channel_id, msg.id).catch(() => {});
     }
   });
 
