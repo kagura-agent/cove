@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { Message, User } from "@cove/shared";
+import { generateSnowflake, type Message, type User } from "@cove/shared";
 
 interface MessageRow {
   id: string;
@@ -79,7 +78,7 @@ export class MessagesRepo {
 
   create(channelId: string, author: User, content: string): Message {
     const now = Date.now();
-    const id = randomUUID();
+    const id = generateSnowflake();
 
     this.db.prepare(
       "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"

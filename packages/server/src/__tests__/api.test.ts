@@ -1034,7 +1034,7 @@ describe("Cove API — Discord-compatible", () => {
       const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
       expect(userRow).toBeDefined();
       expect(userRow!.username).toBe("New User");
-      expect(userRow!.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(userRow!.id).toMatch(/^\d+$/);
     });
 
     it("normalizes invite code input (lowercase + whitespace)", async () => {

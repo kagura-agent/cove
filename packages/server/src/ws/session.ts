@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
-import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
+import { generateSnowflake, GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
@@ -13,7 +12,7 @@ export class GatewaySession {
   readonly guildIds: Set<string> = new Set();
 
   constructor(private ws: WebSocket) {
-    this.id = randomUUID();
+    this.id = generateSnowflake();
   }
 
   get isIdentified(): boolean {

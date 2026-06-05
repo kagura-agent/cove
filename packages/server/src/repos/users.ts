@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import type { CoveAgent } from "@cove/shared";
+import { generateSnowflake, type CoveAgent } from "@cove/shared";
 
 interface UserRow {
   id: string;
@@ -35,7 +34,7 @@ export class UsersRepo {
     const username = opts.username;
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();
-    const token = randomUUID();
+    const token = generateSnowflake();
 
     this.db.prepare(
       "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -79,7 +78,7 @@ export class UsersRepo {
   regenerateToken(id: string): string | null {
     const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
     if (!row) return null;
-    const token = randomUUID();
+    const token = generateSnowflake();
     this.db.prepare("UPDATE users SET token = ?, updated_at = ? WHERE id = ?").run(token, Date.now(), id);
     return token;
   }

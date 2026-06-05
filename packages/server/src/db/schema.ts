@@ -1,13 +1,14 @@
 import Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
+import { generateSnowflake, snowflakeFromTimestamp } from "@cove/shared";
 
-const LATEST_VERSION = 2;
+const LATEST_VERSION = 3;
 
 type MigrationFn = (db: Database.Database) => void;
 
 const migrations: Record<number, MigrationFn> = {
   1: migrateV0ToV1,
   2: migrateV1ToV2,
+  3: migrateV2ToV3,
 };
 
 function runMigrations(db: Database.Database): void {
@@ -63,6 +64,106 @@ function migrateV1ToV2(db: Database.Database): void {
       PRIMARY KEY (user_id, channel_id)
     )
   `);
+}
+
+function migrateV2ToV3(db: Database.Database): void {
+  // Convert UUID-based IDs to Snowflake IDs across all tables.
+  // Generate snowflakes from created_at/timestamp to preserve ordering.
+
+  // Build old→new ID mappings for each table with UUIDs
+  const idMap = new Map<string, string>();
+  const now = Date.now();
+
+  // Helper: safely query rows from a table that may or may not exist
+  const safeQuery = <T>(sql: string, table: string): T[] => {
+    if (!tableExists(db, table)) return [];
+    return db.prepare(sql).all() as T[];
+  };
+
+  // Guilds: use created_at for snowflake timestamp
+  const guilds = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM guilds", "guilds");
+  for (let i = 0; i < guilds.length; i++) {
+    const g = guilds[i];
+    if (!isUUID(g.id)) continue;
+    idMap.set(g.id, snowflakeFromTimestamp(g.created_at, i));
+  }
+
+  // Channels: no created_at, generate from position order
+  const channels = safeQuery<{ id: string; guild_id: string }>("SELECT id, guild_id FROM channels ORDER BY position ASC", "channels");
+  for (let i = 0; i < channels.length; i++) {
+    const ch = channels[i];
+    if (!isUUID(ch.id)) continue;
+    idMap.set(ch.id, snowflakeFromTimestamp(now, i));
+  }
+
+  // Users: use created_at
+  const users = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM users", "users");
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i];
+    if (!isUUID(u.id)) continue;
+    idMap.set(u.id, snowflakeFromTimestamp(u.created_at, i));
+  }
+
+  // Messages: use timestamp
+  const messages = safeQuery<{ id: string; timestamp: number }>("SELECT id, timestamp FROM messages ORDER BY timestamp ASC", "messages");
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (!isUUID(m.id)) continue;
+    idMap.set(m.id, snowflakeFromTimestamp(m.timestamp, i));
+  }
+
+  // Invite codes / pending registrations: use created_at
+  const invites = safeQuery<{ id: string; created_at: number }>("SELECT id, created_at FROM invite_codes", "invite_codes");
+  for (let i = 0; i < invites.length; i++) {
+    const inv = invites[i];
+    if (!isUUID(inv.id)) continue;
+    idMap.set(inv.id, snowflakeFromTimestamp(inv.created_at, i));
+  }
+
+  const pendings = safeQuery<{ id: string; created_at: number | null }>("SELECT id, created_at FROM pending_registrations", "pending_registrations");
+  for (let i = 0; i < pendings.length; i++) {
+    const p = pendings[i];
+    if (!isUUID(p.id)) continue;
+    idMap.set(p.id, snowflakeFromTimestamp(p.created_at ?? now, i));
+  }
+
+  // Apply the ID mapping across all tables
+  const hasColumn = (table: string, column: string): boolean => {
+    const cols = db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>;
+    return cols.some(c => c.name === column);
+  };
+  const update = (table: string, column: string) => {
+    if (!tableExists(db, table) || !hasColumn(table, column)) return;
+    const stmt = db.prepare(`UPDATE "${table}" SET "${column}" = ? WHERE "${column}" = ?`);
+    for (const [oldId, newId] of idMap) {
+      stmt.run(newId, oldId);
+    }
+  };
+
+  // Primary keys first
+  update("guilds", "id");
+  update("channels", "id");
+  update("users", "id");
+  update("messages", "id");
+  update("invite_codes", "id");
+  update("pending_registrations", "id");
+
+  // Foreign keys
+  update("guilds", "owner_id");
+  update("channels", "guild_id");
+  update("messages", "channel_id");
+  update("messages", "sender");
+  update("guild_members", "guild_id");
+  update("guild_members", "user_id");
+  update("read_states", "user_id");
+  update("read_states", "channel_id");
+  update("read_states", "last_read_message_id");
+  update("invite_codes", "used_by");
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUUID(id: string): boolean {
+  return UUID_RE.test(id);
 }
 
 function createAllTables(db: Database.Database): void {
@@ -223,7 +324,7 @@ function migrateLegacyToV1(db: Database.Database): void {
   const guildId = (() => {
     const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
     if (existing) return existing.id;
-    const id = randomUUID();
+    const id = generateSnowflake();
     const now = Date.now();
     db.prepare(
       "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
@@ -279,7 +380,7 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
   // Seed default guild if none exists
   const existing = db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
   if (!existing) {
-    const id = randomUUID();
+    const id = generateSnowflake();
     const now = Date.now();
     db.prepare(
       "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"

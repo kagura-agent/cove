@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { randomUUID } from "node:crypto";
+import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 
@@ -33,9 +33,9 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
       return c.json({ message: "Invalid pending token" }, 400);
     }
 
-    const userId = randomUUID();
+    const userId = generateSnowflake();
     const now = Date.now();
-    const token = randomUUID();
+    const token = generateSnowflake();
 
     const register = db.transaction(() => {
       db.prepare(
