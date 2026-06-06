@@ -3,10 +3,14 @@
  *
  * Simple fetch wrapper that speaks the Discord-compatible Cove REST API.
  * All requests include the Bot token in the Authorization header.
+ * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
 import type { Channel, Message } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
+
+const MAX_RETRIES = 3;
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class CoveRestClient {
   private readonly baseUrl: string;
@@ -17,25 +21,69 @@ export class CoveRestClient {
     this.token = token;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
       "Authorization": `Bot ${this.token}`,
       "Content-Type": "application/json",
     };
 
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+      if (res.status === 429) {
+        const retryAfter = parseFloat(res.headers.get("Retry-After") ?? "1");
+        await new Promise((r) => setTimeout(r, retryAfter * 1000));
+        continue;
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+      }
+
+      return res.json() as Promise<T>;
     }
 
-    return res.json() as Promise<T>;
+    throw new Error(`Cove API ${method} ${path}: max retries exceeded`);
+  }
+
+  /** Fire-and-forget request that does not parse the response body. */
+  private async requestVoid(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<void> {
+    const url = `${this.baseUrl}${path}`;
+    const headers: Record<string, string> = {
+      "Authorization": `Bot ${this.token}`,
+    };
+    if (body) headers["Content-Type"] = "application/json";
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      });
+
+      if (res.status === 429) {
+        const retryAfter = parseFloat(res.headers.get("Retry-After") ?? "1");
+        await new Promise((r) => setTimeout(r, retryAfter * 1000));
+        continue;
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+      }
+
+      return;
+    }
+
+    throw new Error(`Cove API ${method} ${path}: max retries exceeded`);
   }
 
   /** GET /api/v10/gateway — returns the Gateway WebSocket URL. */
@@ -80,23 +128,11 @@ export class CoveRestClient {
 
   /** DELETE /api/v10/channels/:id/messages/:msgId — delete a message. */
   async deleteMessage(channelId: string, messageId: string): Promise<void> {
-    const url = `${this.baseUrl}${API_PREFIX}/channels/${channelId}/messages/${messageId}`;
-    const res = await fetch(url, {
-      method: "DELETE",
-      headers: { "Authorization": `Bot ${this.token}` },
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Cove API DELETE /channels/${channelId}/messages/${messageId} failed: ${res.status} ${text}`);
-    }
+    return this.requestVoid("DELETE", `${API_PREFIX}/channels/${channelId}/messages/${messageId}`);
   }
 
   /** POST /api/v10/channels/:id/typing — send typing indicator. */
   async sendTyping(channelId: string): Promise<void> {
-    const url = `${this.baseUrl}${API_PREFIX}/channels/${channelId}/typing`;
-    await fetch(url, {
-      method: "POST",
-      headers: { "Authorization": `Bot ${this.token}` },
-    });
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`);
   }
 }

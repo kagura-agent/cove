@@ -58,7 +58,11 @@ export enum GatewayOpcode {
   DISPATCH = 0,
   HEARTBEAT = 1,
   IDENTIFY = 2,
+  /** Reserved — not used by Cove. Locked out to prevent accidental sends. */
+  VOICE_STATE_UPDATE = 4,
   RESUME = 6,
+  RECONNECT = 7,
+  INVALID_SESSION = 9,
   HELLO = 10,
   HEARTBEAT_ACK = 11,
 }
