@@ -78,13 +78,13 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), pendingToken }),
+        credentials: "include", // BFF: send/receive cookies
       });
       if (!res.ok) {
         setError(res.status === 400 ? "Invalid or already used invite code" : "Something went wrong, please try again");
         return;
       }
-      const data = await res.json() as { token: string };
-      localStorage.setItem("cove-token", data.token);
+      // Server sets session cookie — just reload
       window.history.replaceState({}, "", "/");
       window.location.reload();
     } catch {
@@ -146,33 +146,39 @@ export default function App() {
   const [pendingToken, setPendingToken] = useState<string | null>(null);
 
   useEffect(() => {
+    // BFF flow: no URL params needed — tokens are in HttpOnly cookies
+    // Clean up any legacy URL params that might exist from old flow
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    const pending = params.get("pending");
-    if (token) {
-      localStorage.setItem("cove-token", token);
+    if (params.has("token") || params.has("pending")) {
       window.history.replaceState({}, "", "/");
     }
 
-    if (pending) {
-      setPendingToken(pending);
-      setAuthLoading(false);
-      return;
-    }
+    // Clean up legacy localStorage tokens from existing users
+    localStorage.removeItem("cove-token");
 
-    if (localStorage.getItem("cove-token")) {
-      api.fetchMe()
-        .then((user) => {
-          setUser(user);
-        })
-        .catch(() => {
-          localStorage.removeItem("cove-token");
-          useUserStore.setState({ needsSetup: true });
-        })
-        .finally(() => setAuthLoading(false));
-    } else {
-      setAuthLoading(false);
-    }
+    // Check if user has a pending registration (cookie-based)
+    api.fetchPendingStatus()
+      .then((status) => {
+        if (status.pending && status.pendingToken) {
+          setPendingToken(status.pendingToken);
+          setAuthLoading(false);
+          return;
+        }
+        // Not pending — try to fetch authenticated user
+        return api.fetchMe()
+          .then((user) => {
+            setUser(user);
+          })
+          .catch(() => {
+            // No valid session cookie
+            useUserStore.setState({ needsSetup: true });
+          });
+      })
+      .catch(() => {
+        // Server unreachable or error — show login
+        useUserStore.setState({ needsSetup: true });
+      })
+      .finally(() => setAuthLoading(false));
   }, [setUser]);
 
   useEffect(() => {

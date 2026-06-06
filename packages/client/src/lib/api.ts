@@ -5,21 +5,24 @@ const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
 let _guildId: string | null = null;
 
-function getToken(): string | null {
-  return localStorage.getItem("cove-token");
-}
-
 async function api<T>(path: string, opts?: RequestInit): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(opts?.headers as Record<string, string>),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+
+  // Legacy/transition: if a localStorage token exists, send it as Authorization
+  // header for backward compatibility. New BFF flow uses cookies exclusively.
+  const legacyToken = localStorage.getItem("cove-token");
+  if (legacyToken) {
+    headers["Authorization"] = `Bearer ${legacyToken}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers,
+    credentials: "include", // BFF: send session cookies with every request
+  });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -83,4 +86,14 @@ export function ackMessage(channelId: string, messageId: string) {
 }
 export function fetchMe() {
   return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");
+}
+
+export function fetchPendingStatus() {
+  return api<{ pending: boolean; pendingToken?: string }>("/api/auth/pending-status");
+}
+
+export async function logout() {
+  await api<{ message: string }>("/api/auth/logout", { method: "POST" });
+  localStorage.removeItem("cove-token");
+  localStorage.removeItem("cove-user");
 }

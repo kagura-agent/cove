@@ -4,6 +4,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useThemeStore } from "../stores/useThemeStore";
 import { BotManagement } from "./BotManagement";
 import { THEME_PRESETS, type ThemePreviewData } from "../lib/theme-previews";
+import * as api from "../lib/api";
 
 /* ── Nav sections ───────────────────────────────────────────── */
 
@@ -207,7 +208,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             </button>
           ))}
           <div className="settings-divider" style={dividerStyle} />
-          <button onClick={() => { logout(); close(); }} className="settings-sign-out">
+          <button onClick={() => { api.logout().then(() => { logout(); close(); }); }} className="settings-sign-out">
             Sign Out
           </button>
         </div>
@@ -220,7 +221,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             <div className="settings-mobile-sign-out">
               <div style={{ ...dividerStyle, margin: "var(--space-xxl) 0 var(--space-lg)" }} />
               <button
-                onClick={() => { logout(); close(); }}
+                onClick={() => { api.logout().then(() => { logout(); close(); }); }}
                 style={{
                   background: "transparent",
                   border: "none",

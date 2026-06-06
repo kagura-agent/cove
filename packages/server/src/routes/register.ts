@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { setCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
+import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
 
 /**
  * Invite-code registration route.
@@ -71,6 +73,10 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
     if (result === null) {
       return c.json({ message: "Invalid or already used invite code", code: 50035 }, 400);
     }
+
+    // BFF: set session cookie and clear pending cookie
+    setCookie(c, SESSION_COOKIE, result, COOKIE_OPTIONS);
+    deleteCookie(c, PENDING_COOKIE, { path: "/" });
 
     return c.json({ token: result });
   });
