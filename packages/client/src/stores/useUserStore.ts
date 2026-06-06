@@ -18,8 +18,6 @@ export const useUserStore = create<UserState>((set) => ({
     set({ id: user.id, username: user.username, avatar: user.avatar, needsSetup: false });
   },
   logout: () => {
-    localStorage.removeItem("cove-token");
-    localStorage.removeItem("cove-user");
     set({ id: "", username: "", avatar: null, needsSetup: true });
   },
 }));

@@ -146,15 +146,12 @@ export default function App() {
   const [pendingToken, setPendingToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // BFF flow: no URL params needed — tokens are in HttpOnly cookies
-    // Clean up any legacy URL params that might exist from old flow
+    // BFF: no URL params needed — tokens are in HttpOnly cookies
+    // Clean up any URL params that might appear from old bookmarks
     const params = new URLSearchParams(window.location.search);
     if (params.has("token") || params.has("pending")) {
       window.history.replaceState({}, "", "/");
     }
-
-    // Clean up legacy localStorage tokens from existing users
-    localStorage.removeItem("cove-token");
 
     // Check if user has a pending registration (cookie-based)
     api.fetchPendingStatus()

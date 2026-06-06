@@ -11,17 +11,10 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
     ...(opts?.headers as Record<string, string>),
   };
 
-  // Legacy/transition: if a localStorage token exists, send it as Authorization
-  // header for backward compatibility. New BFF flow uses cookies exclusively.
-  const legacyToken = localStorage.getItem("cove-token");
-  if (legacyToken) {
-    headers["Authorization"] = `Bearer ${legacyToken}`;
-  }
-
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers,
-    credentials: "include", // BFF: send session cookies with every request
+    credentials: "include",
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   if (res.status === 204) return undefined as T;
@@ -94,6 +87,5 @@ export function fetchPendingStatus() {
 
 export async function logout() {
   await api<{ message: string }>("/api/auth/logout", { method: "POST" });
-  localStorage.removeItem("cove-token");
-  localStorage.removeItem("cove-user");
+
 }
