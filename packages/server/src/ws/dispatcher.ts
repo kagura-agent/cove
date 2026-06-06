@@ -74,7 +74,7 @@ export class GatewayDispatcher {
   messageDelete(channelId: string, messageId: string): void {
     const guildId = this.resolveGuildForChannel(channelId);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId });
+    this.broadcastToGuild(guildId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId, guild_id: guildId });
   }
 
   messageDeleteBulk(channelId: string, messageIds: string[], guildId: string): void {
@@ -134,6 +134,14 @@ export class GatewayDispatcher {
         session.guildIds.delete(guildId);
       }
     }
+  }
+
+  guildMemberAdd(guildId: string, member: { user: { id: string }; nick: string | null; roles: string[]; joined_at: string }): void {
+    this.broadcastToGuild(guildId, "GUILD_MEMBER_ADD", { ...member, guild_id: guildId });
+  }
+
+  guildMemberRemove(guildId: string, userId: string): void {
+    this.broadcastToGuild(guildId, "GUILD_MEMBER_REMOVE", { guild_id: guildId, user: { id: userId } });
   }
 
   private resolveGuildForChannel(channelId: string): string | null {

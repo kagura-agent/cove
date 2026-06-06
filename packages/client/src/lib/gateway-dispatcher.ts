@@ -3,7 +3,7 @@ import type { Message, Channel } from "../types";
 export interface GatewayEventMap {
   MESSAGE_CREATE: Message;
   MESSAGE_UPDATE: Message;
-  MESSAGE_DELETE: { id: string; channel_id: string };
+  MESSAGE_DELETE: { id: string; channel_id: string; guild_id?: string };
   MESSAGE_DELETE_BULK: { ids: string[]; channel_id: string };
   TYPING_START: { channel_id: string; user_id: string; username?: string };
   PRESENCE_UPDATE: { user: { id: string }; status: "online" | "offline" };
@@ -12,6 +12,10 @@ export interface GatewayEventMap {
   CHANNEL_UPDATE: Channel;
   CHANNEL_DELETE: { id: string; guild_id: string };
   MESSAGE_ACK: { channel_id: string; message_id: string };
+  GUILD_MEMBER_ADD: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string };
+  GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
+  GUILD_CREATE: { id: string; name: string };
+  GUILD_DELETE: { id: string };
 }
 
 type Handler<T> = (data: T) => void;

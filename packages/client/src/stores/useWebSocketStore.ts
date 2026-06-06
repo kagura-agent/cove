@@ -55,6 +55,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
         }
         if (payload.t && gatewayEvents.has(payload.t)) {
           dispatcher.emit(payload.t as keyof GatewayEventMap, payload.d as GatewayEventMap[keyof GatewayEventMap]);
+        } else if (payload.t && payload.op === GatewayOpcode.DISPATCH) {
+          if (import.meta.env.DEV) {
+            console.warn("[Gateway] Unknown event:", payload.t);
+          }
         }
       } catch { /* ignore non-JSON */ }
     };
@@ -96,4 +100,8 @@ const gatewayEvents = new Set([
   "CHANNEL_UPDATE",
   "CHANNEL_DELETE",
   "MESSAGE_ACK",
+  "GUILD_CREATE",
+  "GUILD_DELETE",
+  "GUILD_MEMBER_ADD",
+  "GUILD_MEMBER_REMOVE",
 ]);

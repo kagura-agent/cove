@@ -7,6 +7,7 @@ interface ReadStateState {
   markRead: (channelId: string, messageId: string) => void;
   setUnread: (channelId: string) => void;
   clearUnread: (channelId: string) => void;
+  removeChannel: (channelId: string) => void;
   getLastReadId: (channelId: string) => string | undefined;
 }
 
@@ -37,5 +38,10 @@ export const useReadStateStore = create<ReadStateState>((set, get) => ({
   clearUnread: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: false },
   })),
+  removeChannel: (channelId) => set((s) => {
+    const { [channelId]: _rs, ...restReadStates } = s.readStates;
+    const { [channelId]: _ur, ...restUnread } = s.unreadChannels;
+    return { readStates: restReadStates, unreadChannels: restUnread };
+  }),
   getLastReadId: (channelId) => get().readStates[channelId],
 }));
