@@ -7,7 +7,6 @@ import { unknownGuild } from "./helpers.js";
 
 export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
-  
 
   app.post("/users", async (c) => {
     const body = await parseJsonBody<{

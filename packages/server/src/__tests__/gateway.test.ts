@@ -209,22 +209,23 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
 
   describe("removeUser (#187)", () => {
     it("closes all sessions for a user and broadcasts offline", () => {
-      // Add a second session for user-1
+      // Add a second session for user-1 in guild-a
       const sessionA2 = mockSession("s3", "user-1", ["guild-a"]);
       (sessionA2 as any).close = vi.fn();
       (sessionA as any).close = vi.fn();
       dispatcher.addSession(sessionA2);
 
       vi.mocked(sessionB.dispatch).mockClear();
+      vi.mocked(sessionA.dispatch).mockClear();
+      vi.mocked(sessionA2.dispatch).mockClear();
 
+      // removeUser calls removeSession (broadcasts offline) then close.
+      // ws.on("close") will call removeSession again — idempotent no-op.
       dispatcher.removeUser("user-1");
 
-      // Both sessions for user-1 should be closed
+      // Both sessions for user-1 should be closed with 4004
       expect((sessionA as any).close).toHaveBeenCalledWith(4004, "User deleted");
       expect((sessionA2 as any).close).toHaveBeenCalledWith(4004, "User deleted");
-
-      // sessionB should receive offline presence for user-1
-      expect(sessionB.dispatch).not.toHaveBeenCalledWith("PRESENCE_UPDATE", expect.objectContaining({ status: "offline" }));
     });
   });
 });

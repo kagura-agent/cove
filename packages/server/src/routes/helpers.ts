@@ -29,7 +29,3 @@ export function unknownChannel(c: Context) {
 export function unknownMessage(c: Context) {
   return c.json({ message: "Unknown Message", code: 10008 }, 404);
 }
-
-export function missingAccess(c: Context) {
-  return c.json({ message: "Missing Access", code: 50001 }, 403);
-}
