@@ -107,6 +107,17 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_DELETE", (data) => {
     useChannelStore.getState().removeChannel(data.id);
+    useMessageStore.getState().removeChannelMessages(data.id);
+    useReadStateStore.getState().removeChannel(data.id);
+    useTypingStore.getState().removeChannel(data.id);
+  });
+
+  subscribe("GUILD_MEMBER_ADD", (data) => {
+    usePresenceStore.getState().setOnline(data.user.id);
+  });
+
+  subscribe("GUILD_MEMBER_REMOVE", (data) => {
+    usePresenceStore.getState().setOffline(data.user.id);
   });
 }
 

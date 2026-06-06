@@ -7,6 +7,7 @@ interface MessageState {
   addMessage: (channelId: string, message: Message) => void;
   updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null) => void;
   removeMessage: (channelId: string, messageId: string) => void;
+  removeChannelMessages: (channelId: string) => void;
 }
 
 export const useMessageStore = create<MessageState>((set) => ({
@@ -30,5 +31,11 @@ export const useMessageStore = create<MessageState>((set) => ({
       const msgs = s.messages[channelId];
       if (!msgs) return s;
       return { messages: { ...s.messages, [channelId]: msgs.filter((m) => m.id !== messageId) } };
+    }),
+  removeChannelMessages: (channelId) =>
+    set((s) => {
+      if (!(channelId in s.messages)) return s;
+      const { [channelId]: _, ...rest } = s.messages;
+      return { messages: rest };
     }),
 }));

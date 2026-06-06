@@ -81,7 +81,7 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
     it("sends only to the correct guild", () => {
       dispatcher.messageDelete("chan-1", "m1");
 
-      expect(sessionA.dispatch).toHaveBeenCalledWith("MESSAGE_DELETE", { id: "m1", channel_id: "chan-1" });
+      expect(sessionA.dispatch).toHaveBeenCalledWith("MESSAGE_DELETE", { id: "m1", channel_id: "chan-1", guild_id: "guild-a" });
       expect(sessionB.dispatch).not.toHaveBeenCalled();
     });
   });

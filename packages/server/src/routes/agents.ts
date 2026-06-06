@@ -148,6 +148,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     const body = await c.req.json<{ nick?: string; roles?: string[] }>().catch(() => ({} as { nick?: string; roles?: string[] }));
     const member = repos.members.add(guildId, userId, body.nick, body.roles);
     dispatcher?.addGuildToUser(userId, guildId);
+    dispatcher?.guildMemberAdd(guildId, member);
     return c.json(member, 201);
   });
 
@@ -169,6 +170,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     }
 
     repos.members.remove(guildId, userId);
+    dispatcher?.guildMemberRemove(guildId, userId);
     dispatcher?.removeGuildFromUser(userId, guildId);
     return c.body(null, 204);
   });
