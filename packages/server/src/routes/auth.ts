@@ -102,6 +102,8 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     const authHeader = c.req.header("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       token = authHeader.slice(7).trim();
+    } else if (authHeader?.startsWith("Bot ")) {
+      token = authHeader.slice(4).trim();
     }
 
     // Fall back to session cookie (browser BFF flow)
@@ -134,7 +136,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       deleteCookie(c, PENDING_COOKIE, { path: "/" });
       return c.json({ pending: false });
     }
-    return c.json({ pending: true, pendingToken });
+    return c.json({ pending: true });
   });
 
   app.post("/api/auth/logout", (c) => {

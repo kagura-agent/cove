@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { setCookie, deleteCookie } from "hono/cookie";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
@@ -16,7 +16,11 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
 
   app.post("/auth/register", async (c) => {
     const body = await c.req.json<{ inviteCode?: string; pendingToken?: string }>();
-    const { inviteCode, pendingToken } = body;
+    const { inviteCode } = body;
+
+    // Read pendingToken from cookie (BFF: browser never sees auth tokens)
+    // Fall back to body for backward compatibility with existing tests
+    const pendingToken = getCookie(c, PENDING_COOKIE) ?? body.pendingToken;
 
     if (!inviteCode || !pendingToken) {
       return c.json({ message: "inviteCode and pendingToken are required", code: 50035 }, 400);
@@ -78,7 +82,7 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
     setCookie(c, SESSION_COOKIE, result, COOKIE_OPTIONS);
     deleteCookie(c, PENDING_COOKIE, { path: "/" });
 
-    return c.json({ token: result });
+    return c.json({ message: "registered" });
   });
 
   return app;

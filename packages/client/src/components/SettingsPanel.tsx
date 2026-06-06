@@ -208,7 +208,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             </button>
           ))}
           <div className="settings-divider" style={dividerStyle} />
-          <button onClick={() => { api.logout().then(() => { logout(); close(); }); }} className="settings-sign-out">
+          <button onClick={() => { api.logout().catch(() => {}).finally(() => { logout(); close(); }); }} className="settings-sign-out">
             Sign Out
           </button>
         </div>
@@ -221,7 +221,7 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
             <div className="settings-mobile-sign-out">
               <div style={{ ...dividerStyle, margin: "var(--space-xxl) 0 var(--space-lg)" }} />
               <button
-                onClick={() => { api.logout().then(() => { logout(); close(); }); }}
+                onClick={() => { api.logout().catch(() => {}).finally(() => { logout(); close(); }); }}
                 style={{
                   background: "transparent",
                   border: "none",

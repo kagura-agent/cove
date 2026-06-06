@@ -1050,10 +1050,11 @@ describe("Cove API — Discord-compatible", () => {
         body: JSON.stringify({ inviteCode: "COVE-TEST-AA01", pendingToken: "tok-1" }),
       });
       expect(res.status).toBe(200);
-      const data = await res.json() as { token: string };
-      expect(data.token).toBeTruthy();
+      const data = await res.json() as { message: string };
+      expect(data.message).toBe("registered");
 
-      const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
+      // Verify user was created in DB (look up by pending email)
+      const userRow = db.prepare("SELECT id, username FROM users WHERE email = ?").get("newuser@example.com") as { id: string; username: string } | undefined;
       expect(userRow).toBeDefined();
       expect(userRow!.username).toBe("New User");
       expect(userRow!.id).toMatch(/^\d+$/);

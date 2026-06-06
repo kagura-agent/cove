@@ -17,7 +17,13 @@ function parseCookies(header: string | undefined): Record<string, string> {
   const cookies: Record<string, string> = {};
   for (const pair of header.split(";")) {
     const [name, ...rest] = pair.trim().split("=");
-    if (name) cookies[name.trim()] = decodeURIComponent(rest.join("=").trim());
+    if (name) {
+      try {
+        cookies[name.trim()] = decodeURIComponent(rest.join("=").trim());
+      } catch {
+        // Skip malformed cookie values
+      }
+    }
   }
   return cookies;
 }
@@ -96,7 +102,12 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
             if (!user) {
               if (heartbeatCheck) clearInterval(heartbeatCheck);
-              session.close(4001, "Token required");
+              // Distinguish: no credentials at all vs invalid token
+              if (!token && !preAuthUser) {
+                session.close(4001, "Token required");
+              } else {
+                session.close(4004, "Authentication failed");
+              }
               return;
             }
 

@@ -82,7 +82,7 @@ export function fetchMe() {
 }
 
 export function fetchPendingStatus() {
-  return api<{ pending: boolean; pendingToken?: string }>("/api/auth/pending-status");
+  return api<{ pending: boolean }>("/api/auth/pending-status");
 }
 
 export async function logout() {

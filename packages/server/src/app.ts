@@ -15,7 +15,7 @@ export interface AppConfig {
   oauth?: OAuthConfig;
 }
 
-const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", `${API_PREFIX}/auth/register`]);
+const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", "/api/auth/pending-status", "/api/auth/logout", `${API_PREFIX}/auth/register`]);
 
 export function createApp(
   db: Database.Database,

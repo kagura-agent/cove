@@ -65,7 +65,7 @@ const connDot = (status: string): CSSProperties => ({
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
-function InviteCodePage({ pendingToken }: { pendingToken: string }) {
+function InviteCodePage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -77,7 +77,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
       const res = await fetch(`${API_BASE}${API_PREFIX}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), pendingToken }),
+        body: JSON.stringify({ inviteCode: code.trim().toUpperCase() }),
         credentials: "include", // BFF: send/receive cookies
       });
       if (!res.ok) {
@@ -92,7 +92,7 @@ function InviteCodePage({ pendingToken }: { pendingToken: string }) {
     } finally {
       setLoading(false);
     }
-  }, [code, pendingToken]);
+  }, [code]);
 
   return (
     <div style={styles.loginPage}>
@@ -143,7 +143,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
-  const [pendingToken, setPendingToken] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     // BFF: no URL params needed — tokens are in HttpOnly cookies
@@ -156,8 +156,8 @@ export default function App() {
     // Check if user has a pending registration (cookie-based)
     api.fetchPendingStatus()
       .then((status) => {
-        if (status.pending && status.pendingToken) {
-          setPendingToken(status.pendingToken);
+        if (status.pending) {
+          setIsPending(true);
           setAuthLoading(false);
           return;
         }
@@ -203,11 +203,11 @@ export default function App() {
     );
   }
 
-  if (pendingToken) {
+  if (isPending) {
     return (
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
-          <InviteCodePage pendingToken={pendingToken} />
+          <InviteCodePage />
         </div>
       </ConfigProvider>
     );
