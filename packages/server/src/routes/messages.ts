@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember } from "./helpers.js";
+import { requireGuildMember, unknownChannel, unknownMessage } from "./helpers.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -13,7 +13,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
@@ -32,12 +32,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const message = repos.messages.getById(channelId, msgId);
     if (!message) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
     return c.json(message);
   });
@@ -47,7 +47,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const body = await parseJsonBody<{ content: string; username?: string }>(c);
@@ -82,12 +82,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const existing = repos.messages.getById(channelId, msgId);
     if (!existing) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     // Only the message author can edit their own message
@@ -103,7 +103,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     const updated = repos.messages.update(channelId, msgId, body.content);
     if (!updated) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     dispatcher?.messageUpdate(updated);
@@ -117,19 +117,19 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const existing = repos.messages.getById(channelId, msgId);
     if (!existing) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
     // For now, any guild member can delete any message in channels they have access to
 
     if (!repos.messages.delete(channelId, msgId)) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     // Recompute last_message_id if we just deleted the latest message
@@ -148,7 +148,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const body = await parseJsonBody<{ messages: string[] }>(c);
@@ -182,7 +182,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     const count = repos.messages.deleteAll(channelId);
@@ -199,11 +199,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const userId = c.get("botUser").id;
     const ch = requireGuildMember(repos, channelId, userId);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     if (!repos.messages.getById(channelId, messageId)) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     repos.readStates.set(userId, channelId, messageId) &&
@@ -217,7 +217,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const author = c.get("botUser");
     const ch = requireGuildMember(repos, channelId, author.id);
     if (!ch) {
-      return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+      return unknownChannel(c);
     }
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id);

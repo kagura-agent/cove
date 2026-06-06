@@ -27,7 +27,7 @@ export function createApp(
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-  app.route(API_PREFIX, registerRoutes(db, repos.guilds));
+  app.route(API_PREFIX, registerRoutes(db));
 
   if (config?.oauth) {
     app.route("/", authRoutes(db, config.oauth, repos.guilds, repos.users));

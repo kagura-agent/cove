@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { requireAuth, type AppEnv } from "../auth.js";
+import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
+import { unknownGuild } from "./helpers.js";
 
 export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
-  const auth = requireAuth(repos.users);
 
-  app.post("/users", auth, async (c) => {
+  app.post("/users", async (c) => {
     const body = await parseJsonBody<{
       id?: string;
       username: string;
@@ -32,7 +32,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     return c.json(user, 201);
   });
 
-  app.post("/users/:id/token", auth, (c) => {
+  app.post("/users/:id/token", (c) => {
     const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
     const id = rawId === "@me" ? actorId : rawId;
@@ -59,7 +59,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     return c.json(user);
   });
 
-  app.patch("/users/:id", auth, async (c) => {
+  app.patch("/users/:id", async (c) => {
     const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
     const id = rawId === "@me" ? actorId : rawId;
@@ -87,7 +87,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     return c.json(updated);
   });
 
-  app.delete("/users/:id", auth, (c) => {
+  app.delete("/users/:id", (c) => {
     const rawId = c.req.param("id");
     const actorId = c.get("botUser").id;
     const id = rawId === "@me" ? actorId : rawId;
@@ -100,39 +100,40 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     if (!repos.users.delete(id!)) {
       return c.json({ message: "Unknown User", code: 10013 }, 404);
     }
+    dispatcher?.removeUser(id!);
     return c.body(null, 204);
   });
 
   // ─── Guild Members ─────────────────────────────────────────
 
-  app.get("/users/@me/guilds", auth, (c) => {
+  app.get("/users/@me/guilds", (c) => {
     const userId = c.get("botUser").id;
     return c.json(repos.guilds.listForUser(userId));
   });
 
-  app.get("/guilds/:guildId/members", auth, (c) => {
+  app.get("/guilds/:guildId/members", (c) => {
     const guildId = c.req.param("guildId")!;
     if (!repos.guilds.exists(guildId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
     const userId = c.get("botUser").id;
     if (!repos.members.exists(guildId, userId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
     return c.json(repos.members.list(guildId));
   });
 
-  app.put("/guilds/:guildId/members/:userId", auth, async (c) => {
+  app.put("/guilds/:guildId/members/:userId", async (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 
     if (!repos.guilds.exists(guildId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
 
     const actingUserId = c.get("botUser").id;
     if (!repos.members.exists(guildId, actingUserId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
 
     if (!repos.users.exists(userId)) {
@@ -150,17 +151,17 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     return c.json(member, 201);
   });
 
-  app.delete("/guilds/:guildId/members/:userId", auth, (c) => {
+  app.delete("/guilds/:guildId/members/:userId", (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.req.param("userId")!;
 
     if (!repos.guilds.exists(guildId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
 
     const actingUserId = c.get("botUser").id;
     if (!repos.members.exists(guildId, actingUserId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
 
     if (!repos.members.exists(guildId, userId)) {

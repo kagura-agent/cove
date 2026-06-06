@@ -1060,6 +1060,22 @@ describe("Cove API — Discord-compatible", () => {
       expect(userRow!.id).toMatch(/^\d+$/);
     });
 
+    it("does not auto-join new user to default guild (#210)", async () => {
+      seedInviteCode("COVE-NOGUILD-01");
+      seedPending("p-ng", "tok-ng", "noguild@example.com", "NoGuild User");
+
+      await app.request(`${API_PREFIX}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-ng" },
+        body: JSON.stringify({ inviteCode: "COVE-NOGUILD-01" }),
+      });
+
+      const userRow = db.prepare("SELECT id FROM users WHERE email = ?").get("noguild@example.com") as { id: string } | undefined;
+      expect(userRow).toBeDefined();
+      const memberRows = db.prepare("SELECT * FROM guild_members WHERE user_id = ?").all(userRow!.id);
+      expect(memberRows).toHaveLength(0);
+    });
+
     it("normalizes invite code input (lowercase + whitespace)", async () => {
       seedInviteCode("COVE-NORM-BB02");
       seedPending("p-norm", "tok-norm", "norm@example.com", "NormUser");

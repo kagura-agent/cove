@@ -3,7 +3,6 @@ import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
-import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
 
 /**
@@ -11,7 +10,7 @@ import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
  * Public endpoint — no auth required (new users after OAuth).
  * Mounted independently of OAuth config so it's always available.
  */
-export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): Hono {
+export function registerRoutes(db: Database.Database): Hono {
   const app = new Hono();
 
   app.post("/auth/register", async (c) => {
@@ -51,11 +50,6 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
       db.prepare(
         "INSERT INTO users (id, username, avatar, bot, bio, token, google_id, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(userId, pending.username, pending.avatar, 0, null, token, pending.google_id, pending.email, now, now);
-
-      // Add new user to default guild
-      db.prepare(
-        "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-      ).run(guildsRepo.getDefaultId(), userId, null, "[]", now);
 
       // #209: Atomic invite consumption — conditional UPDATE (race-safe within transaction)
       const inviteResult = db.prepare(

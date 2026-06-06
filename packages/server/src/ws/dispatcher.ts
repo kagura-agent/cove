@@ -176,6 +176,19 @@ export class GatewayDispatcher {
     return presences;
   }
 
+  removeUser(userId: string): void {
+    const toRemove: GatewaySession[] = [];
+    for (const session of this.sessions) {
+      if (session.user?.id === userId) {
+        toRemove.push(session);
+      }
+    }
+    for (const session of toRemove) {
+      this.removeSession(session);
+      session.close(4004, "User deleted");
+    }
+  }
+
   private broadcastToGuildMembers(userId: string, event: string, data: unknown, excludeSessionId?: string): void {
     const userGuildIds = this.getSessionGuildIds(userId);
     for (const session of this.sessions) {

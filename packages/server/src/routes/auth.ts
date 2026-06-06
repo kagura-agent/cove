@@ -79,9 +79,6 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       const token = existing.token ?? crypto.randomUUID();
       db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, existing.id);
-      // Ensure user is in default guild
-      db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
-        .run(guildsRepo.getDefaultId(), existing.id, null, "[]", now);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import type { GatewayEventMap } from "../lib/gateway-dispatcher";
 import { useTypingStore } from "./useTypingStore";
+import { GatewayOpcode } from "@cove/shared";
 
 type WsStatus = "connected" | "connecting" | "disconnected";
 
@@ -38,18 +39,18 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     ws.onmessage = (evt) => {
       try {
         const payload = JSON.parse(evt.data) as { t?: string; op?: number; d?: unknown };
-        if (payload.op === 10) {
+        if (payload.op === GatewayOpcode.HELLO) {
           // BFF: server authenticated at WebSocket upgrade via session cookie.
           // Send IDENTIFY without token — bot clients use Authorization header instead.
-          ws?.send(JSON.stringify({ op: 2, d: { token: null } }));
+          ws?.send(JSON.stringify({ op: GatewayOpcode.IDENTIFY, d: { token: null } }));
           const interval = (payload.d as { heartbeat_interval?: number })?.heartbeat_interval ?? 41250;
           if (heartbeatInterval) clearInterval(heartbeatInterval);
           heartbeatInterval = setInterval(() => {
-            ws?.send(JSON.stringify({ op: 1, d: null }));
+            ws?.send(JSON.stringify({ op: GatewayOpcode.HEARTBEAT, d: null }));
           }, interval);
           return;
         }
-        if (payload.op === 11) {
+        if (payload.op === GatewayOpcode.HEARTBEAT_ACK) {
           return;
         }
         if (payload.t && gatewayEvents.has(payload.t)) {
