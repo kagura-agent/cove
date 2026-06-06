@@ -8,7 +8,7 @@ export class GatewaySession {
   readonly id: string;
   private seq = 0;
   private identified = false;
-  user: { id: string; username: string; bot: boolean } | null = null;
+  user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } | null = null;
   readonly guildIds: Set<string> = new Set();
 
   constructor(private ws: WebSocket) {
@@ -35,7 +35,7 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, readStatesRepo: ReadStatesRepo): void {
+  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, readStatesRepo: ReadStatesRepo): void {
     this.user = user;
     this.identified = true;
 

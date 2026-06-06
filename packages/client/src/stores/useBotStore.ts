@@ -17,7 +17,7 @@ export const useBotStore = create<BotState>((set) => ({
   },
   createBot: async (name, bio) => {
     const result = await api.createBot(name, bio);
-    set((s) => ({ bots: [...s.bots, { id: result.id, username: result.username, avatar: null, bio: result.bio, bot: true }] }));
+    set((s) => ({ bots: [...s.bots, { id: result.id, username: result.username, avatar: null, bio: result.bio, bot: true, discriminator: "0", global_name: null }] }));
     return result;
   },
   deleteBot: async (id) => {

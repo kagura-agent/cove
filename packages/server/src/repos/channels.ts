@@ -20,6 +20,9 @@ function toChannel(row: ChannelRow): Channel {
     topic: row.topic,
     position: row.position,
     last_message_id: row.last_message_id,
+    permission_overwrites: [],
+    nsfw: false,
+    rate_limit_per_user: 0,
   };
 }
 

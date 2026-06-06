@@ -16,6 +16,9 @@ export interface User {
   id: string;
   username: string;
   bot: boolean;
+  avatar: string | null;
+  discriminator: string;
+  global_name: string | null;
 }
 
 /** Channel object — channels are mapped to GUILD_TEXT. */
@@ -27,6 +30,9 @@ export interface Channel {
   topic: string | null;
   position: number;
   last_message_id: string | null;
+  permission_overwrites: unknown[];
+  nsfw: boolean;
+  rate_limit_per_user: number;
 }
 
 /** Message object (Discord-compatible). */
@@ -38,6 +44,13 @@ export interface Message {
   timestamp: string; // ISO 8601
   edited_timestamp?: string | null;
   type: number; // 0 = DEFAULT
+  attachments: unknown[];
+  embeds: unknown[];
+  mentions: unknown[];
+  mention_roles: string[];
+  pinned: boolean;
+  tts: boolean;
+  mention_everyone: boolean;
 }
 
 /** Discord Gateway opcodes. */
@@ -64,6 +77,7 @@ export interface Guild {
   name: string;
   icon: string | null;
   owner_id: string | null;
+  features: string[];
 }
 
 // ─── Cove extension types ───────────────────────────────────────────────────
@@ -74,6 +88,8 @@ export interface CoveAgent {
   username: string;
   avatar: string | null;
   bot: boolean;
+  discriminator: string;
+  global_name: string | null;
   /** Cove extension: agent bio/description. */
   bio?: string | null;
 }
