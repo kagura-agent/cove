@@ -20,7 +20,7 @@
         "properties": {
           "token": { "type": "string" },
           "baseUrl": { "type": "string", "default": "http://localhost:3400" },
-          "guildId": { "type": "string", "default": "cove" },
+          "guildId": { "type": "string" },
           "allowFrom": {
             "type": "array",
             "items": { "type": "string" }
