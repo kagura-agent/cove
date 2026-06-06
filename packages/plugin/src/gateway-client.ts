@@ -9,7 +9,7 @@
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import { GatewayOpcode } from "@cove/shared";
-import type { GatewayPayload, Message } from "@cove/shared";
+import type { GatewayPayload, Guild, Message } from "@cove/shared";
 import type { GatewayEvents } from "./types.js";
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
@@ -40,6 +40,9 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
 
   /** The bot user returned from the READY event. */
   public botUser: { id: string; username: string } | null = null;
+
+  /** Guilds the bot belongs to, populated from the READY event. */
+  public guilds: Guild[] = [];
 
   constructor(options: CoveGatewayClientOptions) {
     super();
@@ -121,9 +124,11 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
       case "READY": {
         const data = payload.d as {
           user: { id: string; username: string; bot: boolean };
+          guilds?: Guild[];
           session_id: string;
         };
         this.botUser = { id: data.user.id, username: data.user.username };
+        this.guilds = data.guilds ?? [];
         if (this.hasConnectedOnce) {
           this.emit("reconnect");
         }

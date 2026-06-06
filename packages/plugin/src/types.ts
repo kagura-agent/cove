@@ -20,7 +20,8 @@ export interface CoveAccount {
   accountId: string | null;
   token: string;
   baseUrl: string;
-  guildId: string;
+  /** Guild ID. Comes from config override or discovered from READY event. */
+  guildId: string | null;
   agentId: string;
   agentName: string;
   allowFrom: string[];

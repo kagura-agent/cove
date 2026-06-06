@@ -50,7 +50,7 @@ export class CoveRestClient {
   }
 
   /** GET /api/v10/guilds/:guildId/channels — list all channels. */
-  async getChannels(guildId = "cove"): Promise<Channel[]> {
+  async getChannels(guildId: string): Promise<Channel[]> {
     return this.request("GET", `${API_PREFIX}/guilds/${guildId}/channels`);
   }
 

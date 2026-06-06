@@ -128,7 +128,7 @@ function resolveAccount(
     accountId: accountId ?? null,
     token,
     baseUrl,
-    guildId: section?.guildId ?? "cove",
+    guildId: section?.guildId ?? null,
     agentId,
     agentName: agentName || agentId,
     allowFrom: section?.allowFrom ?? [],
