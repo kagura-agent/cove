@@ -14,6 +14,8 @@ export interface GatewayEventMap {
   MESSAGE_ACK: { channel_id: string; message_id: string };
   GUILD_MEMBER_ADD: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string };
   GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
+  GUILD_CREATE: { id: string; name: string };
+  GUILD_DELETE: { id: string };
 }
 
 type Handler<T> = (data: T) => void;

@@ -100,6 +100,8 @@ const gatewayEvents = new Set([
   "CHANNEL_UPDATE",
   "CHANNEL_DELETE",
   "MESSAGE_ACK",
+  "GUILD_CREATE",
+  "GUILD_DELETE",
   "GUILD_MEMBER_ADD",
   "GUILD_MEMBER_REMOVE",
 ]);

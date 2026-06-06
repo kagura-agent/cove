@@ -112,12 +112,24 @@ export function setupGatewaySubscriptions(): void {
     useTypingStore.getState().removeChannel(data.id);
   });
 
-  subscribe("GUILD_MEMBER_ADD", (data) => {
-    usePresenceStore.getState().setOnline(data.user.id);
+  // GUILD_CREATE/DELETE: guild lifecycle events
+  // Full handling (add/remove guilds from store) deferred to GuildStore (#228)
+  subscribe("GUILD_CREATE", () => {
+    // TODO: add guild to GuildStore, fetch channels
   });
 
-  subscribe("GUILD_MEMBER_REMOVE", (data) => {
-    usePresenceStore.getState().setOffline(data.user.id);
+  subscribe("GUILD_DELETE", () => {
+    // TODO: remove guild from GuildStore, cascade cleanup
+  });
+
+  // GUILD_MEMBER_ADD/REMOVE: membership events, NOT presence.
+  // Presence is driven solely by PRESENCE_UPDATE events.
+  subscribe("GUILD_MEMBER_ADD", () => {
+    // TODO: update member list when MemberStore exists
+  });
+
+  subscribe("GUILD_MEMBER_REMOVE", () => {
+    // TODO: update member list when MemberStore exists
   });
 }
 
