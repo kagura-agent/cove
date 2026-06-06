@@ -15,7 +15,7 @@ export interface AppConfig {
   oauth?: OAuthConfig;
 }
 
-const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", `${API_PREFIX}/auth/register`]);
+const PUBLIC_PATHS = new Set(["/api/auth/google", "/api/auth/callback", "/api/auth/me", "/api/auth/pending-status", "/api/auth/logout", `${API_PREFIX}/auth/register`]);
 
 export function createApp(
   db: Database.Database,
@@ -30,7 +30,7 @@ export function createApp(
   app.route(API_PREFIX, registerRoutes(db, repos.guilds));
 
   if (config?.oauth) {
-    app.route("/", authRoutes(db, config.oauth, repos.guilds));
+    app.route("/", authRoutes(db, config.oauth, repos.guilds, repos.users));
   }
 
   // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.

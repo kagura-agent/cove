@@ -1,8 +1,11 @@
 import { Hono } from "hono";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
+import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
+import type { UsersRepo } from "../repos/users.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -10,7 +13,7 @@ export interface OAuthConfig {
   redirectUri: string;
 }
 
-export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRepo: GuildsRepo): Hono {
+export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRepo: GuildsRepo, usersRepo: UsersRepo): Hono {
   const app = new Hono();
 
   app.get("/api/auth/google", (c) => {
@@ -79,7 +82,8 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       // Ensure user is in default guild
       db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
         .run(guildsRepo.getDefaultId(), existing.id, null, "[]", now);
-      return c.redirect(`/?token=${token}`);
+      setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
+      return c.redirect("/");
     }
 
     // New user: store in pending_registrations, require invite code
@@ -88,21 +92,38 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, now);
 
-    return c.redirect(`/?pending=${pendingToken}`);
+    setCookie(c, PENDING_COOKIE, pendingToken, COOKIE_OPTIONS);
+    return c.redirect("/");
   });
 
   app.get("/api/auth/me", (c) => {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const user = resolveUser(usersRepo, c.req.header("Authorization"), getCookie(c, SESSION_COOKIE));
+    if (!user) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
-    const token = authHeader.slice(7).trim();
-    const row = db.prepare("SELECT id, username, avatar, bot FROM users WHERE token = ?").get(token) as
-      { id: string; username: string; avatar: string | null; bot: number } | undefined;
-    if (!row) {
-      return c.json({ message: "Invalid token", code: 40001 }, 401);
+    return c.json({ id: user.id, username: user.username, avatar: user.avatar, bot: user.bot });
+  });
+
+  app.get("/api/auth/pending-status", (c) => {
+    const pendingToken = getCookie(c, PENDING_COOKIE);
+    if (!pendingToken) {
+      return c.json({ pending: false });
     }
-    return c.json({ id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1 });
+    const row = db.prepare(
+      "SELECT id FROM pending_registrations WHERE pending_token = ?"
+    ).get(pendingToken);
+    if (!row) {
+      // Cookie exists but token invalid — clean up
+      deleteCookie(c, PENDING_COOKIE, { path: "/" });
+      return c.json({ pending: false });
+    }
+    return c.json({ pending: true });
+  });
+
+  app.post("/api/auth/logout", (c) => {
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    deleteCookie(c, PENDING_COOKIE, { path: "/" });
+    return c.json({ message: "ok" });
   });
 
   return app;

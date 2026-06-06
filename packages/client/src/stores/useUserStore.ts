@@ -9,21 +9,15 @@ interface UserState {
   logout: () => void;
 }
 
-function hasToken(): boolean {
-  return !!localStorage.getItem("cove-token");
-}
-
 export const useUserStore = create<UserState>((set) => ({
   id: "",
   username: "",
   avatar: null,
-  needsSetup: !hasToken(),
+  needsSetup: true, // BFF: default true, set false after successful fetchMe()
   setUser: (user) => {
     set({ id: user.id, username: user.username, avatar: user.avatar, needsSetup: false });
   },
   logout: () => {
-    localStorage.removeItem("cove-token");
-    localStorage.removeItem("cove-user");
     set({ id: "", username: "", avatar: null, needsSetup: true });
   },
 }));

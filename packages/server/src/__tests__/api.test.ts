@@ -1046,14 +1046,15 @@ describe("Cove API — Discord-compatible", () => {
 
       const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-TEST-AA01", pendingToken: "tok-1" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-1" },
+        body: JSON.stringify({ inviteCode: "COVE-TEST-AA01" }),
       });
       expect(res.status).toBe(200);
-      const data = await res.json() as { token: string };
-      expect(data.token).toBeTruthy();
+      const data = await res.json() as { message: string };
+      expect(data.message).toBe("registered");
 
-      const userRow = db.prepare("SELECT id, username FROM users WHERE token = ?").get(data.token) as { id: string; username: string } | undefined;
+      // Verify user was created in DB (look up by pending email)
+      const userRow = db.prepare("SELECT id, username FROM users WHERE email = ?").get("newuser@example.com") as { id: string; username: string } | undefined;
       expect(userRow).toBeDefined();
       expect(userRow!.username).toBe("New User");
       expect(userRow!.id).toMatch(/^\d+$/);
@@ -1065,8 +1066,8 @@ describe("Cove API — Discord-compatible", () => {
 
       const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "  cove-norm-bb02  ", pendingToken: "tok-norm" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-norm" },
+        body: JSON.stringify({ inviteCode: "  cove-norm-bb02  " }),
       });
       expect(res.status).toBe(200);
     });
@@ -1076,8 +1077,8 @@ describe("Cove API — Discord-compatible", () => {
 
       const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE", pendingToken: "tok-2" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-2" },
+        body: JSON.stringify({ inviteCode: "COVE-FAKE-CODE" }),
       });
       expect(res.status).toBe(400);
     });
@@ -1088,15 +1089,15 @@ describe("Cove API — Discord-compatible", () => {
 
       await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-3" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-3" },
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03" }),
       });
 
       seedPending("p4", "tok-4", "user2@example.com", "User2");
       const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-USED-CC03", pendingToken: "tok-4" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=tok-4" },
+        body: JSON.stringify({ inviteCode: "COVE-USED-CC03" }),
       });
       expect(res.status).toBe(400);
     });
@@ -1106,8 +1107,8 @@ describe("Cove API — Discord-compatible", () => {
 
       const res = await app.request(`${API_PREFIX}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: "COVE-PEND-DD04", pendingToken: "nonexistent" }),
+        headers: { "Content-Type": "application/json", Cookie: "cove-pending=nonexistent" },
+        body: JSON.stringify({ inviteCode: "COVE-PEND-DD04" }),
       });
       expect(res.status).toBe(400);
     });

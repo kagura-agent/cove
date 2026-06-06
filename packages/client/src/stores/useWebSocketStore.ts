@@ -39,9 +39,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
       try {
         const payload = JSON.parse(evt.data) as { t?: string; op?: number; d?: unknown };
         if (payload.op === 10) {
-          const token = localStorage.getItem("cove-token");
-          if (!token) { ws?.close(); return; }
-          ws?.send(JSON.stringify({ op: 2, d: { token } }));
+          // BFF: server authenticated at WebSocket upgrade via session cookie.
+          // Send IDENTIFY without token — bot clients use Authorization header instead.
+          ws?.send(JSON.stringify({ op: 2, d: { token: null } }));
           const interval = (payload.d as { heartbeat_interval?: number })?.heartbeat_interval ?? 41250;
           if (heartbeatInterval) clearInterval(heartbeatInterval);
           heartbeatInterval = setInterval(() => {

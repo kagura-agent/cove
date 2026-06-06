@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
+import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
 
 /**
  * Invite-code registration route.
@@ -13,8 +15,11 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
   const app = new Hono();
 
   app.post("/auth/register", async (c) => {
-    const body = await c.req.json<{ inviteCode?: string; pendingToken?: string }>();
-    const { inviteCode, pendingToken } = body;
+    const body = await c.req.json<{ inviteCode?: string }>();
+    const { inviteCode } = body;
+
+    // BFF: read pendingToken from cookie only — browser never sees auth tokens
+    const pendingToken = getCookie(c, PENDING_COOKIE);
 
     if (!inviteCode || !pendingToken) {
       return c.json({ message: "inviteCode and pendingToken are required", code: 50035 }, 400);
@@ -72,7 +77,11 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
       return c.json({ message: "Invalid or already used invite code", code: 50035 }, 400);
     }
 
-    return c.json({ token: result });
+    // BFF: set session cookie and clear pending cookie
+    setCookie(c, SESSION_COOKIE, result, COOKIE_OPTIONS);
+    deleteCookie(c, PENDING_COOKIE, { path: "/" });
+
+    return c.json({ message: "registered" });
   });
 
   return app;
