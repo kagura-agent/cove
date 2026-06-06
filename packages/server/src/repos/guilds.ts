@@ -16,6 +16,7 @@ function toGuild(row: GuildRow): Guild {
     name: row.name,
     icon: row.icon,
     owner_id: row.owner_id,
+    features: [],
   };
 }
 

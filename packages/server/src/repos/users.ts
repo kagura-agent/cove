@@ -20,6 +20,8 @@ function toUser(row: UserRow): CoveAgent {
     avatar: row.avatar,
     bot: row.bot === 1,
     bio: row.bio,
+    discriminator: "0",
+    global_name: null,
   };
 }
 
@@ -87,6 +89,6 @@ export class UsersRepo {
 
   findByToken(token: string): CoveAgent & { bot: boolean } | null {
     const row = this.db.prepare("SELECT id, username, avatar, bot, bio FROM users WHERE token = ?").get(token) as UserRow | undefined;
-    return row ? { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio } : null;
+    return row ? { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: null } : null;
   }
 }

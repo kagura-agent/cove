@@ -39,8 +39,8 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
       if (sessionToken) {
         const row = users.findByToken(sessionToken);
         if (row) {
-          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean } }).__coveUser = {
-            id: row.id, username: row.username, bot: row.bot,
+          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser = {
+            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null,
           };
         }
       }
@@ -55,7 +55,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
     let heartbeatCheck: ReturnType<typeof setInterval> | null = null;
 
     // Check if user was pre-authenticated at upgrade via cookie
-    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean } }).__coveUser;
+    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser;
 
     session.send({
       op: GatewayOpcode.HELLO,
@@ -87,12 +87,12 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             const token = data?.token;
 
             // Try explicit token first (bot clients), then fall back to cookie pre-auth
-            let user: { id: string; username: string; bot: boolean } | undefined;
+            let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } | undefined;
 
             if (token) {
               const row = users.findByToken(token);
               if (row) {
-                user = { id: row.id, username: row.username, bot: row.bot };
+                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null };
               }
             }
 

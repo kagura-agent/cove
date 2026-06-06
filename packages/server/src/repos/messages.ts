@@ -25,12 +25,22 @@ function toMessage(row: MessageRow): Message {
       id: row.sender,
       username: row.sender_username ?? row.sender_name ?? row.sender,
       bot: row.sender_bot === 1,
+      avatar: null,
+      discriminator: "0",
+      global_name: null,
     },
     timestamp: new Date(row.timestamp).toISOString(),
     edited_timestamp: row.edited_timestamp
       ? new Date(row.edited_timestamp).toISOString()
       : null,
     type: 0,
+    attachments: [],
+    embeds: [],
+    mentions: [],
+    mention_roles: [],
+    pinned: false,
+    tts: false,
+    mention_everyone: false,
   };
 }
 
@@ -82,10 +92,22 @@ export class MessagesRepo {
       id,
       channel_id: channelId,
       content,
-      author,
+      author: {
+        ...author,
+        avatar: author.avatar ?? null,
+        discriminator: author.discriminator ?? "0",
+        global_name: author.global_name ?? null,
+      },
       timestamp: new Date(now).toISOString(),
       edited_timestamp: null,
       type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
     };
   }
 

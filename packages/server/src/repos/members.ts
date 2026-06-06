@@ -27,6 +27,8 @@ function toUser(row: UserRow): CoveAgent {
     avatar: row.avatar,
     bot: row.bot === 1,
     bio: row.bio,
+    discriminator: "0",
+    global_name: null,
   };
 }
 
