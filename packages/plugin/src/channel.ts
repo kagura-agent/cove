@@ -128,8 +128,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const restClient = getRestClient(account.baseUrl, account.token);
 
       gatewayClient.on("reconnect", () => {
-        // #238: Reconnect state recovery — abort pending dispatches and clear stale state
-        log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
+        // Hard reconnect (IDENTIFY fallback after failed RESUME) — abort pending dispatches and clear stale state
+        log?.info?.(`cove: hard reconnect — aborting ${pendingDispatches.size} pending dispatch(es)`);
         for (const controller of pendingDispatches.values()) {
           controller.abort();
         }
@@ -138,11 +138,17 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         // Re-fetch channel list to pick up any changes during disconnection
         if (account.guildId) {
           restClient.getChannels(account.guildId).then((channels) => {
+            // TODO: update channel cache when channel routing is implemented
             log?.info?.(`cove: reconnect recovery — fetched ${channels.length} channel(s)`);
           }).catch((err) => {
             log?.warn?.(`cove: reconnect channel refresh failed: ${err.message}`);
           });
         }
+      });
+
+      gatewayClient.on("resumed", () => {
+        // Gateway session resumed — no state was lost, dispatches can continue
+        log?.info?.("cove: gateway session resumed");
       });
 
       gatewayClient.on("ready", (user) => {

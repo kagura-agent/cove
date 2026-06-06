@@ -39,6 +39,7 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
   private reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private invalidSessionTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
   private hasConnectedOnce = false;
 
@@ -107,6 +108,10 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.invalidSessionTimer) {
+      clearTimeout(this.invalidSessionTimer);
+      this.invalidSessionTimer = null;
+    }
     this.clearResumeTimer();
   }
 
@@ -145,12 +150,19 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
         this.sessionId = null;
         this.seq = null;
         // Small delay before re-identifying (Discord recommends 1-5s)
-        setTimeout(() => this.sendIdentify(), 1000 + Math.random() * 4000);
+        const currentWs = this.ws;
+        this.invalidSessionTimer = setTimeout(() => {
+          if (this.ws === currentWs && this.ws?.readyState === WebSocket.OPEN) {
+            this.sendIdentify();
+          }
+        }, 1000 + Math.random() * 4000);
         break;
       }
 
       case GatewayOpcode.RECONNECT: {
-        // Server is requesting we reconnect — close and reconnect
+        // RECONNECT tells us to reconnect but keep session state for RESUME attempt.
+        // We preserve seq and sessionId so the next connection can send RESUME
+        // and recover without missing events.
         this.ws?.close(4000, "Server requested reconnect");
         break;
       }
@@ -182,13 +194,11 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
       }
 
       case "RESUMED": {
-        // RESUME was accepted — session continues seamlessly
+        // RESUME was accepted — session continues seamlessly, no replay needed
         this.clearResumeTimer();
         this.resuming = false;
-        if (this.hasConnectedOnce) {
-          this.emit("reconnect");
-        }
         this.hasConnectedOnce = true;
+        this.emit("resumed");
         break;
       }
 

@@ -28,62 +28,56 @@ export class CoveRestClient {
       "Content-Type": "application/json",
     };
 
+    let lastError: Error | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-      });
+      try {
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        });
 
-      if (res.status === 429) {
-        const retryAfter = parseFloat(res.headers.get("Retry-After") ?? "1");
-        await new Promise((r) => setTimeout(r, retryAfter * 1000));
-        continue;
+        if (res.status === 429) {
+          const raw = res.headers.get("Retry-After");
+          const delay = Math.min(parseFloat(raw ?? "") || 1, 30) * 1000;
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+
+        if (res.status >= 500) {
+          lastError = new Error(`Cove API ${method} ${path} failed: ${res.status}`);
+          if (attempt < MAX_RETRIES) {
+            const backoff = Math.min(1000 * Math.pow(2, attempt), 10_000) + Math.random() * 500;
+            await new Promise((r) => setTimeout(r, backoff));
+            continue;
+          }
+          throw lastError;
+        }
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+        }
+
+        return res.json() as Promise<T>;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") throw err;
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < MAX_RETRIES) {
+          const backoff = Math.min(1000 * Math.pow(2, attempt), 10_000) + Math.random() * 500;
+          await new Promise((r) => setTimeout(r, backoff));
+          continue;
+        }
       }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
-      }
-
-      return res.json() as Promise<T>;
     }
 
-    throw new Error(`Cove API ${method} ${path}: max retries exceeded`);
+    throw lastError ?? new Error(`Cove API ${method} ${path} failed after retries`);
   }
 
   /** Fire-and-forget request that does not parse the response body. */
   private async requestVoid(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<void> {
-    const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      "Authorization": `Bot ${this.token}`,
-    };
-    if (body) headers["Content-Type"] = "application/json";
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-      });
-
-      if (res.status === 429) {
-        const retryAfter = parseFloat(res.headers.get("Retry-After") ?? "1");
-        await new Promise((r) => setTimeout(r, retryAfter * 1000));
-        continue;
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
-      }
-
-      return;
-    }
-
-    throw new Error(`Cove API ${method} ${path}: max retries exceeded`);
+    await this.request<unknown>(method, path, body, signal);
   }
 
   /** GET /api/v10/gateway — returns the Gateway WebSocket URL. */

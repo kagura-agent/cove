@@ -44,4 +44,5 @@ export interface GatewayEvents {
   error: (error: Error) => void;
   close: () => void;
   reconnect: () => void;
+  resumed: () => void;
 }
