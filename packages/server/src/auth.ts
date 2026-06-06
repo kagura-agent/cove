@@ -16,10 +16,10 @@ export const SESSION_COOKIE = "cove-session";
 /** Cookie name for pending registration tokens */
 export const PENDING_COOKIE = "cove-pending";
 
-/** Shared cookie options — secure only in production so local dev (HTTP) works */
+/** Shared cookie options — secure by default, disabled only for explicit local dev */
 export const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  secure: process.env.NODE_ENV !== "development",
   sameSite: "Lax" as const,
   path: "/",
   maxAge: 604800, // 7 days

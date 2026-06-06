@@ -96,6 +96,8 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
               }
             }
 
+            // Explicit token invalid but cookie pre-auth exists: use cookie identity.
+            // This handles browser clients sending { token: null } over a cookie-authenticated socket.
             if (!user && preAuthUser) {
               user = preAuthUser;
             }

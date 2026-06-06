@@ -15,12 +15,11 @@ export function registerRoutes(db: Database.Database, guildsRepo: GuildsRepo): H
   const app = new Hono();
 
   app.post("/auth/register", async (c) => {
-    const body = await c.req.json<{ inviteCode?: string; pendingToken?: string }>();
+    const body = await c.req.json<{ inviteCode?: string }>();
     const { inviteCode } = body;
 
-    // Read pendingToken from cookie (BFF: browser never sees auth tokens)
-    // Fall back to body for backward compatibility with existing tests
-    const pendingToken = getCookie(c, PENDING_COOKIE) ?? body.pendingToken;
+    // BFF: read pendingToken from cookie only — browser never sees auth tokens
+    const pendingToken = getCookie(c, PENDING_COOKIE);
 
     if (!inviteCode || !pendingToken) {
       return c.json({ message: "inviteCode and pendingToken are required", code: 50035 }, 400);

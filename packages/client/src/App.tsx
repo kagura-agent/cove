@@ -146,7 +146,11 @@ export default function App() {
   const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
-    // BFF: no URL params needed — tokens are in HttpOnly cookies
+    // BFF: tokens are in HttpOnly cookies, not URL or localStorage
+    // Clean up legacy localStorage tokens (still valid in DB, XSS risk)
+    localStorage.removeItem("cove-token");
+    localStorage.removeItem("cove-user");
+
     // Clean up any URL params that might appear from old bookmarks
     const params = new URLSearchParams(window.location.search);
     if (params.has("token") || params.has("pending")) {
