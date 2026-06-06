@@ -345,6 +345,10 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
   private cleanup(): void {
     this.stopHeartbeat();
     this.clearResumeTimer();
+    if (this.invalidSessionTimer) {
+      clearTimeout(this.invalidSessionTimer);
+      this.invalidSessionTimer = null;
+    }
     this.resuming = false;
     if (this.ws) {
       this.ws.removeAllListeners();

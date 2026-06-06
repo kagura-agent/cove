@@ -60,6 +60,7 @@ export class CoveRestClient {
           throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
         }
 
+        if (res.status === 204) return undefined as unknown as T;
         return res.json() as Promise<T>;
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") throw err;
