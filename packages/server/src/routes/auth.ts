@@ -4,7 +4,8 @@ import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
-import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
+import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
+import type { UsersRepo } from "../repos/users.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -12,7 +13,7 @@ export interface OAuthConfig {
   redirectUri: string;
 }
 
-export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRepo: GuildsRepo): Hono {
+export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRepo: GuildsRepo, usersRepo: UsersRepo): Hono {
   const app = new Hono();
 
   app.get("/api/auth/google", (c) => {
@@ -96,31 +97,11 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
   });
 
   app.get("/api/auth/me", (c) => {
-    let token: string | undefined;
-
-    // Try Authorization header first (bot clients / legacy)
-    const authHeader = c.req.header("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      token = authHeader.slice(7).trim();
-    } else if (authHeader?.startsWith("Bot ")) {
-      token = authHeader.slice(4).trim();
-    }
-
-    // Fall back to session cookie (browser BFF flow)
-    if (!token) {
-      token = getCookie(c, SESSION_COOKIE);
-    }
-
-    if (!token) {
+    const user = resolveUser(usersRepo, c.req.header("Authorization"), getCookie(c, SESSION_COOKIE));
+    if (!user) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
-
-    const row = db.prepare("SELECT id, username, avatar, bot FROM users WHERE token = ?").get(token) as
-      { id: string; username: string; avatar: string | null; bot: number } | undefined;
-    if (!row) {
-      return c.json({ message: "Invalid token", code: 40001 }, 401);
-    }
-    return c.json({ id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1 });
+    return c.json({ id: user.id, username: user.username, avatar: user.avatar, bot: user.bot });
   });
 
   app.get("/api/auth/pending-status", (c) => {

@@ -5,6 +5,7 @@ import type { UsersRepo } from "./repos/users.js";
 export interface AuthUser {
   id: string;
   username: string;
+  avatar: string | null;
   bot: boolean;
 }
 
@@ -50,7 +51,7 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
 
   const user = users.findByToken(token);
   if (!user) return undefined;
-  return { id: user.id, username: user.username, bot: user.bot };
+  return { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot };
 }
 
 export function requireAuth(users: UsersRepo) {

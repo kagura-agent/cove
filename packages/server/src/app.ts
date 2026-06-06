@@ -30,7 +30,7 @@ export function createApp(
   app.route(API_PREFIX, registerRoutes(db, repos.guilds));
 
   if (config?.oauth) {
-    app.route("/", authRoutes(db, config.oauth, repos.guilds));
+    app.route("/", authRoutes(db, config.oauth, repos.guilds, repos.users));
   }
 
   // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.
