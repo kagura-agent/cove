@@ -76,7 +76,8 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     ) as { id: string; token: string | null } | undefined;
 
     if (existing) {
-      const token = existing.token ?? crypto.randomUUID();
+      // Always generate a fresh token on OAuth login (old token may be expired)
+      const token = crypto.randomUUID();
       db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, existing.id);
       usersRepo.refreshTTL(existing.id);
