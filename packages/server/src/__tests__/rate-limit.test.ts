@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
@@ -19,6 +19,9 @@ describe("Rate-limit middleware", () => {
   }
 
   beforeEach(() => {
+    // Freeze time so token refill doesn't interfere with burst tests
+    vi.useFakeTimers();
+
     // Ensure rate limiting is enabled
     delete process.env.RATE_LIMIT_ENABLED;
 
@@ -39,6 +42,7 @@ describe("Rate-limit middleware", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetBuckets();
   });
 
