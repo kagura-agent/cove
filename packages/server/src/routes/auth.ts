@@ -6,6 +6,7 @@ import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
+import { SESSION_TTL_MS } from "../repos/users.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -77,8 +78,10 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
 
     if (existing) {
       const token = existing.token ?? crypto.randomUUID();
-      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ? WHERE id = ?")
-        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, existing.id);
+      const isBot = (db.prepare("SELECT bot FROM users WHERE id = ?").get(existing.id) as { bot: number })?.bot === 1;
+      const expiresAt = isBot ? null : now + SESSION_TTL_MS;
+      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ?, expires_at = ? WHERE id = ?")
+        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, expiresAt, existing.id);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }
@@ -98,7 +101,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
     if (!user) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
-    return c.json({ id: user.id, username: user.username, avatar: user.avatar, bot: user.bot });
+    return c.json({ id: user.id, username: user.username, avatar: user.avatar, bot: user.bot, expires_at: user.expires_at });
   });
 
   app.get("/api/auth/pending-status", (c) => {

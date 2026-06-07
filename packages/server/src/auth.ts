@@ -9,6 +9,7 @@ export interface AuthUser {
   bot: boolean;
   discriminator: string;
   global_name: string | null;
+  expires_at: number | null;
 }
 
 export type AppEnv = { Variables: { botUser: AuthUser } };
@@ -53,7 +54,7 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
 
   const user = users.findByToken(token);
   if (!user) return undefined;
-  return { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: null };
+  return { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: null, expires_at: user.expires_at };
 }
 
 export function requireAuth(users: UsersRepo) {

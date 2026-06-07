@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
+import { SESSION_TTL_MS } from "../repos/users.js";
 
 /**
  * Invite-code registration route.
@@ -48,8 +49,8 @@ export function registerRoutes(db: Database.Database): Hono {
       }
 
       db.prepare(
-        "INSERT INTO users (id, username, avatar, bot, bio, token, google_id, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(userId, pending.username, pending.avatar, 0, null, token, pending.google_id, pending.email, now, now);
+        "INSERT INTO users (id, username, avatar, bot, bio, token, google_id, email, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(userId, pending.username, pending.avatar, 0, null, token, pending.google_id, pending.email, now, now, now + SESSION_TTL_MS);
 
       // #209: Atomic invite consumption — conditional UPDATE (race-safe within transaction)
       const inviteResult = db.prepare(

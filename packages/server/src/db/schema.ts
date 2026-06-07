@@ -33,7 +33,8 @@ export function createAllTables(db: Database.Database): void {
       google_id   TEXT UNIQUE,
       email       TEXT UNIQUE,
       created_at  INTEGER NOT NULL,
-      updated_at  INTEGER NOT NULL
+      updated_at  INTEGER NOT NULL,
+      expires_at  INTEGER DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS guild_members (
@@ -147,7 +148,7 @@ export function seedUsers(db: Database.Database, guildId: string): void {
   // Find or create users by username (don't use hardcoded string IDs)
   const findByUsername = db.prepare("SELECT id FROM users WHERE username = ?");
   const insert = db.prepare(
-    "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const upsertToken = db.prepare(
     "UPDATE users SET token = ?, updated_at = ? WHERE id = ?"
@@ -160,7 +161,8 @@ export function seedUsers(db: Database.Database, guildId: string): void {
       return existing.id;
     }
     const id = generateSnowflake();
-    insert.run(id, username, null, bot ? 1 : 0, null, userToken, now, now);
+    // Seed users: bots get expires_at=null (never expire); non-bots without tokens also get null
+    insert.run(id, username, null, bot ? 1 : 0, null, userToken, now, now, null);
     return id;
   };
 

@@ -2,6 +2,8 @@ import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import type { CoveAgent } from "@cove/shared";
 
+export const SESSION_TTL_MS = parseInt(process.env["SESSION_TTL_MS"] ?? "604800000", 10); // 7 days
+
 interface UserRow {
   id: string;
   username: string;
@@ -11,6 +13,7 @@ interface UserRow {
   token: string | null;
   created_at: number;
   updated_at: number;
+  expires_at: number | null;
 }
 
 function toUser(row: UserRow): CoveAgent {
@@ -38,10 +41,12 @@ export class UsersRepo {
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();
     const token = crypto.randomUUID();
+    const isBot = opts.bot !== false;
+    const expiresAt = isBot ? null : now + SESSION_TTL_MS;
 
     this.db.prepare(
-      "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, username, opts.avatar ?? null, opts.bot !== false ? 1 : 0, opts.bio ?? null, token, now, now);
+      "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, username, opts.avatar ?? null, isBot ? 1 : 0, opts.bio ?? null, token, now, now, expiresAt);
 
     // Auto-join the bot to the cove guild
     this.db.prepare(
@@ -87,8 +92,29 @@ export class UsersRepo {
     return !!this.db.prepare("SELECT id FROM users WHERE id = ?").get(id);
   }
 
-  findByToken(token: string): CoveAgent & { bot: boolean } | null {
-    const row = this.db.prepare("SELECT id, username, avatar, bot, bio FROM users WHERE token = ?").get(token) as UserRow | undefined;
-    return row ? { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: null } : null;
+  findByToken(token: string): (CoveAgent & { bot: boolean; expires_at: number | null }) | null {
+    const row = this.db.prepare("SELECT id, username, avatar, bot, bio, expires_at FROM users WHERE token = ?").get(token) as (UserRow & { expires_at: number | null }) | undefined;
+    if (!row) return null;
+
+    // Check expiry: non-null expires_at that's in the past means expired
+    if (row.expires_at !== null && row.expires_at < Date.now()) {
+      this.db.prepare("DELETE FROM users WHERE token = ?").run(token);
+      return null;
+    }
+
+    return { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: null, expires_at: row.expires_at };
+  }
+
+  refreshTTL(id: string): void {
+    this.db.prepare(
+      "UPDATE users SET expires_at = ?, updated_at = ? WHERE id = ? AND bot = 0"
+    ).run(Date.now() + SESSION_TTL_MS, Date.now(), id);
+  }
+
+  cleanupExpired(): number {
+    const result = this.db.prepare(
+      "DELETE FROM users WHERE expires_at IS NOT NULL AND expires_at < ?"
+    ).run(Date.now());
+    return result.changes;
   }
 }
