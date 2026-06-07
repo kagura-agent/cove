@@ -1,4 +1,5 @@
 import { useChannelStore } from "../stores/useChannelStore";
+import { useGuildStore } from "../stores/useGuildStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { Typography, Button, Popconfirm } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
@@ -18,7 +19,9 @@ const styles = {
 };
 
 export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean }) {
-  const { channels, activeChannelId } = useChannelStore();
+  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const { activeChannelId, getChannels } = useChannelStore();
+  const channels = getChannels(activeGuildId);
   const setMessages = useMessageStore((s) => s.setMessages);
   const channel = channels.find((c) => c.id === activeChannelId);
 

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { Bot, BotCreateResponse } from "../types";
 import * as api from "../lib/api";
+import { useMemberStore } from "./useMemberStore";
+import { useGuildStore } from "./useGuildStore";
 
 interface BotState {
   bots: Bot[];
@@ -12,7 +14,11 @@ interface BotState {
 export const useBotStore = create<BotState>((set) => ({
   bots: [],
   fetchBots: async () => {
-    const members = await api.fetchMembers();
+    const guildId = useGuildStore.getState().activeGuildId;
+    if (!guildId) return;
+    // Fetch members into MemberStore, then derive bots
+    await useMemberStore.getState().fetchMembers(guildId);
+    const members = useMemberStore.getState().getMembers(guildId);
     set({ bots: members.filter((m) => m.user.bot).map((m) => m.user) });
   },
   createBot: async (name, bio) => {

@@ -6,7 +6,7 @@ vi.mock("../stores/useMessageStore", () => ({
   useMessageStore: { getState: vi.fn(() => ({ addMessage: vi.fn(), updateMessage: vi.fn(), removeMessage: vi.fn() })) },
 }));
 vi.mock("../stores/useChannelStore", () => ({
-  useChannelStore: { getState: vi.fn(() => ({ activeChannelId: "c1", addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn(), setChannels: vi.fn(), setActiveChannel: vi.fn() })) },
+  useChannelStore: { getState: vi.fn(() => ({ activeChannelId: "c1", addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn(), setChannels: vi.fn(), setActiveChannel: vi.fn(), removeGuildChannels: vi.fn() })) },
 }));
 vi.mock("../stores/usePresenceStore", () => ({
   usePresenceStore: { getState: vi.fn(() => ({ setOnline: vi.fn(), setOffline: vi.fn(), initPresences: vi.fn() })) },
@@ -24,8 +24,13 @@ vi.mock("../stores/useTypingStore", () => ({
 vi.mock("../stores/useReadStateStore", () => ({
   useReadStateStore: { getState: vi.fn(() => ({ initReadStates: vi.fn(), setUnread: vi.fn(), markRead: vi.fn(), removeChannel: vi.fn() })) },
 }));
+vi.mock("../stores/useGuildStore", () => ({
+  useGuildStore: { getState: vi.fn(() => ({ setGuilds: vi.fn(), setActiveGuild: vi.fn(), addGuild: vi.fn(), removeGuild: vi.fn() })) },
+}));
+vi.mock("../stores/useMemberStore", () => ({
+  useMemberStore: { getState: vi.fn(() => ({ upsertMember: vi.fn(), removeMember: vi.fn() })) },
+}));
 vi.mock("./api", () => ({
-  setGuildId: vi.fn(),
   ackMessage: vi.fn(() => Promise.resolve()),
 }));
 

@@ -1,4 +1,5 @@
 import { useChannelStore } from "../stores/useChannelStore";
+import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { Button, Input, Popconfirm, Spin } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
@@ -50,7 +51,9 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
 }
 
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
-  const { channels, activeChannelId, setActiveChannel, removeChannel, addChannel } = useChannelStore();
+  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const { activeChannelId, setActiveChannel, removeChannel, addChannel, getChannels } = useChannelStore();
+  const channels = getChannels(activeGuildId);
   const { unreadChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -71,7 +74,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      const ch = await api.createChannel(newName.trim());
+      if (!activeGuildId) return;
+      const ch = await api.createChannel(activeGuildId, newName.trim());
       addChannel(ch);
       setNewName("");
       setAdding(false);

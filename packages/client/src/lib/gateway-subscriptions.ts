@@ -6,6 +6,8 @@ import { usePresenceStore } from "../stores/usePresenceStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
+import { useGuildStore } from "../stores/useGuildStore";
+import { useMemberStore } from "../stores/useMemberStore";
 import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,16 +101,31 @@ export function setupGatewaySubscriptions(): void {
     if (data.user) {
       useUserStore.getState().setUser(data.user);
     }
-    if (data.guilds) {
-      const channels = data.guilds.flatMap((g) => g.channels);
-      useChannelStore.getState().setChannels(channels);
-      if (!useChannelStore.getState().activeChannelId && channels.length > 0) {
-        useChannelStore.getState().setActiveChannel(channels[0].id);
+
+    // Seed GuildStore and guild-scoped channels
+    if (data.guilds?.length) {
+      const guildStore = useGuildStore.getState();
+      const channelStore = useChannelStore.getState();
+
+      // Extract guild objects (without channels) for GuildStore
+      const guilds = data.guilds.map(({ channels: _channels, ...guild }) => guild);
+      guildStore.setGuilds(guilds);
+      guildStore.setActiveGuild(guilds[0].id);
+
+      // Seed channels per guild
+      for (const guild of data.guilds) {
+        if (guild.channels) {
+          channelStore.setChannels(guild.id, guild.channels);
+        }
       }
-      if (data.guilds.length > 0) {
-        api.setGuildId(data.guilds[0].id);
+
+      // Auto-select first channel of active guild
+      const activeGuildChannels = data.guilds[0].channels ?? [];
+      if (activeGuildChannels.length > 0 && !channelStore.activeChannelId) {
+        channelStore.setActiveChannel(activeGuildChannels[0].id);
       }
     }
+
     if (data.presences) {
       usePresenceStore.getState().initPresences(
         data.presences.filter((p) => p.status === "online").map((p) => p.user.id),
@@ -139,23 +156,27 @@ export function setupGatewaySubscriptions(): void {
   });
 
   // GUILD_CREATE/DELETE: guild lifecycle events
-  // Full handling (add/remove guilds from store) deferred to GuildStore (#228)
-  subscribe("GUILD_CREATE", () => {
-    // TODO: add guild to GuildStore, fetch channels
+  subscribe("GUILD_CREATE", (data) => {
+    useGuildStore.getState().addGuild({ id: data.id, name: data.name, icon: null, owner_id: null, features: [] });
   });
 
-  subscribe("GUILD_DELETE", () => {
-    // TODO: remove guild from GuildStore, cascade cleanup
+  subscribe("GUILD_DELETE", (data) => {
+    useGuildStore.getState().removeGuild(data.id);
+    useChannelStore.getState().removeGuildChannels(data.id);
   });
 
-  // GUILD_MEMBER_ADD/REMOVE: membership events, NOT presence.
-  // Presence is driven solely by PRESENCE_UPDATE events.
-  subscribe("GUILD_MEMBER_ADD", () => {
-    // TODO: update member list when MemberStore exists
+  // GUILD_MEMBER_ADD/REMOVE: membership events
+  subscribe("GUILD_MEMBER_ADD", (data) => {
+    useMemberStore.getState().upsertMember(data.guild_id, {
+      user: { id: data.user.id, username: data.user.id, avatar: null, bot: false, discriminator: "0", global_name: null },
+      nick: data.nick,
+      roles: data.roles,
+      joined_at: data.joined_at,
+    });
   });
 
-  subscribe("GUILD_MEMBER_REMOVE", () => {
-    // TODO: update member list when MemberStore exists
+  subscribe("GUILD_MEMBER_REMOVE", (data) => {
+    useMemberStore.getState().removeMember(data.guild_id, data.user.id);
   });
 }
 

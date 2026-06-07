@@ -3,8 +3,6 @@ import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
-let _guildId: string | null = null;
-
 async function api<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -21,28 +19,8 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
-/** Fetch the user's first guild ID (cached after first call) */
-export async function getGuildId(): Promise<string> {
-  if (_guildId) return _guildId;
-  const guilds = await api<Array<{ id: string }>>(`${API_PREFIX}/users/@me/guilds`);
-  if (!guilds.length) throw new Error("No guilds available");
-  _guildId = guilds[0].id;
-  return _guildId;
-}
-
-/** Reset cached guild ID (call on logout) */
-export function resetGuildId(): void {
-  _guildId = null;
-}
-
-/** Set the cached guild ID from READY payload (avoids REST call) */
-export function setGuildId(id: string): void {
-  _guildId = id;
-}
-
 /** @deprecated Channels are now seeded from the READY gateway event. Use for manual refresh only. */
-export async function fetchChannels() {
-  const guildId = await getGuildId();
+export function fetchChannels(guildId: string) {
   return api<Channel[]>(`${API_PREFIX}/guilds/${guildId}/channels`);
 }
 export function fetchMessages(channelId: string) {
@@ -56,8 +34,7 @@ export function sendMessage(channelId: string, content: string, nonce?: string) 
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }
-export async function createChannel(name: string, topic?: string) {
-  const guildId = await getGuildId();
+export function createChannel(guildId: string, name: string, topic?: string) {
   return api<Channel>(`${API_PREFIX}/guilds/${guildId}/channels`, {
     method: "POST", body: JSON.stringify({ name, topic }),
   });
@@ -65,8 +42,7 @@ export async function createChannel(name: string, topic?: string) {
 export function deleteChannel(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}`, { method: "DELETE" });
 }
-export async function fetchMembers() {
-  const guildId = await getGuildId();
+export function fetchMembers(guildId: string) {
   return api<GuildMember[]>(`${API_PREFIX}/guilds/${guildId}/members`);
 }
 export function createBot(username: string, bio: string) {
@@ -93,5 +69,4 @@ export function fetchPendingStatus() {
 
 export async function logout() {
   await api<{ message: string }>("/api/auth/logout", { method: "POST" });
-
 }
