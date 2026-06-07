@@ -6,6 +6,7 @@ import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
+import { SESSION_TTL_MS } from "../repos/users.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -77,10 +78,11 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
 
     if (existing) {
       // Always generate a fresh token on OAuth login (old token may be expired)
+      // Single atomic UPDATE includes expires_at to prevent token/expiry mismatch on crash
       const token = crypto.randomUUID();
-      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, updated_at = ? WHERE id = ?")
-        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, now, existing.id);
-      usersRepo.refreshTTL(existing.id);
+      const expiresAt = now + SESSION_TTL_MS;
+      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
+        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, existing.id);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }
@@ -96,11 +98,15 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
   });
 
   app.get("/api/auth/me", (c) => {
-    const user = resolveUser(usersRepo, c.req.header("Authorization"), getCookie(c, SESSION_COOKIE));
-    if (!user) {
+    const result = resolveUser(usersRepo, c.req.header("Authorization"), getCookie(c, SESSION_COOKIE));
+    if (!result) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
-    return c.json({ id: user.id, username: user.username, avatar: user.avatar, bot: user.bot, expires_at: user.expires_at });
+    if (result.refreshed) {
+      const cookieToken = getCookie(c, SESSION_COOKIE);
+      if (cookieToken) setCookie(c, SESSION_COOKIE, cookieToken, COOKIE_OPTIONS);
+    }
+    return c.json({ id: result.user.id, username: result.user.username, avatar: result.user.avatar, bot: result.user.bot, expires_at: result.user.expires_at });
   });
 
   app.get("/api/auth/pending-status", (c) => {

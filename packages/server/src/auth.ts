@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import { getCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import type { UsersRepo } from "./repos/users.js";
 
 export interface AuthUser {
@@ -36,7 +36,7 @@ export const COOKIE_OPTIONS = {
  * The optional `cookieToken` parameter allows callers (like `requireAuth`) to pass
  * a token read from the session cookie.
  */
-export function resolveUser(users: UsersRepo, authHeader: string | undefined, cookieToken?: string): AuthUser | undefined {
+export function resolveUser(users: UsersRepo, authHeader: string | undefined, cookieToken?: string): { user: AuthUser; refreshed: boolean } | undefined {
   let token: string | undefined;
 
   if (authHeader) {
@@ -59,25 +59,30 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
 
   // Sliding refresh: extend TTL if more than 1 day has passed since last refresh
   // Only for non-bot users with an expiry set
+  let refreshed = false;
   if (user.expires_at !== null && !user.bot) {
     const remainingMs = user.expires_at - Date.now();
-    const refreshThreshold = SESSION_TTL_MS - 24 * 60 * 60 * 1000; // refresh after 1 day of use
+    const refreshThreshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
     if (remainingMs < refreshThreshold) {
       users.refreshTTL(user.id);
+      refreshed = true;
     }
   }
 
-  return { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: null, expires_at: user.expires_at };
+  return { user: { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: null, expires_at: user.expires_at }, refreshed };
 }
 
 export function requireAuth(users: UsersRepo) {
   return async (c: Context, next: Next) => {
     const cookieToken = getCookie(c, SESSION_COOKIE);
-    const user = resolveUser(users, c.req.header("Authorization"), cookieToken);
-    if (!user) {
+    const result = resolveUser(users, c.req.header("Authorization"), cookieToken);
+    if (!result) {
       return c.json({ message: "Authentication required", code: 40001 }, 401);
     }
-    c.set("botUser", user);
+    if (result.refreshed && cookieToken) {
+      setCookie(c, SESSION_COOKIE, cookieToken, COOKIE_OPTIONS);
+    }
+    c.set("botUser", result.user);
     return next();
   };
 }

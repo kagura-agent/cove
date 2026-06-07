@@ -25,7 +25,12 @@ console.log("🏝️  Database initialized and seeded");
 // #118: Periodic session TTL cleanup — remove expired human sessions every hour
 const SESSION_CLEANUP_INTERVAL_MS = 3_600_000; // 1 hour
 const sessionCleanupTimer = setInterval(() => {
-  repos.users.cleanupExpired();
+  try {
+    const removed = repos.users.cleanupExpired();
+    if (removed > 0) console.log(`🧹 Session cleanup: cleared ${removed} expired tokens`);
+  } catch (err) {
+    console.error('Session cleanup failed:', err);
+  }
 }, SESSION_CLEANUP_INTERVAL_MS);
 sessionCleanupTimer.unref();
 

@@ -45,7 +45,7 @@ export class UsersRepo {
     const id = opts.id?.trim() || username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const now = Date.now();
     const token = crypto.randomUUID();
-    const isBot = opts.bot !== false;
+    const isBot = opts.bot === true;
     const expiresAt = isBot ? null : now + SESSION_TTL_MS;
 
     this.db.prepare(
