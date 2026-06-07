@@ -75,6 +75,7 @@ export class CoveRestClient {
           await new Promise((r) => setTimeout(r, backoff));
           continue;
         }
+        throw lastError;
       }
     }
 
