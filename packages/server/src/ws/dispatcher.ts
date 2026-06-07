@@ -216,14 +216,12 @@ export class GatewayDispatcher {
 
   /** Broadcast to all sessions in any of the given guilds, deduplicating. */
   private broadcastToGuilds(guildIds: Set<string>, event: string, data: unknown, excludeSessionId?: string): void {
-    const dispatched = new Set<string>();
-    for (const gid of guildIds) {
-      for (const session of this.sessions) {
-        if (dispatched.has(session.id)) continue;
-        if (excludeSessionId && session.id === excludeSessionId) continue;
-        if (session.guildIds.has(gid)) {
-          dispatched.add(session.id);
+    for (const session of this.sessions) {
+      if (excludeSessionId && session.id === excludeSessionId) continue;
+      for (const gid of session.guildIds) {
+        if (guildIds.has(gid)) {
           session.dispatch(event, data);
+          break;
         }
       }
     }
