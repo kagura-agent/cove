@@ -3,6 +3,7 @@ import { ConfigProvider, theme, Button, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
+import { useGuildStore } from "./stores/useGuildStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
 import { Sidebar } from "./components/Sidebar";
@@ -190,13 +191,15 @@ export default function App() {
 
     // Fallback: if READY isn't received within 8s (WS down), load channels via REST
     const fallbackTimer = setTimeout(() => {
-      const currentChannels = useChannelStore.getState().channels;
+      const guildId = useGuildStore.getState().activeGuildId;
+      if (!guildId) return;
+      const currentChannels = useChannelStore.getState().getChannels(guildId);
       if (currentChannels.length === 0) {
-        api.fetchChannels()
+        api.fetchChannels(guildId)
           .then((chs) => {
             // Only apply if still empty (READY may have arrived late)
-            if (useChannelStore.getState().channels.length === 0) {
-              useChannelStore.getState().setChannels(chs);
+            if (useChannelStore.getState().getChannels(guildId).length === 0) {
+              useChannelStore.getState().setChannels(guildId, chs);
               if (!useChannelStore.getState().activeChannelId && chs.length > 0) {
                 useChannelStore.getState().setActiveChannel(chs[0].id);
               }

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Avatar, Spin } from "antd";
-import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { usePresenceStore } from "../stores/usePresenceStore";
+import { useMemberStore } from "../stores/useMemberStore";
+import { useGuildStore } from "../stores/useGuildStore";
 import { StatusDot } from "./StatusDot";
 
 const styles = {
@@ -42,16 +43,21 @@ function MemberRow({ member, online }: { member: GuildMember; online: boolean })
 }
 
 export function MemberList() {
-  const [members, setMembers] = useState<GuildMember[]>([]);
+  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const fetchMembers = useMemberStore((s) => s.fetchMembers);
   const [loading, setLoading] = useState(true);
   const onlineUsers = usePresenceStore((s) => s.onlineUsers);
 
   useEffect(() => {
-    api.fetchMembers()
-      .then(setMembers)
+    if (!activeGuildId) {
+      setLoading(false);
+      return;
+    }
+    fetchMembers(activeGuildId)
       .catch((err) => console.error("fetch members:", err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeGuildId, fetchMembers]);
 
   if (loading) {
     return (
@@ -61,6 +67,7 @@ export function MemberList() {
     );
   }
 
+  const members = Object.values(membersByGuildId[activeGuildId ?? ""] ?? {});
   const online = members.filter((m) => onlineUsers.has(m.user.id));
   const offline = members.filter((m) => !onlineUsers.has(m.user.id));
 
