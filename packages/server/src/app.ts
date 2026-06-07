@@ -9,6 +9,7 @@ import { registerRoutes } from "./routes/register.js";
 import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
+import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -41,6 +42,9 @@ export function createApp(
     if (PUBLIC_PATHS.has(path)) return next();
     return authMw(c, next);
   });
+
+  // Rate limiting — after auth so we have userId, before routes
+  app.use("/api/*", rateLimitMiddleware());
 
   app.route(API_PREFIX, channelRoutes(repos, dispatcher));
   app.route(API_PREFIX, messagesRoutes(repos, dispatcher));

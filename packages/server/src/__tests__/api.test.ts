@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
@@ -53,6 +53,8 @@ describe("Cove API — Discord-compatible", () => {
     generalId = (db.prepare("SELECT id FROM channels WHERE name = 'general'").get() as { id: string }).id;
     randomId = (db.prepare("SELECT id FROM channels WHERE name = 'random'").get() as { id: string }).id;
     broadcastEvents.length = 0;
+    // Disable rate limiting in API tests to avoid interference
+    process.env.RATE_LIMIT_ENABLED = "false";
     app = createApp(db, createRepos(db), new TestDispatcher());
 
     // Bootstrap an admin bot directly in DB for auth
@@ -62,6 +64,10 @@ describe("Cove API — Discord-compatible", () => {
       .run("admin", "Admin", null, 1, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
+  });
+
+  afterEach(() => {
+    delete process.env.RATE_LIMIT_ENABLED;
   });
 
   const authHeaders = () => ({
