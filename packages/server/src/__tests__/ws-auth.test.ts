@@ -140,7 +140,7 @@ describe("WebSocket auth integration (BFF pattern)", () => {
 
     // Create HTTP server, attach WebSocket BEFORE listening (avoids race)
     server = createAdaptorServer({ fetch: app.fetch }) as http.Server;
-    setupGateway(server, repos.users, repos.guilds, dispatcher, repos.readStates);
+    setupGateway(server, repos.users, repos.guilds, repos.channels, dispatcher, repos.readStates);
 
     await new Promise<void>((resolve) => {
       server.listen(0, "127.0.0.1", () => {

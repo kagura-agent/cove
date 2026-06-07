@@ -2,6 +2,7 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import { WebSocketServer } from "ws";
 import type { UsersRepo } from "../repos/users.js";
 import type { GuildsRepo } from "../repos/guilds.js";
+import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import { GatewaySession } from "./session.js";
@@ -28,7 +29,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, dispatcher: GatewayDispatcher, readStates: ReadStatesRepo): void {
+export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, channels: ChannelsRepo, dispatcher: GatewayDispatcher, readStates: ReadStatesRepo): void {
   const wss = new WebSocketServer({
     server,
     path: "/gateway",
@@ -113,7 +114,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
               return;
             }
 
-            session.identify(user, dispatcher, guilds, readStates);
+            session.identify(user, dispatcher, guilds, channels, readStates);
             dispatcher.addSession(session);
             break;
           }

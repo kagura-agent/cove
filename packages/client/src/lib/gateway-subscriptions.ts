@@ -83,6 +83,17 @@ export function setupGatewaySubscriptions(): void {
   });
 
   subscribe("READY", (data) => {
+    if (data.user) {
+      useUserStore.getState().setUser(data.user);
+    }
+    if (data.guilds && data.guilds.length > 0) {
+      const channels = data.guilds.flatMap((g) => g.channels);
+      useChannelStore.getState().setChannels(channels);
+      if (!useChannelStore.getState().activeChannelId && channels.length > 0) {
+        useChannelStore.getState().setActiveChannel(channels[0].id);
+      }
+      api.setGuildId(data.guilds[0].id);
+    }
     if (data.presences) {
       usePresenceStore.getState().initPresences(
         data.presences.filter((p) => p.status === "online").map((p) => p.user.id),

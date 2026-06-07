@@ -35,6 +35,11 @@ export function resetGuildId(): void {
   _guildId = null;
 }
 
+/** Set the cached guild ID from READY payload (avoids REST call) */
+export function setGuildId(id: string): void {
+  _guildId = id;
+}
+
 export async function fetchChannels() {
   const guildId = await getGuildId();
   return api<Channel[]>(`${API_PREFIX}/guilds/${guildId}/channels`);
