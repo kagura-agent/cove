@@ -75,15 +75,19 @@ const failedIndicatorStyle: CSSProperties = {
   userSelect: "none",
 };
 
-function PendingIndicator({ status, channelId, content, author }: {
+function PendingIndicator({ status, messageId, channelId, content, author }: {
   status: PendingStatus | undefined;
+  messageId: string;
   channelId: string;
   content: string;
   author: Message["author"];
 }) {
   if (!status || status === "pending") return null;
-  // Failed state — show retry + delete
+  // Failed state — show retry + dismiss
   const handleRetry = () => {
+    // Remove the old failed message before creating a new pending one
+    useMessageStore.getState().removePendingMessage(channelId, messageId);
+
     const nonce = crypto.randomUUID();
     const tempId = `pending-${nonce}`;
     const pendingMsg: Message = {
@@ -107,10 +111,15 @@ function PendingIndicator({ status, channelId, content, author }: {
       useMessageStore.getState().markFailed(tempId);
     });
   };
+  const handleDismiss = () => {
+    useMessageStore.getState().removePendingMessage(channelId, messageId);
+  };
   return (
     <span style={failedIndicatorStyle}>
       {" "}Failed to send.{" "}
       <span onClick={handleRetry} style={{ textDecoration: "underline", cursor: "pointer" }}>Retry</span>
+      {" | "}
+      <span onClick={handleDismiss} style={{ textDecoration: "underline", cursor: "pointer" }}>Dismiss</span>
     </span>
   );
 }
@@ -192,7 +201,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           >
             <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-            <PendingIndicator status={pendingStatus} channelId={message.channel_id} content={message.content} author={message.author} />
+            <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
           </div>
         </div>
       </div>
@@ -226,7 +235,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         >
           <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-          <PendingIndicator status={pendingStatus} channelId={message.channel_id} content={message.content} author={message.author} />
+          <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
         </div>
       </div>
     </div>

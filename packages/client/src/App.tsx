@@ -187,7 +187,30 @@ export default function App() {
     // (see gateway-subscriptions.ts) — no startup REST calls needed.
     setupGatewaySubscriptions();
     connect();
+
+    // Fallback: if READY isn't received within 8s (WS down), load channels via REST
+    const channels = useChannelStore.getState().channels;
+    const fallbackTimer = setTimeout(() => {
+      const currentChannels = useChannelStore.getState().channels;
+      if (currentChannels.length === 0) {
+        api.fetchChannels()
+          .then((chs) => {
+            // Only apply if still empty (READY may have arrived late)
+            if (useChannelStore.getState().channels.length === 0) {
+              useChannelStore.getState().setChannels(chs);
+              if (!useChannelStore.getState().activeChannelId && chs.length > 0) {
+                useChannelStore.getState().setActiveChannel(chs[0].id);
+              }
+            }
+          })
+          .catch(() => {
+            // REST also failed — user sees "Disconnected" banner from wsStatus
+          });
+      }
+    }, 8000);
+
     return () => {
+      clearTimeout(fallbackTimer);
       teardownGatewaySubscriptions();
     };
   }, [needsSetup, authLoading, connect]);

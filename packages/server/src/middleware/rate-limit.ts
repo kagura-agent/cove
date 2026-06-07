@@ -64,9 +64,9 @@ function consume(key: string, cfg: BucketConfig, now: number): { remaining: numb
   bucket.tokens -= 1;
   const remaining = bucket.tokens;
 
-  // Time until bucket is fully refilled (from current level)
-  const deficit = cfg.limit - Math.max(0, remaining);
-  const resetMs = deficit > 0 ? (deficit / cfg.refillRate) * 1000 : 0;
+  // Time until next token is available (not full refill)
+  const tokensNeeded = Math.max(0, 1 - bucket.tokens);
+  const resetMs = tokensNeeded > 0 ? (tokensNeeded / cfg.refillRate) * 1000 : 0;
 
   return { remaining, resetMs };
 }
@@ -115,26 +115,38 @@ export function rateLimitMiddleware(): MiddlewareHandler<AppEnv> {
 
     const { remaining, resetMs } = consume(bucketKey, activeCfg, now);
 
-    // Also consume from global if we used the write bucket
+    // Also consume from global if we used the write bucket, and check both
+    let globalRemaining = Infinity;
+    let globalResetMs = 0;
     if (isChannelWrite) {
-      consume(`${user.id}:${GLOBAL_BUCKET.id}`, GLOBAL_BUCKET, now);
+      const globalResult = consume(`${user.id}:${GLOBAL_BUCKET.id}`, GLOBAL_BUCKET, now);
+      globalRemaining = globalResult.remaining;
+      globalResetMs = globalResult.resetMs;
     }
 
-    if (remaining < 0) {
+    // Check if either bucket is exhausted
+    const exhaustedByChannel = remaining < 0;
+    const exhaustedByGlobal = isChannelWrite && globalRemaining < 0;
+
+    if (exhaustedByChannel || exhaustedByGlobal) {
+      // Use the more restrictive bucket for the response
+      const useCfg = exhaustedByChannel ? activeCfg : GLOBAL_BUCKET;
+      const useRemaining = exhaustedByChannel ? remaining : globalRemaining;
+      const useResetMs = exhaustedByChannel ? resetMs : globalResetMs;
       // Rate limited — compute retry_after (time until 1 token available)
-      const retryAfter = Math.max(0, (1 - (remaining + 1)) / activeCfg.refillRate);
+      const retryAfter = Math.max(0, (1 - (useRemaining + 1)) / useCfg.refillRate);
       const retryAfterSec = parseFloat(retryAfter.toFixed(3));
 
       const res = c.json(
         {
           message: "You are being rate limited.",
           retry_after: retryAfterSec,
-          global: false,
+          global: exhaustedByGlobal && !exhaustedByChannel,
           code: 0,
         },
         429,
       );
-      setRateLimitHeaders(res.headers, activeCfg, remaining, resetMs);
+      setRateLimitHeaders(res.headers, useCfg, useRemaining, useResetMs);
       res.headers.set("Retry-After", String(Math.ceil(retryAfterSec)));
       return res;
     }
