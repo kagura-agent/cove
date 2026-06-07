@@ -50,7 +50,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return unknownChannel(c);
     }
 
-    const body = await parseJsonBody<{ content: string; username?: string }>(c);
+    const body = await parseJsonBody<{ content: string; username?: string; nonce?: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
@@ -59,6 +59,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const author = c.get("botUser");
 
     const message = repos.messages.create(channelId, author, body.content);
+
+    // Pass through client nonce for optimistic send reconciliation
+    if (body.nonce) {
+      message.nonce = body.nonce;
+    }
 
     // Update channel's last_message_id
     repos.channels.updateLastMessageId(channelId, message.id);

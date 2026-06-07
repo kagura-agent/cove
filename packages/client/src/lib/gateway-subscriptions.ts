@@ -20,7 +20,20 @@ export function setupGatewaySubscriptions(): void {
   teardownGatewaySubscriptions();
 
   subscribe("MESSAGE_CREATE", (msg) => {
-    useMessageStore.getState().addMessage(msg.channel_id, msg);
+    const store = useMessageStore.getState();
+
+    // Nonce reconciliation: if this message has a nonce matching a pending message, replace it
+    if (msg.nonce) {
+      const channelMsgs = store.messages[msg.channel_id] ?? [];
+      const hasPending = channelMsgs.some((m) => m.nonce === msg.nonce && store.pendingStatus[m.id]);
+      if (hasPending) {
+        store.reconcilePending(msg.channel_id, msg.nonce, msg);
+        useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
+        return;
+      }
+    }
+
+    store.addMessage(msg.channel_id, msg);
     useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
 
     // Mark channel unread if the message is from someone else and not the active channel

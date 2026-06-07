@@ -3,6 +3,9 @@ import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { useMessageStore } from "../stores/useMessageStore";
+import type { PendingStatus } from "../stores/useMessageStore";
+import * as api from "../lib/api";
 
 function formatTime(ts: string): string {
   try {
@@ -56,7 +59,65 @@ interface MessageItemProps {
   isGroupStart: boolean;
 }
 
+const pendingStyle: CSSProperties = {
+  opacity: 0.5,
+};
+
+const failedRowStyle: CSSProperties = {
+  opacity: 0.7,
+};
+
+const failedIndicatorStyle: CSSProperties = {
+  color: "var(--text-danger, #ed4245)",
+  fontSize: "var(--font-size-xs)",
+  marginLeft: "var(--space-xs)",
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+function PendingIndicator({ status, channelId, content, author }: {
+  status: PendingStatus | undefined;
+  channelId: string;
+  content: string;
+  author: Message["author"];
+}) {
+  if (!status || status === "pending") return null;
+  // Failed state — show retry + delete
+  const handleRetry = () => {
+    const nonce = crypto.randomUUID();
+    const tempId = `pending-${nonce}`;
+    const pendingMsg: Message = {
+      id: tempId,
+      channel_id: channelId,
+      content,
+      author,
+      timestamp: new Date().toISOString(),
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      nonce,
+    };
+    useMessageStore.getState().addPendingMessage(channelId, pendingMsg);
+    api.sendMessage(channelId, content, nonce).catch(() => {
+      useMessageStore.getState().markFailed(tempId);
+    });
+  };
+  return (
+    <span style={failedIndicatorStyle}>
+      {" "}Failed to send.{" "}
+      <span onClick={handleRetry} style={{ textDecoration: "underline", cursor: "pointer" }}>Retry</span>
+    </span>
+  );
+}
+
 export function MessageItem({ message, isGroupStart }: MessageItemProps) {
+  const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
+  const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
   const isBot = message.author.bot;
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
@@ -72,6 +133,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           gap: "var(--content-gap)",
           padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-pad)",
           marginTop: "var(--content-gap)",
+          ...rowExtraStyle,
         }}
       >
         {/* Avatar */}
@@ -130,6 +192,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           >
             <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+            <PendingIndicator status={pendingStatus} channelId={message.channel_id} content={message.content} author={message.author} />
           </div>
         </div>
       </div>
@@ -144,6 +207,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         display: "flex",
         alignItems: "flex-start",
         padding: "var(--space-xxs) var(--message-right-pad) 0 var(--content-start)",
+        ...rowExtraStyle,
       }}
     >
       <span className="compact-ts">
@@ -162,6 +226,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         >
           <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+          <PendingIndicator status={pendingStatus} channelId={message.channel_id} content={message.content} author={message.author} />
         </div>
       </div>
     </div>

@@ -2,6 +2,9 @@ import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import { Button } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
+import { useMessageStore } from "../stores/useMessageStore";
+import { useUserStore } from "../stores/useUserStore";
+import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
 
@@ -64,11 +67,43 @@ export function MessageInput({ channelId }: { channelId: string }) {
     if (ta) {
       ta.focus();
     }
+
+    const nonce = crypto.randomUUID();
+    const tempId = `pending-${nonce}`;
+    const user = useUserStore.getState();
+
+    // Build a pending message and insert immediately
+    const pendingMessage: Message = {
+      id: tempId,
+      channel_id: channelId,
+      content: text,
+      author: {
+        id: user.id || "0",
+        username: user.username || "You",
+        bot: false,
+        avatar: null,
+        discriminator: "0",
+        global_name: null,
+      },
+      timestamp: new Date().toISOString(),
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      nonce,
+    };
+
+    useMessageStore.getState().addPendingMessage(channelId, pendingMessage);
+
     try {
-      await api.sendMessage(channelId, text);
+      await api.sendMessage(channelId, text, nonce);
     } catch (err) {
       console.error("send:", err);
-      setContent(text);
+      useMessageStore.getState().markFailed(tempId);
     }
   }
 
