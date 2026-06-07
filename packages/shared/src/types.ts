@@ -51,6 +51,8 @@ export interface Message {
   pinned: boolean;
   tts: boolean;
   mention_everyone: boolean;
+  /** Client-generated nonce for optimistic send reconciliation. */
+  nonce?: string;
 }
 
 /** Discord Gateway opcodes. */
