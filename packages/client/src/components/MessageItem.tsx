@@ -3,6 +3,9 @@ import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { useMessageStore } from "../stores/useMessageStore";
+import type { PendingStatus } from "../stores/useMessageStore";
+import * as api from "../lib/api";
 
 function formatTime(ts: string): string {
   try {
@@ -56,7 +59,76 @@ interface MessageItemProps {
   isGroupStart: boolean;
 }
 
+const pendingStyle: CSSProperties = {
+  opacity: 0.5,
+};
+
+const failedRowStyle: CSSProperties = {
+  opacity: 0.7,
+};
+
+const failedIndicatorStyle: CSSProperties = {
+  color: "var(--text-danger, #ed4245)",
+  fontSize: "var(--font-size-xs)",
+  marginLeft: "var(--space-xs)",
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+function PendingIndicator({ status, messageId, channelId, content, author }: {
+  status: PendingStatus | undefined;
+  messageId: string;
+  channelId: string;
+  content: string;
+  author: Message["author"];
+}) {
+  if (!status || status === "pending") return null;
+  // Failed state — show retry + dismiss
+  const handleRetry = () => {
+    // Remove the old failed message before creating a new pending one
+    useMessageStore.getState().removePendingMessage(channelId, messageId);
+
+    const nonce = crypto.randomUUID();
+    const tempId = `pending-${nonce}`;
+    const pendingMsg: Message = {
+      id: tempId,
+      channel_id: channelId,
+      content,
+      author,
+      timestamp: new Date().toISOString(),
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      nonce,
+    };
+    useMessageStore.getState().addPendingMessage(channelId, pendingMsg);
+    api.sendMessage(channelId, content, nonce).then((real) => {
+      useMessageStore.getState().reconcilePending(channelId, nonce, real);
+    }).catch(() => {
+      useMessageStore.getState().markFailed(tempId);
+    });
+  };
+  const handleDismiss = () => {
+    useMessageStore.getState().removePendingMessage(channelId, messageId);
+  };
+  return (
+    <span style={failedIndicatorStyle}>
+      {" "}Failed to send.{" "}
+      <button type="button" onClick={handleRetry} style={{ textDecoration: "underline", cursor: "pointer", background: "none", border: "none", color: "inherit", font: "inherit", padding: 0 }}>Retry</button>
+      {" | "}
+      <button type="button" onClick={handleDismiss} style={{ textDecoration: "underline", cursor: "pointer", background: "none", border: "none", color: "inherit", font: "inherit", padding: 0 }}>Dismiss</button>
+    </span>
+  );
+}
+
 export function MessageItem({ message, isGroupStart }: MessageItemProps) {
+  const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
+  const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
   const isBot = message.author.bot;
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
@@ -72,6 +144,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           gap: "var(--content-gap)",
           padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-pad)",
           marginTop: "var(--content-gap)",
+          ...rowExtraStyle,
         }}
       >
         {/* Avatar */}
@@ -130,6 +203,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           >
             <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+            <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
           </div>
         </div>
       </div>
@@ -144,6 +218,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         display: "flex",
         alignItems: "flex-start",
         padding: "var(--space-xxs) var(--message-right-pad) 0 var(--content-start)",
+        ...rowExtraStyle,
       }}
     >
       <span className="compact-ts">
@@ -162,6 +237,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         >
           <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
+          <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
         </div>
       </div>
     </div>

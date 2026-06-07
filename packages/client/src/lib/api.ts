@@ -35,6 +35,12 @@ export function resetGuildId(): void {
   _guildId = null;
 }
 
+/** Set the cached guild ID from READY payload (avoids REST call) */
+export function setGuildId(id: string): void {
+  _guildId = id;
+}
+
+/** @deprecated Channels are now seeded from the READY gateway event. Use for manual refresh only. */
 export async function fetchChannels() {
   const guildId = await getGuildId();
   return api<Channel[]>(`${API_PREFIX}/guilds/${guildId}/channels`);
@@ -42,9 +48,9 @@ export async function fetchChannels() {
 export function fetchMessages(channelId: string) {
   return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?limit=50`);
 }
-export function sendMessage(channelId: string, content: string) {
+export function sendMessage(channelId: string, content: string, nonce?: string) {
   return api<Message>(`${API_PREFIX}/channels/${channelId}/messages`, {
-    method: "POST", body: JSON.stringify({ content }),
+    method: "POST", body: JSON.stringify(nonce ? { content, nonce } : { content }),
   });
 }
 export function clearMessages(channelId: string) {

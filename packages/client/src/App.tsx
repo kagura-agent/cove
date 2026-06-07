@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ConfigProvider, theme, Button, Input, message } from "antd";
+import { ConfigProvider, theme, Button, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
@@ -135,13 +135,12 @@ export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { activeChannelId, setChannels, setActiveChannel } = useChannelStore();
+  const { activeChannelId, channelsLoaded } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [channelsLoading, setChannelsLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
 
@@ -184,18 +183,36 @@ export default function App() {
 
   useEffect(() => {
     if (needsSetup || authLoading) return;
-    setChannelsLoading(true);
-    api.fetchChannels().then((chs) => {
-      setChannels(chs);
-      if (chs.length > 0) setActiveChannel(chs[0].id);
-    }).catch(() => message.error("Failed to load channels"))
-      .finally(() => setChannelsLoading(false));
+    // Channels and user data are seeded from the READY gateway event
+    // (see gateway-subscriptions.ts) — no startup REST calls needed.
     setupGatewaySubscriptions();
     connect();
+
+    // Fallback: if READY isn't received within 8s (WS down), load channels via REST
+    const fallbackTimer = setTimeout(() => {
+      const currentChannels = useChannelStore.getState().channels;
+      if (currentChannels.length === 0) {
+        api.fetchChannels()
+          .then((chs) => {
+            // Only apply if still empty (READY may have arrived late)
+            if (useChannelStore.getState().channels.length === 0) {
+              useChannelStore.getState().setChannels(chs);
+              if (!useChannelStore.getState().activeChannelId && chs.length > 0) {
+                useChannelStore.getState().setActiveChannel(chs[0].id);
+              }
+            }
+          })
+          .catch(() => {
+            // REST also failed — user sees "Disconnected" banner from wsStatus
+          });
+      }
+    }, 8000);
+
     return () => {
+      clearTimeout(fallbackTimer);
       teardownGatewaySubscriptions();
     };
-  }, [needsSetup, authLoading, setChannels, setActiveChannel, connect]);
+  }, [needsSetup, authLoading, connect]);
 
   if (authLoading) {
     return (
@@ -234,7 +251,7 @@ export default function App() {
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
         <div style={{ ...styles.layout, gridTemplateColumns: membersOpen ? "var(--sidebar-width) 1fr var(--member-list-width)" : "var(--sidebar-width) 1fr" }} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={channelsLoading} style={styles.sidebarBody} />
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
           <div style={styles.sidebarFooter} className="sidebar-footer-cell">
             <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
           </div>
