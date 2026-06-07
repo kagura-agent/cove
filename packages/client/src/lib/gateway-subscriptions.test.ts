@@ -6,13 +6,13 @@ vi.mock("../stores/useMessageStore", () => ({
   useMessageStore: { getState: vi.fn(() => ({ addMessage: vi.fn(), updateMessage: vi.fn(), removeMessage: vi.fn() })) },
 }));
 vi.mock("../stores/useChannelStore", () => ({
-  useChannelStore: { getState: vi.fn(() => ({ activeChannelId: "c1", addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn() })) },
+  useChannelStore: { getState: vi.fn(() => ({ activeChannelId: "c1", addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn(), setChannels: vi.fn(), setActiveChannel: vi.fn() })) },
 }));
 vi.mock("../stores/usePresenceStore", () => ({
   usePresenceStore: { getState: vi.fn(() => ({ setOnline: vi.fn(), setOffline: vi.fn(), initPresences: vi.fn() })) },
 }));
 vi.mock("../stores/useUserStore", () => ({
-  useUserStore: { getState: vi.fn(() => ({ id: "self" })) },
+  useUserStore: { getState: vi.fn(() => ({ id: "self", setUser: vi.fn() })) },
 }));
 vi.mock("../stores/useTypingStore", () => ({
   useTypingStore: {
@@ -20,6 +20,13 @@ vi.mock("../stores/useTypingStore", () => ({
     setState: vi.fn(),
   },
   typingTimeoutIds: new Set(),
+}));
+vi.mock("../stores/useReadStateStore", () => ({
+  useReadStateStore: { getState: vi.fn(() => ({ initReadStates: vi.fn(), setUnread: vi.fn(), markRead: vi.fn(), removeChannel: vi.fn() })) },
+}));
+vi.mock("./api", () => ({
+  setGuildId: vi.fn(),
+  ackMessage: vi.fn(() => Promise.resolve()),
 }));
 
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./gateway-subscriptions";

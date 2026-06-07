@@ -2,6 +2,7 @@ import { WebSocket } from "ws";
 import { generateSnowflake, GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
+import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 
 export class GatewaySession {
@@ -35,7 +36,7 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, readStatesRepo: ReadStatesRepo): void {
+  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, channelsRepo: ChannelsRepo, readStatesRepo: ReadStatesRepo): void {
     this.user = user;
     this.identified = true;
 
@@ -43,6 +44,11 @@ export class GatewaySession {
     for (const guild of guilds) {
       this.guildIds.add(guild.id);
     }
+
+    const guildsWithChannels = guilds.map((g) => ({
+      ...g,
+      channels: channelsRepo.list(g.id),
+    }));
 
     const presences = dispatcher.getSharedGuildPresences(this.guildIds);
     const readState = readStatesRepo.getAllForUserWithLastMessage(user.id);
@@ -55,7 +61,7 @@ export class GatewaySession {
       d: {
         v: 10,
         user,
-        guilds,
+        guilds: guildsWithChannels,
         session_id: this.id,
         presences,
         read_state: readState,
