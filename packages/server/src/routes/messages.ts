@@ -56,15 +56,19 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
     if (err) return validationError(c, err);
 
+    // Validate nonce before DB write to prevent orphan records
+    if (body.nonce) {
+      if (typeof body.nonce !== "string" || body.nonce.length > 64) {
+        return validationError(c, "nonce must be a string of at most 64 characters");
+      }
+    }
+
     const author = c.get("botUser");
 
     const message = repos.messages.create(channelId, author, body.content);
 
     // Pass through client nonce for optimistic send reconciliation
     if (body.nonce) {
-      if (typeof body.nonce !== "string" || body.nonce.length > 64) {
-        return validationError(c, "nonce must be a string of at most 64 characters");
-      }
       message.nonce = body.nonce;
     }
 

@@ -189,7 +189,6 @@ export default function App() {
     connect();
 
     // Fallback: if READY isn't received within 8s (WS down), load channels via REST
-    const channels = useChannelStore.getState().channels;
     const fallbackTimer = setTimeout(() => {
       const currentChannels = useChannelStore.getState().channels;
       if (currentChannels.length === 0) {

@@ -107,7 +107,9 @@ function PendingIndicator({ status, messageId, channelId, content, author }: {
       nonce,
     };
     useMessageStore.getState().addPendingMessage(channelId, pendingMsg);
-    api.sendMessage(channelId, content, nonce).catch(() => {
+    api.sendMessage(channelId, content, nonce).then((real) => {
+      useMessageStore.getState().reconcilePending(channelId, nonce, real);
+    }).catch(() => {
       useMessageStore.getState().markFailed(tempId);
     });
   };
@@ -117,9 +119,9 @@ function PendingIndicator({ status, messageId, channelId, content, author }: {
   return (
     <span style={failedIndicatorStyle}>
       {" "}Failed to send.{" "}
-      <span onClick={handleRetry} style={{ textDecoration: "underline", cursor: "pointer" }}>Retry</span>
+      <button type="button" onClick={handleRetry} style={{ textDecoration: "underline", cursor: "pointer", background: "none", border: "none", color: "inherit", font: "inherit", padding: 0 }}>Retry</button>
       {" | "}
-      <span onClick={handleDismiss} style={{ textDecoration: "underline", cursor: "pointer" }}>Dismiss</span>
+      <button type="button" onClick={handleDismiss} style={{ textDecoration: "underline", cursor: "pointer", background: "none", border: "none", color: "inherit", font: "inherit", padding: 0 }}>Dismiss</button>
     </span>
   );
 }
