@@ -28,6 +28,8 @@ export class CoveRestClient {
       "Content-Type": "application/json",
     };
 
+    const isIdempotent = method === "GET" || method === "DELETE" || method === "HEAD" || method === "PUT";
+
     let lastError: Error | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -38,6 +40,7 @@ export class CoveRestClient {
           signal: signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
         });
 
+        // 429: server explicitly rejected without processing — safe to retry all methods
         if (res.status === 429) {
           const raw = res.headers.get("Retry-After");
           const delay = Math.min(parseFloat(raw ?? "") || 1, 30) * 1000;
@@ -45,9 +48,10 @@ export class CoveRestClient {
           continue;
         }
 
+        // 5xx: only retry idempotent methods (POST/PATCH may have committed server-side)
         if (res.status >= 500) {
           lastError = new Error(`Cove API ${method} ${path} failed: ${res.status}`);
-          if (attempt < MAX_RETRIES) {
+          if (isIdempotent && attempt < MAX_RETRIES) {
             const backoff = Math.min(1000 * Math.pow(2, attempt), 10_000) + Math.random() * 500;
             await new Promise((r) => setTimeout(r, backoff));
             continue;
@@ -65,7 +69,8 @@ export class CoveRestClient {
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
-        if (attempt < MAX_RETRIES) {
+        // Network errors: only retry idempotent methods (non-idempotent may have been received)
+        if (isIdempotent && attempt < MAX_RETRIES) {
           const backoff = Math.min(1000 * Math.pow(2, attempt), 10_000) + Math.random() * 500;
           await new Promise((r) => setTimeout(r, backoff));
           continue;
@@ -128,6 +133,6 @@ export class CoveRestClient {
 
   /** POST /api/v10/channels/:id/typing — send typing indicator. */
   async sendTyping(channelId: string): Promise<void> {
-    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`);
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`, undefined, AbortSignal.timeout(3000));
   }
 }
