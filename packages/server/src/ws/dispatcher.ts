@@ -5,12 +5,14 @@ import type { GuildsRepo } from "../repos/guilds.js";
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
+  private sessionsById = new Map<string, GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
+    this.sessionsById.set(session.id, session);
     if (session.user) {
       const userId = session.user.id;
       if (!this.userSessions.has(userId)) {
@@ -30,17 +32,18 @@ export class GatewayDispatcher {
       if (sessions) {
         sessions.delete(session.id);
         if (sessions.size === 0) {
-          this.userSessions.delete(userId);
-          // Broadcast before removing from sessions so guild IDs are still accessible.
-          // Exclude the dying session so it doesn't receive its own offline event.
-          this.broadcastToGuildMembers(userId, "PRESENCE_UPDATE", {
+          // Broadcast before removing indexes. Use dying session's guild IDs directly
+          // since userSessions no longer contains it.
+          this.broadcastToGuilds(session.guildIds, "PRESENCE_UPDATE", {
             user: { id: userId },
             status: "offline",
           }, session.id);
+          this.userSessions.delete(userId);
         }
       }
     }
     this.sessions.delete(session);
+    this.sessionsById.delete(session.id);
   }
 
   getOnlineUserIds(): string[] {
@@ -48,9 +51,12 @@ export class GatewayDispatcher {
   }
 
   getSessionGuildIds(userId: string): string[] {
+    const sessionIds = this.userSessions.get(userId);
+    if (!sessionIds) return [];
     const guildIds = new Set<string>();
-    for (const session of this.sessions) {
-      if (session.user?.id === userId) {
+    for (const sid of sessionIds) {
+      const session = this.sessionsById.get(sid);
+      if (session) {
         for (const gid of session.guildIds) {
           guildIds.add(gid);
         }
@@ -114,9 +120,11 @@ export class GatewayDispatcher {
   }
 
   addGuildToUser(userId: string, guildId: string): void {
-    for (const session of this.sessions) {
-      if (session.user?.id === userId) {
-        session.guildIds.add(guildId);
+    const sessionIds = this.userSessions.get(userId);
+    if (sessionIds) {
+      for (const sid of sessionIds) {
+        const session = this.sessionsById.get(sid);
+        if (session) session.guildIds.add(guildId);
       }
     }
     // Notify the user's sessions about the new guild membership
@@ -129,9 +137,11 @@ export class GatewayDispatcher {
   removeGuildFromUser(userId: string, guildId: string): void {
     // Notify the user's sessions BEFORE removing the guild from their set
     this.sendToUser(userId, "GUILD_DELETE", { id: guildId });
-    for (const session of this.sessions) {
-      if (session.user?.id === userId) {
-        session.guildIds.delete(guildId);
+    const sessionIds = this.userSessions.get(userId);
+    if (sessionIds) {
+      for (const sid of sessionIds) {
+        const session = this.sessionsById.get(sid);
+        if (session) session.guildIds.delete(guildId);
       }
     }
   }
@@ -160,10 +170,11 @@ export class GatewayDispatcher {
   }
 
   private sendToUser(userId: string, event: string, data: unknown): void {
-    for (const session of this.sessions) {
-      if (session.user?.id === userId) {
-        session.dispatch(event, data);
-      }
+    const sessionIds = this.userSessions.get(userId);
+    if (!sessionIds) return;
+    for (const sid of sessionIds) {
+      const session = this.sessionsById.get(sid);
+      if (session) session.dispatch(event, data);
     }
   }
 
@@ -185,11 +196,12 @@ export class GatewayDispatcher {
   }
 
   removeUser(userId: string): void {
+    const sessionIds = this.userSessions.get(userId);
+    if (!sessionIds) return;
     const toRemove: GatewaySession[] = [];
-    for (const session of this.sessions) {
-      if (session.user?.id === userId) {
-        toRemove.push(session);
-      }
+    for (const sid of sessionIds) {
+      const session = this.sessionsById.get(sid);
+      if (session) toRemove.push(session);
     }
     for (const session of toRemove) {
       this.removeSession(session);
@@ -199,10 +211,18 @@ export class GatewayDispatcher {
 
   private broadcastToGuildMembers(userId: string, event: string, data: unknown, excludeSessionId?: string): void {
     const userGuildIds = this.getSessionGuildIds(userId);
+    this.broadcastToGuilds(new Set(userGuildIds), event, data, excludeSessionId);
+  }
+
+  /** Broadcast to all sessions in any of the given guilds, deduplicating. */
+  private broadcastToGuilds(guildIds: Set<string>, event: string, data: unknown, excludeSessionId?: string): void {
     for (const session of this.sessions) {
       if (excludeSessionId && session.id === excludeSessionId) continue;
-      if (userGuildIds.some((gid) => session.guildIds.has(gid))) {
-        session.dispatch(event, data);
+      for (const gid of session.guildIds) {
+        if (guildIds.has(gid)) {
+          session.dispatch(event, data);
+          break;
+        }
       }
     }
   }
