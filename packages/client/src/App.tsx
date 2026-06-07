@@ -135,7 +135,7 @@ export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { activeChannelId } = useChannelStore();
+  const { activeChannelId, channelsLoaded } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -252,7 +252,7 @@ export default function App() {
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
         <div style={{ ...styles.layout, gridTemplateColumns: membersOpen ? "var(--sidebar-width) 1fr var(--member-list-width)" : "var(--sidebar-width) 1fr" }} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={wsStatus !== "connected"} style={styles.sidebarBody} />
+          <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
           <div style={styles.sidebarFooter} className="sidebar-footer-cell">
             <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
           </div>

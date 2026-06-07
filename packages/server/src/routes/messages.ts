@@ -62,6 +62,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     // Pass through client nonce for optimistic send reconciliation
     if (body.nonce) {
+      if (typeof body.nonce !== "string" || body.nonce.length > 64) {
+        return validationError(c, "nonce must be a string of at most 64 characters");
+      }
       message.nonce = body.nonce;
     }
 

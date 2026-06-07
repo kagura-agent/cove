@@ -47,8 +47,8 @@ function ensureCleanup(): void {
   }
 }
 
-/** Consume one token. Returns remaining tokens (may be negative if exhausted). */
-function consume(key: string, cfg: BucketConfig, now: number): { remaining: number; resetMs: number } {
+/** Consume one token. Returns remaining tokens and whether the request is allowed. */
+function consume(key: string, cfg: BucketConfig, now: number): { remaining: number; resetMs: number; allowed: boolean } {
   let bucket = buckets.get(key);
   if (!bucket) {
     bucket = { tokens: cfg.limit, lastRefill: now };
@@ -60,15 +60,19 @@ function consume(key: string, cfg: BucketConfig, now: number): { remaining: numb
   bucket.tokens = Math.min(cfg.limit, bucket.tokens + elapsed * cfg.refillRate);
   bucket.lastRefill = now;
 
-  // Consume
-  bucket.tokens -= 1;
+  // Only consume if there are tokens available
+  if (bucket.tokens >= 1) {
+    bucket.tokens -= 1;
+    const remaining = bucket.tokens;
+    return { remaining, resetMs: 0, allowed: true };
+  }
+
+  // Exhausted — don't deduct, compute time until next token
   const remaining = bucket.tokens;
+  const tokensNeeded = 1 - bucket.tokens;
+  const resetMs = (tokensNeeded / cfg.refillRate) * 1000;
 
-  // Time until next token is available (not full refill)
-  const tokensNeeded = Math.max(0, 1 - bucket.tokens);
-  const resetMs = tokensNeeded > 0 ? (tokensNeeded / cfg.refillRate) * 1000 : 0;
-
-  return { remaining, resetMs };
+  return { remaining, resetMs, allowed: false };
 }
 
 function setRateLimitHeaders(
@@ -113,29 +117,30 @@ export function rateLimitMiddleware(): MiddlewareHandler<AppEnv> {
     const activeCfg = isChannelWrite ? CHANNEL_WRITE_BUCKET : GLOBAL_BUCKET;
     const bucketKey = `${user.id}:${activeCfg.id}`;
 
-    const { remaining, resetMs } = consume(bucketKey, activeCfg, now);
+    const { remaining, resetMs, allowed } = consume(bucketKey, activeCfg, now);
 
     // Also consume from global if we used the write bucket, and check both
     let globalRemaining = Infinity;
     let globalResetMs = 0;
+    let globalAllowed = true;
     if (isChannelWrite) {
       const globalResult = consume(`${user.id}:${GLOBAL_BUCKET.id}`, GLOBAL_BUCKET, now);
       globalRemaining = globalResult.remaining;
       globalResetMs = globalResult.resetMs;
+      globalAllowed = globalResult.allowed;
     }
 
     // Check if either bucket is exhausted
-    const exhaustedByChannel = remaining < 0;
-    const exhaustedByGlobal = isChannelWrite && globalRemaining < 0;
+    const exhaustedByChannel = !allowed;
+    const exhaustedByGlobal = isChannelWrite && !globalAllowed;
 
     if (exhaustedByChannel || exhaustedByGlobal) {
       // Use the more restrictive bucket for the response
       const useCfg = exhaustedByChannel ? activeCfg : GLOBAL_BUCKET;
       const useRemaining = exhaustedByChannel ? remaining : globalRemaining;
       const useResetMs = exhaustedByChannel ? resetMs : globalResetMs;
-      // Rate limited — compute retry_after (time until 1 token available)
-      const retryAfter = Math.max(0, (1 - (useRemaining + 1)) / useCfg.refillRate);
-      const retryAfterSec = parseFloat(retryAfter.toFixed(3));
+      // retry_after = time until next token, consistent with header
+      const retryAfterSec = parseFloat((useResetMs / 1000).toFixed(3));
 
       const res = c.json(
         {

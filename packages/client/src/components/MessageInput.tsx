@@ -100,7 +100,9 @@ export function MessageInput({ channelId }: { channelId: string }) {
     useMessageStore.getState().addPendingMessage(channelId, pendingMessage);
 
     try {
-      await api.sendMessage(channelId, text, nonce);
+      const real = await api.sendMessage(channelId, text, nonce);
+      // Reconcile immediately so the message resolves even if WS is down
+      useMessageStore.getState().reconcilePending(channelId, nonce, real);
     } catch (err) {
       console.error("send:", err);
       useMessageStore.getState().markFailed(tempId);

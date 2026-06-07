@@ -4,6 +4,7 @@ import type { Channel } from "../types";
 interface ChannelState {
   channels: Channel[];
   activeChannelId: string | null;
+  channelsLoaded: boolean;
   setChannels: (channels: Channel[]) => void;
   setActiveChannel: (id: string | null) => void;
   addChannel: (channel: Channel) => void;
@@ -14,7 +15,8 @@ interface ChannelState {
 export const useChannelStore = create<ChannelState>((set) => ({
   channels: [],
   activeChannelId: null,
-  setChannels: (channels) => set({ channels }),
+  channelsLoaded: false,
+  setChannels: (channels) => set({ channels, channelsLoaded: true }),
   setActiveChannel: (id) => set({ activeChannelId: id }),
   addChannel: (channel) => set((s) => (
     s.channels.some((c) => c.id === channel.id)
