@@ -3,72 +3,19 @@
  *
  * Each Cove channel (home, garden, beach, etc.) maps to a separate OpenClaw
  * session. Messages in different channels go to different agent sessions.
+ *
+ * This module is the orchestrator — it wires up the gateway client, handles
+ * events, and delegates message dispatch to the dispatch module.
  */
 
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
-import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
-import { createToolProgressTracker } from "./tool-progress.js";
+import { dispatchMessage } from "./dispatch.js";
 
-const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
-
-// Use dynamic import to access the direct-dm helper
-const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
-
-export class DispatchTimeoutError extends Error {
-  constructor() { super('dispatch timeout'); this.name = 'DispatchTimeoutError'; }
-}
-export class DispatchAbortedError extends Error {
-  constructor() { super('dispatch aborted'); this.name = 'DispatchAbortedError'; }
-}
-
-/**
- * Race a dispatch promise against a timeout and an AbortSignal.
- * Resolves/rejects as soon as any of the three fires.
- *
- * Note: this is release-only, not cancellation — the underlying dispatch
- * continues running but side effects (message delivery, streaming edits,
- * typing indicators) are guarded by per-channel AbortController reference
- * equality so stale dispatches cannot send messages.
- */
-export function createAbortableDispatch(
-  dispatch: Promise<unknown>,
-  timeoutMs: number,
-  signal: AbortSignal,
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const settle = (fn: () => void) => {
-      if (!settled) { settled = true; fn(); }
-    };
-
-    const timer = setTimeout(
-      () => settle(() => reject(new DispatchTimeoutError())),
-      timeoutMs,
-    );
-
-    const onAbort = () => settle(() => {
-      clearTimeout(timer);
-      reject(new DispatchAbortedError());
-    });
-
-    if (signal.aborted) {
-      clearTimeout(timer);
-      dispatch.catch(() => {}); // Prevent unhandled rejection from orphaned dispatch
-      reject(new DispatchAbortedError());
-      return;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    dispatch.then(
-      () => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve(); }),
-      (err) => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); reject(err); }),
-    );
-  });
-}
+// Re-export for test compatibility
+export { createAbortableDispatch, DispatchTimeoutError, DispatchAbortedError } from "./dispatch.js";
 
 const restClients = new Map<string, CoveRestClient>();
 
@@ -80,29 +27,6 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
     restClients.set(key, client);
   }
   return client;
-}
-
-/**
- * Clean up an orphaned draft message and fall back to sending a fresh
- * message.  Reused by both the streaming-error path and the final-edit
- * failure path.
- */
-async function cleanupAndSend(
-  restClient: CoveRestClient,
-  channelId: string,
-  draftMessageId: string | undefined,
-  text: string,
-  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
-): Promise<void> {
-  if (draftMessageId) {
-    try {
-      await restClient.deleteMessage(channelId, draftMessageId);
-    } catch (delErr: any) {
-      log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
-    }
-  }
-  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-  await restClient.sendMessage(channelId, text);
 }
 
 function resolveAccount(
@@ -146,7 +70,6 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     blurb: "Mirror world channel",
   },
   capabilities: {
-    // Support both channel and direct messages
     chatTypes: ["direct", "channel"],
   },
   config: {
@@ -202,13 +125,30 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       /** Track in-flight dispatches per channel so we can cancel on reconnect or duplicate. */
       const pendingDispatches = new Map<string, AbortController>();
+      const restClient = getRestClient(account.baseUrl, account.token);
 
       gatewayClient.on("reconnect", () => {
-        log?.info?.(`cove: reconnected — aborting ${pendingDispatches.size} pending dispatch(es)`);
+        // Hard reconnect (IDENTIFY fallback after failed RESUME) — abort pending dispatches and clear stale state
+        log?.info?.(`cove: hard reconnect — aborting ${pendingDispatches.size} pending dispatch(es)`);
         for (const controller of pendingDispatches.values()) {
           controller.abort();
         }
         pendingDispatches.clear();
+
+        // Re-fetch channel list to pick up any changes during disconnection
+        if (account.guildId) {
+          restClient.getChannels(account.guildId).then((channels) => {
+            // TODO: update channel cache when channel routing is implemented
+            log?.info?.(`cove: reconnect recovery — fetched ${channels.length} channel(s)`);
+          }).catch((err) => {
+            log?.warn?.(`cove: reconnect channel refresh failed: ${err.message}`);
+          });
+        }
+      });
+
+      gatewayClient.on("resumed", () => {
+        // Gateway session resumed — no state was lost, dispatches can continue
+        log?.info?.("cove: gateway session resumed");
       });
 
       gatewayClient.on("ready", (user) => {
@@ -227,288 +167,18 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) return;
         if (message.author.bot) return;
 
-        const channelId = message.channel_id;
-        const senderId = message.author.id;
-        const senderName = message.author.username;
+        log?.info?.(`cove: [${message.channel_id}] ${message.author.username}: ${message.content.slice(0, 50)}`);
 
-        log?.info?.(`cove: [${channelId}] ${senderName}: ${message.content.slice(0, 50)}`);
-
-        // Register controller synchronously BEFORE any await to prevent ordering race:
-        // two same-channel messages overlapping on await boundaries could abort the wrong one.
-        const existingDispatch = pendingDispatches.get(channelId);
-        if (existingDispatch) {
-          log?.warn?.(`cove: aborting pending dispatch for [${channelId}] (superseded by new message)`);
-          existingDispatch.abort();
-        }
-        const abortController = new AbortController();
-        pendingDispatches.set(channelId, abortController);
-
-        // Fire-and-forget early typing cue via REST endpoint
-        const restClient = getRestClient(account.baseUrl, account.token);
-        restClient.sendTyping(channelId).catch(() => {});
-
-        const typingCallbacks = createTypingCallbacks({
-          start: () => {
-            return restClient.sendTyping(channelId);
-          },
-          keepaliveIntervalMs: 5000,
-          maxDurationMs: 60000,
-          onStartError: (err) => log?.warn?.(`cove: typing start error in [${channelId}]: ${err}`),
+        await dispatchMessage({
+          message,
+          account,
+          restClient,
+          channelRuntime,
+          cfg,
+          accountId: ctx.accountId,
+          pendingDispatches,
+          log,
         });
-
-        try {
-          const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
-
-          const targetAgent = account.agentId;
-          const originalRouting = channelRuntime.routing;
-          const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
-
-          const draftState = { stopped: false, final: false };
-          let draftMessageId: string | undefined;
-          let lastSentText = "";
-          // Pass the channel config section so tool-progress can read
-          // channel-level settings (e.g. maxLines, labels).  `cfg` is the
-          // full gateway config; the cove channel entry lives under
-          // `channels.cove`.
-          const channelEntry = cfg?.channels?.["cove"] ?? {};
-          const dispatchTimeoutMs = (channelEntry as any).dispatchTimeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
-          const toolProgress = createToolProgressTracker(channelEntry, {
-            seed: message.id ?? String(Date.now()),
-            onProgressUpdate: () => {
-              const combined = toolProgress.getCombinedText();
-              if (combined) draft.update(combined);
-            },
-          });
-
-          // Sequential queue ensures PATCH requests land in order even if
-          // multiple sendOrEdit calls overlap (e.g. rapid streaming ticks).
-          let editQueue = Promise.resolve();
-
-          /** Returns true if this dispatch is still the current one for this channel. */
-          const isCurrent = () => pendingDispatches.get(channelId) === abortController;
-
-          const sendOrEdit = async (text: string): Promise<boolean> => {
-            if (!isCurrent()) return false;
-            return new Promise<boolean>((resolve) => {
-              editQueue = editQueue.then(async () => {
-                if (!isCurrent()) { resolve(false); return; }
-                if (draftState.stopped && !draftState.final) { resolve(false); return; }
-                const trimmed = text.trimEnd();
-                if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
-                lastSentText = trimmed;
-                try {
-                  if (draftMessageId) {
-                    await restClient.editMessage(channelId, draftMessageId, trimmed);
-                  } else {
-                    const msg = await restClient.sendMessage(channelId, trimmed);
-                    draftMessageId = msg.id;
-                  }
-                  resolve(true);
-                } catch (err: any) {
-                  draftState.stopped = true;
-                  log?.warn?.(`cove: stream preview failed: ${err.message}`);
-                  resolve(false);
-                }
-              });
-            });
-          };
-
-          const draft = createFinalizableDraftLifecycle({
-            throttleMs: 250,
-            state: draftState,
-            sendOrEditStreamMessage: sendOrEdit,
-            readMessageId: () => draftMessageId,
-            clearMessageId: () => { draftMessageId = undefined; },
-            isValidMessageId: (v: unknown) => typeof v === "string",
-            deleteMessage: async (messageId?: string) => {
-              const idToDelete = messageId ?? draftMessageId;
-              if (idToDelete) {
-                try {
-                  await restClient.deleteMessage(channelId, idToDelete);
-                } catch (err: any) {
-                  log?.warn?.(`cove: failed to delete draft message ${idToDelete}: ${err.message}`);
-                }
-              }
-            },
-            warnPrefix: "cove",
-          });
-
-          const patchedRuntime = {
-            channel: {
-              ...channelRuntime,
-              routing: {
-                ...originalRouting,
-                resolveAgentRoute: (params: any) => {
-                  const route = originalRouting.resolveAgentRoute(params);
-                  return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
-                },
-              },
-              reply: {
-                ...channelRuntime.reply,
-                dispatchReplyWithBufferedBlockDispatcher: (params: any) =>
-                  originalDispatcher({
-                    ...params,
-                    dispatcherOptions: {
-                      ...params.dispatcherOptions,
-                      typingCallbacks,
-                      deliver: async (payload: any, _info: { kind: string }) => {
-                        if (!isCurrent()) return;
-                        typingCallbacks.onCleanup?.();
-                        const text = payload.text ?? "";
-                        if (!text) return;
-
-                        draftState.final = true;
-                        await draft.seal();
-
-                        // Re-check after async seal — dispatch may have been superseded
-                        if (!isCurrent()) return;
-
-                        // If streaming was stopped due to an earlier API error,
-                        // the draftMessageId may be stale or absent. Fall back
-                        // to sending a fresh message so the final reply is not
-                        // silently lost.
-                        if (draftMessageId && !draftState.stopped) {
-                          log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                          try {
-                            await restClient.editMessage(channelId, draftMessageId, text);
-                          } catch (editErr: any) {
-                            log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
-                            await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
-                          }
-                        } else {
-                          await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
-                        }
-                      },
-                    },
-                    replyOptions: {
-                      ...params.replyOptions,
-                      // Disable the DEFAULT block dispatcher so our custom
-                      // createFinalizableDraftLifecycle handles streaming instead.
-                      // This does NOT disable streaming events — only the built-in
-                      // block delivery mechanism.
-                      disableBlockStreaming: true,
-                      suppressDefaultToolProgressMessages: true,
-                      onPartialReply: (payload: any) => {
-                        if (!isCurrent()) return;
-                        if (payload?.text) {
-                          toolProgress.onPartialReply(payload.text);
-                          draft.update(payload.text);
-                        }
-                      },
-                      onToolStart: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onToolStart({
-                          name: payload?.name ?? payload?.toolName,
-                          args: payload?.args,
-                          phase: payload?.phase,
-                          detailMode: payload?.detailMode,
-                        });
-                      },
-                      onItemEvent: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onItemEvent(payload);
-                      },
-                      onPlanUpdate: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onPlanUpdate(payload);
-                      },
-                      onApprovalEvent: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onApprovalEvent(payload);
-                      },
-                      onCommandOutput: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onCommandOutput(payload);
-                      },
-                      onPatchSummary: (payload: any) => {
-                        if (!isCurrent()) return;
-                        toolProgress.onPatchSummary(payload);
-                      },
-                      onCompactionStart: () => {
-                        if (!isCurrent()) return;
-                        toolProgress.onCompactionStart();
-                        const combined = toolProgress.getCombinedText();
-                        if (combined) draft.update(combined);
-                      },
-                      onCompactionEnd: () => {
-                        if (!isCurrent()) return;
-                        toolProgress.onCompactionEnd();
-                      },
-                      onAssistantMessageStart: () => {
-                        if (!isCurrent()) return;
-                        toolProgress.onAssistantMessageStart();
-                      },
-                    },
-                  }),
-              },
-            },
-          };
-
-          // Yield event loop so WS typing frame flushes before heavy bootstrap work
-          await new Promise<void>((resolve) => setTimeout(resolve, 1));
-
-          // Controller already registered synchronously in the prologue above.
-          // isCurrent() uses the controller registered at message entry.
-
-          try {
-            await createAbortableDispatch(
-              dispatchInboundDirectDmWithRuntime({
-            cfg,
-            runtime: patchedRuntime as any,
-            channel: "cove",
-            channelLabel: "Cove",
-            accountId: ctx.accountId,
-            peer: { kind: "group" as any, id: channelId },
-            senderId,
-            senderAddress: senderId,
-            recipientAddress: channelId,
-            conversationLabel: `#${channelId}`,
-            rawBody: message.content,
-            bodyForAgent: message.content,
-            messageId: message.id ?? `cove-${Date.now()}`,
-            timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
-            provider: "cove",
-            surface: "cove",
-            extraContext: {
-              ChatType: "channel",
-              SenderId: senderId,
-              SenderName: senderName,
-              ChannelId: channelId,
-            },
-            deliver: async (_payload) => {
-              // Delivery is handled by the dispatcher's deliver callback above
-              // (block streaming sends/edits messages directly).
-            },
-            onRecordError: (err) => {
-              log?.error?.(`cove: record error in [${channelId}]: ${err}`);
-            },
-            onDispatchError: (err, info) => {
-              log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
-            },
-          }),
-              dispatchTimeoutMs,
-              abortController.signal,
-            );
-          } catch (err: any) {
-            if (err instanceof DispatchTimeoutError) {
-              typingCallbacks.onCleanup?.();
-              log?.warn?.(`cove: dispatch timed out after ${dispatchTimeoutMs}ms in [${channelId}]`);
-            } else if (err instanceof DispatchAbortedError) {
-              typingCallbacks.onCleanup?.();
-              log?.info?.(`cove: dispatch aborted in [${channelId}]`);
-            } else {
-              throw err;
-            }
-          } finally {
-            // Only remove if this is still our controller (not replaced by a newer dispatch)
-            if (pendingDispatches.get(channelId) === abortController) {
-              pendingDispatches.delete(channelId);
-            }
-          }
-        } catch (err: any) {
-          typingCallbacks.onCleanup?.();
-          log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
-        }
       });
 
       gatewayClient.on("error", (err) => {
