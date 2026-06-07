@@ -51,9 +51,11 @@ describe("Session TTL & Cleanup (#118)", () => {
     });
     expect(res.status).toBe(401);
 
-    // Verify the user row was deleted (lazy cleanup)
-    const row = db.prepare("SELECT id FROM users WHERE id = ?").get("expired-user");
-    expect(row).toBeUndefined();
+    // Verify the user still exists but token was cleared (lazy cleanup)
+    const row = db.prepare("SELECT id, token, expires_at FROM users WHERE id = ?").get("expired-user") as { id: string; token: string | null; expires_at: number | null } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.token).toBeNull();
+    expect(row!.expires_at).toBeNull();
   });
 
   // ─── Bot token (expires_at=null) never expires ────────────────────────
@@ -100,12 +102,17 @@ describe("Session TTL & Cleanup (#118)", () => {
     const deleted = repos.users.cleanupExpired();
     expect(deleted).toBe(1);
 
-    // Stale user should be gone
-    expect(db.prepare("SELECT id FROM users WHERE id = ?").get("stale-user")).toBeUndefined();
+    // Stale user still exists but token was cleared
+    const stale = db.prepare("SELECT id, token, expires_at FROM users WHERE id = ?").get("stale-user") as { id: string; token: string | null; expires_at: number | null } | undefined;
+    expect(stale).toBeDefined();
+    expect(stale!.token).toBeNull();
+    expect(stale!.expires_at).toBeNull();
 
-    // Fresh user and bot should remain
-    expect(db.prepare("SELECT id FROM users WHERE id = ?").get("fresh-user")).toBeTruthy();
-    expect(db.prepare("SELECT id FROM users WHERE id = ?").get("bot-user")).toBeTruthy();
+    // Fresh user and bot should remain with tokens intact
+    const fresh = db.prepare("SELECT token FROM users WHERE id = ?").get("fresh-user") as { token: string };
+    expect(fresh.token).toBe("fresh-token");
+    const bot = db.prepare("SELECT token FROM users WHERE id = ?").get("bot-user") as { token: string };
+    expect(bot.token).toBe("bot-token-2");
   });
 
   // ─── create() sets expires_at correctly ───────────────────────────────

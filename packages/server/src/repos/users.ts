@@ -2,7 +2,11 @@ import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import type { CoveAgent } from "@cove/shared";
 
-export const SESSION_TTL_MS = parseInt(process.env["SESSION_TTL_MS"] ?? "604800000", 10); // 7 days
+const parsedTTL = parseInt(process.env["SESSION_TTL_MS"] ?? "604800000", 10); // 7 days
+if (!Number.isFinite(parsedTTL) || parsedTTL <= 0) {
+  throw new Error(`Invalid SESSION_TTL_MS: ${process.env["SESSION_TTL_MS"]}`);
+}
+export const SESSION_TTL_MS = parsedTTL;
 
 interface UserRow {
   id: string;
@@ -98,7 +102,7 @@ export class UsersRepo {
 
     // Check expiry: non-null expires_at that's in the past means expired
     if (row.expires_at !== null && row.expires_at < Date.now()) {
-      this.db.prepare("DELETE FROM users WHERE token = ?").run(token);
+      this.db.prepare("UPDATE users SET token = NULL, expires_at = NULL WHERE token = ?").run(token);
       return null;
     }
 
@@ -113,7 +117,7 @@ export class UsersRepo {
 
   cleanupExpired(): number {
     const result = this.db.prepare(
-      "DELETE FROM users WHERE expires_at IS NOT NULL AND expires_at < ?"
+      "UPDATE users SET token = NULL, expires_at = NULL WHERE expires_at IS NOT NULL AND expires_at < ?"
     ).run(Date.now());
     return result.changes;
   }
