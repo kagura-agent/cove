@@ -217,13 +217,27 @@ describe("Sliding refresh regression (#267)", () => {
   });
 
   it("sliding threshold works for short TTLs (< 24h)", () => {
-    // With a short TTL, threshold = max(TTL/2, TTL - 86400000)
-    // For TTL = 3600000 (1h): threshold = max(1800000, 3600000 - 86400000) = 1800000
-    // So refresh triggers when remaining < 1800000 (half the TTL)
-    const now = Date.now();
-    const shortTTL = SESSION_TTL_MS; // use actual configured TTL
-    const threshold = Math.max(shortTTL / 2, shortTTL - 86_400_000);
+    // The short-TTL branch triggers when TTL < 2*86400000 (< 2 days).
+    // For TTL = 3600000 (1h): threshold = max(1800000, 3600000 - 86400000) = 1800000 (half TTL wins)
+    // For the default 7-day TTL: threshold = max(3.5d, 6d) = 6d (the -1day branch wins)
+    //
+    // To actually test the short-TTL branch (where TTL/2 > TTL - 86400000),
+    // we test the threshold calculation directly with a known short TTL value.
+    const shortTTL = 3_600_000; // 1 hour
+    const shortThreshold = Math.max(shortTTL / 2, shortTTL - 86_400_000);
+    // For 1h TTL: max(1800000, -82800000) = 1800000 → half the TTL
+    expect(shortThreshold).toBe(shortTTL / 2);
+    // Verify this IS the short-TTL branch (TTL/2 wins over TTL - 1day)
+    expect(shortTTL / 2).toBeGreaterThan(shortTTL - 86_400_000);
 
+    // Now verify with the actual SESSION_TTL_MS that the long-TTL branch applies
+    const longThreshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
+    // 7-day TTL: max(3.5d, 6d) = 6d → the -1day branch wins
+    expect(longThreshold).toBe(SESSION_TTL_MS - 86_400_000);
+
+    // Integration: verify resolveUser triggers refresh when remaining < threshold
+    const now = Date.now();
+    const threshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
     // User whose remaining time is below threshold
     const expiresAt = now + Math.floor(threshold * 0.5); // well below threshold
     db.prepare(
@@ -237,23 +251,64 @@ describe("Sliding refresh regression (#267)", () => {
     expect(result!.user.expires_at).toBeGreaterThan(expiresAt);
   });
 
-  it("OAuth login sets correct expires_at atomically", () => {
+  it("OAuth login sets correct expires_at atomically via /api/auth/callback", async () => {
     const now = Date.now();
-    // Simulate what OAuth callback does: atomic UPDATE with token + expires_at
+    // Pre-existing user who will re-login via OAuth
     db.prepare(
       "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at, google_id, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run("oauth-user", "OAuthUser", null, 0, null, "old-token", now - 100000, now - 100000, now - 1000, "google-123", "test@test.com");
+    db.prepare(
+      "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(defaultGuildId, "oauth-user", null, "[]", now);
 
-    // Re-login: single atomic UPDATE (mirrors auth route logic)
-    const newToken = "new-oauth-token";
-    const expiresAt = Date.now() + SESSION_TTL_MS;
-    db.prepare("UPDATE users SET token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
-      .run(newToken, expiresAt, Date.now(), "oauth-user");
+    // Mock global fetch to intercept Google token exchange and userinfo
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "mock-access-token" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("googleapis.com/oauth2/v2/userinfo")) {
+        return new Response(JSON.stringify({
+          id: "google-123",
+          email: "test@test.com",
+          name: "OAuthUser",
+          picture: "https://example.com/avatar.jpg",
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return originalFetch(input, init as any);
+    };
 
-    const row = db.prepare("SELECT token, expires_at FROM users WHERE id = ?").get("oauth-user") as { token: string; expires_at: number };
-    expect(row.token).toBe(newToken);
-    expect(row.expires_at).toBe(expiresAt);
-    // Verify token and expires_at are consistent (both updated in same statement)
-    expect(row.expires_at).toBeGreaterThan(now);
+    try {
+      // Call the actual OAuth callback route
+      const res = await app.request("/api/auth/callback?code=mock-auth-code");
+      // Should redirect to /
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/");
+
+      // Verify the DB row was updated atomically
+      const row = db.prepare("SELECT token, expires_at, updated_at FROM users WHERE id = ?").get("oauth-user") as {
+        token: string;
+        expires_at: number;
+        updated_at: number;
+      };
+      // Token should be freshly generated (not the old one)
+      expect(row.token).not.toBe("old-token");
+      expect(row.token).toBeTruthy();
+      // expires_at should be set to ~now + SESSION_TTL_MS
+      expect(row.expires_at).toBeGreaterThan(now);
+      expect(row.expires_at).toBeLessThanOrEqual(Date.now() + SESSION_TTL_MS + 1000);
+      expect(row.expires_at).toBeGreaterThanOrEqual(Date.now() + SESSION_TTL_MS - 5000);
+      // Both token and expires_at were updated together (atomic)
+      expect(row.updated_at).toBeGreaterThanOrEqual(now);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

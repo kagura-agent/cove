@@ -104,11 +104,10 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             // This handles browser clients sending { token: null } over a cookie-authenticated socket.
             if (!user && preAuthUser) {
               user = preAuthUser;
-              // For expiry checks, use the cookie token
-              if (!identifyToken) {
-                const cookies = parseCookies(request.headers.cookie);
-                identifyToken = cookies[SESSION_COOKIE] || undefined;
-              }
+              // Always use the cookie token for expiry checks when falling back to cookie auth.
+              // If the client sent an invalid explicit token, we must NOT use it for session validation.
+              const cookies = parseCookies(request.headers.cookie);
+              identifyToken = cookies[SESSION_COOKIE] || undefined;
             }
 
             if (!user) {
