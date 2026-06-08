@@ -40,8 +40,8 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
       if (sessionToken) {
         const row = users.findByToken(sessionToken);
         if (row) {
-          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser = {
-            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null,
+          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } }).__coveUser = {
+            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null,
           };
         }
       }
@@ -54,9 +54,11 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
     const session = new GatewaySession(ws);
     let lastHeartbeat = Date.now();
     let heartbeatCheck: ReturnType<typeof setInterval> | null = null;
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
+    let sessionToken: string | null = null;
 
     // Check if user was pre-authenticated at upgrade via cookie
-    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser;
+    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } }).__coveUser;
 
     session.send({
       op: GatewayOpcode.HELLO,
@@ -85,15 +87,15 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             }
 
             const data = payload.d as { token?: string } | null;
-            const token = data?.token;
+            let identifyToken = data?.token;
 
             // Try explicit token first (bot clients), then fall back to cookie pre-auth
-            let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } | undefined;
+            let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } | undefined;
 
-            if (token) {
-              const row = users.findByToken(token);
+            if (identifyToken) {
+              const row = users.findByToken(identifyToken);
               if (row) {
-                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null };
+                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null };
               }
             }
 
@@ -101,12 +103,16 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             // This handles browser clients sending { token: null } over a cookie-authenticated socket.
             if (!user && preAuthUser) {
               user = preAuthUser;
+              // Always use the cookie token for expiry checks when falling back to cookie auth.
+              // If the client sent an invalid explicit token, we must NOT use it for session validation.
+              const cookies = parseCookies(request.headers.cookie);
+              identifyToken = cookies[SESSION_COOKIE] || undefined;
             }
 
             if (!user) {
               if (heartbeatCheck) clearInterval(heartbeatCheck);
               // Distinguish: no credentials at all vs invalid token
-              if (!token && !preAuthUser) {
+              if (!identifyToken && !preAuthUser) {
                 session.close(4001, "Token required");
               } else {
                 session.close(4004, "Authentication failed");
@@ -116,6 +122,18 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
             session.identify(user, dispatcher, guilds, channels, readStates);
             dispatcher.addSession(session);
+
+            // Schedule session expiry disconnect for non-bot users
+            if (!user.bot && user.expires_at) {
+              sessionToken = identifyToken || null;
+              const ttl = user.expires_at - Date.now();
+              if (ttl > 0) {
+                scheduleExpiry(sessionToken!, ttl);
+              } else {
+                // Already expired
+                session.close(4004, "Authentication expired");
+              }
+            }
             break;
           }
 
@@ -138,8 +156,31 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
       }
     });
 
+    /** Cap to prevent setTimeout overflow (>2^31-1 ms fires immediately) */
+    const MAX_TIMEOUT = 2_147_483_647;
+
+    function scheduleExpiry(token: string, delayMs: number) {
+      if (expiryTimer) clearTimeout(expiryTimer);
+      expiryTimer = setTimeout(() => {
+        const row = users.findByToken(token);
+        if (!row || !row.expires_at) {
+          if (heartbeatCheck) clearInterval(heartbeatCheck);
+          session.close(4004, "Authentication expired");
+          return;
+        }
+        const remaining = row.expires_at - Date.now();
+        if (remaining <= 0) {
+          if (heartbeatCheck) clearInterval(heartbeatCheck);
+          session.close(4004, "Authentication expired");
+        } else {
+          scheduleExpiry(token, remaining);
+        }
+      }, Math.min(delayMs, MAX_TIMEOUT));
+    }
+
     ws.on("close", () => {
       if (heartbeatCheck) clearInterval(heartbeatCheck);
+      if (expiryTimer) clearTimeout(expiryTimer);
       dispatcher.removeSession(session);
     });
   });

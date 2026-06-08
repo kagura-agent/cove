@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
-import { SESSION_TTL_MS } from "../repos/users.js";
+import { SESSION_TTL_MS } from "../config.js";
 
 /**
  * Invite-code registration route.

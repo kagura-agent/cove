@@ -6,7 +6,7 @@ import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
-import { SESSION_TTL_MS } from "../repos/users.js";
+import { SESSION_TTL_MS } from "../config.js";
 
 export interface OAuthConfig {
   clientId: string;

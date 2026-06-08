@@ -1,8 +1,6 @@
 import Database from "better-sqlite3";
 import { addColumnIfMissing, hasColumn } from "./util.js";
-
-const parsedTTL = parseInt(process.env["SESSION_TTL_MS"] ?? "604800000", 10); // 7 days default
-const SESSION_TTL = Number.isFinite(parsedTTL) && parsedTTL > 0 ? parsedTTL : 604800000;
+import { SESSION_TTL_MS } from "../../config.js";
 
 export function migrateV5ToV6(db: Database.Database): void {
   // #118: Add expires_at column for session TTL
@@ -10,7 +8,7 @@ export function migrateV5ToV6(db: Database.Database): void {
 
   // Backfill existing human users with a grace period from deployment time
   if (hasColumn(db, "users", "updated_at")) {
-    const gracePeriod = Date.now() + SESSION_TTL;
+    const gracePeriod = Date.now() + SESSION_TTL_MS;
     db.prepare(
       "UPDATE users SET expires_at = ? WHERE bot = 0 AND expires_at IS NULL"
     ).run(gracePeriod);
