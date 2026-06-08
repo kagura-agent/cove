@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Message } from "../types";
+import type { Reaction } from "@cove/shared";
 
 export type PendingStatus = "pending" | "failed";
 
@@ -16,6 +17,8 @@ interface MessageState {
   updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null) => void;
   removeMessage: (channelId: string, messageId: string) => void;
   removeChannelMessages: (channelId: string) => void;
+  addReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
+  removeReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
 }
 
 export const useMessageStore = create<MessageState>((set) => ({
@@ -83,5 +86,48 @@ export const useMessageStore = create<MessageState>((set) => ({
       if (!(channelId in s.messages)) return s;
       const { [channelId]: _, ...rest } = s.messages;
       return { messages: rest };
+    }),
+  addReaction: (channelId, messageId, emoji, me, count) =>
+    set((s) => {
+      const msgs = s.messages[channelId];
+      if (!msgs) return s;
+      return {
+        messages: {
+          ...s.messages,
+          [channelId]: msgs.map((m) => {
+            if (m.id !== messageId) return m;
+            const reactions = [...(m.reactions ?? [])] as Reaction[];
+            const idx = reactions.findIndex((r) => r.emoji.name === emoji);
+            if (idx >= 0) {
+              reactions[idx] = { ...reactions[idx], count, me: me ? true : reactions[idx].me };
+            } else {
+              reactions.push({ emoji: { id: null, name: emoji }, count, me });
+            }
+            return { ...m, reactions };
+          }),
+        },
+      };
+    }),
+  removeReaction: (channelId, messageId, emoji, me, count) =>
+    set((s) => {
+      const msgs = s.messages[channelId];
+      if (!msgs) return s;
+      return {
+        messages: {
+          ...s.messages,
+          [channelId]: msgs.map((m) => {
+            if (m.id !== messageId) return m;
+            const reactions = [...(m.reactions ?? [])] as Reaction[];
+            const idx = reactions.findIndex((r) => r.emoji.name === emoji);
+            if (idx < 0) return m;
+            if (count <= 0) {
+              reactions.splice(idx, 1);
+            } else {
+              reactions[idx] = { ...reactions[idx], count, me: me ? false : reactions[idx].me };
+            }
+            return { ...m, reactions };
+          }),
+        },
+      };
     }),
 }));

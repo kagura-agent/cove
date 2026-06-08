@@ -98,6 +98,11 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/users/@me`);
   }
 
+  /** GET /api/v10/users/:id — returns a user by ID. */
+  async getUser(id: string): Promise<{ id: string; username: string; bot?: boolean }> {
+    return this.request("GET", `${API_PREFIX}/users/${id}`);
+  }
+
   /** GET /api/v10/guilds/:guildId/channels — list all channels. */
   async getChannels(guildId: string): Promise<Channel[]> {
     return this.request("GET", `${API_PREFIX}/guilds/${guildId}/channels`);
@@ -130,6 +135,11 @@ export class CoveRestClient {
   /** DELETE /api/v10/channels/:id/messages/:msgId — delete a message. */
   async deleteMessage(channelId: string, messageId: string): Promise<void> {
     return this.requestVoid("DELETE", `${API_PREFIX}/channels/${channelId}/messages/${messageId}`);
+  }
+
+  /** GET /api/v10/channels/:channelId/messages/:messageId — get a single message. */
+  async getMessage(channelId: string, messageId: string): Promise<Message> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/messages/${messageId}`);
   }
 
   /** POST /api/v10/channels/:id/typing — send typing indicator. */

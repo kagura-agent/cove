@@ -59,6 +59,12 @@ export function sendTyping(channelId: string) {
 export function ackMessage(channelId: string, messageId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/ack`, { method: "PUT" });
 }
+export function addReaction(channelId: string, messageId: string, emoji: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`, { method: "PUT" });
+}
+export function removeReaction(channelId: string, messageId: string, emoji: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`, { method: "DELETE" });
+}
 export function fetchMe() {
   return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");
 }

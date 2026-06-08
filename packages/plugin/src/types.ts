@@ -41,6 +41,8 @@ export interface GatewayEvents {
   guildMemberRemove: (payload: { user: { id: string; username: string }; guild_id: string }) => void;
   presenceUpdate: (presence: { user: { id: string }; status: string }) => void;
   typingStart: (payload: { channel_id: string; user_id: string; timestamp: number }) => void;
+  messageReactionAdd: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
+  messageReactionRemove: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
   error: (error: Error) => void;
   close: () => void;
   reconnect: () => void;

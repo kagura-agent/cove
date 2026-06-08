@@ -16,6 +16,8 @@ export interface GatewayEventMap {
   CHANNEL_UPDATE: Channel;
   CHANNEL_DELETE: { id: string; guild_id: string };
   MESSAGE_ACK: { channel_id: string; message_id: string };
+  MESSAGE_REACTION_ADD: { user_id: string; channel_id: string; message_id: string; guild_id: string; emoji: { id: string | null; name: string }; count: number };
+  MESSAGE_REACTION_REMOVE: { user_id: string; channel_id: string; message_id: string; guild_id: string; emoji: { id: string | null; name: string }; count: number };
   GUILD_MEMBER_ADD: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string };
   GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
   GUILD_CREATE: { id: string; name: string };

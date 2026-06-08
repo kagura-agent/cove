@@ -178,6 +178,18 @@ export function setupGatewaySubscriptions(): void {
   subscribe("GUILD_MEMBER_REMOVE", (data) => {
     useMemberStore.getState().removeMember(data.guild_id, data.user.id);
   });
+
+  subscribe("MESSAGE_REACTION_ADD", (data) => {
+    const selfId = useUserStore.getState().id;
+    const me = data.user_id === selfId;
+    useMessageStore.getState().addReaction(data.channel_id, data.message_id, data.emoji.name, me, data.count);
+  });
+
+  subscribe("MESSAGE_REACTION_REMOVE", (data) => {
+    const selfId = useUserStore.getState().id;
+    const me = data.user_id === selfId;
+    useMessageStore.getState().removeReaction(data.channel_id, data.message_id, data.emoji.name, me, data.count);
+  });
 }
 
 export function teardownGatewaySubscriptions(): void {

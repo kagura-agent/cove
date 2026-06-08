@@ -195,6 +195,28 @@ export class GatewayDispatcher {
     return presences;
   }
 
+  reactionAdd(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
+    this.broadcastToGuild(guildId, "MESSAGE_REACTION_ADD", {
+      user_id: userId,
+      channel_id: channelId,
+      message_id: messageId,
+      guild_id: guildId,
+      emoji: { id: null, name: emoji },
+      count,
+    });
+  }
+
+  reactionRemove(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
+    this.broadcastToGuild(guildId, "MESSAGE_REACTION_REMOVE", {
+      user_id: userId,
+      channel_id: channelId,
+      message_id: messageId,
+      guild_id: guildId,
+      emoji: { id: null, name: emoji },
+      count,
+    });
+  }
+
   removeUser(userId: string): void {
     const sessionIds = this.userSessions.get(userId);
     if (!sessionIds) return;

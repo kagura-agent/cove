@@ -22,7 +22,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const after = c.req.query("after");
     const around = c.req.query("around");
 
-    const messages = repos.messages.list(channelId, { limit, before, after, around });
+    const messages = repos.messages.list(channelId, { limit, before, after, around }, userId);
     return c.json(messages);
   });
 
@@ -35,7 +35,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return unknownChannel(c);
     }
 
-    const message = repos.messages.getById(channelId, msgId);
+    const message = repos.messages.getById(channelId, msgId, userId);
     if (!message) {
       return unknownMessage(c);
     }
