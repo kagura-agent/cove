@@ -128,16 +128,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
               sessionToken = identifyToken || null;
               const ttl = user.expires_at - Date.now();
               if (ttl > 0) {
-                expiryTimer = setTimeout(() => {
-                  // Re-validate in case session was refreshed
-                  if (sessionToken) {
-                    const valid = users.findByToken(sessionToken);
-                    if (!valid) {
-                      if (heartbeatCheck) clearInterval(heartbeatCheck);
-                      session.close(4004, "Authentication expired");
-                    }
-                  }
-                }, ttl);
+                scheduleExpiry(sessionToken!, ttl);
               } else {
                 // Already expired
                 session.close(4004, "Authentication expired");
@@ -164,6 +155,28 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
         // Ignore malformed messages
       }
     });
+
+    /** Cap to prevent setTimeout overflow (>2^31-1 ms fires immediately) */
+    const MAX_TIMEOUT = 2_147_483_647;
+
+    function scheduleExpiry(token: string, delayMs: number) {
+      if (expiryTimer) clearTimeout(expiryTimer);
+      expiryTimer = setTimeout(() => {
+        const row = users.findByToken(token);
+        if (!row || !row.expires_at) {
+          if (heartbeatCheck) clearInterval(heartbeatCheck);
+          session.close(4004, "Authentication expired");
+          return;
+        }
+        const remaining = row.expires_at - Date.now();
+        if (remaining <= 0) {
+          if (heartbeatCheck) clearInterval(heartbeatCheck);
+          session.close(4004, "Authentication expired");
+        } else {
+          scheduleExpiry(token, remaining);
+        }
+      }, Math.min(delayMs, MAX_TIMEOUT));
+    }
 
     ws.on("close", () => {
       if (heartbeatCheck) clearInterval(heartbeatCheck);
