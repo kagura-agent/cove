@@ -66,6 +66,7 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
     if (remainingMs < refreshThreshold) {
       users.refreshTTL(user.id);
       refreshed = true;
+      user.expires_at = Date.now() + SESSION_TTL_MS;
     }
   }
 
