@@ -11,6 +11,7 @@ import { SESSION_COOKIE } from "../auth.js";
 
 const HEARTBEAT_INTERVAL = 41250;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
+const SESSION_EXPIRY_CHECK_INTERVAL = 60_000; // Check token expiry every 60s
 
 /** Simple cookie parser for raw HTTP upgrade requests (no hono dependency) */
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -54,6 +55,8 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
     const session = new GatewaySession(ws);
     let lastHeartbeat = Date.now();
     let heartbeatCheck: ReturnType<typeof setInterval> | null = null;
+    let expiryCheck: ReturnType<typeof setInterval> | null = null;
+    let sessionToken: string | null = null;
 
     // Check if user was pre-authenticated at upgrade via cookie
     const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser;
@@ -85,13 +88,13 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             }
 
             const data = payload.d as { token?: string } | null;
-            const token = data?.token;
+            let identifyToken = data?.token;
 
             // Try explicit token first (bot clients), then fall back to cookie pre-auth
             let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } | undefined;
 
-            if (token) {
-              const row = users.findByToken(token);
+            if (identifyToken) {
+              const row = users.findByToken(identifyToken);
               if (row) {
                 user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null };
               }
@@ -101,12 +104,17 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             // This handles browser clients sending { token: null } over a cookie-authenticated socket.
             if (!user && preAuthUser) {
               user = preAuthUser;
+              // For expiry checks, use the cookie token
+              if (!identifyToken) {
+                const cookies = parseCookies(request.headers.cookie);
+                identifyToken = cookies[SESSION_COOKIE] || undefined;
+              }
             }
 
             if (!user) {
               if (heartbeatCheck) clearInterval(heartbeatCheck);
               // Distinguish: no credentials at all vs invalid token
-              if (!token && !preAuthUser) {
+              if (!identifyToken && !preAuthUser) {
                 session.close(4001, "Token required");
               } else {
                 session.close(4004, "Authentication failed");
@@ -116,6 +124,22 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
             session.identify(user, dispatcher, guilds, channels, readStates);
             dispatcher.addSession(session);
+
+            // Start periodic session expiry check for non-bot users
+            if (!user.bot) {
+              sessionToken = identifyToken || null;
+              expiryCheck = setInterval(() => {
+                // Re-validate: check if the user's session is still valid
+                if (sessionToken) {
+                  const valid = users.findByToken(sessionToken);
+                  if (!valid) {
+                    if (expiryCheck) clearInterval(expiryCheck);
+                    if (heartbeatCheck) clearInterval(heartbeatCheck);
+                    session.close(4004, "Authentication expired");
+                  }
+                }
+              }, SESSION_EXPIRY_CHECK_INTERVAL);
+            }
             break;
           }
 
@@ -140,6 +164,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
     ws.on("close", () => {
       if (heartbeatCheck) clearInterval(heartbeatCheck);
+      if (expiryCheck) clearInterval(expiryCheck);
       dispatcher.removeSession(session);
     });
   });

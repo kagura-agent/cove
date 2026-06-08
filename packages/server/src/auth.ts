@@ -20,7 +20,7 @@ export const SESSION_COOKIE = "cove-session";
 /** Cookie name for pending registration tokens */
 export const PENDING_COOKIE = "cove-pending";
 
-import { SESSION_TTL_MS } from "./repos/users.js";
+import { SESSION_TTL_MS } from "./config.js";
 
 /** Shared cookie options — secure by default, disabled only for explicit local dev */
 export const COOKIE_OPTIONS = {

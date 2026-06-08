@@ -1,12 +1,9 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import type { CoveAgent } from "@cove/shared";
+import { SESSION_TTL_MS } from "../config.js";
 
-const parsedTTL = parseInt(process.env["SESSION_TTL_MS"] ?? "604800000", 10); // 7 days
-if (!Number.isFinite(parsedTTL) || parsedTTL <= 0) {
-  throw new Error(`Invalid SESSION_TTL_MS: ${process.env["SESSION_TTL_MS"]}`);
-}
-export const SESSION_TTL_MS = parsedTTL;
+export { SESSION_TTL_MS };
 
 interface UserRow {
   id: string;
