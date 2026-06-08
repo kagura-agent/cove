@@ -46,6 +46,8 @@ export function setupGatewaySubscriptions(): void {
     }
 
     // Auto-ack incoming messages in the active channel from other users
+    // (MessageList handles ack on scroll-to-bottom; gateway only auto-acks
+    // when the channel is active so sidebar badge clears)
     if (msg.author.id !== selfId && msg.channel_id === activeChannelId) {
       api.ackMessage(msg.channel_id, msg.id).catch(() => {});
     }
