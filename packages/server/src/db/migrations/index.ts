@@ -4,8 +4,9 @@ import { migrateV1ToV2 } from "./v2-read-states.js";
 import { migrateV2ToV3 } from "./v3-snowflake.js";
 import { migrateV3ToV4 } from "./v4-fk-constraints.js";
 import { migrateV4ToV5 } from "./v5-last-message-id.js";
+import { migrateV5ToV6 } from "./v6-session-ttl.js";
 
-const LATEST_VERSION = 5;
+const LATEST_VERSION = 6;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -15,6 +16,7 @@ const migrations: Record<number, MigrationFn> = {
   3: migrateV2ToV3,
   4: migrateV3ToV4,
   5: migrateV4ToV5,
+  6: migrateV5ToV6,
 };
 
 export function runMigrations(db: Database.Database): void {

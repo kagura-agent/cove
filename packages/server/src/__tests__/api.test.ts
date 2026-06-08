@@ -82,7 +82,7 @@ describe("Cove API — Discord-compatible", () => {
     const res = await app.request(`${API_PREFIX}/users`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ id, username, ...extra }),
+      body: JSON.stringify({ id, username, bot: true, ...extra }),
     });
     return res.json() as Promise<CoveAgent & { token: string }>;
   }
@@ -659,6 +659,7 @@ describe("Cove API — Discord-compatible", () => {
           username: "Kagura",
           avatar: "🌸",
           bio: "AI assistant",
+          bot: true,
         }),
       });
       expect(res.status).toBe(201);
