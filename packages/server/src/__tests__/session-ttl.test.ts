@@ -7,7 +7,7 @@ import type Database from "better-sqlite3";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { OAuthConfig } from "../routes/auth.js";
 import type { Repos } from "../repos/index.js";
-import { resolveUser } from "../auth.js";
+import { resolveUser, getRefreshThreshold } from "../auth.js";
 
 describe("Session TTL & Cleanup (#118)", () => {
   let db: Database.Database;
@@ -217,27 +217,21 @@ describe("Sliding refresh regression (#267)", () => {
   });
 
   it("sliding threshold works for short TTLs (< 24h)", () => {
-    // The short-TTL branch triggers when TTL < 2*86400000 (< 2 days).
-    // For TTL = 3600000 (1h): threshold = max(1800000, 3600000 - 86400000) = 1800000 (half TTL wins)
-    // For the default 7-day TTL: threshold = max(3.5d, 6d) = 6d (the -1day branch wins)
-    //
-    // To actually test the short-TTL branch (where TTL/2 > TTL - 86400000),
-    // we test the threshold calculation directly with a known short TTL value.
-    const shortTTL = 3_600_000; // 1 hour
-    const shortThreshold = Math.max(shortTTL / 2, shortTTL - 86_400_000);
-    // For 1h TTL: max(1800000, -82800000) = 1800000 → half the TTL
-    expect(shortThreshold).toBe(shortTTL / 2);
-    // Verify this IS the short-TTL branch (TTL/2 wins over TTL - 1day)
-    expect(shortTTL / 2).toBeGreaterThan(shortTTL - 86_400_000);
-
-    // Now verify with the actual SESSION_TTL_MS that the long-TTL branch applies
-    const longThreshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
-    // 7-day TTL: max(3.5d, 6d) = 6d → the -1day branch wins
-    expect(longThreshold).toBe(SESSION_TTL_MS - 86_400_000);
+    // Test the extracted pure function with various TTL values
+    // Short TTL (1h): TTL/2 wins over TTL-1day (which is negative)
+    expect(getRefreshThreshold(3_600_000)).toBe(1_800_000); // half of 1h
+    // Very short TTL (5min): same — TTL/2 wins
+    expect(getRefreshThreshold(300_000)).toBe(150_000);
+    // Exactly 24h: max(12h, 0) = 12h — TTL/2 wins
+    expect(getRefreshThreshold(86_400_000)).toBe(43_200_000);
+    // 48h: max(24h, 24h) = 24h — tie
+    expect(getRefreshThreshold(172_800_000)).toBe(86_400_000);
+    // 7 days: max(3.5d, 6d) = 6d — TTL-1day wins
+    expect(getRefreshThreshold(604_800_000)).toBe(604_800_000 - 86_400_000);
 
     // Integration: verify resolveUser triggers refresh when remaining < threshold
     const now = Date.now();
-    const threshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
+    const threshold = getRefreshThreshold(SESSION_TTL_MS);
     // User whose remaining time is below threshold
     const expiresAt = now + Math.floor(threshold * 0.5); // well below threshold
     db.prepare(

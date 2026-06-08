@@ -11,7 +11,6 @@ import { SESSION_COOKIE } from "../auth.js";
 
 const HEARTBEAT_INTERVAL = 41250;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_INTERVAL * 2;
-const SESSION_EXPIRY_CHECK_INTERVAL = 60_000; // Check token expiry every 60s
 
 /** Simple cookie parser for raw HTTP upgrade requests (no hono dependency) */
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -41,8 +40,8 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
       if (sessionToken) {
         const row = users.findByToken(sessionToken);
         if (row) {
-          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser = {
-            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null,
+          (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } }).__coveUser = {
+            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null,
           };
         }
       }
@@ -55,11 +54,11 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
     const session = new GatewaySession(ws);
     let lastHeartbeat = Date.now();
     let heartbeatCheck: ReturnType<typeof setInterval> | null = null;
-    let expiryCheck: ReturnType<typeof setInterval> | null = null;
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
     let sessionToken: string | null = null;
 
     // Check if user was pre-authenticated at upgrade via cookie
-    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } }).__coveUser;
+    const preAuthUser = (request as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } }).__coveUser;
 
     session.send({
       op: GatewayOpcode.HELLO,
@@ -91,12 +90,12 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             let identifyToken = data?.token;
 
             // Try explicit token first (bot clients), then fall back to cookie pre-auth
-            let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null } | undefined;
+            let user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } | undefined;
 
             if (identifyToken) {
               const row = users.findByToken(identifyToken);
               if (row) {
-                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null };
+                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null };
               }
             }
 
@@ -124,20 +123,25 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             session.identify(user, dispatcher, guilds, channels, readStates);
             dispatcher.addSession(session);
 
-            // Start periodic session expiry check for non-bot users
-            if (!user.bot) {
+            // Schedule session expiry disconnect for non-bot users
+            if (!user.bot && user.expires_at) {
               sessionToken = identifyToken || null;
-              expiryCheck = setInterval(() => {
-                // Re-validate: check if the user's session is still valid
-                if (sessionToken) {
-                  const valid = users.findByToken(sessionToken);
-                  if (!valid) {
-                    if (expiryCheck) clearInterval(expiryCheck);
-                    if (heartbeatCheck) clearInterval(heartbeatCheck);
-                    session.close(4004, "Authentication expired");
+              const ttl = user.expires_at - Date.now();
+              if (ttl > 0) {
+                expiryTimer = setTimeout(() => {
+                  // Re-validate in case session was refreshed
+                  if (sessionToken) {
+                    const valid = users.findByToken(sessionToken);
+                    if (!valid) {
+                      if (heartbeatCheck) clearInterval(heartbeatCheck);
+                      session.close(4004, "Authentication expired");
+                    }
                   }
-                }
-              }, SESSION_EXPIRY_CHECK_INTERVAL);
+                }, ttl);
+              } else {
+                // Already expired
+                session.close(4004, "Authentication expired");
+              }
             }
             break;
           }
@@ -163,7 +167,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
 
     ws.on("close", () => {
       if (heartbeatCheck) clearInterval(heartbeatCheck);
-      if (expiryCheck) clearInterval(expiryCheck);
+      if (expiryTimer) clearTimeout(expiryTimer);
       dispatcher.removeSession(session);
     });
   });

@@ -17,6 +17,15 @@ export type AppEnv = { Variables: { botUser: AuthUser } };
 /** Cookie name for authenticated session tokens */
 export const SESSION_COOKIE = "cove-session";
 
+/**
+ * Calculate the sliding refresh threshold for a given TTL.
+ * For TTLs >= 24h: refresh when less than 24h remains.
+ * For TTLs < 24h: refresh when less than half the TTL remains.
+ */
+export function getRefreshThreshold(ttlMs: number): number {
+  return Math.max(ttlMs / 2, ttlMs - 86_400_000);
+}
+
 /** Cookie name for pending registration tokens */
 export const PENDING_COOKIE = "cove-pending";
 
@@ -62,7 +71,7 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
   let refreshed = false;
   if (user.expires_at !== null && !user.bot) {
     const remainingMs = user.expires_at - Date.now();
-    const refreshThreshold = Math.max(SESSION_TTL_MS / 2, SESSION_TTL_MS - 86_400_000);
+    const refreshThreshold = getRefreshThreshold(SESSION_TTL_MS);
     if (remainingMs < refreshThreshold) {
       users.refreshTTL(user.id);
       refreshed = true;

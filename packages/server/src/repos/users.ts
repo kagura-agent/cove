@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import type { CoveAgent } from "@cove/shared";
 import { SESSION_TTL_MS } from "../config.js";
 
+/** @deprecated Import from '../config.js' directly */
 export { SESSION_TTL_MS };
 
 interface UserRow {
