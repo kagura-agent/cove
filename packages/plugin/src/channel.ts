@@ -14,6 +14,35 @@ import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
 
+
+/**
+ * Bounded LRU-style set to track message IDs sent by the bot.
+ * Used to determine "own" messages for reaction notifications.
+ */
+class SentMessageTracker {
+  private readonly ids = new Set<string>();
+  private readonly maxSize: number;
+
+  constructor(maxSize = 500) {
+    this.maxSize = maxSize;
+  }
+
+  add(id: string): void {
+    if (this.ids.has(id)) {
+      this.ids.delete(id); // refresh recency
+    } else if (this.ids.size >= this.maxSize) {
+      // Remove oldest entry (first inserted)
+      const oldest = this.ids.values().next().value;
+      this.ids.delete(oldest!);
+    }
+    this.ids.add(id);
+  }
+
+  has(id: string): boolean {
+    return this.ids.has(id);
+  }
+}
+
 // Re-export for test compatibility
 export { createAbortableDispatch, DispatchTimeoutError, DispatchAbortedError } from "./dispatch.js";
 
@@ -162,9 +191,63 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         });
       });
 
+      // Track messages sent by the bot for reaction notifications
+      const sentMessages = new SentMessageTracker();
+
+      // Resolve reaction notification mode from config
+      const channelSection = cfg?.channels?.["cove"] ?? {};
+      const reactionNotifications: "off" | "own" | "all" = (channelSection as any).reactionNotifications ?? "own";
+
+      gatewayClient.on("messageReactionAdd", async (payload) => {
+        log?.info?.(`cove: reaction event received — user=${payload.user_id} msg=${payload.message_id} emoji=${payload.emoji.name} tracked=${sentMessages.has(payload.message_id)} mode=${reactionNotifications}`);
+        if (reactionNotifications === "off") return;
+        // Don't notify when the bot itself reacts
+        if (gatewayClient.botUser && payload.user_id === gatewayClient.botUser.id) return;
+        // In "own" mode, only notify for reactions to bot's own messages
+        if (reactionNotifications === "own" && !sentMessages.has(payload.message_id)) {
+          // REST fallback: check if message was sent by bot
+          try {
+            const msg = await restClient.getMessage(payload.channel_id, payload.message_id);
+            if (!msg || msg.author.id !== gatewayClient.botUser?.id) return;
+            sentMessages.add(payload.message_id); // cache for next time
+          } catch { return; }
+        }
+
+        const emoji = payload.emoji.name;
+        const userId = payload.user_id;
+        const channelId = payload.channel_id;
+
+        // Resolve display names for the notification text
+        let username = userId;
+        let channelName = channelId;
+        try {
+          const user = await restClient.getUser(userId);
+          username = user.username;
+        } catch { /* fall back to ID */ }
+        try {
+          const channel = await restClient.getChannel(channelId);
+          channelName = channel.name;
+        } catch { /* fall back to ID */ }
+
+        const text = `${username} reacted with ${emoji} to your message in #${channelName}`;
+        const sessionKey = `agent:${account.agentId}:cove:group:${channelId}`;
+
+        try {
+          const { enqueueSystemEvent } = await import("openclaw/plugin-sdk/system-event-runtime");
+          enqueueSystemEvent(text, { sessionKey, contextKey: "cove-reaction" });
+          log?.info?.(`cove: reaction notification enqueued — ${text}`);
+        } catch (err: any) {
+          log?.warn?.(`cove: failed to enqueue reaction system event: ${err.message}`);
+        }
+      });
+
       gatewayClient.on("messageCreate", async (message) => {
-        // Skip own messages and bot messages
-        if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) return;
+        // Track messages sent by the bot
+        if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) {
+          sentMessages.add(message.id);
+          return;
+        }
+        // Skip bot messages from others
         if (message.author.bot) return;
 
         log?.info?.(`cove: [${message.channel_id}] ${message.author.username}: ${message.content.slice(0, 50)}`);

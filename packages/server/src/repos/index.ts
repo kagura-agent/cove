@@ -5,8 +5,9 @@ import { UsersRepo } from "./users.js";
 import { MembersRepo } from "./members.js";
 import { GuildsRepo } from "./guilds.js";
 import { ReadStatesRepo } from "./readStates.js";
+import { ReactionsRepo } from "./reactions.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -16,16 +17,19 @@ export interface Repos {
   members: MembersRepo;
   guilds: GuildsRepo;
   readStates: ReadStatesRepo;
+  reactions: ReactionsRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
+  const reactions = new ReactionsRepo(db);
   return {
     db,
-    messages: new MessagesRepo(db),
+    messages: new MessagesRepo(db, reactions),
     channels: new ChannelsRepo(db),
     users: new UsersRepo(db),
     members: new MembersRepo(db),
     guilds: new GuildsRepo(db),
     readStates: new ReadStatesRepo(db),
+    reactions,
   };
 }

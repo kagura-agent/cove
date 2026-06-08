@@ -64,6 +64,7 @@
   --bg-primary: #1a191d;
   --bg-secondary: #111113;
   --bg-tertiary: #0c0c0e;
+  --bg-floating: #232428;
   --bg-input: #222226;
   --bg-code: rgba(255, 255, 255, 0.06);
   --bg-modifier-hover: rgba(79,84,92,0.16);
@@ -129,6 +130,7 @@
   --bg-primary: #ffffff;
   --bg-secondary: #f2f3f5;
   --bg-tertiary: #e3e5e8;
+  --bg-floating: #ffffff;
   --bg-input: #ebedef;
   --bg-code: rgba(0, 0, 0, 0.06);
   --bg-modifier-hover: rgba(116,127,141,0.08);
@@ -184,6 +186,7 @@
   --bg-primary: #313338;
   --bg-secondary: #2b2d31;
   --bg-tertiary: #232428;
+  --bg-floating: #2b2d31;
   --bg-input: #383a40;
   --bg-code: rgba(255, 255, 255, 0.06);
   --bg-modifier-hover: rgba(116,127,141,0.06);
@@ -577,4 +580,43 @@ textarea:focus-visible {
 
 /* ── Markdown message content ────────────────────────────── */
 
+
+
+/* ── Reactions ──────────────────────────────────────────── */
+/* ── Message hover toolbar (Discord-style) ────────────── */
+.message-actions {
+  position: absolute;
+  top: -16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-floating);
+  border: 1px solid var(--bg-modifier-hover);
+  border-radius: 6px;
+  padding: 2px 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+.discord-msg-row:hover .message-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.message-actions-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: background 0.1s ease;
+}
+.message-actions-btn:hover {
+  background: var(--bg-modifier-hover);
+}
 

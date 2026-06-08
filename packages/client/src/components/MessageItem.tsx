@@ -7,6 +7,8 @@ import { useMessageStore } from "../stores/useMessageStore";
 import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
 
+const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
+
 function formatTime(ts: string): string {
   try {
     const d = new Date(ts);
@@ -57,6 +59,62 @@ const editedStyle: CSSProperties = {
 interface MessageItemProps {
   message: Message;
   isGroupStart: boolean;
+}
+
+function MessageActions({ messageId, channelId }: { messageId: string; channelId: string }) {
+  return (
+    <div className="message-actions">
+      {QUICK_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          className="message-actions-btn"
+          onClick={() => api.addReaction(channelId, messageId, emoji)}
+          title={emoji}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ReactionPills({ message }: { message: Message }) {
+  const hasReactions = message.reactions && message.reactions.length > 0;
+  if (!hasReactions) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+      {message.reactions?.map((r) => (
+        <button
+          key={r.emoji.id ?? r.emoji.name}
+          type="button"
+          onClick={() => {
+            if (r.me) {
+              api.removeReaction(message.channel_id, message.id, r.emoji.name);
+            } else {
+              api.addReaction(message.channel_id, message.id, r.emoji.name);
+            }
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "2px 6px",
+            fontSize: "var(--font-size-sm)",
+            borderRadius: "4px",
+            border: r.me ? "1px solid var(--accent)" : "1px solid var(--bg-modifier-hover)",
+            background: r.me ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--bg-modifier-hover)",
+            color: r.me ? "var(--accent)" : "var(--text-normal)",
+            cursor: "pointer",
+            lineHeight: 1.2,
+          }}
+        >
+          <span>{r.emoji.name}</span>
+          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 500 }}>{r.count}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const pendingStyle: CSSProperties = {
@@ -205,7 +263,13 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
             <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
           </div>
+
+          {/* Reactions */}
+          <ReactionPills message={message} />
         </div>
+
+        {/* Hover toolbar */}
+        <MessageActions messageId={message.id} channelId={message.channel_id} />
       </div>
     );
   }
@@ -239,7 +303,13 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
         </div>
+
+        {/* Reactions */}
+        <ReactionPills message={message} />
       </div>
+
+      {/* Hover toolbar */}
+      <MessageActions messageId={message.id} channelId={message.channel_id} />
     </div>
   );
 }

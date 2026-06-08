@@ -83,6 +83,18 @@ export function MessageList({ channelId }: { channelId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessageContent, scrollToBottom]);
 
+  // Auto-scroll when reactions change on the last message (pill height may grow)
+  // Use a primitive value to avoid over-firing on object reference changes
+  const lastMsg = messages?.[messages.length - 1];
+  const lastMsgReactionKey = lastMsg ? `${lastMsg.id}:${(lastMsg.reactions ?? []).reduce((s, r) => s + r.count, 0)}` : "";
+  useEffect(() => {
+    if (!messages || !lastMsgReactionKey) return;
+    if (wasNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMsgReactionKey, scrollToBottom]);
+
   if (!messages) {
     return <div style={centerStyle}><Spin tip="Loading messages…" /></div>;
   }

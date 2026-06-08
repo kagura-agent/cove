@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { generateSnowflake, type Message, type User } from "@cove/shared";
+import { generateSnowflake, type Message, type Reaction, type User } from "@cove/shared";
+import type { ReactionsRepo } from "./reactions.js";
 
 interface MessageRow {
   id: string;
@@ -16,7 +17,7 @@ interface MessageRow {
 
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
-function toMessage(row: MessageRow): Message {
+function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   return {
     id: row.id,
     channel_id: row.channel_id,
@@ -41,13 +42,14 @@ function toMessage(row: MessageRow): Message {
     pinned: false,
     tts: false,
     mention_everyone: false,
+    reactions: reactions ?? [],
   };
 }
 
 export class MessagesRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database.Database, private reactionsRepo?: ReactionsRepo) {}
 
-  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }): Message[] {
+  list(channelId: string, opts: { limit: number; before?: string; after?: string; around?: string }, currentUserId?: string): Message[] {
     const { limit, before, after, around } = opts;
     let rows: MessageRow[];
 
@@ -71,13 +73,26 @@ export class MessagesRepo {
         .all(channelId, limit) as MessageRow[];
     }
 
-    return rows.map(toMessage);
+    const messages = rows.map(r => toMessage(r));
+    if (this.reactionsRepo) {
+      const ids = messages.map(m => m.id);
+      const reactionMap = this.reactionsRepo.getForMessages(ids, currentUserId);
+      for (const msg of messages) {
+        msg.reactions = reactionMap.get(msg.id) ?? [];
+      }
+    }
+    return messages;
   }
 
-  getById(channelId: string, messageId: string): Message | null {
+  getById(channelId: string, messageId: string, currentUserId?: string): Message | null {
     const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow | undefined;
-    return row ? toMessage(row) : null;
+    if (!row) return null;
+    const msg = toMessage(row);
+    if (this.reactionsRepo) {
+      msg.reactions = this.reactionsRepo.getForMessage(messageId, currentUserId);
+    }
+    return msg;
   }
 
   create(channelId: string, author: User, content: string): Message {

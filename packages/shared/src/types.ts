@@ -53,6 +53,14 @@ export interface Message {
   mention_everyone: boolean;
   /** Client-generated nonce for optimistic send reconciliation. */
   nonce?: string;
+  reactions?: Reaction[];
+}
+
+/** A reaction summary for a message. */
+export interface Reaction {
+  emoji: { id: string | null; name: string };
+  count: number;
+  me: boolean;
 }
 
 /** Discord Gateway opcodes. */
