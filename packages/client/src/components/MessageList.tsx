@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useMemo, Fragment } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
+import { useUserStore } from "../stores/useUserStore";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { Spin, Empty } from "antd";
@@ -277,14 +278,29 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [channelId]);
 
   // ── New message arrival effect ───────────────────────────
+  const currentUserId = useUserStore((s) => s.id);
   useEffect(() => {
     if (!messages) return;
     if (messages.length > prevCountRef.current) {
-      if (wasNearBottomRef.current) {
-        // Policy #2: User at bottom + new message → keep at bottom
+      const lastMsg = messages[messages.length - 1];
+      const isMine = lastMsg.author.id === currentUserId;
+
+      if (isMine) {
+        // User sent a message → clear all unread state + scroll to bottom
+        setShowBanner(false);
+        setUnreadInfo(null);
+        useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
+        useReadStateStore.getState().clearUnread(channelId);
+        if (lastMsg.id !== lastAckedIds.get(channelId)) {
+          lastAckedIds.set(channelId, lastMsg.id);
+          api.ackMessage(channelId, lastMsg.id).catch(() => {});
+        }
+        requestAnimationFrame(() => scrollToBottom());
+      } else if (wasNearBottomRef.current) {
+        // Policy #2: User at bottom + new message from others → keep at bottom
         requestAnimationFrame(() => scrollToBottom());
       } else {
-        // Policy #5: User scrolled up + new message → show/update banner
+        // Policy #5: User scrolled up + new message from others → show/update banner
         const newCount = messages.length - prevCountRef.current;
         bannerModeRef.current = "live";
         setUnreadInfo((prev) => {
@@ -298,7 +314,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     }
     prevCountRef.current = messages.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages?.length, scrollToBottom]);
+  }, [messages?.length, scrollToBottom, currentUserId, channelId]);
 
   // Auto-scroll when last message content changes (e.g. edit) while at bottom
   const lastMessageContent = messages?.[messages.length - 1]?.content;
