@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, useMemo, Fragment } from "react";
+import { useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useUserStore } from "../stores/useUserStore";
@@ -50,59 +50,27 @@ function NewMessagesDivider() {
   );
 }
 
-/* ── Unread Banner ───────────────────────────────────────── */
-const bannerWrapperStyle: CSSProperties = {
-  position: "relative",
-  zIndex: 10,
-  flexShrink: 0,
-};
-const bannerStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "6px var(--content-pad)",
-  background: "var(--accent)",
-  color: "var(--text-on-accent)",
-  fontSize: "var(--font-size-sm)",
-  fontWeight: 500,
-  cursor: "pointer",
-  flexShrink: 0,
-};
-const bannerDismissStyle: CSSProperties = {
-  background: "none",
-  border: "none",
-  color: "var(--text-on-accent)",
-  cursor: "pointer",
-  fontSize: "var(--font-size-sm)",
-  fontWeight: 600,
-  padding: "2px 8px",
-  borderRadius: "4px",
-  opacity: 0.9,
-};
-
-type BannerMode = "catchup" | "live";
-
 /**
- * Scroll Policy (unified):
+ * Scroll Policy (Discord-style):
  *
  * SCROLL TO BOTTOM when:
  *   1. Opening a channel with NO unread messages
  *   2. New message arrives while user is already at bottom
- *   3. User sends a message (handled by parent — we just see message count increase while near bottom)
+ *   3. User sends a message
  *
  * SCROLL TO DIVIDER when:
  *   4. Opening a channel WITH unread messages → scroll to NEW divider
  *
  * DON'T SCROLL when:
- *   5. New message arrives while user is scrolled UP → show/update banner instead
+ *   5. New message arrives while user is scrolled UP
  *
- * CLEAR UNREAD (ack + remove divider + hide banner) when:
- *   6. User MANUALLY scrolls to bottom (not programmatic scroll)
- *   7. User clicks "Mark as Read" button
+ * NEW DIVIDER disappears when:
+ *   - User sends a message (clears snapshot)
+ *   - User switches channel (unmount clears snapshot)
  *
- * Key mechanism: `isProgrammaticScrollRef` is set to true before any programmatic
- * scroll and cleared in the scroll handler. This distinguishes user scrolls from
- * programmatic ones without timing hacks.
+ * ACK (mark as read on server) when:
+ *   - User scrolls to bottom (but divider stays)
+ *   - User sends a message
  */
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
@@ -113,15 +81,6 @@ export function MessageList({ channelId }: { channelId: string }) {
   const dividerRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
   const wasNearBottomRef = useRef(true);
-  const [showBanner, setShowBanner] = useState(false);
-  const [unreadInfo, setUnreadInfo] = useState<{ count: number; since: string } | null>(null);
-
-  // Banner mode: "catchup" = initial unread, "live" = new messages while scrolled up
-  const bannerModeRef = useRef<BannerMode>("catchup");
-
-  // Ref mirror of showBanner for use in scroll handler without re-binding
-  const showBannerRef = useRef(false);
-  showBannerRef.current = showBanner;
 
   /**
    * THE KEY MECHANISM: Set this to true before any programmatic scroll.
@@ -140,12 +99,6 @@ export function MessageList({ channelId }: { channelId: string }) {
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     isProgrammaticScrollRef.current = true;
     bottomRef.current?.scrollIntoView({ behavior });
-  }, []);
-
-  // Helper: perform a programmatic scroll to divider
-  const scrollToDivider = useCallback(() => {
-    isProgrammaticScrollRef.current = true;
-    dividerRef.current?.scrollIntoView({ behavior: "instant", block: "start" });
   }, []);
 
   // Snapshot read state when opening a channel
@@ -167,9 +120,6 @@ export function MessageList({ channelId }: { channelId: string }) {
     wasNearBottomRef.current = true;
     isLoadedRef.current = false;
     isProgrammaticScrollRef.current = false;
-    setShowBanner(false);
-    setUnreadInfo(null);
-    bannerModeRef.current = "catchup";
 
     api.fetchMessages(channelId).then((msgs) => {
       if (cancelled) return;
@@ -183,12 +133,6 @@ export function MessageList({ channelId }: { channelId: string }) {
         // Channel has unread messages → find first unread
         const firstUnreadIdx = reversed.findIndex((m) => m.id > openReadId);
         if (firstUnreadIdx !== -1) {
-          // Calculate unread info for banner
-          const unreadCount = reversed.length - firstUnreadIdx;
-          const firstUnreadTime = new Date(reversed[firstUnreadIdx].timestamp);
-          const timeStr = firstUnreadTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          setUnreadInfo({ count: unreadCount, since: timeStr });
-          bannerModeRef.current = "catchup";
           wasNearBottomRef.current = false;
 
           // Policy #4: Scroll to divider, not bottom
@@ -201,7 +145,6 @@ export function MessageList({ channelId }: { channelId: string }) {
               // Fallback: if divider not rendered yet, scroll to bottom
               bottomRef.current?.scrollIntoView({ behavior: "instant" });
             }
-            setShowBanner(true);
             // Mark as loaded after programmatic scroll completes
             requestAnimationFrame(() => { isLoadedRef.current = true; });
           });
@@ -249,20 +192,17 @@ export function MessageList({ channelId }: { channelId: string }) {
       }
 
       // This is a user-initiated scroll
-      // If content doesn't overflow, don't auto-clear (only Mark as Read works)
+      // If content doesn't overflow, don't auto-clear (only sending a message clears)
       if (container.scrollHeight <= container.clientHeight) return;
 
       wasNearBottomRef.current = isNearBottom(container);
 
-      // Policy #6: User manually scrolled to bottom → clear unread state
+      // User scrolled to bottom → ack the messages (but divider STAYS per Discord behavior)
       if (wasNearBottomRef.current) {
         const store = useReadStateStore.getState();
         const hasOpenSnapshot = !!store.channelOpenReadIds[channelId];
-        if (showBannerRef.current || hasOpenSnapshot) {
-          setShowBanner(false);
-          setUnreadInfo(null);
-          store.clearChannelOpenSnapshot(channelId);
-          // Ack the last message
+        if (hasOpenSnapshot) {
+          // Ack the last message on server
           const currentMessages = useMessageStore.getState().messages[channelId];
           if (currentMessages && currentMessages.length > 0) {
             const lastMessage = currentMessages[currentMessages.length - 1];
@@ -286,10 +226,8 @@ export function MessageList({ channelId }: { channelId: string }) {
       const isMine = lastMsg.author.id === currentUserId;
 
       if (isMine) {
-        // User sent a message → clear all unread state + scroll to bottom
+        // User sent a message → clear divider + ack + scroll to bottom
         wasNearBottomRef.current = true;
-        setShowBanner(false);
-        setUnreadInfo(null);
         useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
         useReadStateStore.getState().clearUnread(channelId);
         if (lastMsg.id !== lastAckedIds.get(channelId)) {
@@ -300,18 +238,8 @@ export function MessageList({ channelId }: { channelId: string }) {
       } else if (wasNearBottomRef.current) {
         // Policy #2: User at bottom + new message from others → keep at bottom
         requestAnimationFrame(() => scrollToBottom());
-      } else {
-        // Policy #5: User scrolled up + new message from others → show/update banner
-        const newCount = messages.length - prevCountRef.current;
-        bannerModeRef.current = "live";
-        setUnreadInfo((prev) => {
-          const count = (prev?.count ?? 0) + newCount;
-          const firstNewMsg = messages[messages.length - newCount];
-          const since = prev?.since ?? new Date(firstNewMsg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          return { count, since };
-        });
-        setShowBanner(true);
       }
+      // Policy #5: User scrolled up + new message from others → don't scroll (no banner)
     }
     prevCountRef.current = messages.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -338,33 +266,6 @@ export function MessageList({ channelId }: { channelId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMsgReactionKey, scrollToBottom]);
 
-  // Banner click: scroll to bottom (live mode) or divider (catchup mode)
-  const handleBannerClick = useCallback(() => {
-    if (bannerModeRef.current === "live") {
-      scrollToBottom();
-    } else {
-      scrollToDivider();
-    }
-    setShowBanner(false);
-    setUnreadInfo(null);
-  }, [scrollToBottom, scrollToDivider]);
-
-  // Policy #7: Mark as Read button — clear everything + ack
-  const handleMarkAsRead = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowBanner(false);
-    setUnreadInfo(null);
-    useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
-
-    const currentMessages = useMessageStore.getState().messages[channelId];
-    if (currentMessages && currentMessages.length > 0) {
-      const lastMessage = currentMessages[currentMessages.length - 1];
-      lastAckedIds.set(channelId, lastMessage.id);
-      useReadStateStore.getState().clearUnread(channelId);
-      api.ackMessage(channelId, lastMessage.id).catch(() => {});
-    }
-  }, [channelId]);
-
   // Memoize divider index (must be before early returns to satisfy hooks rules)
   const dividerBeforeIndex = useMemo(() => {
     if (!channelOpenReadId || !messages) return -1;
@@ -383,21 +284,8 @@ export function MessageList({ channelId }: { channelId: string }) {
     );
   }
 
-  const bannerArrow = bannerModeRef.current === "live" ? "↓" : "↑";
-  const bannerText = bannerModeRef.current === "live"
-    ? `${bannerArrow} ${unreadInfo?.count ?? 0} new message${(unreadInfo?.count ?? 0) !== 1 ? "s" : ""}`
-    : `${bannerArrow} ${unreadInfo?.count ?? 0} new message${(unreadInfo?.count ?? 0) !== 1 ? "s" : ""} since ${unreadInfo?.since ?? ""} — Jump`;
-
   return (
     <>
-      {showBanner && unreadInfo && (
-        <div style={bannerWrapperStyle}>
-          <div style={bannerStyle} onClick={handleBannerClick} role="button" tabIndex={0}>
-            <span>{bannerText}</span>
-            <button style={bannerDismissStyle} onClick={handleMarkAsRead}>Mark as Read</button>
-          </div>
-        </div>
-      )}
       <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
         {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
