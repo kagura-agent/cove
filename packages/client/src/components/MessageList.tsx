@@ -124,14 +124,6 @@ export function MessageList({ channelId }: { channelId: string }) {
     api.fetchMessages(channelId).then((msgs) => {
       if (cancelled) return;
       const reversed = msgs.reverse();
-
-      // Pre-set scroll to bottom before React renders to avoid visual flash
-      // (messages appear at correct position without a frame of showing from top)
-      const container = scrollContainerRef.current;
-      if (container) {
-        container.style.opacity = "0";
-      }
-
       setMessages(channelId, reversed);
       prevCountRef.current = reversed.length;
 
@@ -152,7 +144,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             } else {
               bottomRef.current?.scrollIntoView({ behavior: "instant" });
             }
-            if (container) container.style.opacity = "1";
+            
             requestAnimationFrame(() => { isLoadedRef.current = true; });
           });
         } else {
@@ -161,7 +153,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             if (cancelled) return;
             isProgrammaticScrollRef.current = true;
             bottomRef.current?.scrollIntoView({ behavior: "instant" });
-            if (container) container.style.opacity = "1";
+            
             requestAnimationFrame(() => { isLoadedRef.current = true; });
           });
         }
@@ -171,7 +163,7 @@ export function MessageList({ channelId }: { channelId: string }) {
           if (cancelled) return;
           isProgrammaticScrollRef.current = true;
           bottomRef.current?.scrollIntoView({ behavior: "instant" });
-          if (container) container.style.opacity = "1";
+          
           requestAnimationFrame(() => { isLoadedRef.current = true; });
         });
       }
