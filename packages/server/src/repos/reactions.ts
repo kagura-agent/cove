@@ -88,11 +88,11 @@ export class ReactionsRepo {
     const params: (string | number)[] = [messageId, emoji];
 
     if (after) {
-      query += ` AND r.created_at > (SELECT created_at FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?)`;
-      params.push(messageId, after, emoji);
+      query += ` AND (r.created_at, r.user_id) > ((SELECT created_at FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?), ?)`;
+      params.push(messageId, after, emoji, after);
     }
 
-    query += ` ORDER BY r.created_at LIMIT ?`;
+    query += ` ORDER BY r.created_at, r.user_id LIMIT ?`;
     params.push(limit);
 
     return this.db.prepare(query).all(...params) as { id: string; username: string; avatar: string | null; bot: number }[];
