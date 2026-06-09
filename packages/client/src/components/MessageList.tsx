@@ -81,6 +81,28 @@ const bannerDismissStyle: CSSProperties = {
 
 type BannerMode = "catchup" | "live";
 
+/**
+ * Scroll Policy (unified):
+ *
+ * SCROLL TO BOTTOM when:
+ *   1. Opening a channel with NO unread messages
+ *   2. New message arrives while user is already at bottom
+ *   3. User sends a message (handled by parent — we just see message count increase while near bottom)
+ *
+ * SCROLL TO DIVIDER when:
+ *   4. Opening a channel WITH unread messages → scroll to NEW divider
+ *
+ * DON'T SCROLL when:
+ *   5. New message arrives while user is scrolled UP → show/update banner instead
+ *
+ * CLEAR UNREAD (ack + remove divider + hide banner) when:
+ *   6. User MANUALLY scrolls to bottom (not programmatic scroll)
+ *   7. User clicks "Mark as Read" button
+ *
+ * Key mechanism: `isProgrammaticScrollRef` is set to true before any programmatic
+ * scroll and cleared in the scroll handler. This distinguishes user scrolls from
+ * programmatic ones without timing hacks.
+ */
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
@@ -93,139 +115,151 @@ export function MessageList({ channelId }: { channelId: string }) {
   const [showBanner, setShowBanner] = useState(false);
   const [unreadInfo, setUnreadInfo] = useState<{ count: number; since: string } | null>(null);
 
-  // Fix #1: Store auto-hide timer to prevent leaks / cross-channel pollution
-  const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Fix #3: Track banner mode for click direction
+  // Banner mode: "catchup" = initial unread, "live" = new messages while scrolled up
   const bannerModeRef = useRef<BannerMode>("catchup");
 
-  // Fix #4: Guard against initial programmatic scroll hiding banner
-  const isInitialScrollRef = useRef(false);
-
-  // Fix #8: Use ref for showBanner so scroll handler doesn't cause re-bind
+  // Ref mirror of showBanner for use in scroll handler without re-binding
   const showBannerRef = useRef(false);
   showBannerRef.current = showBanner;
 
+  /**
+   * THE KEY MECHANISM: Set this to true before any programmatic scroll.
+   * The scroll handler checks it to distinguish programmatic vs user scrolls.
+   * It's cleared on the first scroll event after being set.
+   */
+  const isProgrammaticScrollRef = useRef(false);
+
+  /**
+   * Track whether initial load is complete. Scroll events before this are ignored entirely.
+   * This handles the edge case where the browser fires scroll events during initial render/layout.
+   */
+  const isLoadedRef = useRef(false);
+
+  // Helper: perform a programmatic scroll to bottom
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    isProgrammaticScrollRef.current = true;
     bottomRef.current?.scrollIntoView({ behavior });
   }, []);
 
+  // Helper: perform a programmatic scroll to divider
   const scrollToDivider = useCallback(() => {
-    dividerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    isProgrammaticScrollRef.current = true;
+    dividerRef.current?.scrollIntoView({ behavior: "instant", block: "start" });
   }, []);
 
   // Snapshot read state when opening a channel
   useEffect(() => {
     const store = useReadStateStore.getState();
-    // Only snapshot if the channel is actually unread
     if (store.unreadChannels[channelId]) {
       store.snapshotChannelOpen(channelId);
     }
     return () => {
-      // Clear snapshot on unmount
       useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
     };
   }, [channelId]);
 
+  // ── Channel Load Effect ──────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    // Reset state for new channel
     prevCountRef.current = 0;
     wasNearBottomRef.current = true;
+    isLoadedRef.current = false;
+    isProgrammaticScrollRef.current = false;
     setShowBanner(false);
     setUnreadInfo(null);
     bannerModeRef.current = "catchup";
 
-    // Fix #1: Clear any pending auto-hide timer on channel switch
-    if (autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-      autoHideTimerRef.current = null;
-    }
-
     api.fetchMessages(channelId).then((msgs) => {
-      if (!cancelled) {
-        const reversed = msgs.reverse();
-        setMessages(channelId, reversed);
-        prevCountRef.current = reversed.length;
+      if (cancelled) return;
+      const reversed = msgs.reverse();
+      setMessages(channelId, reversed);
+      prevCountRef.current = reversed.length;
 
-        // Calculate unread info for banner
-        const openReadId = useReadStateStore.getState().channelOpenReadIds[channelId];
-        if (openReadId) {
-          const firstUnreadIdx = reversed.findIndex((m) => m.id > openReadId);
-          if (firstUnreadIdx !== -1) {
-            const unreadCount = reversed.length - firstUnreadIdx;
-            const firstUnreadTime = new Date(reversed[firstUnreadIdx].timestamp);
-            const timeStr = firstUnreadTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-            setUnreadInfo({ count: unreadCount, since: timeStr });
-            bannerModeRef.current = "catchup";
-            // Fix #4: Set initial scroll guard before scrolling
-            isInitialScrollRef.current = true;
-            wasNearBottomRef.current = false;
-            requestAnimationFrame(() => {
-              // Discord behavior: scroll to divider, not bottom, so user sees unread context
-              if (dividerRef.current) {
-                dividerRef.current.scrollIntoView({ behavior: "instant", block: "start" });
-              } else {
-                scrollToBottom("instant");
-              }
-              setShowBanner(true);
-              // Enable user scroll detection after initial scroll settles
-              setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
-              // Fix #1: Store timer ref and clear before setting new one
-              if (autoHideTimerRef.current) {
-                clearTimeout(autoHideTimerRef.current);
-              }
-              // No auto-hide timer — banner stays until user scrolls to bottom or clicks Mark as Read
-              // (Discord behavior: unread indicator persists until explicitly dismissed)
-            });
-          } else {
-            requestAnimationFrame(() => {
-              scrollToBottom("instant");
-              setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
-            });
-          }
-        } else {
+      const openReadId = useReadStateStore.getState().channelOpenReadIds[channelId];
+
+      if (openReadId) {
+        // Channel has unread messages → find first unread
+        const firstUnreadIdx = reversed.findIndex((m) => m.id > openReadId);
+        if (firstUnreadIdx !== -1) {
+          // Calculate unread info for banner
+          const unreadCount = reversed.length - firstUnreadIdx;
+          const firstUnreadTime = new Date(reversed[firstUnreadIdx].timestamp);
+          const timeStr = firstUnreadTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          setUnreadInfo({ count: unreadCount, since: timeStr });
+          bannerModeRef.current = "catchup";
+          wasNearBottomRef.current = false;
+
+          // Policy #4: Scroll to divider, not bottom
           requestAnimationFrame(() => {
-            scrollToBottom("instant");
-            setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
+            if (cancelled) return;
+            isProgrammaticScrollRef.current = true;
+            if (dividerRef.current) {
+              dividerRef.current.scrollIntoView({ behavior: "instant", block: "start" });
+            } else {
+              // Fallback: if divider not rendered yet, scroll to bottom
+              bottomRef.current?.scrollIntoView({ behavior: "instant" });
+            }
+            setShowBanner(true);
+            // Mark as loaded after programmatic scroll completes
+            requestAnimationFrame(() => { isLoadedRef.current = true; });
+          });
+        } else {
+          // openReadId exists but all messages are read → scroll to bottom
+          requestAnimationFrame(() => {
+            if (cancelled) return;
+            isProgrammaticScrollRef.current = true;
+            bottomRef.current?.scrollIntoView({ behavior: "instant" });
+            requestAnimationFrame(() => { isLoadedRef.current = true; });
           });
         }
-
-        // Auto-ack DEFERRED: Do NOT ack on initial channel open.
-        // Ack happens when: user clicks Mark as Read, scrolls to bottom, or auto-hide timer fires at bottom.
+      } else {
+        // Policy #1: No unread → scroll to bottom
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          isProgrammaticScrollRef.current = true;
+          bottomRef.current?.scrollIntoView({ behavior: "instant" });
+          requestAnimationFrame(() => { isLoadedRef.current = true; });
+        });
       }
     }).catch((err) => console.error("loadMessages:", err));
-    return () => {
-      cancelled = true;
-      // Fix #1: Cleanup timer on unmount / channel change
-      if (autoHideTimerRef.current) {
-        clearTimeout(autoHideTimerRef.current);
-        autoHideTimerRef.current = null;
-      }
-    };
-  }, [channelId, setMessages, scrollToBottom]);
 
-  // Fix #8: Bind scroll listener only once per channel (no showBanner in deps)
-  // Track whether user has manually scrolled (not programmatic)
-  const userScrollEnabledRef = useRef(false);
+    return () => { cancelled = true; };
+  }, [channelId, setMessages]);
 
+  // ── Scroll Event Handler (bound once per channel) ────────
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    // Disable user scroll detection initially; enable after settling period
-    userScrollEnabledRef.current = false;
+
     const onScroll = () => {
-      if (!userScrollEnabledRef.current) return;
-      // If content doesn't overflow (nothing to scroll), don't auto-clear
+      // Ignore scroll events before initial load completes
+      if (!isLoadedRef.current) {
+        isProgrammaticScrollRef.current = false;
+        return;
+      }
+
+      // If this scroll was programmatic, consume the flag and skip ack logic
+      if (isProgrammaticScrollRef.current) {
+        isProgrammaticScrollRef.current = false;
+        // Still update wasNearBottom for future "new message" decisions
+        wasNearBottomRef.current = isNearBottom(container);
+        return;
+      }
+
+      // This is a user-initiated scroll
+      // If content doesn't overflow, don't auto-clear (only Mark as Read works)
       if (container.scrollHeight <= container.clientHeight) return;
+
       wasNearBottomRef.current = isNearBottom(container);
-      // When user scrolls to bottom: clear banner + divider + ack (Discord behavior)
+
+      // Policy #6: User manually scrolled to bottom → clear unread state
       if (wasNearBottomRef.current) {
         const store = useReadStateStore.getState();
         const hasOpenSnapshot = !!store.channelOpenReadIds[channelId];
         if (showBannerRef.current || hasOpenSnapshot) {
           setShowBanner(false);
           setUnreadInfo(null);
-          // Clear the NEW divider snapshot
           store.clearChannelOpenSnapshot(channelId);
           // Ack the last message
           const currentMessages = useMessageStore.getState().messages[channelId];
@@ -242,16 +276,16 @@ export function MessageList({ channelId }: { channelId: string }) {
     return () => container.removeEventListener("scroll", onScroll);
   }, [channelId]);
 
-  // New message added → scroll if was near bottom, or show banner
+  // ── New message arrival effect ───────────────────────────
   useEffect(() => {
     if (!messages) return;
     if (messages.length > prevCountRef.current) {
       if (wasNearBottomRef.current) {
+        // Policy #2: User at bottom + new message → keep at bottom
         requestAnimationFrame(() => scrollToBottom());
       } else {
-        // User is scrolled up, new messages arrived — update banner with live mode
+        // Policy #5: User scrolled up + new message → show/update banner
         const newCount = messages.length - prevCountRef.current;
-        // Fix #3: Set mode to 'live' for new arrivals while scrolled up
         bannerModeRef.current = "live";
         setUnreadInfo((prev) => {
           const count = (prev?.count ?? 0) + newCount;
@@ -266,6 +300,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages?.length, scrollToBottom]);
 
+  // Auto-scroll when last message content changes (e.g. edit) while at bottom
   const lastMessageContent = messages?.[messages.length - 1]?.content;
   useEffect(() => {
     if (!messages) return;
@@ -286,7 +321,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMsgReactionKey, scrollToBottom]);
 
-  // Fix #3: Banner click scrolls based on mode
+  // Banner click: scroll to bottom (live mode) or divider (catchup mode)
   const handleBannerClick = useCallback(() => {
     if (bannerModeRef.current === "live") {
       scrollToBottom();
@@ -294,18 +329,16 @@ export function MessageList({ channelId }: { channelId: string }) {
       scrollToDivider();
     }
     setShowBanner(false);
-    // Fix #6: Reset unreadInfo on banner click
     setUnreadInfo(null);
   }, [scrollToBottom, scrollToDivider]);
 
-  // Fix #2: handleMarkAsRead now calls api.ackMessage
+  // Policy #7: Mark as Read button — clear everything + ack
   const handleMarkAsRead = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowBanner(false);
     setUnreadInfo(null);
     useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
 
-    // Fix #2: Ack the last message on the server
     const currentMessages = useMessageStore.getState().messages[channelId];
     if (currentMessages && currentMessages.length > 0) {
       const lastMessage = currentMessages[currentMessages.length - 1];
@@ -315,7 +348,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     }
   }, [channelId]);
 
-  // Fix #7: Memoize divider index (must be before early returns to satisfy hooks rules)
+  // Memoize divider index (must be before early returns to satisfy hooks rules)
   const dividerBeforeIndex = useMemo(() => {
     if (!channelOpenReadId || !messages) return -1;
     return messages.findIndex((m) => m.id > channelOpenReadId);
@@ -328,12 +361,11 @@ export function MessageList({ channelId }: { channelId: string }) {
   if (messages.length === 0) {
     return (
       <div style={centerStyle}>
-        <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" /* decorative one-off */ }} description="No messages yet — be the first!" />
+        <Empty image="🌊" imageStyle={{ fontSize: 48, lineHeight: "56px" }} description="No messages yet — be the first!" />
       </div>
     );
   }
 
-  // Fix #3: Build banner text based on mode
   const bannerArrow = bannerModeRef.current === "live" ? "↓" : "↑";
   const bannerText = bannerModeRef.current === "live"
     ? `${bannerArrow} ${unreadInfo?.count ?? 0} new message${(unreadInfo?.count ?? 0) !== 1 ? "s" : ""}`
@@ -350,7 +382,6 @@ export function MessageList({ channelId }: { channelId: string }) {
         </div>
       )}
       <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
-        {/* Fix #5: Use Fragment instead of wrapper div */}
         {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart = !prev || prev.author.id !== msg.author.id ||
