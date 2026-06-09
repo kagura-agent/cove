@@ -41,10 +41,10 @@ export function MessageList({ channelId }: { channelId: string }) {
         prevCountRef.current = reversed.length;
         requestAnimationFrame(() => scrollToBottom("instant"));
 
-        // Auto-ack: now that messages are loaded, ack the last one (skip if already acked)
+        // Auto-ack: now that messages are loaded, ack the last one (skip if already acked or pending)
         if (reversed.length > 0) {
           const lastMsg = reversed[reversed.length - 1];
-          if (lastMsg.id !== lastAckedIds.get(channelId)) {
+          if (lastMsg.id !== lastAckedIds.get(channelId) && !lastMsg.id.startsWith("pending-")) {
             lastAckedIds.set(channelId, lastMsg.id);
             useReadStateStore.getState().clearUnread(channelId);
             api.ackMessage(channelId, lastMsg.id).catch(() => {});
