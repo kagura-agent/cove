@@ -159,29 +159,21 @@ export function MessageList({ channelId }: { channelId: string }) {
             bannerModeRef.current = "catchup";
             // Fix #4: Set initial scroll guard before scrolling
             isInitialScrollRef.current = true;
+            wasNearBottomRef.current = false;
             requestAnimationFrame(() => {
-              scrollToBottom("instant");
+              // Discord behavior: scroll to divider, not bottom, so user sees unread context
+              if (dividerRef.current) {
+                dividerRef.current.scrollIntoView({ behavior: "instant", block: "start" });
+              } else {
+                scrollToBottom("instant");
+              }
               setShowBanner(true);
               // Fix #1: Store timer ref and clear before setting new one
               if (autoHideTimerRef.current) {
                 clearTimeout(autoHideTimerRef.current);
               }
-              autoHideTimerRef.current = setTimeout(() => {
-                if (wasNearBottomRef.current) {
-                  setShowBanner(false);
-                  setUnreadInfo(null);
-                  // Clear the NEW divider and ack on auto-hide at bottom
-                  useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
-                  const currentMessages = useMessageStore.getState().messages[channelId];
-                  if (currentMessages && currentMessages.length > 0) {
-                    const lastMessage = currentMessages[currentMessages.length - 1];
-                    lastAckedIds.set(channelId, lastMessage.id);
-                    useReadStateStore.getState().clearUnread(channelId);
-                    api.ackMessage(channelId, lastMessage.id).catch(() => {});
-                  }
-                }
-                autoHideTimerRef.current = null;
-              }, 5000);
+              // No auto-hide timer — banner stays until user scrolls to bottom or clicks Mark as Read
+              // (Discord behavior: unread indicator persists until explicitly dismissed)
             });
           } else {
             requestAnimationFrame(() => scrollToBottom("instant"));
@@ -215,19 +207,23 @@ export function MessageList({ channelId }: { channelId: string }) {
         return;
       }
       wasNearBottomRef.current = isNearBottom(container);
-      // Fix #6: If user scrolled to bottom, hide banner, clear unreadInfo, clear divider, and ack
-      if (wasNearBottomRef.current && showBannerRef.current) {
-        setShowBanner(false);
-        setUnreadInfo(null);
-        // Clear the NEW divider snapshot
-        useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
-        // Ack the last message
-        const currentMessages = useMessageStore.getState().messages[channelId];
-        if (currentMessages && currentMessages.length > 0) {
-          const lastMessage = currentMessages[currentMessages.length - 1];
-          lastAckedIds.set(channelId, lastMessage.id);
-          useReadStateStore.getState().clearUnread(channelId);
-          api.ackMessage(channelId, lastMessage.id).catch(() => {});
+      // When user scrolls to bottom: clear banner + divider + ack (Discord behavior)
+      if (wasNearBottomRef.current) {
+        const store = useReadStateStore.getState();
+        const hasOpenSnapshot = !!store.channelOpenReadIds[channelId];
+        if (showBannerRef.current || hasOpenSnapshot) {
+          setShowBanner(false);
+          setUnreadInfo(null);
+          // Clear the NEW divider snapshot
+          store.clearChannelOpenSnapshot(channelId);
+          // Ack the last message
+          const currentMessages = useMessageStore.getState().messages[channelId];
+          if (currentMessages && currentMessages.length > 0) {
+            const lastMessage = currentMessages[currentMessages.length - 1];
+            lastAckedIds.set(channelId, lastMessage.id);
+            store.clearUnread(channelId);
+            api.ackMessage(channelId, lastMessage.id).catch(() => {});
+          }
         }
       }
     };
