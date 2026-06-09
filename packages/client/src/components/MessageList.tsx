@@ -170,6 +170,15 @@ export function MessageList({ channelId }: { channelId: string }) {
                 if (wasNearBottomRef.current) {
                   setShowBanner(false);
                   setUnreadInfo(null);
+                  // Clear the NEW divider and ack on auto-hide at bottom
+                  useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
+                  const currentMessages = useMessageStore.getState().messages[channelId];
+                  if (currentMessages && currentMessages.length > 0) {
+                    const lastMessage = currentMessages[currentMessages.length - 1];
+                    lastAckedIds.set(channelId, lastMessage.id);
+                    useReadStateStore.getState().clearUnread(channelId);
+                    api.ackMessage(channelId, lastMessage.id).catch(() => {});
+                  }
                 }
                 autoHideTimerRef.current = null;
               }, 5000);
@@ -181,15 +190,8 @@ export function MessageList({ channelId }: { channelId: string }) {
           requestAnimationFrame(() => scrollToBottom("instant"));
         }
 
-        // Auto-ack: now that messages are loaded, ack the last one (skip if already acked)
-        if (reversed.length > 0) {
-          const lastMsg = reversed[reversed.length - 1];
-          if (lastMsg.id !== lastAckedIds.get(channelId)) {
-            lastAckedIds.set(channelId, lastMsg.id);
-            useReadStateStore.getState().clearUnread(channelId);
-            api.ackMessage(channelId, lastMsg.id).catch(() => {});
-          }
-        }
+        // Auto-ack DEFERRED: Do NOT ack on initial channel open.
+        // Ack happens when: user clicks Mark as Read, scrolls to bottom, or auto-hide timer fires at bottom.
       }
     }).catch((err) => console.error("loadMessages:", err));
     return () => {
@@ -213,10 +215,20 @@ export function MessageList({ channelId }: { channelId: string }) {
         return;
       }
       wasNearBottomRef.current = isNearBottom(container);
-      // Fix #6: If user scrolled to bottom, hide banner AND clear unreadInfo
+      // Fix #6: If user scrolled to bottom, hide banner, clear unreadInfo, clear divider, and ack
       if (wasNearBottomRef.current && showBannerRef.current) {
         setShowBanner(false);
         setUnreadInfo(null);
+        // Clear the NEW divider snapshot
+        useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
+        // Ack the last message
+        const currentMessages = useMessageStore.getState().messages[channelId];
+        if (currentMessages && currentMessages.length > 0) {
+          const lastMessage = currentMessages[currentMessages.length - 1];
+          lastAckedIds.set(channelId, lastMessage.id);
+          useReadStateStore.getState().clearUnread(channelId);
+          api.ackMessage(channelId, lastMessage.id).catch(() => {});
+        }
       }
     };
     container.addEventListener("scroll", onScroll, { passive: true });
