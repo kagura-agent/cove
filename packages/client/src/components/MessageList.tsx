@@ -168,7 +168,19 @@ export function MessageList({ channelId }: { channelId: string }) {
       }
     }).catch((err) => console.error("loadMessages:", err));
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Ack on leave: mark channel as read when switching away
+      const currentMessages = useMessageStore.getState().messages[channelId];
+      if (currentMessages && currentMessages.length > 0) {
+        const lastMessage = currentMessages[currentMessages.length - 1];
+        if (!lastMessage.id.startsWith("pending-") && lastMessage.id !== lastAckedIds.get(channelId)) {
+          lastAckedIds.set(channelId, lastMessage.id);
+          useReadStateStore.getState().clearUnread(channelId);
+          api.ackMessage(channelId, lastMessage.id).catch(() => {});
+        }
+      }
+    };
   }, [channelId, setMessages]);
 
   // ── Scroll Event Handler (bound once per channel) ────────
@@ -206,9 +218,11 @@ export function MessageList({ channelId }: { channelId: string }) {
           const currentMessages = useMessageStore.getState().messages[channelId];
           if (currentMessages && currentMessages.length > 0) {
             const lastMessage = currentMessages[currentMessages.length - 1];
-            lastAckedIds.set(channelId, lastMessage.id);
-            store.clearUnread(channelId);
-            api.ackMessage(channelId, lastMessage.id).catch(() => {});
+            if (!lastMessage.id.startsWith("pending-")) {
+              lastAckedIds.set(channelId, lastMessage.id);
+              store.clearUnread(channelId);
+              api.ackMessage(channelId, lastMessage.id).catch(() => {});
+            }
           }
         }
       }
@@ -230,7 +244,7 @@ export function MessageList({ channelId }: { channelId: string }) {
         wasNearBottomRef.current = true;
         useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
         useReadStateStore.getState().clearUnread(channelId);
-        if (lastMsg.id !== lastAckedIds.get(channelId)) {
+        if (lastMsg.id !== lastAckedIds.get(channelId) && !lastMsg.id.startsWith("pending-")) {
           lastAckedIds.set(channelId, lastMsg.id);
           api.ackMessage(channelId, lastMsg.id).catch(() => {});
         }
