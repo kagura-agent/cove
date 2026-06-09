@@ -287,6 +287,7 @@ export function MessageList({ channelId }: { channelId: string }) {
 
       if (isMine) {
         // User sent a message → clear all unread state + scroll to bottom
+        wasNearBottomRef.current = true;
         setShowBanner(false);
         setUnreadInfo(null);
         useReadStateStore.getState().clearChannelOpenSnapshot(channelId);
