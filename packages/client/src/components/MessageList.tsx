@@ -330,6 +330,14 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   return (
     <>
+      {showBanner && unreadInfo && (
+        <div style={bannerWrapperStyle}>
+          <div style={bannerStyle} onClick={handleBannerClick} role="button" tabIndex={0}>
+            <span>{bannerText}</span>
+            <button style={bannerDismissStyle} onClick={handleMarkAsRead}>Mark as Read</button>
+          </div>
+        </div>
+      )}
       <div ref={scrollContainerRef} style={listStyle} className="scroll-container">
         {/* Fix #5: Use Fragment instead of wrapper div */}
         {messages.map((msg, i) => {
@@ -346,14 +354,6 @@ export function MessageList({ channelId }: { channelId: string }) {
         })}
         <div ref={bottomRef} />
       </div>
-      {showBanner && unreadInfo && (
-        <div style={bannerWrapperStyle}>
-          <div style={bannerStyle} onClick={handleBannerClick} role="button" tabIndex={0}>
-            <span>{bannerText}</span>
-            <button style={bannerDismissStyle} onClick={handleMarkAsRead}>Mark as Read</button>
-          </div>
-        </div>
-      )}
       <TypingIndicator channelId={channelId} />
     </>
   );
