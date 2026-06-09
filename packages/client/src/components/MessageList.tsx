@@ -168,6 +168,8 @@ export function MessageList({ channelId }: { channelId: string }) {
                 scrollToBottom("instant");
               }
               setShowBanner(true);
+              // Enable user scroll detection after initial scroll settles
+              setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
               // Fix #1: Store timer ref and clear before setting new one
               if (autoHideTimerRef.current) {
                 clearTimeout(autoHideTimerRef.current);
@@ -176,10 +178,16 @@ export function MessageList({ channelId }: { channelId: string }) {
               // (Discord behavior: unread indicator persists until explicitly dismissed)
             });
           } else {
-            requestAnimationFrame(() => scrollToBottom("instant"));
+            requestAnimationFrame(() => {
+              scrollToBottom("instant");
+              setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
+            });
           }
         } else {
-          requestAnimationFrame(() => scrollToBottom("instant"));
+          requestAnimationFrame(() => {
+            scrollToBottom("instant");
+            setTimeout(() => { userScrollEnabledRef.current = true; }, 300);
+          });
         }
 
         // Auto-ack DEFERRED: Do NOT ack on initial channel open.
@@ -197,15 +205,18 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, [channelId, setMessages, scrollToBottom]);
 
   // Fix #8: Bind scroll listener only once per channel (no showBanner in deps)
+  // Track whether user has manually scrolled (not programmatic)
+  const userScrollEnabledRef = useRef(false);
+
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
+    // Disable user scroll detection initially; enable after settling period
+    userScrollEnabledRef.current = false;
     const onScroll = () => {
-      // Fix #4: Skip the first programmatic scroll event
-      if (isInitialScrollRef.current) {
-        isInitialScrollRef.current = false;
-        return;
-      }
+      if (!userScrollEnabledRef.current) return;
+      // If content doesn't overflow (nothing to scroll), don't auto-clear
+      if (container.scrollHeight <= container.clientHeight) return;
       wasNearBottomRef.current = isNearBottom(container);
       // When user scrolls to bottom: clear banner + divider + ack (Discord behavior)
       if (wasNearBottomRef.current) {
