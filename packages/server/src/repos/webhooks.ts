@@ -23,6 +23,16 @@ function toWebhook(row: WebhookRow): Webhook {
   };
 }
 
+function toPublicWebhook(row: WebhookRow): Webhook {
+  return {
+    id: row.id,
+    channel_id: row.channel_id,
+    guild_id: row.guild_id,
+    name: row.name,
+    avatar: row.avatar,
+  };
+}
+
 export class WebhooksRepo {
   constructor(private db: Database.Database) {}
 
@@ -55,12 +65,12 @@ export class WebhooksRepo {
 
   listByChannel(channelId: string): Webhook[] {
     const rows = this.db.prepare("SELECT * FROM webhooks WHERE channel_id = ? ORDER BY created_at").all(channelId) as WebhookRow[];
-    return rows.map(toWebhook);
+    return rows.map(toPublicWebhook);
   }
 
   listByGuild(guildId: string): Webhook[] {
     const rows = this.db.prepare("SELECT * FROM webhooks WHERE guild_id = ? ORDER BY created_at").all(guildId) as WebhookRow[];
-    return rows.map(toWebhook);
+    return rows.map(toPublicWebhook);
   }
 
   update(id: string, fields: { name?: string; avatar?: string | null }): Webhook | null {

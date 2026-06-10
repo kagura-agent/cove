@@ -46,6 +46,14 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
     reactions: reactions ?? [],
   };
   if (row.webhook_id) {
+    msg.author = {
+      id: row.webhook_id,
+      username: row.sender_name ?? "Webhook",
+      avatar: null,
+      bot: true,
+      discriminator: "0",
+      global_name: null,
+    };
     msg.webhook_id = row.webhook_id;
   }
   return msg;
@@ -137,7 +145,7 @@ export class MessagesRepo {
 
     this.db.prepare(
       "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, webhook_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, webhookId, webhookName, content, now, null, null, webhookId);
+    ).run(id, channelId, null, webhookName, content, now, null, null, webhookId);
 
     return {
       id,

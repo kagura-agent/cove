@@ -5,7 +5,12 @@ import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireGuildMember, unknownChannel } from "./helpers.js";
 
-export function webhookRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
+function stripToken<T extends { token?: unknown }>(webhook: T): Omit<T, "token"> {
+  const { token: _, ...rest } = webhook;
+  return rest;
+}
+
+export function webhookRoutes(repos: Repos): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.post("/channels/:channelId/webhooks", async (c) => {
@@ -53,7 +58,7 @@ export function webhookRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
       return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
     }
 
-    return c.json(webhook);
+    return c.json(stripToken(webhook));
   });
 
   app.patch("/webhooks/:webhookId", async (c) => {
@@ -80,7 +85,7 @@ export function webhookRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     });
     if (!updated) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
-    return c.json(updated);
+    return c.json(stripToken(updated));
   });
 
   app.delete("/webhooks/:webhookId", (c) => {
@@ -103,9 +108,25 @@ export function webhookRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
+  const WINDOW_MS = 60_000;
+  const MAX_REQUESTS = 30;
+  const buckets = new Map<string, number[]>();
+
   app.post("/webhooks/:webhookId/:webhookToken", async (c) => {
     const webhookId = c.req.param("webhookId");
     const webhookToken = c.req.param("webhookToken");
+
+    const now = Date.now();
+    const timestamps = buckets.get(webhookId) ?? [];
+    const windowStart = now - WINDOW_MS;
+    const recent = timestamps.filter((t) => t > windowStart);
+    if (recent.length >= MAX_REQUESTS) {
+      const retryAfter = Math.ceil((recent[0] + WINDOW_MS - now) / 1000);
+      c.header("Retry-After", String(retryAfter));
+      return c.json({ message: "You are being rate limited.", retry_after: retryAfter, global: false, code: 0 }, 429);
+    }
+    recent.push(now);
+    buckets.set(webhookId, recent);
 
     const webhook = repos.webhooks.findByIdAndToken(webhookId, webhookToken);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
@@ -115,6 +136,15 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
 
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
     if (err) return validationError(c, err);
+
+    if (body.username !== undefined) {
+      const usernameErr = validateString(body.username, "username", { maxLength: 80 });
+      if (usernameErr) return validationError(c, usernameErr);
+    }
+    if (body.avatar_url !== undefined) {
+      const avatarErr = validateString(body.avatar_url, "avatar_url", { maxLength: 2048 });
+      if (avatarErr) return validationError(c, avatarErr);
+    }
 
     // Allow per-execution overrides for username and avatar (Discord-compatible)
     const displayName = body.username ?? webhook.name;

@@ -156,7 +156,7 @@ export class CoveRestClient {
   }
 
   /** GET /api/v10/channels/:channelId/webhooks — list channel webhooks. */
-  async getWebhooks(channelId: string): Promise<Array<{ id: string; token: string; channel_id: string; name: string }>> {
+  async getWebhooks(channelId: string): Promise<Array<{ id: string; token?: string; channel_id: string; name: string }>> {
     return this.request("GET", `${API_PREFIX}/channels/${channelId}/webhooks`);
   }
 

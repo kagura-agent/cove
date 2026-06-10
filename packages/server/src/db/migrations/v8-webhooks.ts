@@ -13,6 +13,7 @@ export function migrateV7ToV8(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_webhooks_channel_id ON webhooks(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_webhooks_guild_id ON webhooks(guild_id);
 
     ALTER TABLE messages ADD COLUMN webhook_id TEXT REFERENCES webhooks(id) ON DELETE SET NULL;
   `);
