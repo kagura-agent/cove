@@ -11,6 +11,7 @@ import { ChatArea } from "./components/ChatArea";
 import { UserBar } from "./components/UserBar";
 import { MessageInput } from "./components/MessageInput";
 import { MemberList } from "./components/MemberList";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
@@ -46,23 +47,17 @@ function useAntdThemeConfig() {
 }
 
 const styles = {
-  fullHeight: { height: "100%", background: "var(--bg-primary)" } as CSSProperties,
+  fullHeight: { height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-primary)" } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
   overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
-  layout: { display: "grid", gridTemplateRows: "1fr minmax(var(--footer-height), auto)", height: "100%", overflow: "hidden" } as CSSProperties,
+  layout: { display: "grid", gridTemplateRows: "1fr minmax(var(--footer-height), auto)", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
   sidebarBody: { gridColumn: 1, gridRow: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-secondary)" } as CSSProperties,
   sidebarFooter: { gridColumn: 1, gridRow: 2 } as CSSProperties,
   chatBody: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
   chatFooter: { gridColumn: 2, gridRow: 2, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
-  connStatus: { display: "flex", alignItems: "center", gap: "var(--space-xs)", padding: "var(--space-xs) var(--space-md)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
   loginTitle: { fontSize: "var(--font-size-xxl)", fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
-
-const connDot = (status: string): CSSProperties => ({
-  width: "var(--status-dot-size)", height: "var(--status-dot-size)", borderRadius: "50%", display: "inline-block",
-  background: status === "connecting" ? "var(--warning)" : "var(--danger)",
-});
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
 
@@ -139,6 +134,14 @@ export default function App() {
   const { activeChannelId, channelsLoaded } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
   const wsStatus = useWebSocketStore((s) => s.status);
+  const serverName = useGuildStore((s) => {
+    const id = s.activeGuildId;
+    return id ? s.guilds[id]?.name ?? "" : "";
+  });
+  const serverIcon = useGuildStore((s) => {
+    const id = s.activeGuildId;
+    return id ? s.guilds[id]?.icon ?? null : null;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -250,6 +253,7 @@ export default function App() {
   return (
     <ConfigProvider theme={themeConfig}>
       <div style={styles.fullHeight}>
+        <ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
         <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
@@ -260,12 +264,6 @@ export default function App() {
           </div>
 
           <div style={styles.chatBody} className="chat-body-cell">
-            {wsStatus !== "connected" && (
-              <div style={styles.connStatus}>
-                <span style={connDot(wsStatus)} />
-                <span>{wsStatus === "connecting" ? "Connecting..." : "Disconnected"}</span>
-              </div>
-            )}
             <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
           </div>
           <div style={styles.chatFooter} className="chat-footer-cell">
