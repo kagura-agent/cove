@@ -50,6 +50,7 @@ export function ChannelSettings({
   const [webhookCreating, setWebhookCreating] = useState(false);
   const [webhookDeleteId, setWebhookDeleteId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [newlyCreatedTokens, setNewlyCreatedTokens] = useState<Map<string, string>>(new Map());
 
   // Sync form state when channel changes
   useEffect(() => {
@@ -93,6 +94,9 @@ export function ChannelSettings({
     setWebhookCreating(true);
     try {
       const wh = await api.createWebhook(channelId, trimmed);
+      if (wh.token) {
+        setNewlyCreatedTokens((prev) => new Map(prev).set(wh.id, wh.token!));
+      }
       setWebhooks((prev) => [...prev, wh]);
       setWebhookName("");
     } catch (err) {
@@ -113,13 +117,17 @@ export function ChannelSettings({
     }
   }
 
-  function webhookUrl(wh: Webhook) {
+  function webhookUrl(wh: Webhook): string | null {
+    const token = wh.token ?? newlyCreatedTokens.get(wh.id);
+    if (!token) return null;
     const base = window.location.origin;
-    return `${base}/api/v10/webhooks/${wh.id}/${wh.token}`;
+    return `${base}/api/v10/webhooks/${wh.id}/${token}`;
   }
 
   function handleCopyUrl(wh: Webhook) {
-    navigator.clipboard.writeText(webhookUrl(wh));
+    const url = webhookUrl(wh);
+    if (!url) return;
+    navigator.clipboard.writeText(url);
     setCopiedId(wh.id);
     setTimeout(() => setCopiedId((prev) => (prev === wh.id ? null : prev)), 2000);
   }
@@ -312,10 +320,10 @@ export function ChannelSettings({
                           {wh.name}
                         </div>
                         <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", wordBreak: "break-all", marginBottom: "var(--space-sm)" }}>
-                          {webhookUrl(wh)}
+                          {webhookUrl(wh) ?? "Token hidden — URL was shown at creation"}
                         </div>
                         <div style={{ display: "flex", gap: "var(--space-sm)", justifyContent: "flex-end" }}>
-                          <Button size="small" onClick={() => handleCopyUrl(wh)}>
+                          <Button size="small" onClick={() => handleCopyUrl(wh)} disabled={!webhookUrl(wh)}>
                             {copiedId === wh.id ? "Copied!" : "Copy URL"}
                           </Button>
                           <Button size="small" danger onClick={() => setWebhookDeleteId(wh.id)}>
