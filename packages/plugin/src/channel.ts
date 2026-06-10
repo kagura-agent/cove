@@ -130,7 +130,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           token: account.token,
           inputs,
           missingTokenNote: "missing Cove bot token",
-          resolveWithToken: async ({ token, inputs: inputsValue }) => {
+          resolveWithToken: async ({ token, inputs: inputsValue }): Promise<Array<{ input: string; resolved: boolean; channelId?: string; channelName?: string; guildId?: string | null; note?: string }>> => {
             if (!account.guildId) {
               return inputsValue.map((input) => ({
                 input,
