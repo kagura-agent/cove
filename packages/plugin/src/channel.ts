@@ -44,9 +44,6 @@ class SentMessageTracker {
   }
 }
 
-// Re-export for test compatibility
-export { createAbortableDispatch, DispatchTimeoutError, DispatchAbortedError } from "./dispatch.js";
-
 const restClients = new Map<string, CoveRestClient>();
 
 function getRestClient(baseUrl: string, token: string): CoveRestClient {

@@ -16,56 +16,7 @@ import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 
-const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
-
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
-
-export class DispatchTimeoutError extends Error {
-  constructor() { super("dispatch timeout"); this.name = "DispatchTimeoutError"; }
-}
-export class DispatchAbortedError extends Error {
-  constructor() { super("dispatch aborted"); this.name = "DispatchAbortedError"; }
-}
-
-/**
- * Race a dispatch promise against a timeout and an AbortSignal.
- * Resolves/rejects as soon as any of the three fires.
- */
-export function createAbortableDispatch(
-  dispatch: Promise<unknown>,
-  timeoutMs: number,
-  signal: AbortSignal,
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const settle = (fn: () => void) => {
-      if (!settled) { settled = true; fn(); }
-    };
-
-    const timer = setTimeout(
-      () => settle(() => reject(new DispatchTimeoutError())),
-      timeoutMs,
-    );
-
-    const onAbort = () => settle(() => {
-      clearTimeout(timer);
-      reject(new DispatchAbortedError());
-    });
-
-    if (signal.aborted) {
-      clearTimeout(timer);
-      dispatch.catch(() => {}); // Prevent unhandled rejection from orphaned dispatch
-      reject(new DispatchAbortedError());
-      return;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    dispatch.then(
-      () => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve(); }),
-      (err) => settle(() => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); reject(err); }),
-    );
-  });
-}
 
 /**
  * Clean up an orphaned draft message and fall back to sending a fresh
@@ -147,7 +98,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let draftMessageId: string | undefined;
     let lastSentText = "";
     const channelEntry = cfg?.channels?.["cove"] ?? {};
-    const dispatchTimeoutMs = (channelEntry as any).dispatchTimeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
     const toolProgress = createToolProgressTracker(channelEntry, {
       seed: message.id ?? String(Date.now()),
       onProgressUpdate: () => {
@@ -314,8 +264,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
     try {
-      await createAbortableDispatch(
-        dispatchInboundDirectDmWithRuntime({
+      await dispatchInboundDirectDmWithRuntime({
           cfg,
           runtime: patchedRuntime as any,
           channel: "cove",
@@ -347,15 +296,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           onDispatchError: (err, info) => {
             log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
           },
-        }),
-        dispatchTimeoutMs,
-        abortController.signal,
-      );
+        });
     } catch (err: any) {
-      if (err instanceof DispatchTimeoutError) {
-        typingCallbacks.onCleanup?.();
-        log?.warn?.(`cove: dispatch timed out after ${dispatchTimeoutMs}ms in [${channelId}]`);
-      } else if (err instanceof DispatchAbortedError) {
+      if (abortController.signal.aborted) {
         typingCallbacks.onCleanup?.();
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
       } else {
