@@ -13,6 +13,7 @@ import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 
 
 /**
@@ -56,6 +57,15 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
     restClients.set(key, client);
   }
   return client;
+}
+
+function readAccountConfig(cfg: any): { token?: string; baseUrl: string; guildId: string | null } {
+  const section = cfg?.channels?.["cove"] ?? {};
+  return {
+    token: section.token ?? process.env["COVE_BOT_TOKEN"] ?? undefined,
+    baseUrl: section.baseUrl ?? process.env["COVE_BASE_URL"] ?? "http://localhost:3400",
+    guildId: section.guildId ?? null,
+  };
 }
 
 function resolveAccount(
@@ -118,6 +128,81 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         allowFromPath: "channels.cove.allowFrom",
         approveHint: "Add user to channels.cove.allowFrom",
       };
+    },
+  },
+  resolver: {
+    resolveTargets: async ({ cfg, accountId, inputs, kind }) => {
+      const account = readAccountConfig(cfg);
+
+      if (kind === "group") {
+        return resolveTargetsWithOptionalToken({
+          token: account.token,
+          inputs,
+          missingTokenNote: "missing Cove bot token",
+          resolveWithToken: async ({ token, inputs: inputsValue }): Promise<Array<{ input: string; resolved: boolean; channelId?: string; channelName?: string; guildId?: string | null; note?: string }>> => {
+            if (!account.guildId) {
+              return inputsValue.map((input) => ({
+                input,
+                resolved: false,
+                note: "guildId not configured",
+              }));
+            }
+
+            const restClient = getRestClient(account.baseUrl, token);
+            let channels;
+            try {
+              channels = await restClient.getChannels(account.guildId);
+            } catch (err: any) {
+              return inputsValue.map((input) => ({
+                input,
+                resolved: false,
+                note: `failed to fetch channels: ${err.message}`,
+              }));
+            }
+
+            return inputsValue.map((input) => {
+              const inputLower = input.toLowerCase();
+              const match = channels.find(
+                (ch) => ch.id === input || ch.name.toLowerCase() === inputLower,
+              );
+              return {
+                input,
+                resolved: Boolean(match),
+                channelId: match?.id,
+                channelName: match?.name,
+                guildId: account.guildId,
+                note: match ? undefined : "channel not found",
+              };
+            });
+          },
+          mapResolved: (entry) => ({
+            input: entry.input,
+            resolved: entry.resolved,
+            id: entry.resolved ? entry.channelId : undefined,
+            name: entry.resolved ? entry.channelName : undefined,
+            note: entry.note,
+          }),
+        });
+      }
+
+      // User target resolution — not supported yet
+      return resolveTargetsWithOptionalToken({
+        token: account.token,
+        inputs,
+        missingTokenNote: "missing Cove bot token",
+        resolveWithToken: async ({ inputs: inputsValue }) => {
+          return inputsValue.map((input) => ({
+            input,
+            resolved: false,
+            note: "user target resolution not supported",
+          }));
+        },
+        mapResolved: (entry) => ({
+          input: entry.input,
+          resolved: entry.resolved,
+          note: entry.note,
+        }),
+      });
     },
   },
   outbound: {
@@ -288,4 +373,4 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   },
 };
 
-export { coveChannelPlugin, resolveAccount, getRestClient };
+export { coveChannelPlugin, resolveAccount, readAccountConfig, getRestClient };
