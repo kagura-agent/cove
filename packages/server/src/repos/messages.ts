@@ -13,12 +13,13 @@ interface MessageRow {
   edited_timestamp: number | null;
   sender_username: string | null;
   sender_bot: number | null;
+  webhook_id: string | null;
 }
 
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
 function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
-  return {
+  const msg: Message = {
     id: row.id,
     channel_id: row.channel_id,
     content: row.content,
@@ -44,6 +45,10 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
     mention_everyone: false,
     reactions: reactions ?? [],
   };
+  if (row.webhook_id) {
+    msg.webhook_id = row.webhook_id;
+  }
+  return msg;
 }
 
 export class MessagesRepo {
@@ -123,6 +128,40 @@ export class MessagesRepo {
       pinned: false,
       tts: false,
       mention_everyone: false,
+    };
+  }
+
+  createFromWebhook(channelId: string, webhookId: string, webhookName: string, webhookAvatar: string | null, content: string): Message {
+    const now = Date.now();
+    const id = generateSnowflake();
+
+    this.db.prepare(
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, webhook_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, webhookId, webhookName, content, now, null, null, webhookId);
+
+    return {
+      id,
+      channel_id: channelId,
+      content,
+      author: {
+        id: webhookId,
+        username: webhookName,
+        avatar: webhookAvatar,
+        bot: true,
+        discriminator: "0",
+        global_name: null,
+      },
+      timestamp: new Date(now).toISOString(),
+      edited_timestamp: null,
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      webhook_id: webhookId,
     };
   }
 

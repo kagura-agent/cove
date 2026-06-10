@@ -6,8 +6,9 @@ import { MembersRepo } from "./members.js";
 import { GuildsRepo } from "./guilds.js";
 import { ReadStatesRepo } from "./readStates.js";
 import { ReactionsRepo } from "./reactions.js";
+import { WebhooksRepo } from "./webhooks.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -18,6 +19,7 @@ export interface Repos {
   guilds: GuildsRepo;
   readStates: ReadStatesRepo;
   reactions: ReactionsRepo;
+  webhooks: WebhooksRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -31,5 +33,6 @@ export function createRepos(db: Database.Database): Repos {
     guilds: new GuildsRepo(db),
     readStates: new ReadStatesRepo(db),
     reactions,
+    webhooks: new WebhooksRepo(db),
   };
 }

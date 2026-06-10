@@ -6,8 +6,9 @@ import { migrateV3ToV4 } from "./v4-fk-constraints.js";
 import { migrateV4ToV5 } from "./v5-last-message-id.js";
 import { migrateV5ToV6 } from "./v6-session-ttl.js";
 import { migrateV6ToV7 } from "./v7-reactions.js";
+import { migrateV7ToV8 } from "./v8-webhooks.js";
 
-const LATEST_VERSION = 7;
+const LATEST_VERSION = 8;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -19,6 +20,7 @@ const migrations: Record<number, MigrationFn> = {
   5: migrateV4ToV5,
   6: migrateV5ToV6,
   7: migrateV6ToV7,
+  8: migrateV7ToV8,
 };
 
 export function runMigrations(db: Database.Database): void {
