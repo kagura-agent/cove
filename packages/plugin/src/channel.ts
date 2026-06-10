@@ -59,6 +59,15 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
   return client;
 }
 
+function readAccountConfig(cfg: any): { token?: string; baseUrl: string; guildId: string | null } {
+  const section = cfg?.channels?.["cove"] ?? {};
+  return {
+    token: section.token ?? process.env["COVE_BOT_TOKEN"] ?? undefined,
+    baseUrl: section.baseUrl ?? process.env["COVE_BASE_URL"] ?? "http://localhost:3400",
+    guildId: section.guildId ?? null,
+  };
+}
+
 function resolveAccount(
   cfg: any,
   accountId?: string | null,
@@ -123,7 +132,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   },
   resolver: {
     resolveTargets: async ({ cfg, accountId, inputs, kind }) => {
-      const account = resolveAccount(cfg, accountId);
+      const account = readAccountConfig(cfg);
 
       if (kind === "group") {
         return resolveTargetsWithOptionalToken({
@@ -140,7 +149,16 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             }
 
             const restClient = getRestClient(account.baseUrl, token);
-            const channels = await restClient.getChannels(account.guildId);
+            let channels;
+            try {
+              channels = await restClient.getChannels(account.guildId);
+            } catch (err: any) {
+              return inputsValue.map((input) => ({
+                input,
+                resolved: false,
+                note: `failed to fetch channels: ${err.message}`,
+              }));
+            }
 
             return inputsValue.map((input) => {
               const inputLower = input.toLowerCase();
@@ -160,8 +178,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           mapResolved: (entry) => ({
             input: entry.input,
             resolved: entry.resolved,
-            id: entry.channelId ?? entry.guildId ?? undefined,
-            name: entry.channelName ?? (entry.guildId && !entry.channelId ? entry.guildId : undefined),
+            id: entry.resolved ? entry.channelId : undefined,
+            name: entry.resolved ? entry.channelName : undefined,
             note: entry.note,
           }),
         });
@@ -355,4 +373,4 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   },
 };
 
-export { coveChannelPlugin, resolveAccount, getRestClient };
+export { coveChannelPlugin, resolveAccount, readAccountConfig, getRestClient };
