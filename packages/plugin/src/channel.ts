@@ -13,6 +13,7 @@ import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 
 
 /**
@@ -118,6 +119,72 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         allowFromPath: "channels.cove.allowFrom",
         approveHint: "Add user to channels.cove.allowFrom",
       };
+    },
+  },
+  resolver: {
+    resolveTargets: async ({ cfg, accountId, inputs, kind }) => {
+      const account = resolveAccount(cfg, accountId);
+
+      if (kind === "group") {
+        return resolveTargetsWithOptionalToken({
+          token: account.token,
+          inputs,
+          missingTokenNote: "missing Cove bot token",
+          resolveWithToken: async ({ token, inputs: inputsValue }) => {
+            if (!account.guildId) {
+              return inputsValue.map((input) => ({
+                input,
+                resolved: false,
+                note: "guildId not configured",
+              }));
+            }
+
+            const restClient = getRestClient(account.baseUrl, token);
+            const channels = await restClient.getChannels(account.guildId);
+
+            return inputsValue.map((input) => {
+              const inputLower = input.toLowerCase();
+              const match = channels.find(
+                (ch) => ch.id === input || ch.name.toLowerCase() === inputLower,
+              );
+              return {
+                input,
+                resolved: Boolean(match),
+                channelId: match?.id,
+                channelName: match?.name,
+                guildId: account.guildId,
+                note: match ? undefined : "channel not found",
+              };
+            });
+          },
+          mapResolved: (entry) => ({
+            input: entry.input,
+            resolved: entry.resolved,
+            id: entry.channelId ?? entry.guildId ?? undefined,
+            name: entry.channelName ?? (entry.guildId && !entry.channelId ? entry.guildId : undefined),
+            note: entry.note,
+          }),
+        });
+      }
+
+      // User target resolution — not supported yet
+      return resolveTargetsWithOptionalToken({
+        token: account.token,
+        inputs,
+        missingTokenNote: "missing Cove bot token",
+        resolveWithToken: async ({ inputs: inputsValue }) => {
+          return inputsValue.map((input) => ({
+            input,
+            resolved: false,
+            note: "user target resolution not supported",
+          }));
+        },
+        mapResolved: (entry) => ({
+          input: entry.input,
+          resolved: entry.resolved,
+          note: entry.note,
+        }),
+      });
     },
   },
   outbound: {
