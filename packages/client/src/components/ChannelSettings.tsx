@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties } from "react";
+import type { Webhook } from "@cove/shared";
 import { Input, Button, Modal } from "antd";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
@@ -20,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "overview", label: "Overview" },
   { key: "permissions", label: "Permissions", disabled: true },
   { key: "invites", label: "Invites", disabled: true },
-  { key: "integrations", label: "Integrations", disabled: true },
+  { key: "integrations", label: "Integrations" },
   { key: "delete", label: "Delete Channel", danger: true },
 ];
 
@@ -43,6 +44,12 @@ export function ChannelSettings({
   const [topic, setTopic] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [webhooksLoading, setWebhooksLoading] = useState(false);
+  const [webhookName, setWebhookName] = useState("");
+  const [webhookCreating, setWebhookCreating] = useState(false);
+  const [webhookDeleteId, setWebhookDeleteId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Sync form state when channel changes
   useEffect(() => {
@@ -73,6 +80,49 @@ export function ChannelSettings({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, handleKeyDown]);
+
+  useEffect(() => {
+    if (!open || activeSection !== "integrations") return;
+    setWebhooksLoading(true);
+    api.fetchWebhooks(channelId).then(setWebhooks).catch(console.error).finally(() => setWebhooksLoading(false));
+  }, [open, activeSection, channelId]);
+
+  async function handleCreateWebhook() {
+    const trimmed = webhookName.trim();
+    if (!trimmed) return;
+    setWebhookCreating(true);
+    try {
+      const wh = await api.createWebhook(channelId, trimmed);
+      setWebhooks((prev) => [...prev, wh]);
+      setWebhookName("");
+    } catch (err) {
+      console.error("create webhook:", err);
+    } finally {
+      setWebhookCreating(false);
+    }
+  }
+
+  async function handleDeleteWebhook(id: string) {
+    try {
+      await api.deleteWebhook(id);
+      setWebhooks((prev) => prev.filter((w) => w.id !== id));
+    } catch (err) {
+      console.error("delete webhook:", err);
+    } finally {
+      setWebhookDeleteId(null);
+    }
+  }
+
+  function webhookUrl(wh: Webhook) {
+    const base = window.location.origin;
+    return `${base}/api/v10/webhooks/${wh.id}/${wh.token}`;
+  }
+
+  function handleCopyUrl(wh: Webhook) {
+    navigator.clipboard.writeText(webhookUrl(wh));
+    setCopiedId(wh.id);
+    setTimeout(() => setCopiedId((prev) => (prev === wh.id ? null : prev)), 2000);
+  }
 
   if (!open || !channel) return null;
 
@@ -226,7 +276,68 @@ export function ChannelSettings({
             {activeSection === "integrations" && (
               <div>
                 <h2 style={sectionTitleStyle}>Integrations</h2>
-                <p style={{ color: "var(--text-muted)" }}>Integration settings are coming soon.</p>
+
+                <label style={fieldLabelStyle}>WEBHOOKS</label>
+
+                <div style={{ display: "flex", gap: "var(--space-sm)", marginBottom: "var(--space-lg)" }}>
+                  <Input
+                    value={webhookName}
+                    onChange={(e) => setWebhookName(e.target.value)}
+                    placeholder="Webhook name"
+                    maxLength={80}
+                    style={{ ...inputStyle, flex: 1 }}
+                    onPressEnter={handleCreateWebhook}
+                  />
+                  <Button
+                    type="primary"
+                    onClick={handleCreateWebhook}
+                    loading={webhookCreating}
+                    disabled={!webhookName.trim()}
+                  >
+                    Create Webhook
+                  </Button>
+                </div>
+
+                {webhooksLoading ? (
+                  <p style={{ color: "var(--text-muted)" }}>Loading webhooks…</p>
+                ) : webhooks.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)" }}>
+                    No webhooks yet. Create one to enable cross-channel messaging.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                    {webhooks.map((wh) => (
+                      <div key={wh.id} style={webhookCardStyle}>
+                        <div style={{ fontWeight: 600, color: "var(--text-normal)", marginBottom: "var(--space-xs)" }}>
+                          {wh.name}
+                        </div>
+                        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", wordBreak: "break-all", marginBottom: "var(--space-sm)" }}>
+                          {webhookUrl(wh)}
+                        </div>
+                        <div style={{ display: "flex", gap: "var(--space-sm)", justifyContent: "flex-end" }}>
+                          <Button size="small" onClick={() => handleCopyUrl(wh)}>
+                            {copiedId === wh.id ? "Copied!" : "Copy URL"}
+                          </Button>
+                          <Button size="small" danger onClick={() => setWebhookDeleteId(wh.id)}>
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Modal
+                  title="Delete Webhook"
+                  open={webhookDeleteId !== null}
+                  onCancel={() => setWebhookDeleteId(null)}
+                  onOk={() => webhookDeleteId && handleDeleteWebhook(webhookDeleteId)}
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Cancel"
+                >
+                  <p>Are you sure you want to delete this webhook? Any services using it will stop working.</p>
+                </Modal>
               </div>
             )}
 
@@ -320,4 +431,11 @@ const saveBarStyle: CSSProperties = {
   borderRadius: "var(--space-xs)",
   position: "sticky",
   bottom: 0,
+};
+
+const webhookCardStyle: CSSProperties = {
+  padding: "var(--space-md)",
+  background: "var(--bg-tertiary, var(--bg-secondary))",
+  borderRadius: "var(--space-xs)",
+  border: "1px solid var(--border-subtle)",
 };
