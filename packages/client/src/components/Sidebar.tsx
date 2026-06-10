@@ -1,11 +1,12 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
-import { Button, Input, Popconfirm, Spin } from "antd";
-import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Button, Input, Spin } from "antd";
+import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import { ChannelSettings } from "./ChannelSettings";
 
 const styles = {
   root: { display: "flex", flexDirection: "column", background: "var(--bg-secondary)", borderRight: "none", minHeight: 0, overflow: "hidden" } as CSSProperties,
@@ -19,12 +20,12 @@ const styles = {
   channelHover: { background: "var(--bg-modifier-hover)", color: "var(--interactive-hover)" } as CSSProperties,
   hash: { fontSize: "var(--font-size-lg)", fontWeight: 600, opacity: 0.5, width: "var(--space-xl)", textAlign: "center", flexShrink: 0 } as CSSProperties,
   channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
-  deleteBtn: { opacity: 0, fontSize: "var(--font-size-sm)", transition: "opacity 0.15s" } as CSSProperties,
+  settingsBtn: { opacity: 0, fontSize: "var(--font-size-sm)", transition: "opacity 0.15s" } as CSSProperties,
   addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
 };
 
-function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
-  name: string; isActive: boolean; isUnread: boolean; onSelect: () => void; onDelete: () => void;
+function ChannelItem({ name, isActive, isUnread, onSelect, onSettings }: {
+  name: string; isActive: boolean; isUnread: boolean; onSelect: () => void; onSettings: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -37,37 +38,29 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onDelete }: {
     >
       <span style={styles.hash}>#</span>
       <span style={{ ...styles.channelName, ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}>{name}</span>
-      <Popconfirm title={`Delete #${name}?`} description="All messages will be lost." onConfirm={(e) => { e?.stopPropagation(); onDelete(); }} onCancel={(e) => e?.stopPropagation()} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
-        <Button
-          type="text"
-          size="small"
-          icon={<DeleteOutlined />}
-          onClick={(e) => e.stopPropagation()}
-          style={{ ...styles.deleteBtn, opacity: hovered ? 0.5 : 0 }}
-        />
-      </Popconfirm>
+      <Button
+        type="text"
+        size="small"
+        icon={<SettingOutlined />}
+        onClick={(e) => { e.stopPropagation(); onSettings(); }}
+        style={{ ...styles.settingsBtn, opacity: hovered ? 0.5 : 0 }}
+      />
     </div>
   );
 }
 
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
   const activeGuildId = useGuildStore((s) => s.activeGuildId);
-  const { activeChannelId, setActiveChannel, removeChannel, addChannel, getChannels } = useChannelStore();
+  const { activeChannelId, setActiveChannel, addChannel, getChannels } = useChannelStore();
   const channels = getChannels(activeGuildId);
   const { unreadChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
 
   function handleSelectChannel(id: string) {
     setActiveChannel(id);
     onClose?.();
-  }
-
-  async function handleDeleteChannel(id: string) {
-    try {
-      await api.deleteChannel(id);
-      removeChannel(id);
-    } catch (err) { console.error("delete channel:", err); }
   }
 
   async function handleAddChannel(e: React.FormEvent) {
@@ -105,7 +98,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
                 isActive={ch.id === activeChannelId}
                 isUnread={!!unreadChannels[ch.id]}
                 onSelect={() => handleSelectChannel(ch.id)}
-                onDelete={() => handleDeleteChannel(ch.id)}
+                onSettings={() => setSettingsChannelId(ch.id)}
               />
             ))}
             {adding && (
@@ -120,6 +113,13 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           </>
         )}
       </div>
+      {settingsChannelId && (
+        <ChannelSettings
+          channelId={settingsChannelId}
+          open={!!settingsChannelId}
+          onClose={() => setSettingsChannelId(null)}
+        />
+      )}
     </div>
   );
 }

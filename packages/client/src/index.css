@@ -42,6 +42,11 @@
 
   /* ── Settings ────────────────────────────────────────── */
   --settings-content-max-width: 660px;
+  --settings-panel-max-width: 960px;
+  --settings-panel-max-height: 720px;
+  --settings-panel-inset: 80px;
+  --settings-panel-radius: 10px;
+  --settings-sidebar-width: 220px;
 
   /* ── Input ────────────────────────────────────────────── */
   --input-radius: 8px;
@@ -326,11 +331,11 @@ textarea:focus-visible {
 .settings-panel {
   position: relative;
   display: flex;
-  width: calc(100vw - 80px);
-  max-width: 960px;
-  height: calc(100vh - 80px);
-  max-height: 720px;
-  border-radius: 10px;
+  width: calc(100vw - var(--settings-panel-inset));
+  max-width: var(--settings-panel-max-width);
+  height: calc(100vh - var(--settings-panel-inset));
+  max-height: var(--settings-panel-max-height);
+  border-radius: var(--settings-panel-radius);
   overflow: hidden;
   background: var(--bg-primary);
   box-shadow: var(--shadow-modal);
@@ -338,7 +343,7 @@ textarea:focus-visible {
 }
 
 .settings-sidebar {
-  width: 220px;
+  width: var(--settings-sidebar-width);
   flex-shrink: 0;
   background: var(--bg-secondary);
   display: flex;
@@ -548,9 +553,9 @@ textarea:focus-visible {
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 8px;
-    padding-right: 48px; /* leave space for close button */
-    gap: 4px;
+    padding: var(--space-sm);
+    padding-right: var(--icon-emoji-size); /* leave space for close button */
+    gap: var(--space-xs);
     border-bottom: 1px solid var(--border-subtle);
   }
   .settings-sidebar .settings-profile-area,
@@ -566,7 +571,7 @@ textarea:focus-visible {
     display: none;
   }
   .settings-content {
-    padding: 20px 16px;
+    padding: var(--space-xl) var(--space-lg);
   }
   .settings-mobile-sign-out {
     display: block;
