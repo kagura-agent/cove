@@ -146,4 +146,30 @@ export class CoveRestClient {
   async sendTyping(channelId: string): Promise<void> {
     return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`, undefined, AbortSignal.timeout(3000));
   }
+
+  /** POST /api/v10/channels/:channelId/webhooks — create a webhook. */
+  async createWebhook(channelId: string, name: string, avatar?: string): Promise<{ id: string; token: string; channel_id: string; name: string }> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/webhooks`, {
+      name,
+      ...(avatar ? { avatar } : {}),
+    });
+  }
+
+  /** GET /api/v10/channels/:channelId/webhooks — list channel webhooks. */
+  async getWebhooks(channelId: string): Promise<Array<{ id: string; token: string; channel_id: string; name: string }>> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/webhooks`);
+  }
+
+  /**
+   * POST /api/v10/webhooks/:id/:token — execute webhook (no auth needed).
+   * Sends a message to the webhook's channel with the webhook's identity.
+   * Use `username` to override display name (e.g. "From #home").
+   */
+  async executeWebhook(webhookId: string, webhookToken: string, content: string, username?: string, avatarUrl?: string): Promise<Message> {
+    return this.request("POST", `${API_PREFIX}/webhooks/${webhookId}/${webhookToken}`, {
+      content,
+      ...(username ? { username } : {}),
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+    });
+  }
 }
