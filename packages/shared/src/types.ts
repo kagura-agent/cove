@@ -21,6 +21,22 @@ export interface User {
   global_name: string | null;
 }
 
+/** A channel-level permission overwrite for a role or member. */
+export interface PermissionOverwrite {
+  id: string;          // target user or role id
+  type: number;        // 0 = role, 1 = member
+  allow: string;       // permission bitfield as string (bigint)
+  deny: string;        // permission bitfield as string (bigint)
+}
+
+export const PermissionFlags = {
+  VIEW_CHANNEL: (1n << 10n).toString(),
+  SEND_MESSAGES: (1n << 11n).toString(),
+  MANAGE_MESSAGES: (1n << 13n).toString(),
+  MANAGE_CHANNELS: (1n << 4n).toString(),
+  MANAGE_WEBHOOKS: (1n << 29n).toString(),
+} as const;
+
 /** Channel object — channels are mapped to GUILD_TEXT. */
 export interface Channel {
   id: string;
@@ -30,7 +46,7 @@ export interface Channel {
   topic: string | null;
   position: number;
   last_message_id: string | null;
-  permission_overwrites: unknown[];
+  permission_overwrites: PermissionOverwrite[];
   nsfw: boolean;
   rate_limit_per_user: number;
 }

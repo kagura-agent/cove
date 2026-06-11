@@ -39,6 +39,7 @@ const googleClientSecret = process.env["GOOGLE_CLIENT_SECRET"];
 const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
 
 const dispatcher = new GatewayDispatcher(repos.channels, repos.guilds);
+dispatcher.setPermissionsRepo(repos.permissions);
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
@@ -55,5 +56,5 @@ const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`🏝️  Cove server running on http://localhost:${info.port}`);
 });
 
-setupGateway(server as any, repos.users, repos.guilds, repos.channels, dispatcher, repos.readStates);
+setupGateway(server as any, repos.users, repos.guilds, repos.channels, dispatcher, repos.readStates, repos.permissions);
 console.log("🏝️  Gateway WebSocket ready on /gateway");

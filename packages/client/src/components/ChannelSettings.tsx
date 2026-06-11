@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties } from "react";
-import type { Webhook } from "@cove/shared";
-import { Input, Button, Modal } from "antd";
+import type { Webhook, PermissionOverwrite } from "@cove/shared";
+import { PermissionFlags } from "@cove/shared";
+import { Input, Button, Modal, Switch } from "antd";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import * as api from "../lib/api";
+import type { GuildMember } from "../types";
 
 type SectionKey = "overview" | "permissions" | "invites" | "integrations" | "delete";
 
@@ -19,7 +21,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: "overview", label: "Overview" },
-  { key: "permissions", label: "Permissions", disabled: true },
+  { key: "permissions", label: "Permissions" },
   { key: "invites", label: "Invites", disabled: true },
   { key: "integrations", label: "Integrations" },
   { key: "delete", label: "Delete Channel", danger: true },
@@ -51,6 +53,10 @@ export function ChannelSettings({
   const [webhookDeleteId, setWebhookDeleteId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [newlyCreatedTokens, setNewlyCreatedTokens] = useState<Map<string, string>>(new Map());
+  const [botMembers, setBotMembers] = useState<GuildMember[]>([]);
+  const [overwrites, setOverwrites] = useState<PermissionOverwrite[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
+  const [permSaving, setPermSaving] = useState<string | null>(null);
 
   // Sync form state when channel changes
   useEffect(() => {
@@ -88,6 +94,19 @@ export function ChannelSettings({
     api.fetchWebhooks(channelId).then(setWebhooks).catch(console.error).finally(() => setWebhooksLoading(false));
   }, [open, activeSection, channelId]);
 
+  useEffect(() => {
+    if (!open || activeSection !== "permissions" || !activeGuildId) return;
+    setPermissionsLoading(true);
+    Promise.all([
+      api.fetchMembers(activeGuildId),
+      api.fetchChannels(activeGuildId),
+    ]).then(([members, channels]) => {
+      setBotMembers(members.filter((m) => m.user.bot));
+      const ch = channels.find((c) => c.id === channelId);
+      setOverwrites(ch?.permission_overwrites ?? []);
+    }).catch(console.error).finally(() => setPermissionsLoading(false));
+  }, [open, activeSection, channelId, activeGuildId]);
+
   async function handleCreateWebhook() {
     const trimmed = webhookName.trim();
     if (!trimmed) return;
@@ -114,6 +133,30 @@ export function ChannelSettings({
       console.error("delete webhook:", err);
     } finally {
       setWebhookDeleteId(null);
+    }
+  }
+
+  async function handleToggleBotPermission(botId: string, enabled: boolean) {
+    setPermSaving(botId);
+    try {
+      if (enabled) {
+        await api.putPermissionOverwrite(channelId, botId, {
+          type: 1,
+          allow: PermissionFlags.VIEW_CHANNEL,
+          deny: "0",
+        });
+        setOverwrites((prev) => [
+          ...prev.filter((o) => o.id !== botId),
+          { id: botId, type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" },
+        ]);
+      } else {
+        await api.deletePermissionOverwrite(channelId, botId);
+        setOverwrites((prev) => prev.filter((o) => o.id !== botId));
+      }
+    } catch (err) {
+      console.error("toggle permission:", err);
+    } finally {
+      setPermSaving(null);
     }
   }
 
@@ -270,7 +313,38 @@ export function ChannelSettings({
             {activeSection === "permissions" && (
               <div>
                 <h2 style={sectionTitleStyle}>Permissions</h2>
-                <p style={{ color: "var(--text-muted)" }}>Channel permissions are coming soon.</p>
+                <label style={fieldLabelStyle}>BOT VISIBILITY</label>
+                <p style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)", marginBottom: "var(--space-lg)" }}>
+                  Control which bots can see this channel. Bots without access will not receive messages from this channel.
+                </p>
+                {permissionsLoading ? (
+                  <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+                ) : botMembers.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)" }}>No bots in this server.</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                    {botMembers.map((m) => {
+                      const hasAccess = overwrites.some(
+                        (o) => o.id === m.user.id && (BigInt(o.allow) & BigInt(PermissionFlags.VIEW_CHANNEL)) !== 0n,
+                      );
+                      return (
+                        <div key={m.user.id} style={botPermCardStyle}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", flex: 1 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg-modifier-hover)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--font-size-sm)", color: "var(--text-muted)", flexShrink: 0 }}>
+                              {m.user.username[0].toUpperCase()}
+                            </div>
+                            <span style={{ color: "var(--text-normal)", fontWeight: 500 }}>{m.user.username}</span>
+                          </div>
+                          <Switch
+                            checked={hasAccess}
+                            loading={permSaving === m.user.id}
+                            onChange={(checked) => handleToggleBotPermission(m.user.id, checked)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -442,6 +516,16 @@ const saveBarStyle: CSSProperties = {
 };
 
 const webhookCardStyle: CSSProperties = {
+  padding: "var(--space-md)",
+  background: "var(--bg-tertiary, var(--bg-secondary))",
+  borderRadius: "var(--space-xs)",
+  border: "1px solid var(--border-subtle)",
+};
+
+const botPermCardStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
   padding: "var(--space-md)",
   background: "var(--bg-tertiary, var(--bg-secondary))",
   borderRadius: "var(--space-xs)",

@@ -36,7 +36,7 @@ describe("Webhooks", () => {
     adminToken = "test-admin-token";
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("admin", "Admin", null, 1, null, adminToken, now, now);
+      .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
   });
@@ -47,7 +47,7 @@ describe("Webhooks", () => {
 
   const authHeaders = () => ({
     "Content-Type": "application/json",
-    Authorization: `Bot ${adminToken}`,
+    Authorization: `Bearer ${adminToken}`,
   });
 
   async function createWebhook(channelId: string, name: string): Promise<Webhook> {
@@ -271,7 +271,7 @@ describe("Webhooks", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bot ${adminToken}`,
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({ name: "Temp Hook" }),
     });

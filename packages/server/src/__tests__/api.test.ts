@@ -4,7 +4,7 @@ import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
 import type { Channel, Message, CoveAgent, CoveGuildMember } from "@cove/shared";
-import { API_PREFIX } from "@cove/shared";
+import { API_PREFIX, PermissionFlags } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Cove API — Discord-compatible", () => {
@@ -57,11 +57,11 @@ describe("Cove API — Discord-compatible", () => {
     process.env.RATE_LIMIT_ENABLED = "false";
     app = createApp(db, createRepos(db), new TestDispatcher());
 
-    // Bootstrap an admin bot directly in DB for auth
+    // Bootstrap an admin user directly in DB for auth
     adminToken = "test-admin-token";
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("admin", "Admin", null, 1, null, adminToken, now, now);
+      .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
   });
@@ -72,10 +72,10 @@ describe("Cove API — Discord-compatible", () => {
 
   const authHeaders = () => ({
     "Content-Type": "application/json",
-    Authorization: `Bot ${adminToken}`,
+    Authorization: `Bearer ${adminToken}`,
   });
 
-  const authGet = (path: string) => app.request(path, { headers: { Authorization: `Bot ${adminToken}` } });
+  const authGet = (path: string) => app.request(path, { headers: { Authorization: `Bearer ${adminToken}` } });
 
   // Helper to create a bot user and get its token
   async function createBotUser(id: string, username: string, extra?: Record<string, unknown>) {
@@ -85,6 +85,14 @@ describe("Cove API — Discord-compatible", () => {
       body: JSON.stringify({ id, username, bot: true, ...extra }),
     });
     return res.json() as Promise<CoveAgent & { token: string }>;
+  }
+
+  async function grantViewChannel(channelId: string, botId: string) {
+    await app.request(`${API_PREFIX}/channels/${channelId}/permissions/${botId}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" }),
+    });
   }
 
   // ─── Channels ───────────────────────────────────────────────────────────
@@ -161,6 +169,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`POST ${API_PREFIX}/channels/:id/messages`, () => {
     it("creates a message and returns Discord format", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: {
@@ -193,6 +202,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("message appears in channel messages list", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: {
@@ -211,6 +221,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("broadcasts MESSAGE_CREATE event", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: {
@@ -246,6 +257,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`GET ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("returns a single message by ID", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
@@ -272,6 +284,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`DELETE ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("deletes a message and returns 204", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
@@ -301,7 +314,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns 404 for nonexistent message", async () => {
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/nonexistent`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bearer ${adminToken}` },
       });
       expect(res.status).toBe(404);
     });
@@ -312,6 +325,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`PATCH ${API_PREFIX}/channels/:id/messages/:msgId`, () => {
     it("edits a message and returns updated content with edited_timestamp", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
@@ -354,6 +368,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`POST ${API_PREFIX}/channels/:id/typing`, () => {
     it("returns 204 and broadcasts TYPING_START", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       broadcastEvents.length = 0;
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/typing`, {
         method: "POST",
@@ -375,6 +390,7 @@ describe("Cove API — Discord-compatible", () => {
   describe(`PUT ${API_PREFIX}/channels/:id/messages/:msgId/ack`, () => {
     it("acks a message — persists read state and dispatches MESSAGE_ACK", async () => {
       const bot = await createBotUser("kagura", "Kagura");
+      await grantViewChannel(generalId, "kagura");
       const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
@@ -419,7 +435,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns 404 for nonexistent message", async () => {
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/nonexistent/ack`, {
         method: "PUT",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bearer ${adminToken}` },
       });
       expect(res.status).toBe(404);
     });
@@ -626,7 +642,7 @@ describe("Cove API — Discord-compatible", () => {
     it("deletes a channel", async () => {
       const res = await app.request(`${API_PREFIX}/channels/${randomId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bearer ${adminToken}` },
       });
       expect(res.status).toBe(200);
       const data: Channel = await res.json();
@@ -641,7 +657,7 @@ describe("Cove API — Discord-compatible", () => {
     it("returns 404 for unknown channel", async () => {
       const res = await app.request(`${API_PREFIX}/channels/nonexistent`, {
         method: "DELETE",
-        headers: { Authorization: `Bot ${adminToken}` },
+        headers: { Authorization: `Bearer ${adminToken}` },
       });
       expect(res.status).toBe(404);
     });
@@ -823,7 +839,7 @@ describe("Cove API — Discord-compatible", () => {
     });
 
     it("DELETE removes member from guild", async () => {
-      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, { method: "DELETE", headers: { Authorization: `Bot ${adminToken}` } });
+      const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/members/bot-a`, { method: "DELETE", headers: { Authorization: `Bearer ${adminToken}` } });
       expect(res.status).toBe(204);
 
       const listRes = await authGet(`${API_PREFIX}/guilds/${defaultGuildId}/members`);
@@ -1196,6 +1212,7 @@ describe("Cove API — Discord-compatible", () => {
 
     it("PATCH message rejects empty content", async () => {
       const bot = await createBotUser("val-bot", "ValBot");
+      await grantViewChannel(generalId, "val-bot");
       const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },

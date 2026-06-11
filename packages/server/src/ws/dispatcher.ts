@@ -2,13 +2,21 @@ import type { Message, Channel } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
 import type { GuildsRepo } from "../repos/guilds.js";
+import type { PermissionsRepo } from "../repos/permissions.js";
+
+const VIEW_CHANNEL_BIT = 1n << 10n;
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
   private sessionsById = new Map<string, GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
+  private permissionsRepo: PermissionsRepo | null = null;
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
+
+  setPermissionsRepo(repo: PermissionsRepo): void {
+    this.permissionsRepo = repo;
+  }
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
@@ -68,23 +76,23 @@ export class GatewayDispatcher {
   messageCreate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_CREATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_CREATE", message);
   }
 
   messageUpdate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_UPDATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_UPDATE", message);
   }
 
   messageDelete(channelId: string, messageId: string): void {
     const guildId = this.resolveGuildForChannel(channelId);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId, guild_id: guildId });
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId, guild_id: guildId });
   }
 
   messageDeleteBulk(channelId: string, messageIds: string[], guildId: string): void {
-    this.broadcastToGuild(guildId, "MESSAGE_DELETE_BULK", { ids: messageIds, channel_id: channelId, guild_id: guildId });
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_DELETE_BULK", { ids: messageIds, channel_id: channelId, guild_id: guildId });
   }
 
   channelCreate(channel: Channel): void {
@@ -92,7 +100,7 @@ export class GatewayDispatcher {
   }
 
   channelUpdate(channel: Channel): void {
-    this.broadcastToGuild(channel.guild_id, "CHANNEL_UPDATE", channel);
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, channel.id, "CHANNEL_UPDATE", channel);
   }
 
   channelDelete(guildId: string, channelId: string): void {
@@ -100,7 +108,7 @@ export class GatewayDispatcher {
   }
 
   typingStart(channelId: string, user: { id: string; username: string }, guildId: string): void {
-    this.broadcastToGuild(guildId, "TYPING_START", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "TYPING_START", {
       channel_id: channelId,
       user_id: user.id,
       username: user.username,
@@ -169,6 +177,18 @@ export class GatewayDispatcher {
     }
   }
 
+  private broadcastToGuildWithChannelFilter(guildId: string, channelId: string, event: string, data: unknown): void {
+    for (const session of this.sessions) {
+      if (!session.guildIds.has(guildId)) continue;
+      if (session.user?.bot && this.permissionsRepo) {
+        if (!this.permissionsRepo.hasPermission(channelId, session.user.id, VIEW_CHANNEL_BIT)) {
+          continue;
+        }
+      }
+      session.dispatch(event, data);
+    }
+  }
+
   private sendToUser(userId: string, event: string, data: unknown): void {
     const sessionIds = this.userSessions.get(userId);
     if (!sessionIds) return;
@@ -196,7 +216,7 @@ export class GatewayDispatcher {
   }
 
   reactionAdd(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
-    this.broadcastToGuild(guildId, "MESSAGE_REACTION_ADD", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_REACTION_ADD", {
       user_id: userId,
       channel_id: channelId,
       message_id: messageId,
@@ -207,7 +227,7 @@ export class GatewayDispatcher {
   }
 
   reactionRemove(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
-    this.broadcastToGuild(guildId, "MESSAGE_REACTION_REMOVE", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_REACTION_REMOVE", {
       user_id: userId,
       channel_id: channelId,
       message_id: messageId,

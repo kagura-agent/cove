@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { generateSnowflake, type Channel } from "@cove/shared";
+import type { PermissionsRepo } from "./permissions.js";
 
 interface ChannelRow {
   id: string;
@@ -27,16 +28,27 @@ function toChannel(row: ChannelRow): Channel {
 }
 
 export class ChannelsRepo {
+  private permissionsRepo: PermissionsRepo | null = null;
+
   constructor(private db: Database.Database) {}
+
+  setPermissionsRepo(repo: PermissionsRepo): void {
+    this.permissionsRepo = repo;
+  }
+
+  private enrichOverwrites(channel: Channel): Channel {
+    if (!this.permissionsRepo) return channel;
+    return { ...channel, permission_overwrites: this.permissionsRepo.listByChannel(channel.id) };
+  }
 
   list(guildId: string): Channel[] {
     const rows = this.db.prepare("SELECT * FROM channels WHERE guild_id = ? ORDER BY position ASC").all(guildId) as ChannelRow[];
-    return rows.map(toChannel);
+    return rows.map((r) => this.enrichOverwrites(toChannel(r)));
   }
 
   getById(id: string): Channel | null {
     const row = this.db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as ChannelRow | undefined;
-    return row ? toChannel(row) : null;
+    return row ? this.enrichOverwrites(toChannel(row)) : null;
   }
 
   create(guildId: string, name: string, topic?: string, type?: number): Channel {

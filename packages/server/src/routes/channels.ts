@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, unknownGuild, unknownChannel } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownGuild, unknownChannel } from "./helpers.js";
 
 export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -13,19 +13,28 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     if (!repos.guilds.exists(guildId)) {
       return unknownGuild(c);
     }
-    const userId = c.get("botUser").id;
-    if (!repos.members.exists(guildId, userId)) {
+    const user = c.get("botUser");
+    if (!repos.members.exists(guildId, user.id)) {
       return unknownGuild(c);
     }
-    return c.json(repos.channels.list(guildId));
+    let channels = repos.channels.list(guildId);
+    if (user.bot) {
+      channels = channels.filter((ch) =>
+        requireBotChannelPermission(repos, ch.id, user.id, true),
+      );
+    }
+    return c.json(channels);
   });
 
   app.get("/channels/:id", (c) => {
     const id = c.req.param("id")!;
-    const userId = c.get("botUser").id;
-    const channel = requireGuildMember(repos, id, userId);
+    const user = c.get("botUser");
+    const channel = requireGuildMember(repos, id, user.id);
     if (!channel) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
+      return c.json({ message: "Missing Access", code: 50001 }, 403);
     }
     return c.json(channel);
   });
@@ -67,10 +76,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
   app.patch("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
-    const userId = c.get("botUser").id;
-    const channel = requireGuildMember(repos, id, userId);
+    const user = c.get("botUser");
+    const channel = requireGuildMember(repos, id, user.id);
     if (!channel) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
+      return c.json({ message: "Missing Access", code: 50001 }, 403);
     }
 
     const body = await parseJsonBody<{
@@ -114,10 +126,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
   app.delete("/channels/:id", (c) => {
     const id = c.req.param("id")!;
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, id, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, id, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
+      return c.json({ message: "Missing Access", code: 50001 }, 403);
     }
     if (!repos.channels.delete(id)) {
       return unknownChannel(c);

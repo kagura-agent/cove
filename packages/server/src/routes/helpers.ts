@@ -29,3 +29,14 @@ export function unknownChannel(c: Context) {
 export function unknownMessage(c: Context) {
   return c.json({ message: "Unknown Message", code: 10008 }, 404);
 }
+
+export function requireBotChannelPermission(
+  repos: Repos,
+  channelId: string,
+  userId: string,
+  isBotUser: boolean,
+): boolean {
+  if (!isBotUser) return true;
+  const VIEW_CHANNEL = 1n << 10n;
+  return repos.permissions.hasPermission(channelId, userId, VIEW_CHANNEL);
+}

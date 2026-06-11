@@ -38,6 +38,13 @@ describe("Auth endpoints (BFF pattern)", () => {
       .run("admin", "Admin", null, 1, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
+
+    // Grant bot VIEW_CHANNEL on all seeded channels
+    const channels = db.prepare("SELECT id FROM channels WHERE guild_id = ?").all(defaultGuildId) as { id: string }[];
+    for (const ch of channels) {
+      db.prepare("INSERT OR IGNORE INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+        .run(ch.id, "admin", 1, "1024", "0");
+    }
   });
 
   function seedPending(id: string, token: string, email: string, username: string) {
