@@ -302,10 +302,10 @@ textarea:focus-visible {
 
 /* ── Discord-style hidden scrollbar ──────────────────────── */
 
-.scroll-container { scrollbar-width: none; }
+.scroll-container { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 .scroll-container::-webkit-scrollbar { width: 8px; }
 .scroll-container::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background 0.15s ease; }
-.scroll-container:hover { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
+.scroll-container:hover { scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
 .scroll-container:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); }
 .scroll-container:hover::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thin-thumb-hover); }
 
