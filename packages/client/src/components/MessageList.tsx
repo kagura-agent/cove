@@ -59,6 +59,7 @@ const centerStyle: CSSProperties = {
 const listStyle: CSSProperties = {
   flex: 1,
   overflowY: "auto",
+  scrollbarGutter: "stable" as any,
   paddingTop: "var(--space-sm)",
   paddingBottom: 0,
   paddingLeft: 0,
