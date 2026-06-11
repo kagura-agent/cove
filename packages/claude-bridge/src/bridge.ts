@@ -197,13 +197,15 @@ export class Bridge {
     if (active && active.messageId) {
       // Edit the existing message with the final result
       this.editMessageSafe(channelId, active.messageId, resultText);
-    } else if (!active) {
+    } else if (active && !active.messageId) {
+      // messageId not yet set — update content so the sendMessage callback picks it up
+      active.content = resultText;
+    } else {
       // No streaming text was received — send the result directly
       this.rest.sendMessage(channelId, resultText || "(empty response)").catch((err) => {
         console.error(`[bridge] Failed to send result to ${channelId}:`, err.message);
       });
     }
-    // else: messageId not yet set — the sendMessage callback will handle it
 
     this.activeResponses.delete(channelId);
   }

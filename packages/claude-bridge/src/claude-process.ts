@@ -32,8 +32,12 @@ interface ManagedProcess {
   sessionId: string;
 }
 
+/** Track the last completed session ID per channel for --resume. */
+const channelSessions = new Map<string, string>();
+
 export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitter<ClaudeProcessEvents>) {
   private readonly processes = new Map<string, ManagedProcess>();
+  private readonly pendingMessages = new Map<string, string[]>();
   private readonly workingDir: string;
 
   constructor(workingDir: string) {
@@ -43,36 +47,39 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
   /**
    * Send a user message to the claude process for a channel.
-   * Spawns a new process if one doesn't exist or has exited.
+   * Each message spawns a new claude process with --resume to maintain session.
    */
   sendMessage(channelId: string, content: string): void {
     let managed = this.processes.get(channelId);
 
-    if (!managed || managed.proc.exitCode !== null || managed.proc.killed) {
-      // Clean up dead entry
-      if (managed) this.processes.delete(channelId);
-      managed = this.spawnProcess(channelId);
+    // If there's an active process, wait for it to finish
+    if (managed && managed.proc.exitCode === null && !managed.proc.killed) {
+      // Queue the message — it will be sent after the current process exits
+      if (!this.pendingMessages.has(channelId)) {
+        this.pendingMessages.set(channelId, []);
+      }
+      this.pendingMessages.get(channelId)!.push(content);
+      return;
     }
 
-    const msg = JSON.stringify({ type: "user_message", content }) + "\n";
-    managed.proc.stdin?.write(msg);
+    this.processes.delete(channelId);
+    managed = this.spawnProcess(channelId, content);
   }
 
-  /** Spawn a new claude process for a channel. */
-  private spawnProcess(channelId: string): ManagedProcess {
-    // Derive a deterministic session ID from channelId so sessions persist across restarts
-    const sessionId = deterministicUUID(channelId);
-
-    const proc = spawn("claude", [
+  /** Spawn a new claude process for a channel with a specific prompt. */
+  private spawnProcess(channelId: string, prompt: string): ManagedProcess {
+    const sessionId = randomUUID();
+    const args = [
       "--print",
       "--verbose",
-      "--input-format", "stream-json",
       "--output-format", "stream-json",
-      "--session-id", sessionId,
       "--dangerously-skip-permissions",
-    ], {
+      "-p", prompt,
+    ];
+
+    const proc = spawn("claude", args, {
       cwd: this.workingDir,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
     });
 
@@ -101,7 +108,17 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
     proc.on("exit", (code) => {
       this.processes.delete(channelId);
+      // Save session ID for future --resume
+      channelSessions.set(channelId, sessionId);
       this.emit("exit", channelId, code);
+      // Process any pending messages for this channel
+      const pending = this.pendingMessages.get(channelId);
+      if (pending && pending.length > 0) {
+        const nextMsg = pending.shift()!;
+        if (pending.length === 0) this.pendingMessages.delete(channelId);
+        // Small delay to let session ID release
+        setTimeout(() => this.sendMessage(channelId, nextMsg), 500);
+      }
     });
 
     proc.on("error", (err) => {
@@ -118,7 +135,7 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
     switch (type) {
       case "assistant":
-        if (event.subtype === "text" && typeof event.text === "string") {
+        if (typeof event.text === "string") {
           this.emit("text", channelId, event.text);
         }
         break;
@@ -126,6 +143,8 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
       case "result":
         if (typeof event.result === "string") {
           this.emit("result", channelId, event.result);
+        } else if (typeof event.text === "string") {
+          this.emit("result", channelId, event.text);
         }
         break;
 
