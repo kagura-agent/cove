@@ -50,11 +50,13 @@ const styles = {
   fullHeight: { height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-primary)" } as CSSProperties,
   overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
   overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
-  layout: { display: "grid", gridTemplateRows: "1fr minmax(var(--footer-height), auto)", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
-  sidebarBody: { gridColumn: 1, gridRow: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-secondary)" } as CSSProperties,
-  sidebarFooter: { gridColumn: 1, gridRow: 2 } as CSSProperties,
-  chatBody: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
-  chatFooter: { gridColumn: 2, gridRow: 2, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
+  layout: { display: "flex", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
+  sidebarColumn: { width: "var(--sidebar-width)", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-secondary)" } as CSSProperties,
+  sidebarBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" } as CSSProperties,
+  sidebarFooter: { flexShrink: 0, minHeight: "var(--footer-height)" } as CSSProperties,
+  chatColumn: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } as CSSProperties,
+  chatBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
+  chatFooter: { flexShrink: 0, minHeight: "var(--footer-height)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
   loginTitle: { fontSize: "var(--font-size-xxl)", fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
@@ -257,17 +259,21 @@ export default function App() {
         <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
 
-        <div style={{ ...styles.layout, gridTemplateColumns: membersOpen ? "var(--sidebar-width) 1fr var(--member-list-width)" : "var(--sidebar-width) 1fr" }} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
-          <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
-          <div style={styles.sidebarFooter} className="sidebar-footer-cell">
-            <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
+        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
+          <div style={styles.sidebarColumn} className="sidebar-column">
+            <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
+            <div style={styles.sidebarFooter} className="sidebar-footer-cell">
+              <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
+            </div>
           </div>
 
-          <div style={styles.chatBody} className="chat-body-cell">
-            <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
-          </div>
-          <div style={styles.chatFooter} className="chat-footer-cell">
-            {activeChannelId && <MessageInput channelId={activeChannelId} />}
+          <div style={styles.chatColumn} className="chat-column">
+            <div style={styles.chatBody} className="chat-body-cell">
+              <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
+            </div>
+            <div style={styles.chatFooter} className="chat-footer-cell">
+              {activeChannelId && <MessageInput channelId={activeChannelId} />}
+            </div>
           </div>
 
           {membersOpen && <MemberList />}

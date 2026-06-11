@@ -9,7 +9,7 @@ import { useGuildStore } from "../stores/useGuildStore";
 import { StatusDot } from "./StatusDot";
 
 const styles = {
-  root: { gridColumn: 3, gridRow: "1 / -1", width: "var(--member-list-width)", minWidth: "var(--member-list-width)", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
+  root: { width: "var(--member-list-width)", minWidth: "var(--member-list-width)", flexShrink: 0, background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflowY: "auto", paddingTop: "var(--header-height)" } as CSSProperties,
   header: { padding: "var(--space-lg) var(--space-lg) var(--space-xs)", fontSize: "var(--font-size-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-muted)" } as CSSProperties,
   member: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-lg)", borderRadius: "var(--space-xs)", cursor: "default", transition: "background 0.15s" } as CSSProperties,
   memberHover: { background: "var(--member-hover)" } as CSSProperties,
