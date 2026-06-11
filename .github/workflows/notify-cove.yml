@@ -9,6 +9,8 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for deploy to complete
+        run: sleep 90
       - name: Send merge notification to Cove
         run: |
           curl -s -X POST "${{ secrets.COVE_DEV_WEBHOOK_URL }}" \
