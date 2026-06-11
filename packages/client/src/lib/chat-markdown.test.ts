@@ -175,3 +175,9 @@ test("SNAKE_CASE in sentence stays literal", () => {
   const allText = tokens.every(t => t.type === "text" || t.type === "br");
   if (!allText) throw new Error("should all be text, got " + tokens.map(t => t.type).join(","));
 });
+
+test("closing underscore followed by word char stays literal", () => {
+  const tokens = parseChatMarkdown("_PRIVATE_CHANNEL");
+  if (tokens.length !== 1 || tokens[0].type !== "text") throw new Error("should be plain text, got " + tokens.map(t => t.type).join(","));
+  if ((tokens[0] as any).text !== "_PRIVATE_CHANNEL") throw new Error("text should be _PRIVATE_CHANNEL");
+});

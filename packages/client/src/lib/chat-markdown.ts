@@ -32,7 +32,7 @@ const INLINE_RULES: Array<{ pattern: RegExp; guard?: (consumed: string) => boole
   {
     // Underscore italic: only at word boundaries (Discord-compatible)
     // Don't trigger when preceded by a word character (e.g. VIEW_CHANNEL)
-    pattern: /^_([^_]+?)_/,
+    pattern: /^_([^_]+?)_(?!\w)/,
     guard: (consumed) => {
       if (consumed.length === 0) return true;
       const lastChar = consumed[consumed.length - 1];
