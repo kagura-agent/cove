@@ -44,6 +44,8 @@ function sanitizedEnv(): Record<string, string> {
 export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitter<ClaudeProcessEvents>) {
   private readonly processes = new Map<string, ManagedProcess>();
   private readonly pendingMessages = new Map<string, string[]>();
+  private readonly drainTimers = new Set<ReturnType<typeof setTimeout>>();
+  private destroyed = false;
   private readonly workingDir: string;
 
   constructor(workingDir: string) {
@@ -126,12 +128,16 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
   /** Process next pending message for a channel after current process finishes. */
   private drainPending(channelId: string): void {
+    if (this.destroyed) return;
     const pending = this.pendingMessages.get(channelId);
     if (pending && pending.length > 0) {
       const nextMsg = pending.shift()!;
       if (pending.length === 0) this.pendingMessages.delete(channelId);
-      // Small delay to avoid rapid respawn
-      setTimeout(() => this.sendMessage(channelId, nextMsg), 500);
+      const timer = setTimeout(() => {
+        this.drainTimers.delete(timer);
+        if (!this.destroyed) this.sendMessage(channelId, nextMsg);
+      }, 500);
+      this.drainTimers.add(timer);
     }
   }
 
@@ -174,6 +180,9 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
   /** Kill all claude processes and clear queues (for graceful shutdown). */
   destroyAll(): void {
+    this.destroyed = true;
+    for (const timer of this.drainTimers) clearTimeout(timer);
+    this.drainTimers.clear();
     for (const [channelId, managed] of this.processes) {
       console.log(`[claude] Killing process for channel ${channelId}`);
       managed.proc.kill("SIGTERM");
