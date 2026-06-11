@@ -90,6 +90,16 @@ export function createAllTables(db: Database.Database): void {
       PRIMARY KEY (message_id, user_id, emoji)
     );
     CREATE INDEX IF NOT EXISTS idx_reactions_message_id ON reactions(message_id);
+
+    CREATE TABLE IF NOT EXISTS channel_permission_overwrites (
+      channel_id   TEXT NOT NULL,
+      target_id    TEXT NOT NULL,
+      target_type  INTEGER NOT NULL DEFAULT 1,
+      allow        TEXT NOT NULL DEFAULT '0',
+      deny         TEXT NOT NULL DEFAULT '0',
+      PRIMARY KEY (channel_id, target_id),
+      FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+    );
   `);
 }
 

@@ -94,3 +94,11 @@ export function createWebhook(channelId: string, name: string) {
 export function deleteWebhook(webhookId: string) {
   return api<void>(`${API_PREFIX}/webhooks/${webhookId}`, { method: "DELETE" });
 }
+export function putPermissionOverwrite(channelId: string, targetId: string, data: { type: number; allow: string; deny: string }) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/permissions/${targetId}`, {
+    method: "PUT", body: JSON.stringify(data),
+  });
+}
+export function deletePermissionOverwrite(channelId: string, targetId: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/permissions/${targetId}`, { method: "DELETE" });
+}

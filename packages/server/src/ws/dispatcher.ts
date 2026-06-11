@@ -2,13 +2,21 @@ import type { Message, Channel } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
 import type { GuildsRepo } from "../repos/guilds.js";
+import type { PermissionsRepo } from "../repos/permissions.js";
+
+const VIEW_CHANNEL_BIT = 1n << 10n;
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
   private sessionsById = new Map<string, GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
+  private permissionsRepo: PermissionsRepo | null = null;
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
+
+  setPermissionsRepo(repo: PermissionsRepo): void {
+    this.permissionsRepo = repo;
+  }
 
   addSession(session: GatewaySession): void {
     this.sessions.add(session);
@@ -68,19 +76,19 @@ export class GatewayDispatcher {
   messageCreate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_CREATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_CREATE", message);
   }
 
   messageUpdate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_UPDATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_UPDATE", message);
   }
 
   messageDelete(channelId: string, messageId: string): void {
     const guildId = this.resolveGuildForChannel(channelId);
     if (!guildId) return;
-    this.broadcastToGuild(guildId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId, guild_id: guildId });
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_DELETE", { id: messageId, channel_id: channelId, guild_id: guildId });
   }
 
   messageDeleteBulk(channelId: string, messageIds: string[], guildId: string): void {
@@ -166,6 +174,18 @@ export class GatewayDispatcher {
       if (session.guildIds.has(guildId)) {
         session.dispatch(event, data);
       }
+    }
+  }
+
+  private broadcastToGuildWithChannelFilter(guildId: string, channelId: string, event: string, data: unknown): void {
+    for (const session of this.sessions) {
+      if (!session.guildIds.has(guildId)) continue;
+      if (session.user?.bot && this.permissionsRepo) {
+        if (!this.permissionsRepo.hasPermission(channelId, session.user.id, VIEW_CHANNEL_BIT)) {
+          continue;
+        }
+      }
+      session.dispatch(event, data);
     }
   }
 
