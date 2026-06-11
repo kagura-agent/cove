@@ -89,11 +89,10 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
   app.delete("/users/:id", (c) => {
     const rawId = c.req.param("id");
-    const actorId = c.get("botUser").id;
-    const id = rawId === "@me" ? actorId : rawId;
+    const actor = c.get("botUser");
+    const id = rawId === "@me" ? actor.id : rawId;
 
-    // Only the user themselves can delete their account
-    if (id !== actorId) {
+    if (id !== actor.id && !actor.bot) {
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
