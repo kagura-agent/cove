@@ -261,6 +261,105 @@ describe("Permissions", () => {
     expect(body.code).toBe(50013);
   });
 
+  it("denied bot cannot PATCH a message (403)", async () => {
+    const botToken = createBotUser("patch-bot", "PatchBot");
+    // Create a message as admin first
+    const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "original" }),
+    });
+    const msg = await createRes.json();
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${msg.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${botToken}`,
+      },
+      body: JSON.stringify({ content: "edited" }),
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("denied bot cannot DELETE a message (403)", async () => {
+    const botToken = createBotUser("delete-bot", "DeleteBot");
+    // Create a message as admin first
+    const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "to delete" }),
+    });
+    const msg = await createRes.json();
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${msg.id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("denied bot cannot add a reaction (403)", async () => {
+    const botToken = createBotUser("react-bot", "ReactBot");
+    // Create a message as admin first
+    const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "react to this" }),
+    });
+    const msg = await createRes.json();
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${msg.id}/reactions/%F0%9F%91%8D/@me`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("denied bot cannot remove a reaction (403)", async () => {
+    const botToken = createBotUser("unreact-bot", "UnreactBot");
+    // Create a message as admin first
+    const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "unreact from this" }),
+    });
+    const msg = await createRes.json();
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${msg.id}/reactions/%F0%9F%91%8D/@me`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("denied bot cannot use typing indicator (403)", async () => {
+    const botToken = createBotUser("typing-bot", "TypingBot");
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/typing`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
   // ─── Dispatcher filtering ─────────────────────────────────────
 
   it("bot WITH VIEW_CHANNEL receives dispatched events", async () => {

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
-import { requireGuildMember, unknownChannel, unknownMessage } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
 
 export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -16,18 +16,21 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!emoji || emoji.length > 64) {
       return c.json({ message: "Invalid emoji" }, 400);
     }
-    const userId = c.get("botUser").id;
+    const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, userId);
+    const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);
 
-    const added = repos.reactions.add(messageId, userId, emoji);
+    const added = repos.reactions.add(messageId, user.id, emoji);
     if (added) {
       const count = repos.reactions.getCount(messageId, emoji);
-      dispatcher?.reactionAdd(channelId, messageId, userId, emoji, channel.guild_id, count);
+      dispatcher?.reactionAdd(channelId, messageId, user.id, emoji, channel.guild_id, count);
     }
 
     return c.body(null, 204);
@@ -42,18 +45,21 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!emoji || emoji.length > 64) {
       return c.json({ message: "Invalid emoji" }, 400);
     }
-    const userId = c.get("botUser").id;
+    const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, userId);
+    const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);
 
-    const removed = repos.reactions.remove(messageId, userId, emoji);
+    const removed = repos.reactions.remove(messageId, user.id, emoji);
     if (removed) {
       const count = repos.reactions.getCount(messageId, emoji);
-      dispatcher?.reactionRemove(channelId, messageId, userId, emoji, channel.guild_id, count);
+      dispatcher?.reactionRemove(channelId, messageId, user.id, emoji, channel.guild_id, count);
     }
 
     return c.body(null, 204);
@@ -68,10 +74,13 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!emoji || emoji.length > 64) {
       return c.json({ message: "Invalid emoji" }, 400);
     }
-    const userId = c.get("botUser").id;
+    const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, userId);
+    const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);

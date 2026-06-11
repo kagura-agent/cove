@@ -32,13 +32,16 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.get("/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
     }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
-    const message = repos.messages.getById(channelId, msgId, userId);
+    const message = repos.messages.getById(channelId, msgId, user.id);
     if (!message) {
       return unknownMessage(c);
     }
@@ -97,10 +100,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.patch("/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const existing = repos.messages.getById(channelId, msgId);
@@ -109,7 +115,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
 
     // Only the message author can edit their own message
-    if (existing.author.id !== userId) {
+    if (existing.author.id !== user.id) {
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
@@ -132,10 +138,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.delete("/channels/:id/messages/:msgId", (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const existing = repos.messages.getById(channelId, msgId);
@@ -163,10 +172,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
   app.post("/channels/:id/messages/bulk-delete", async (c) => {
     const channelId = c.req.param("id");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const body = await parseJsonBody<{ messages: string[] }>(c);
@@ -197,10 +209,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   // Cove-specific: clear all messages in a channel
   app.delete("/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const count = repos.messages.deleteAll(channelId);
@@ -214,18 +229,21 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.put("/channels/:id/messages/:msgId/ack", (c) => {
     const channelId = c.req.param("id");
     const messageId = c.req.param("msgId");
-    const userId = c.get("botUser").id;
-    const ch = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const ch = requireGuildMember(repos, channelId, user.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     if (!repos.messages.getById(channelId, messageId)) {
       return unknownMessage(c);
     }
 
-    repos.readStates.set(userId, channelId, messageId) &&
-      dispatcher?.messageAck(userId, channelId, messageId);
+    repos.readStates.set(user.id, channelId, messageId) &&
+      dispatcher?.messageAck(user.id, channelId, messageId);
 
     return c.body(null, 204);
   });
@@ -236,6 +254,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const ch = requireGuildMember(repos, channelId, author.id);
     if (!ch) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, author.id, author.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id);

@@ -37,6 +37,13 @@ describe("Reactions", () => {
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
 
+    // Grant VIEW_CHANNEL to the bot admin so route tests pass
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "admin", 1, "1024", "0");
+    const randomId = (db.prepare("SELECT id FROM channels WHERE name = 'random'").get() as { id: string }).id;
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(randomId, "admin", 1, "1024", "0");
+
     // Create a message to react to
     db.prepare("INSERT INTO messages (id, channel_id, sender, content, timestamp) VALUES (?, ?, ?, ?, ?)")
       .run("msg1", generalId, "admin", "Hello", now);
