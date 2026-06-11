@@ -1,0 +1,16 @@
+name: Notify Cove on PR merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send merge notification to Cove
+        run: |
+          curl -s -X POST "${{ secrets.COVE_DEV_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"✅ PR #${{ github.event.number }} merged: ${{ github.event.pull_request.title }}\", \"username\": \"GitHub\"}"
