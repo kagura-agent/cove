@@ -193,6 +193,74 @@ describe("Permissions", () => {
     expect(res.status).toBe(404);
   });
 
+  // ─── Negative auth: bots cannot manage permissions ─────────────
+
+  it("bot cannot PUT permissions (403)", async () => {
+    const botToken = createBotUser("mgmt-bot", "MgmtBot");
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/permissions/mgmt-bot`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${botToken}`,
+      },
+      body: JSON.stringify({ type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" }),
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("bot cannot DELETE permissions (403)", async () => {
+    const botToken = createBotUser("del-bot", "DelBot");
+    await app.request(`${API_PREFIX}/channels/${generalId}/permissions/del-bot`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" }),
+    });
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/permissions/del-bot`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  // ─── Negative auth: denied bot cannot read/send messages ──────
+
+  it("denied bot cannot read messages from channel (403)", async () => {
+    const botToken = createBotUser("read-bot", "ReadBot");
+    // No VIEW_CHANNEL permission granted
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bot ${botToken}`,
+      },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
+  it("denied bot cannot send messages to channel (403)", async () => {
+    const botToken = createBotUser("send-bot", "SendBot");
+    // No VIEW_CHANNEL permission granted
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${botToken}`,
+      },
+      body: JSON.stringify({ content: "should fail" }),
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50013);
+  });
+
   // ─── Dispatcher filtering ─────────────────────────────────────
 
   it("bot WITH VIEW_CHANNEL receives dispatched events", async () => {

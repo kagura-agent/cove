@@ -34,7 +34,7 @@ describe("Rate-limit middleware", () => {
     adminToken = "test-admin-token";
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("admin", "Admin", null, 1, null, adminToken, now, now);
+      .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
 
@@ -47,12 +47,12 @@ describe("Rate-limit middleware", () => {
   });
 
   const authGet = (path: string, token = adminToken) =>
-    app.request(path, { headers: { Authorization: `Bot ${token}` } });
+    app.request(path, { headers: { Authorization: `Bearer ${token}` } });
 
   const authPost = (path: string, body: object, token = adminToken) =>
     app.request(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bot ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     });
 
@@ -124,7 +124,7 @@ describe("Rate-limit middleware", () => {
     // Create a second user
     const secondToken = "test-second-token";
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("user2", "User2", null, 1, null, secondToken, now, now);
+      .run("user2", "User2", null, 0, null, secondToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "user2", null, "[]", now);
 

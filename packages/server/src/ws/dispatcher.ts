@@ -92,7 +92,7 @@ export class GatewayDispatcher {
   }
 
   messageDeleteBulk(channelId: string, messageIds: string[], guildId: string): void {
-    this.broadcastToGuild(guildId, "MESSAGE_DELETE_BULK", { ids: messageIds, channel_id: channelId, guild_id: guildId });
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_DELETE_BULK", { ids: messageIds, channel_id: channelId, guild_id: guildId });
   }
 
   channelCreate(channel: Channel): void {
@@ -108,7 +108,7 @@ export class GatewayDispatcher {
   }
 
   typingStart(channelId: string, user: { id: string; username: string }, guildId: string): void {
-    this.broadcastToGuild(guildId, "TYPING_START", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "TYPING_START", {
       channel_id: channelId,
       user_id: user.id,
       username: user.username,
@@ -216,7 +216,7 @@ export class GatewayDispatcher {
   }
 
   reactionAdd(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
-    this.broadcastToGuild(guildId, "MESSAGE_REACTION_ADD", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_REACTION_ADD", {
       user_id: userId,
       channel_id: channelId,
       message_id: messageId,
@@ -227,7 +227,7 @@ export class GatewayDispatcher {
   }
 
   reactionRemove(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
-    this.broadcastToGuild(guildId, "MESSAGE_REACTION_REMOVE", {
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_REACTION_REMOVE", {
       user_id: userId,
       channel_id: channelId,
       message_id: messageId,

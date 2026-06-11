@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, unknownGuild, unknownChannel } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownGuild, unknownChannel } from "./helpers.js";
 
 export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -13,11 +13,17 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     if (!repos.guilds.exists(guildId)) {
       return unknownGuild(c);
     }
-    const userId = c.get("botUser").id;
-    if (!repos.members.exists(guildId, userId)) {
+    const user = c.get("botUser");
+    if (!repos.members.exists(guildId, user.id)) {
       return unknownGuild(c);
     }
-    return c.json(repos.channels.list(guildId));
+    let channels = repos.channels.list(guildId);
+    if (user.bot) {
+      channels = channels.filter((ch) =>
+        requireBotChannelPermission(repos, ch.id, user.id, true),
+      );
+    }
+    return c.json(channels);
   });
 
   app.get("/channels/:id", (c) => {

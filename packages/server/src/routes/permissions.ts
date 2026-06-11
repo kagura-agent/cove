@@ -8,9 +8,13 @@ export function permissionRoutes(repos: Repos): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.put("/channels/:channelId/permissions/:targetId", async (c) => {
+    const user = c.get("botUser");
+    if (user.bot) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
     const channelId = c.req.param("channelId")!;
     const targetId = c.req.param("targetId")!;
-    const userId = c.get("botUser").id;
+    const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) return unknownChannel(c);
 
@@ -24,14 +28,25 @@ export function permissionRoutes(repos: Repos): Hono<AppEnv> {
       return validationError(c, "allow and deny must be strings");
     }
 
+    try {
+      BigInt(body.allow);
+      BigInt(body.deny);
+    } catch {
+      return validationError(c, "allow and deny must be valid integer strings");
+    }
+
     repos.permissions.upsert(channelId, targetId, body.type, body.allow, body.deny);
     return c.body(null, 204);
   });
 
   app.delete("/channels/:channelId/permissions/:targetId", (c) => {
+    const user = c.get("botUser");
+    if (user.bot) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
     const channelId = c.req.param("channelId")!;
     const targetId = c.req.param("targetId")!;
-    const userId = c.get("botUser").id;
+    const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) return unknownChannel(c);
 

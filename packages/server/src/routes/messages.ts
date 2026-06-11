@@ -3,17 +3,20 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, unknownChannel, unknownMessage } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.get("/channels/:id/messages", (c) => {
     const channelId = c.req.param("id");
-    const userId = c.get("botUser").id;
-    const channel = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
@@ -22,7 +25,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const after = c.req.query("after");
     const around = c.req.query("around");
 
-    const messages = repos.messages.list(channelId, { limit, before, after, around }, userId);
+    const messages = repos.messages.list(channelId, { limit, before, after, around }, user.id);
     return c.json(messages);
   });
 
@@ -44,10 +47,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
   app.post("/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
-    const userId = c.get("botUser").id;
-    const channel = requireGuildMember(repos, channelId, userId);
+    const user = c.get("botUser");
+    const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) {
       return unknownChannel(c);
+    }
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const body = await parseJsonBody<{ content: string; username?: string; nonce?: string }>(c);
@@ -63,7 +69,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     }
 
-    const author = c.get("botUser");
+    const author = user;
 
     const message = repos.messages.create(channelId, author, body.content);
 
@@ -76,13 +82,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     repos.channels.updateLastMessageId(channelId, message.id);
 
     // Update sender's read state so their own message doesn't show unread on reload
-    const acked = repos.readStates.set(userId, channelId, message.id);
+    const acked = repos.readStates.set(user.id, channelId, message.id);
 
     dispatcher?.messageCreate(message);
 
     // Notify sender's other sessions so unread badges clear everywhere
     if (acked) {
-      dispatcher?.messageAck(userId, channelId, message.id);
+      dispatcher?.messageAck(user.id, channelId, message.id);
     }
 
     return c.json(message, 201);

@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, unknownChannel } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownChannel } from "./helpers.js";
 
 function stripToken<T extends { token?: unknown }>(webhook: T): Omit<T, "token"> {
   const { token: _, ...rest } = webhook;
@@ -19,6 +19,9 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, userId, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const body = await parseJsonBody<{ name: string; avatar?: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -41,6 +44,9 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, userId, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     return c.json(repos.webhooks.listByChannel(channelId));
   });
