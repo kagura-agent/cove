@@ -145,3 +145,33 @@ test("autolink rejects non-http", () => {
 });
 
 console.log("Edge case tests passed");
+
+// ── Underscore word-boundary tests ───────────────────────────────────
+
+test("underscore italic at word boundary works", () => {
+  const tokens = parseChatMarkdown("_hello_");
+  if (tokens.length !== 1 || tokens[0].type !== "italic") throw new Error("should be italic");
+});
+
+test("underscore italic with leading space works", () => {
+  const tokens = parseChatMarkdown("say _hello_ world");
+  if (!tokens.some(t => t.type === "italic")) throw new Error("should contain italic");
+});
+
+test("mid-word underscores do NOT trigger italic", () => {
+  const tokens = parseChatMarkdown("VIEW_CHANNEL");
+  if (tokens.length !== 1 || tokens[0].type !== "text") throw new Error("should be plain text, got " + tokens.map(t => t.type).join(","));
+  if ((tokens[0] as any).text !== "VIEW_CHANNEL") throw new Error("text should be VIEW_CHANNEL");
+});
+
+test("multiple mid-word underscores stay literal", () => {
+  const tokens = parseChatMarkdown("abc_def_ghi");
+  if (tokens.length !== 1 || tokens[0].type !== "text") throw new Error("should be plain text");
+  if ((tokens[0] as any).text !== "abc_def_ghi") throw new Error("text should be abc_def_ghi");
+});
+
+test("SNAKE_CASE in sentence stays literal", () => {
+  const tokens = parseChatMarkdown("use MANAGE_WEBHOOKS permission");
+  const allText = tokens.every(t => t.type === "text" || t.type === "br");
+  if (!allText) throw new Error("should all be text, got " + tokens.map(t => t.type).join(","));
+});
