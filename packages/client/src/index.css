@@ -481,18 +481,13 @@ textarea:focus-visible {
     grid-template-columns: 1fr !important;
   }
   .sidebar-panel {
-    position: fixed !important;
-    z-index: 30 !important;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: var(--sidebar-width) !important;
-    transform: translateX(-100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform;
+    /* Positioned by parent .sidebar-column on mobile */
+    position: static !important;
+    width: 100% !important;
+    transform: none;
   }
   .sidebar-open .sidebar-panel {
-    transform: translateX(0);
+    transform: none;
   }
 
   /* Sidebar column on mobile — slides in/out */
