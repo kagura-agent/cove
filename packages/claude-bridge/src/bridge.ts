@@ -85,6 +85,7 @@ export class Bridge {
     this.typingIntervals.clear();
     for (const timer of this.editTimers.values()) clearTimeout(timer);
     this.editTimers.clear();
+    this.activeResponses.clear();
   }
 
   private setupGatewayHandlers(): void {
@@ -159,6 +160,13 @@ export class Bridge {
     this.claude.sendMessage(channelId, messageForClaude);
   }
 
+  /** Truncate content if it exceeds the message length limit. */
+  private truncate(content: string): string {
+    return content.length > MAX_MESSAGE_LENGTH
+      ? content.slice(0, MAX_MESSAGE_LENGTH - 20) + "\n\n…(truncated)"
+      : content;
+  }
+
   private handleClaudeText(channelId: string, text: string): void {
     const active = this.activeResponses.get(channelId);
 
@@ -170,7 +178,7 @@ export class Bridge {
         resultPending: null,
       });
 
-      this.rest.sendMessage(channelId, text).then((msg) => {
+      this.rest.sendMessage(channelId, this.truncate(text)).then((msg) => {
         const current = this.activeResponses.get(channelId);
         if (current) {
           current.messageId = msg.id;
@@ -217,7 +225,7 @@ export class Bridge {
       // Don't delete activeResponses here — the sendMessage callback will
     } else {
       // No streaming text was received — send the result directly
-      this.rest.sendMessage(channelId, resultText || "(empty response)").catch((err) => {
+      this.rest.sendMessage(channelId, this.truncate(resultText) || "(empty response)").catch((err) => {
         console.error(`[bridge] Failed to send result to ${channelId}:`, err.message);
       });
     }
@@ -239,13 +247,9 @@ export class Bridge {
     }, 300));
   }
 
-  /** Edit a message, truncating if content exceeds the limit. */
+  /** Edit a message, truncating if needed. */
   private editMessageSafe(channelId: string, messageId: string, content: string): void {
-    const truncated = content.length > MAX_MESSAGE_LENGTH
-      ? content.slice(0, MAX_MESSAGE_LENGTH - 20) + "\n\n…(truncated)"
-      : content;
-
-    this.rest.editMessage(channelId, messageId, truncated || "(empty)").catch((err) => {
+    this.rest.editMessage(channelId, messageId, this.truncate(content) || "(empty)").catch((err) => {
       console.error(`[bridge] Failed to edit message in ${channelId}:`, err.message);
     });
   }

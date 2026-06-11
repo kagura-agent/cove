@@ -172,13 +172,14 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
     }
   }
 
-  /** Kill all claude processes (for graceful shutdown). */
+  /** Kill all claude processes and clear queues (for graceful shutdown). */
   destroyAll(): void {
     for (const [channelId, managed] of this.processes) {
       console.log(`[claude] Killing process for channel ${channelId}`);
       managed.proc.kill("SIGTERM");
     }
     this.processes.clear();
+    this.pendingMessages.clear();
   }
 
   /** Check if a channel has an active process. */
