@@ -7,6 +7,7 @@ import { agentRoutes } from "./routes/agents.js";
 import { authRoutes, type OAuthConfig } from "./routes/auth.js";
 import { registerRoutes } from "./routes/register.js";
 import { reactionRoutes } from "./routes/reactions.js";
+import { webhookRoutes, webhookExecuteRoutes } from "./routes/webhooks.js";
 import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
@@ -35,6 +36,9 @@ export function createApp(
     app.route("/", authRoutes(db, config.oauth, repos.guilds, repos.users));
   }
 
+  // Webhook execute endpoint — no auth required (token is in the URL)
+  app.route(API_PREFIX, webhookExecuteRoutes(repos, dispatcher));
+
   // Global auth: all /api/* routes (except PUBLIC_PATHS and OPTIONS) require a valid token.
   const authMw = requireAuth(repos.users);
   app.use("/api/*", async (c, next) => {
@@ -50,6 +54,7 @@ export function createApp(
   app.route(API_PREFIX, channelRoutes(repos, dispatcher));
   app.route(API_PREFIX, messagesRoutes(repos, dispatcher));
   app.route(API_PREFIX, reactionRoutes(repos, dispatcher));
+  app.route(API_PREFIX, webhookRoutes(repos));
   app.route(API_PREFIX, agentRoutes(repos, dispatcher));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";

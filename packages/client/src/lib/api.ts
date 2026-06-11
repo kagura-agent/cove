@@ -1,4 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
+import type { Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -80,4 +81,16 @@ export function fetchPendingStatus() {
 
 export async function logout() {
   await api<{ message: string }>("/api/auth/logout", { method: "POST" });
+}
+
+export function fetchWebhooks(channelId: string) {
+  return api<Webhook[]>(`${API_PREFIX}/channels/${channelId}/webhooks`);
+}
+export function createWebhook(channelId: string, name: string) {
+  return api<Webhook>(`${API_PREFIX}/channels/${channelId}/webhooks`, {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+}
+export function deleteWebhook(webhookId: string) {
+  return api<void>(`${API_PREFIX}/webhooks/${webhookId}`, { method: "DELETE" });
 }

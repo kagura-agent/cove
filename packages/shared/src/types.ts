@@ -54,6 +54,7 @@ export interface Message {
   /** Client-generated nonce for optimistic send reconciliation. */
   nonce?: string;
   reactions?: Reaction[];
+  webhook_id?: string;
 }
 
 /** A reaction summary for a message. */
@@ -119,4 +120,14 @@ export interface CoveGuildMember {
   nick: string | null;
   roles: string[];
   joined_at: string; // ISO 8601
+}
+
+/** Webhook object (Discord-compatible). */
+export interface Webhook {
+  id: string;
+  channel_id: string;
+  guild_id: string;
+  name: string;
+  avatar: string | null;
+  token?: string;
 }
