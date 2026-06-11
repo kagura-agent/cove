@@ -264,4 +264,43 @@ describe("Webhooks", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it("deleted webhook messages retain sender_name as author", async () => {
+    // Create webhook
+    const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/webhooks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${adminToken}`,
+      },
+      body: JSON.stringify({ name: "Temp Hook" }),
+    });
+    const webhook = (await createRes.json()) as { id: string; token: string };
+
+    // Send a message via webhook
+    const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "before delete", username: "Custom Name" }),
+    });
+    expect(execRes.status).toBe(201);
+    const msg = (await execRes.json()) as { id: string };
+
+    // Delete the webhook
+    const delRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bot ${adminToken}` },
+    });
+    expect(delRes.status).toBe(204);
+
+    // Fetch messages — the deleted webhook message should retain sender_name
+    const listRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages?limit=50`, {
+      headers: { Authorization: `Bot ${adminToken}` },
+    });
+    const messages = (await listRes.json()) as Array<{ id: string; author: { username: string; bot: boolean } }>;
+    const found = messages.find((m) => m.id === msg.id);
+    expect(found).toBeDefined();
+    expect(found!.author.username).toBe("Custom Name");
+    expect(found!.author.bot).toBe(true);
+  });
 });

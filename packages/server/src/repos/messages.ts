@@ -41,7 +41,7 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   } else {
     author = {
       id: "0",
-      username: "Deleted Webhook",
+      username: row.sender_name ?? "Deleted Webhook",
       avatar: null,
       bot: true,
       discriminator: "0",
