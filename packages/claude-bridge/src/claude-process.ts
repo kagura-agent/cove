@@ -6,7 +6,6 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { EventEmitter } from "node:events";
 
@@ -29,7 +28,6 @@ type TypedEmitter<T> = {
 
 interface ManagedProcess {
   proc: ChildProcess;
-  sessionId: string;
 }
 
 /** Minimal env vars to pass to Claude child processes. */
@@ -75,8 +73,6 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
 
   /** Spawn a new claude process for a channel with a specific prompt. */
   private spawnProcess(channelId: string, prompt: string): ManagedProcess {
-    const sessionId = randomUUID();
-
     const proc = spawn("claude", [
       "--print",
       "--verbose",
@@ -89,7 +85,7 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
       env: sanitizedEnv(),
     });
 
-    const managed: ManagedProcess = { proc, sessionId };
+    const managed: ManagedProcess = { proc };
     this.processes.set(channelId, managed);
 
     // Parse stdout line by line for stream-json events
@@ -124,7 +120,7 @@ export class ClaudeProcessManager extends (EventEmitter as new () => TypedEmitte
       this.drainPending(channelId);
     });
 
-    console.log(`[claude] Spawned process for channel ${channelId} (session: ${sessionId.slice(0, 8)}...)`);
+    console.log(`[claude] Spawned process for channel ${channelId}`);
     return managed;
   }
 

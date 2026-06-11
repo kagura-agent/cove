@@ -48,8 +48,6 @@ export class Bridge {
   /** Debounce timers for batching edits. */
   private editTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  private botUserId: string | null = null;
-
   constructor(config: BridgeConfig) {
     this.guildId = config.guildId;
     this.baseUrl = config.baseUrl;
@@ -91,13 +89,15 @@ export class Bridge {
 
   private setupGatewayHandlers(): void {
     this.gateway.on("ready", (user) => {
-      this.botUserId = user.id;
       console.log(`[bridge] Connected as ${user.username} (${user.id})`);
     });
 
     this.gateway.on("messageCreate", (message) => {
       // Ignore bot messages (prevent echo loops)
       if (message.author.bot) return;
+
+      // Only handle messages from our guild
+      if ((message as any).guild_id && (message as any).guild_id !== this.guildId) return;
 
       // Only handle messages (ignore empty)
       if (!message.content?.trim()) return;
@@ -132,10 +132,14 @@ export class Bridge {
     this.claude.on("exit", (channelId, code) => {
       console.log(`[bridge] Claude process for ${channelId} exited with code ${code}`);
       this.stopTyping(channelId);
+      // Non-zero exit with no response sent — notify user
+      if (code !== 0 && code !== null && !this.activeResponses.has(channelId)) {
+        this.rest.sendMessage(channelId, `⚠️ Claude exited with an error (code ${code}).`).catch(() => {});
+      }
     });
 
     this.claude.on("error", (channelId, error) => {
-      console.error(`[bridge] Claude process error for ${channelId}`);
+      console.error(`[bridge] Claude process error for ${channelId}:`, error.message);
       this.stopTyping(channelId);
       this.rest.sendMessage(channelId, "⚠️ Claude process encountered an error.").catch(() => {});
     });
@@ -145,8 +149,10 @@ export class Bridge {
     // Start typing indicator
     this.startTyping(channelId);
 
-    // Clear any previous response tracking for this channel
-    this.activeResponses.delete(channelId);
+    // Only clear previous response if no active process (avoids corrupting in-flight response)
+    if (!this.claude.hasProcess(channelId)) {
+      this.activeResponses.delete(channelId);
+    }
 
     // Forward to Claude — include username for context
     const messageForClaude = `[${username}]: ${content}`;
