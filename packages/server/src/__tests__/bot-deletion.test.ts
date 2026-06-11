@@ -60,7 +60,7 @@ describe("Bot deletion by another bot user", () => {
     expect(getRes.status).toBe(404);
   });
 
-  it("non-bot user cannot delete another user", async () => {
+  it("non-bot user can delete a bot user", async () => {
     const now = Date.now();
     const humanToken = "human-token";
     db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -71,6 +71,27 @@ describe("Bot deletion by another bot user", () => {
     const target = await createBotUser("target-bot2", "TargetBot2");
 
     const res = await app.request(`${API_PREFIX}/users/${target.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bot ${humanToken}` },
+    });
+    expect(res.status).toBe(204);
+  });
+
+  it("non-bot user cannot delete another non-bot user", async () => {
+    const now = Date.now();
+    const humanToken = "human-token-2";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("human-a", "HumanA", null, 0, null, humanToken, now, now, now + 86400000);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(defaultGuildId, "human-a", null, "[]", now);
+
+    const humanToken2 = "human-token-3";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("human-b", "HumanB", null, 0, null, humanToken2, now, now, now + 86400000);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(defaultGuildId, "human-b", null, "[]", now);
+
+    const res = await app.request(`${API_PREFIX}/users/human-b`, {
       method: "DELETE",
       headers: { Authorization: `Bot ${humanToken}` },
     });

@@ -92,8 +92,16 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     const actor = c.get("botUser");
     const id = rawId === "@me" ? actor.id : rawId;
 
-    if (id !== actor.id && !actor.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    // Allow self-deletion always.
+    // Allow deleting OTHER users only if the target is a bot.
+    if (id !== actor.id) {
+      const target = repos.users.getById(id!);
+      if (!target) {
+        return c.json({ message: "Unknown User", code: 10013 }, 404);
+      }
+      if (!target.bot) {
+        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      }
     }
 
     if (!repos.users.delete(id!)) {
