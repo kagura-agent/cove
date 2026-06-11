@@ -52,7 +52,7 @@ const styles = {
   overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
   layout: { display: "grid", gridTemplateRows: "1fr minmax(var(--footer-height), auto)", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
   sidebarBody: { gridColumn: 1, gridRow: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-secondary)" } as CSSProperties,
-  sidebarFooter: { gridColumn: 1, gridRow: 2 } as CSSProperties,
+  sidebarFooter: { gridColumn: 1, gridRow: 2, alignSelf: "end", height: "var(--footer-height)" } as CSSProperties,
   chatBody: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
   chatFooter: { gridColumn: 2, gridRow: 2, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
