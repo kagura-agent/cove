@@ -38,6 +38,18 @@ Thanks for your interest in contributing to Cove! 🏝️
   - At least 1 approved review
   - Branch up to date with main
 
+## Development Workflow
+
+The full development cycle for Cove follows this rhythm:
+
+1. **Develop** — Work in `#cove-dev` (Cove channel), push PRs. CI auto-deploys to staging.
+2. **Verify behavior** — Luna reviews the deployed staging build for correctness. Wait for her confirmation before proceeding to code review.
+3. **Code review** — Send the PR to `#code-review` via webhook (request results sent back to `#cove-dev`).
+4. **Iterate on review** —
+   - If review changes **alter behavior**: notify Luna to re-verify on staging.
+   - If review changes are **code-only** (no behavior change): fix and continue review without interrupting Luna.
+5. **Merge** — When code review passes unanimously, notify Luna for final review and merge.
+
 ## PR Review Process
 
 - **Before requesting Luna's review**, send the PR to the `#code-review` channel (Discord <#1508641076204802159>) for automated multi-model code review. Address any findings first, then request Luna's review.
