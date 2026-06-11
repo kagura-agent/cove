@@ -53,7 +53,7 @@ const styles = {
   layout: { display: "grid", gridTemplateRows: "1fr", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
   sidebarColumn: { gridColumn: 1, gridRow: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-secondary)" } as CSSProperties,
   sidebarBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" } as CSSProperties,
-  sidebarFooter: { flexShrink: 0 } as CSSProperties,
+  sidebarFooter: { flexShrink: 0, minHeight: "var(--footer-height)", display: "flex", alignItems: "center" } as CSSProperties,
   chatColumn: { gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" } as CSSProperties,
   chatBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
   chatFooter: { flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
