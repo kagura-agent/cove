@@ -53,7 +53,7 @@ export function fetchMembers(guildId: string) {
 }
 export function createBot(username: string, bio: string) {
   return api<BotCreateResponse>(`${API_PREFIX}/users`, {
-    method: "POST", body: JSON.stringify({ username, bio }),
+    method: "POST", body: JSON.stringify({ username, bio, bot: true }),
   });
 }
 export function deleteBot(id: string) {
