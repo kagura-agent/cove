@@ -493,3 +493,78 @@ describe("Permissions", () => {
     dispatcher.removeSession(session);
   });
 });
+
+describe("Channel route VIEW_CHANNEL enforcement", () => {
+  let db: any;
+  let app: any;
+  let adminToken: string;
+  let botToken: string;
+  let defaultGuildId: string;
+  let generalId: string;
+
+  beforeEach(async () => {
+    const { initDb, seedChannels } = await import("../db/schema.js");
+    const { createRepos } = await import("../repos/index.js");
+    const { createApp } = await import("../app.js");
+
+    db = initDb(":memory:");
+    defaultGuildId = (db.prepare("SELECT id FROM guilds ORDER BY created_at ASC LIMIT 1").get() as { id: string }).id;
+    seedChannels(db, defaultGuildId);
+    generalId = (db.prepare("SELECT id FROM channels WHERE name = 'general'").get() as { id: string }).id;
+    process.env.RATE_LIMIT_ENABLED = "false";
+    app = createApp(db, createRepos(db));
+
+    const now = Date.now();
+    adminToken = "admin-tok";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("admin", "Admin", null, 1, null, adminToken, now, now);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(defaultGuildId, "admin", null, "[]", now);
+
+    // Bot WITHOUT VIEW_CHANNEL
+    botToken = "denied-bot-tok";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("denied-bot", "DeniedBot", null, 1, null, botToken, now, now);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(defaultGuildId, "denied-bot", null, "[]", now);
+  });
+
+  afterEach(() => { delete process.env.RATE_LIMIT_ENABLED; });
+
+  it("denied bot cannot GET /channels/:id", async () => {
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("denied bot cannot PATCH /channels/:id", async () => {
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "hacked" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("denied bot cannot DELETE /channels/:id", async () => {
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("denied bot gets filtered guild channel list", async () => {
+    // Grant VIEW_CHANNEL on general only to admin, not denied-bot
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "admin", 1, "1024", "0");
+
+    const res = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    expect(res.status).toBe(200);
+    const channels = await res.json();
+    expect(channels.every((ch: any) => ch.id !== generalId)).toBe(true);
+  });
+});
