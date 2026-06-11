@@ -15,9 +15,6 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
 
   app.post("/channels/:channelId/webhooks", async (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const channelId = c.req.param("channelId");
     const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
@@ -29,15 +26,17 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const err = validateString(body.name, "name", { required: true, maxLength: 80 });
     if (err) return validationError(c, err);
 
+    if (body.avatar !== undefined) {
+      const avatarErr = validateString(body.avatar, "avatar", { maxLength: 2048 });
+      if (avatarErr) return validationError(c, avatarErr);
+    }
+
     const webhook = repos.webhooks.create(channelId, channel.guild_id, body.name, body.avatar);
     return c.json(webhook, 201);
   });
 
   app.get("/channels/:channelId/webhooks", (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const channelId = c.req.param("channelId");
     const userId = user.id;
     const channel = requireGuildMember(repos, channelId, userId);
@@ -48,9 +47,6 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
 
   app.get("/guilds/:guildId/webhooks", (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const guildId = c.req.param("guildId");
     const userId = user.id;
     if (!repos.guilds.exists(guildId) || !repos.members.exists(guildId, userId)) {
@@ -62,9 +58,6 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
 
   app.get("/webhooks/:webhookId", (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
@@ -79,9 +72,6 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
 
   app.patch("/webhooks/:webhookId", async (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
@@ -99,6 +89,11 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
       if (err) return validationError(c, err);
     }
 
+    if (body.avatar !== undefined && body.avatar !== null) {
+      const avatarErr = validateString(body.avatar, "avatar", { maxLength: 2048 });
+      if (avatarErr) return validationError(c, avatarErr);
+    }
+
     const updated = repos.webhooks.update(webhookId, {
       name: body.name,
       avatar: body.avatar,
@@ -110,9 +105,6 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
 
   app.delete("/webhooks/:webhookId", (c) => {
     const user = c.get("botUser");
-    if (!user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);

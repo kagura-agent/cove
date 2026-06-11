@@ -210,4 +210,58 @@ describe("Webhooks", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // ─── Negative auth tests ───────────────────────────────────────────
+
+  it("unauthenticated request returns 401", async () => {
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/webhooks`);
+    expect(res.status).toBe(401);
+  });
+
+  it("non-member user gets 404 (Unknown Channel)", async () => {
+    const now = Date.now();
+    const outsiderToken = "outsider-token";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("outsider", "Outsider", null, 0, null, outsiderToken, now, now);
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/webhooks`, {
+      headers: { Authorization: `Bearer ${outsiderToken}` },
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe(10003);
+  });
+
+  it("wrong webhook token on execute returns 404", async () => {
+    const wh = await createWebhook(generalId, "Token Test");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/wrong-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "nope" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("cross-guild user cannot manage webhooks in another guild", async () => {
+    const now = Date.now();
+    const otherGuildId = "other-guild-id";
+    db.prepare("INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(otherGuildId, "Other Guild", null, null, now, now);
+
+    const crossToken = "cross-guild-token";
+    db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("cross-user", "CrossUser", null, 1, null, crossToken, now, now);
+    db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(otherGuildId, "cross-user", null, "[]", now);
+
+    const res = await app.request(`${API_PREFIX}/channels/${generalId}/webhooks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bot ${crossToken}`,
+      },
+      body: JSON.stringify({ name: "Sneaky Hook" }),
+    });
+    expect(res.status).toBe(404);
+  });
 });

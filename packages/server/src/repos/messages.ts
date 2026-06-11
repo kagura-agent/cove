@@ -19,18 +19,41 @@ interface MessageRow {
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
 function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
-  const msg: Message = {
-    id: row.id,
-    channel_id: row.channel_id,
-    content: row.content,
-    author: {
+  let author: Message["author"];
+  if (row.webhook_id) {
+    author = {
+      id: row.webhook_id,
+      username: row.sender_name ?? "Webhook",
+      avatar: null,
+      bot: true,
+      discriminator: "0",
+      global_name: null,
+    };
+  } else if (row.sender) {
+    author = {
       id: row.sender,
       username: row.sender_username ?? row.sender_name ?? row.sender,
       bot: row.sender_bot === 1,
       avatar: null,
       discriminator: "0",
       global_name: null,
-    },
+    };
+  } else {
+    author = {
+      id: "0",
+      username: "Deleted Webhook",
+      avatar: null,
+      bot: true,
+      discriminator: "0",
+      global_name: null,
+    };
+  }
+
+  const msg: Message = {
+    id: row.id,
+    channel_id: row.channel_id,
+    content: row.content,
+    author,
     timestamp: new Date(row.timestamp).toISOString(),
     edited_timestamp: row.edited_timestamp
       ? new Date(row.edited_timestamp).toISOString()
@@ -46,14 +69,6 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
     reactions: reactions ?? [],
   };
   if (row.webhook_id) {
-    msg.author = {
-      id: row.webhook_id,
-      username: row.sender_name ?? "Webhook",
-      avatar: null,
-      bot: true,
-      discriminator: "0",
-      global_name: null,
-    };
     msg.webhook_id = row.webhook_id;
   }
   return msg;
