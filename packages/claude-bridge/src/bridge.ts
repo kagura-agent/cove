@@ -27,17 +27,19 @@ export interface BridgeConfig {
 }
 
 export class Bridge {
-  private readonly gateway: GatewayClient;
   private readonly rest: RestClient;
   private readonly claude: ClaudeProcessManager;
   private readonly guildId: string;
+  private readonly baseUrl: string;
+  private readonly token: string;
+  private gateway!: GatewayClient;
 
   /** Track the current response message per channel for streaming edits. */
   private activeResponses = new Map<string, {
     messageId: string;
     content: string;
-    /** Overflow messages when content exceeds MAX_MESSAGE_LENGTH. */
-    overflowIds: string[];
+    /** Whether the final result has arrived (waiting for messageId). */
+    resultPending: string | null;
   }>();
 
   /** Typing indicator intervals per channel. */
@@ -50,35 +52,36 @@ export class Bridge {
 
   constructor(config: BridgeConfig) {
     this.guildId = config.guildId;
+    this.baseUrl = config.baseUrl;
+    this.token = config.token;
 
     this.rest = new RestClient(config.baseUrl, config.token);
     this.claude = new ClaudeProcessManager(config.workingDir);
 
-    // Gateway URL: derive WS from base URL
-    const wsUrl = config.baseUrl.replace(/^http/, "ws") + "/gateway";
-    this.gateway = new GatewayClient({ url: wsUrl, token: config.token });
-
-    this.setupGatewayHandlers();
     this.setupClaudeHandlers();
   }
 
   async start(): Promise<void> {
     console.log("[bridge] Starting...");
 
-    // Optionally discover gateway URL from REST API
+    // Discover gateway URL from REST API, fall back to derived URL
+    let wsUrl: string;
     try {
-      const gwUrl = await this.rest.getGatewayUrl();
-      console.log(`[bridge] Gateway URL from API: ${gwUrl}`);
+      wsUrl = await this.rest.getGatewayUrl();
+      console.log(`[bridge] Gateway URL from API: ${wsUrl}`);
     } catch {
-      console.log("[bridge] Could not fetch gateway URL from REST, using derived URL");
+      wsUrl = this.baseUrl.replace(/^http/, "ws") + "/gateway";
+      console.log(`[bridge] Could not fetch gateway URL from REST, using derived URL: ${wsUrl}`);
     }
 
+    this.gateway = new GatewayClient({ url: wsUrl, token: this.token });
+    this.setupGatewayHandlers();
     this.gateway.connect();
   }
 
   shutdown(): void {
     console.log("[bridge] Shutting down...");
-    this.gateway.destroy();
+    this.gateway?.destroy();
     this.claude.destroyAll();
     for (const timer of this.typingIntervals.values()) clearInterval(timer);
     this.typingIntervals.clear();
@@ -132,9 +135,9 @@ export class Bridge {
     });
 
     this.claude.on("error", (channelId, error) => {
-      console.error(`[bridge] Claude process error for ${channelId}:`, error.message);
+      console.error(`[bridge] Claude process error for ${channelId}`);
       this.stopTyping(channelId);
-      this.rest.sendMessage(channelId, `⚠️ Claude process error: ${error.message}`).catch(() => {});
+      this.rest.sendMessage(channelId, "⚠️ Claude process encountered an error.").catch(() => {});
     });
   }
 
@@ -158,15 +161,19 @@ export class Bridge {
       this.activeResponses.set(channelId, {
         messageId: "", // Will be set after sendMessage completes
         content: text,
-        overflowIds: [],
+        resultPending: null,
       });
 
       this.rest.sendMessage(channelId, text).then((msg) => {
         const current = this.activeResponses.get(channelId);
         if (current) {
           current.messageId = msg.id;
-          // If content has grown since we sent, schedule an edit
-          if (current.content !== text) {
+          // If result arrived while we were sending, do the final edit now
+          if (current.resultPending !== null) {
+            this.editMessageSafe(channelId, msg.id, current.resultPending);
+            this.activeResponses.delete(channelId);
+          } else if (current.content !== text) {
+            // Content grew since we sent — schedule an edit
             this.scheduleEdit(channelId);
           }
         }
@@ -197,17 +204,17 @@ export class Bridge {
     if (active && active.messageId) {
       // Edit the existing message with the final result
       this.editMessageSafe(channelId, active.messageId, resultText);
+      this.activeResponses.delete(channelId);
     } else if (active && !active.messageId) {
-      // messageId not yet set — update content so the sendMessage callback picks it up
-      active.content = resultText;
+      // messageId not yet set — mark result as pending so sendMessage callback handles it
+      active.resultPending = resultText;
+      // Don't delete activeResponses here — the sendMessage callback will
     } else {
       // No streaming text was received — send the result directly
       this.rest.sendMessage(channelId, resultText || "(empty response)").catch((err) => {
         console.error(`[bridge] Failed to send result to ${channelId}:`, err.message);
       });
     }
-
-    this.activeResponses.delete(channelId);
   }
 
   /**
