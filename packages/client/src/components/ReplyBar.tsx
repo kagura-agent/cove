@@ -11,7 +11,7 @@ const barStyle: CSSProperties = {
   borderTop: "1px solid var(--border-subtle)",
   fontSize: "var(--font-size-sm)",
   color: "var(--text-muted)",
-  minHeight: 32,
+  minHeight: 28,
 };
 
 const previewStyle: CSSProperties = {

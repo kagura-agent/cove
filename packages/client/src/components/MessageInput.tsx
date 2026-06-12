@@ -17,7 +17,7 @@ const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "flex-end", gap: "var(--space-sm)",
   padding: "0 var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  minHeight: "100%", boxSizing: "border-box",
+  boxSizing: "border-box",
 };
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
@@ -31,6 +31,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -122,7 +123,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   return (
-    <div style={wrapperStyle}>
+    <div style={{ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }}>
       <textarea
         ref={textareaRef}
         value={content}
