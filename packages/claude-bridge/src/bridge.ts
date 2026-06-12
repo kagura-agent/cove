@@ -97,9 +97,6 @@ export class Bridge {
       // Ignore bot messages (prevent echo loops)
       if (message.author.bot) return;
 
-      // Only handle messages from our guild (default-deny)
-      if (message.guild_id !== this.guildId) return;
-
       // Only handle messages (ignore empty)
       if (!message.content?.trim()) return;
 
