@@ -62,7 +62,7 @@ export interface Message {
   type: number; // 0 = DEFAULT
   attachments: unknown[];
   embeds: unknown[];
-  mentions: User[];
+  mentions: unknown[];
   mention_roles: string[];
   pinned: boolean;
   tts: boolean;
