@@ -43,9 +43,15 @@ export function ReplyBar({ channelId }: { channelId: string }) {
         {replyingTo.author.username}
       </span>
       <span style={previewStyle}>{replyingTo.content}</span>
-      <span style={closeStyle} onClick={() => clearReply(channelId)} title="Cancel reply">
+      <button
+        type="button"
+        style={{ ...closeStyle, background: "none", border: "none", font: "inherit" }}
+        onClick={() => clearReply(channelId)}
+        title="Cancel reply"
+        aria-label="Cancel reply"
+      >
         <CloseOutlined style={{ fontSize: 12 }} />
-      </span>
+      </button>
     </div>
   );
 }

@@ -145,12 +145,14 @@ const failedIndicatorStyle: CSSProperties = {
   userSelect: "none",
 };
 
-function PendingIndicator({ status, messageId, channelId, content, author }: {
+function PendingIndicator({ status, messageId, channelId, content, author, messageReference, referencedMessage }: {
   status: PendingStatus | undefined;
   messageId: string;
   channelId: string;
   content: string;
   author: Message["author"];
+  messageReference?: Message["message_reference"];
+  referencedMessage?: Message["referenced_message"];
 }) {
   if (!status || status === "pending") return null;
   // Failed state — show retry + dismiss
@@ -175,9 +177,11 @@ function PendingIndicator({ status, messageId, channelId, content, author }: {
       tts: false,
       mention_everyone: false,
       nonce,
+      ...(messageReference ? { message_reference: messageReference, referenced_message: referencedMessage } : {}),
     };
     useMessageStore.getState().addPendingMessage(channelId, pendingMsg);
-    api.sendMessage(channelId, content, nonce).then((real) => {
+    const apiRef = messageReference ? { message_id: messageReference.message_id } : undefined;
+    api.sendMessage(channelId, content, nonce, apiRef).then((real) => {
       useMessageStore.getState().reconcilePending(channelId, nonce, real);
     }).catch(() => {
       useMessageStore.getState().markFailed(tempId);
@@ -282,7 +286,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
           >
             <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-            <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
+            <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
           </div>
 
           {/* Reactions */}
@@ -330,7 +334,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
         >
           <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
-          <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} />
+          <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
         </div>
 
         {/* Reactions */}
