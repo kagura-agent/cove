@@ -3,7 +3,9 @@ import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { MessageReplyQuote } from "./MessageReplyQuote";
 import { useMessageStore } from "../stores/useMessageStore";
+import { useReplyStore } from "../stores/useReplyStore";
 import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
 
@@ -59,17 +61,27 @@ const editedStyle: CSSProperties = {
 interface MessageItemProps {
   message: Message;
   isGroupStart: boolean;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
-function MessageActions({ messageId, channelId }: { messageId: string; channelId: string }) {
+function MessageActions({ message }: { message: Message }) {
+  const setReplyingTo = useReplyStore((s) => s.setReplyingTo);
   return (
     <div className="message-actions">
+      <button
+        type="button"
+        className="message-actions-btn"
+        onClick={() => setReplyingTo(message.channel_id, message)}
+        title="Reply"
+      >
+        ↩
+      </button>
       {QUICK_EMOJIS.map((emoji) => (
         <button
           key={emoji}
           type="button"
           className="message-actions-btn"
-          onClick={() => api.addReaction(channelId, messageId, emoji)}
+          onClick={() => api.addReaction(message.channel_id, message.id, emoji)}
           title={emoji}
         >
           {emoji}
@@ -184,7 +196,7 @@ function PendingIndicator({ status, messageId, channelId, content, author }: {
   );
 }
 
-export function MessageItem({ message, isGroupStart }: MessageItemProps) {
+export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageItemProps) {
   const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
   const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
   const isBot = message.author.bot;
@@ -196,6 +208,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
     return (
       <div
         className="discord-msg-row"
+        data-message-id={message.id}
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -248,6 +261,14 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
             </Typography.Text>
           </div>
 
+          {/* Reply quote */}
+          {message.message_reference && (
+            <MessageReplyQuote
+              referencedMessage={message.referenced_message}
+              onClickJump={onJumpToMessage}
+            />
+          )}
+
           {/* Message body */}
           <div
             
@@ -269,7 +290,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         </div>
 
         {/* Hover toolbar */}
-        <MessageActions messageId={message.id} channelId={message.channel_id} />
+        <MessageActions message={message} />
       </div>
     );
   }
@@ -278,6 +299,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
   return (
     <div
       className="discord-msg-row"
+      data-message-id={message.id}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -289,6 +311,13 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
         {formatCompactTime(message.timestamp)}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Reply quote */}
+        {message.message_reference && (
+          <MessageReplyQuote
+            referencedMessage={message.referenced_message}
+            onClickJump={onJumpToMessage}
+          />
+        )}
         <div
           
           style={{
@@ -309,7 +338,7 @@ export function MessageItem({ message, isGroupStart }: MessageItemProps) {
       </div>
 
       {/* Hover toolbar */}
-      <MessageActions messageId={message.id} channelId={message.channel_id} />
+      <MessageActions message={message} />
     </div>
   );
 }

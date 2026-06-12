@@ -14,6 +14,7 @@ interface MessageRow {
   sender_username: string | null;
   sender_bot: number | null;
   webhook_id: string | null;
+  referenced_message_id: string | null;
 }
 
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
@@ -71,6 +72,9 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   if (row.webhook_id) {
     msg.webhook_id = row.webhook_id;
   }
+  if (row.referenced_message_id) {
+    msg.message_reference = { message_id: row.referenced_message_id, channel_id: row.channel_id };
+  }
   return msg;
 }
 
@@ -109,6 +113,8 @@ export class MessagesRepo {
         msg.reactions = reactionMap.get(msg.id) ?? [];
       }
     }
+    // Populate referenced_message for replies
+    this.populateReferencedMessages(messages, channelId, currentUserId);
     return messages;
   }
 
@@ -120,18 +126,24 @@ export class MessagesRepo {
     if (this.reactionsRepo) {
       msg.reactions = this.reactionsRepo.getForMessage(messageId, currentUserId);
     }
+    // Populate referenced_message for replies
+    if (msg.message_reference?.message_id) {
+      const refRow = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
+        .get(msg.message_reference.message_id, channelId) as MessageRow | undefined;
+      msg.referenced_message = refRow ? toMessage(refRow) : null;
+    }
     return msg;
   }
 
-  create(channelId: string, author: User, content: string): Message {
+  create(channelId: string, author: User, content: string, referencedMessageId?: string): Message {
     const now = Date.now();
     const id = generateSnowflake();
 
     this.db.prepare(
-      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, author.id, author.username, content, now, null, null);
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, referenced_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, author.id, author.username, content, now, null, null, referencedMessageId ?? null);
 
-    return {
+    const msg: Message = {
       id,
       channel_id: channelId,
       content,
@@ -152,6 +164,15 @@ export class MessagesRepo {
       tts: false,
       mention_everyone: false,
     };
+
+    if (referencedMessageId) {
+      msg.message_reference = { message_id: referencedMessageId, channel_id: channelId };
+      // Populate referenced_message
+      const refMsg = this.getById(channelId, referencedMessageId);
+      msg.referenced_message = refMsg ?? null;
+    }
+
+    return msg;
   }
 
   createFromWebhook(channelId: string, webhookId: string, webhookName: string, webhookAvatar: string | null, content: string): Message {
@@ -210,5 +231,43 @@ export class MessagesRepo {
   deleteAll(channelId: string): number {
     const result = this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(channelId);
     return result.changes;
+  }
+
+  /** Batch-populate referenced_message for replies. */
+  private populateReferencedMessages(messages: Message[], channelId: string, _currentUserId?: string): void {
+    const refIds = new Set<string>();
+    for (const msg of messages) {
+      if (msg.message_reference?.message_id) {
+        refIds.add(msg.message_reference.message_id);
+      }
+    }
+    if (refIds.size === 0) return;
+
+    // Build a map of referenced messages — some may already be in the current batch
+    const refMap = new Map<string, Message>();
+    for (const msg of messages) {
+      if (refIds.has(msg.id)) {
+        refMap.set(msg.id, msg);
+      }
+    }
+
+    // Fetch any referenced messages not in the current batch
+    const missing = [...refIds].filter(id => !refMap.has(id));
+    if (missing.length > 0) {
+      const placeholders = missing.map(() => "?").join(",");
+      const rows = this.db.prepare(
+        `${MSG_SELECT} WHERE m.id IN (${placeholders}) AND m.channel_id = ?`
+      ).all(...missing, channelId) as MessageRow[];
+      for (const row of rows) {
+        refMap.set(row.id, toMessage(row));
+      }
+    }
+
+    // Assign referenced_message to each reply
+    for (const msg of messages) {
+      if (msg.message_reference?.message_id) {
+        msg.referenced_message = refMap.get(msg.message_reference.message_id) ?? null;
+      }
+    }
   }
 }

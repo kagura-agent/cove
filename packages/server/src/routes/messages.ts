@@ -59,7 +59,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
-    const body = await parseJsonBody<{ content: string; username?: string; nonce?: string }>(c);
+    const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
@@ -72,9 +72,23 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     }
 
+    // Validate message_reference if provided
+    let referencedMessageId: string | undefined;
+    if (body.message_reference) {
+      if (typeof body.message_reference.message_id !== "string") {
+        return validationError(c, "message_reference.message_id must be a string");
+      }
+      // Verify the referenced message exists in this channel
+      const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
+      if (!refMsg) {
+        return c.json({ message: "Unknown Message", code: 10008 }, 400);
+      }
+      referencedMessageId = body.message_reference.message_id;
+    }
+
     const author = user;
 
-    const message = repos.messages.create(channelId, author, body.content);
+    const message = repos.messages.create(channelId, author, body.content, referencedMessageId);
 
     // Pass through client nonce for optimistic send reconciliation
     if (body.nonce) {

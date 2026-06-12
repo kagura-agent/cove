@@ -672,3 +672,13 @@ textarea:focus-visible {
   line-height: 1;
 }
 
+
+
+/* Reply jump highlight */
+.message-highlight {
+  animation: message-highlight-fade 2s ease;
+}
+@keyframes message-highlight-fade {
+  0%, 30% { background-color: color-mix(in srgb, var(--accent) 20%, transparent); }
+  100% { background-color: transparent; }
+}

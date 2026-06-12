@@ -71,6 +71,10 @@ export interface Message {
   nonce?: string;
   reactions?: Reaction[];
   webhook_id?: string;
+  /** Reference to another message (for replies). */
+  message_reference?: { message_id: string; channel_id?: string; guild_id?: string };
+  /** The referenced message object (populated by server). */
+  referenced_message?: Message | null;
   /** Guild the message belongs to. Present on gateway dispatches; absent on REST responses. */
   guild_id?: string;
 }
