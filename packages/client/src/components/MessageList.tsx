@@ -156,6 +156,8 @@ export function MessageList({ channelId }: { channelId: string }) {
     channelIdRef.current = channelId;
     // Reset hasMore for the new channel from module-level cache
     setHasMore(hasMoreHistory.get(channelId) !== false);
+    // Reset firstMessageIdRef so effect #5 doesn't misdetect a prepend
+    firstMessageIdRef.current = undefined;
   }, [channelId]);
 
   /** Previous message count — used to detect newly-added messages. */
@@ -265,7 +267,10 @@ export function MessageList({ channelId }: { channelId: string }) {
             .catch((err) => console.error("loadOlder:", err))
             .finally(() => {
               fetchingOlder.set(id, false);
-              setLoadingOlder(false);
+              // Only update React state if still on the same channel
+              if (channelIdRef.current === id) {
+                setLoadingOlder(false);
+              }
             });
         }
       }
@@ -446,22 +451,27 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   return (
     <>
-      <div
-        ref={scrollContainerCallbackRef}
-        style={listStyle}
-        className="scroll-container"
-      >
+      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {loadingOlder && (
-          <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-sm) 0" }}>
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, zIndex: 1,
+            display: "flex", justifyContent: "center", padding: "var(--space-sm) 0",
+            background: "linear-gradient(var(--bg-primary), transparent)",
+          }}>
             <Spin size="small" />
           </div>
         )}
-        {!loadingOlder && !hasMore && messages.length > 0 && (
-          <div style={{ textAlign: "center", padding: "var(--space-sm) 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-            This is the beginning of the conversation
-          </div>
-        )}
-        {messages.map((msg, i) => {
+        <div
+          ref={scrollContainerCallbackRef}
+          style={listStyle}
+          className="scroll-container"
+        >
+          {!hasMore && messages.length > 0 && (
+            <div style={{ textAlign: "center", padding: "var(--space-sm) 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+              This is the beginning of the conversation
+            </div>
+          )}
+          {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart =
             !prev ||
@@ -481,6 +491,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             );
           })}
         <div ref={bottomRef} />
+        </div>
       </div>
       <TypingIndicator channelId={channelId} />
     </>
