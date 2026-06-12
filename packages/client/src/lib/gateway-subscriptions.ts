@@ -8,6 +8,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useMemberStore } from "../stores/useMemberStore";
+import { useReplyStore } from "../stores/useReplyStore";
 import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,12 +58,15 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("MESSAGE_DELETE", (data) => {
     useMessageStore.getState().removeMessage(data.channel_id, data.id);
+    useReplyStore.getState().clearReplyForDeletedMessage(data.channel_id, data.id);
   });
 
   subscribe("MESSAGE_DELETE_BULK", (data) => {
     const store = useMessageStore.getState();
+    const replyStore = useReplyStore.getState();
     for (const id of data.ids) {
       store.removeMessage(data.channel_id, id);
+      replyStore.clearReplyForDeletedMessage(data.channel_id, id);
     }
   });
 

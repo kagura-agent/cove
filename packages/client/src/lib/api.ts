@@ -30,9 +30,12 @@ export function fetchMessages(channelId: string, opts?: { before?: string; limit
   if (opts?.before) params.set("before", opts.before);
   return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?${params}`);
 }
-export function sendMessage(channelId: string, content: string, nonce?: string) {
+export function sendMessage(channelId: string, content: string, nonce?: string, messageReference?: { message_id: string }) {
+  const body: Record<string, unknown> = { content };
+  if (nonce) body.nonce = nonce;
+  if (messageReference) body.message_reference = messageReference;
   return api<Message>(`${API_PREFIX}/channels/${channelId}/messages`, {
-    method: "POST", body: JSON.stringify(nonce ? { content, nonce } : { content }),
+    method: "POST", body: JSON.stringify(body),
   });
 }
 export function clearMessages(channelId: string) {

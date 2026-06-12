@@ -4,6 +4,7 @@ import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useUserStore } from "../stores/useUserStore";
+import { useReplyStore } from "../stores/useReplyStore";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -16,7 +17,7 @@ const wrapperStyle: CSSProperties = {
   display: "flex", alignItems: "flex-end", gap: "var(--space-sm)",
   padding: "0 var(--content-pad)", background: "var(--bg-secondary)",
   borderTop: "1px solid var(--border-subtle)",
-  minHeight: "100%", boxSizing: "border-box",
+  boxSizing: "border-box",
 };
 const textareaStyle: CSSProperties = {
   borderRadius: "var(--input-radius)", background: "var(--bg-input)", border: "none",
@@ -30,6 +31,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -68,6 +70,12 @@ export function MessageInput({ channelId }: { channelId: string }) {
       ta.focus();
     }
 
+    // Capture and clear reply state before async work
+    const replyMsg = useReplyStore.getState().replyingTo[channelId];
+    if (replyMsg) {
+      useReplyStore.getState().clearReply(channelId);
+    }
+
     const nonce = crypto.randomUUID();
     const tempId = `pending-${nonce}`;
     const user = useUserStore.getState();
@@ -95,12 +103,17 @@ export function MessageInput({ channelId }: { channelId: string }) {
       tts: false,
       mention_everyone: false,
       nonce,
+      ...(replyMsg ? {
+        message_reference: { message_id: replyMsg.id, channel_id: channelId },
+        referenced_message: replyMsg,
+      } : {}),
     };
 
     useMessageStore.getState().addPendingMessage(channelId, pendingMessage);
 
     try {
-      const real = await api.sendMessage(channelId, text, nonce);
+      const messageReference = replyMsg ? { message_id: replyMsg.id } : undefined;
+      const real = await api.sendMessage(channelId, text, nonce, messageReference);
       // Reconcile immediately so the message resolves even if WS is down
       useMessageStore.getState().reconcilePending(channelId, nonce, real);
     } catch (err) {
@@ -110,7 +123,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   return (
-    <div style={wrapperStyle}>
+    <div style={{ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }}>
       <textarea
         ref={textareaRef}
         value={content}

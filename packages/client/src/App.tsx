@@ -10,6 +10,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { UserBar } from "./components/UserBar";
 import { MessageInput } from "./components/MessageInput";
+import { ReplyBar } from "./components/ReplyBar";
 import { MemberList } from "./components/MemberList";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -272,6 +273,7 @@ export default function App() {
               <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
             </div>
             <div style={styles.chatFooter} className="chat-footer-cell">
+              {activeChannelId && <ReplyBar channelId={activeChannelId} />}
               {activeChannelId && <MessageInput channelId={activeChannelId} />}
             </div>
           </div>

@@ -80,7 +80,18 @@ export const useMessageStore = create<MessageState>((set) => ({
     set((s) => {
       const msgs = s.messages[channelId];
       if (!msgs) return s;
-      return { messages: { ...s.messages, [channelId]: msgs.filter((m) => m.id !== messageId) } };
+      return {
+        messages: {
+          ...s.messages,
+          [channelId]: msgs
+            .filter((m) => m.id !== messageId)
+            .map((m) =>
+              m.message_reference?.message_id === messageId
+                ? { ...m, referenced_message: null }
+                : m
+            ),
+        },
+      };
     }),
   removeChannelMessages: (channelId) =>
     set((s) => {

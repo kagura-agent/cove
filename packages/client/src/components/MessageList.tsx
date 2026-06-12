@@ -181,6 +181,19 @@ export function MessageList({ channelId }: { channelId: string }) {
     bottomRef.current?.scrollIntoView({ behavior });
   }, []);
 
+  /** Scroll to and briefly highlight a specific message (for reply jump). */
+  const handleJumpToMessage = useCallback((messageId: string) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Find the message element by data attribute
+    const el = container.querySelector(`[data-message-id="${messageId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("message-highlight");
+      setTimeout(() => el.classList.remove("message-highlight"), 2000);
+    }
+  }, []);
+
   // ── 1. Restore scroll position on channel switch ──────────────────
   //
   // Setup restores the INCOMING channel's scroll position from
@@ -492,7 +505,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                 eager={eager}
                 scrollRoot={scrollRoot}
               >
-                <MessageItem message={msg} isGroupStart={isGroupStart} />
+                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} />
               </LazyMessageItem>
             );
           })}

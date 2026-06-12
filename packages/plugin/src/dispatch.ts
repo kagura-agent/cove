@@ -286,6 +286,11 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             SenderId: senderId,
             SenderName: senderName,
             ChannelId: channelId,
+            ...(message.message_reference?.message_id ? {
+              ReplyToId: message.message_reference.message_id,
+              ReplyToBody: message.referenced_message?.content,
+              ReplyToSender: message.referenced_message?.author?.username,
+            } : {}),
           },
           deliver: async (_payload) => {
             // Delivery handled by the dispatcher's deliver callback above
