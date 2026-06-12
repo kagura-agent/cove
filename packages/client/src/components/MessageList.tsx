@@ -301,10 +301,22 @@ export function MessageList({ channelId }: { channelId: string }) {
   });
 
   // ── 5. New message → auto-scroll if user was at bottom ────────────
+  //
+  // Own messages (optimistic pending-* ids) ALWAYS trigger scroll-to-bottom
+  // so the user sees their own message immediately, even if they had
+  // scrolled up. Other people's messages only scroll if we were already
+  // near the bottom.
   useEffect(() => {
     if (!messages) return;
-    if (messages.length > prevCountRef.current && wasNearBottomRef.current) {
-      requestAnimationFrame(() => scrollToBottom());
+    if (messages.length > prevCountRef.current) {
+      const lastMsg = messages[messages.length - 1];
+      const isOwnMessage = lastMsg && lastMsg.id.startsWith("pending-");
+      if (isOwnMessage || wasNearBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom());
+        // After scrolling for own message, mark as near-bottom so
+        // subsequent messages from others also auto-scroll.
+        wasNearBottomRef.current = true;
+      }
     }
     prevCountRef.current = messages.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
