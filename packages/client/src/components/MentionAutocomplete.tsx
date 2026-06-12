@@ -81,6 +81,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
       setActiveIndex((i) => (i - 1 + filtered.length) % filtered.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
+      e.stopImmediatePropagation();
       const member = filtered[activeIndex];
       if (member) {
         onSelect(member.user.id, member.user.username, atStart, cursorPos);
