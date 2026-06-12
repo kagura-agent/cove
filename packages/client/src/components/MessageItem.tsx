@@ -6,7 +6,6 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { MessageReplyQuote } from "./MessageReplyQuote";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
-import { useUserStore } from "../stores/useUserStore";
 import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
 
@@ -203,24 +202,11 @@ function PendingIndicator({ status, messageId, channelId, content, author, messa
 
 export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageItemProps) {
   const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
-  const currentUserId = useUserStore((s) => s.id);
   const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
   const isBot = message.author.bot;
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
   const textColor = getContrastTextColor(bgColor);
-
-  // Build mention user map for rendering
-  const mentionUsers = new Map<string, string>();
-  if (message.mentions) {
-    for (const u of message.mentions) {
-      mentionUsers.set(u.id, u.username);
-    }
-  }
-
-  // Check if current user is mentioned
-  const isMentioned = currentUserId ? message.mentions?.some(u => u.id === currentUserId) : false;
-  const mentionHighlight = isMentioned ? { background: "color-mix(in srgb, #faa61a 8%, transparent)", borderLeft: "2px solid #faa61a" } : {};
 
   if (isGroupStart) {
     return (
@@ -233,7 +219,6 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
           gap: "var(--content-gap)",
           padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-pad)",
           marginTop: "var(--content-gap)",
-          ...mentionHighlight,
           ...rowExtraStyle,
         }}
       >
@@ -299,7 +284,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
               wordBreak: "break-word",
             }}
           >
-            <ChatMarkdown content={message.content} mentionUsers={mentionUsers} />
+            <ChatMarkdown content={message.content} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
             <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
           </div>
@@ -323,7 +308,6 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
         display: "flex",
         alignItems: "flex-start",
         padding: "var(--space-xxs) var(--message-right-pad) 0 var(--content-start)",
-        ...mentionHighlight,
         ...rowExtraStyle,
       }}
     >
@@ -348,7 +332,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
             wordBreak: "break-word",
           }}
         >
-          <ChatMarkdown content={message.content} mentionUsers={mentionUsers} />
+          <ChatMarkdown content={message.content} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
         </div>

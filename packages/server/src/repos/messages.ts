@@ -78,17 +78,6 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   return msg;
 }
 
-/** Extract user IDs from Discord-style mention syntax <@userId> */
-function parseMentionIds(content: string): string[] {
-  const re = /<@(\d+)>/g;
-  const ids: string[] = [];
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    if (!ids.includes(m[1])) ids.push(m[1]);
-  }
-  return ids;
-}
-
 export class MessagesRepo {
   constructor(private db: Database.Database, private reactionsRepo?: ReactionsRepo) {}
 
@@ -126,8 +115,6 @@ export class MessagesRepo {
     }
     // Populate referenced_message for replies
     this.populateReferencedMessages(messages, channelId, currentUserId);
-    // Resolve @mentions
-    this.resolveMentions(messages);
     return messages;
   }
 
@@ -145,8 +132,6 @@ export class MessagesRepo {
         .get(msg.message_reference.message_id, channelId) as MessageRow | undefined;
       msg.referenced_message = refRow ? toMessage(refRow) : null;
     }
-    // Resolve @mentions
-    this.resolveMentions([msg]);
     return msg;
   }
 
@@ -186,9 +171,6 @@ export class MessagesRepo {
       const refMsg = this.getById(channelId, referencedMessageId);
       msg.referenced_message = refMsg ?? null;
     }
-
-    // Resolve @mentions
-    this.resolveMentions([msg]);
 
     return msg;
   }
@@ -237,9 +219,7 @@ export class MessagesRepo {
 
     const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow;
-    const msg = toMessage(row);
-    this.resolveMentions([msg]);
-    return msg;
+    return toMessage(row);
   }
 
   delete(channelId: string, messageId: string): boolean {
@@ -288,52 +268,6 @@ export class MessagesRepo {
       if (msg.message_reference?.message_id) {
         msg.referenced_message = refMap.get(msg.message_reference.message_id) ?? null;
       }
-    }
-  }
-
-  /** Resolve <@userId> mentions in message content to User objects.
-   *  Only resolves users who are members of the guild the channel belongs to. */
-  private resolveMentions(messages: Message[]): void {
-    const allIds = new Set<string>();
-    const channelIds = new Set<string>();
-    for (const msg of messages) {
-      channelIds.add(msg.channel_id);
-      for (const id of parseMentionIds(msg.content)) {
-        allIds.add(id);
-      }
-    }
-    if (allIds.size === 0) return;
-
-    // Get the guild ID from the first channel (all messages in a batch are same channel)
-    const channelId = [...channelIds][0];
-    const channel = this.db.prepare("SELECT guild_id FROM channels WHERE id = ?").get(channelId) as { guild_id: string } | undefined;
-    if (!channel) return;
-
-    const userMap = new Map<string, User>();
-    const idList = [...allIds];
-    const placeholders = idList.map(() => "?").join(",");
-    // Only resolve users who are guild members
-    const rows = this.db.prepare(
-      `SELECT u.id, u.username, u.bot, u.avatar FROM users u
-       INNER JOIN guild_members gm ON gm.user_id = u.id AND gm.guild_id = ?
-       WHERE u.id IN (${placeholders})`
-    ).all(channel.guild_id, ...idList) as Array<{ id: string; username: string; bot: number; avatar: string | null }>;
-    for (const row of rows) {
-      userMap.set(row.id, {
-        id: row.id,
-        username: row.username,
-        bot: row.bot === 1,
-        avatar: row.avatar,
-        discriminator: "0",
-        global_name: null,
-      });
-    }
-
-    for (const msg of messages) {
-      const mentionIds = parseMentionIds(msg.content);
-      msg.mentions = mentionIds
-        .map(id => userMap.get(id))
-        .filter((u): u is User => u !== undefined);
     }
   }
 }
