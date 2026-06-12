@@ -72,10 +72,14 @@ const listStyle: CSSProperties = {
 
 // ── Constants ───────────────────────────────────────────────────────────
 const NEAR_BOTTOM_THRESHOLD = 100;
+/** Distance from top that triggers loading older messages. */
+const NEAR_TOP_THRESHOLD = 200;
 /** Bottom N messages render eagerly; older ones use lazy placeholders. */
 const EAGER_COUNT = 30;
 /** Cached messages older than this trigger a background refetch. */
 const STALE_MS = 5 * 60 * 1000; // 5 min
+/** Number of messages per page fetch. */
+const PAGE_SIZE = 50;
 
 // ── Module-level persistent state ───────────────────────────────────────
 /** Scroll memory per channel. Uses distance-from-bottom for stability. */
@@ -87,6 +91,10 @@ const scrollMemory = new Map<
 const lastFetchTime = new Map<string, number>();
 /** Last acked message ID per channel to skip redundant ack calls. */
 const lastAckedIds = new Map<string, string>();
+/** Whether there are more older messages to load per channel. */
+const hasMoreHistory = new Map<string, boolean>();
+/** Whether we're currently fetching older messages per channel. */
+const fetchingOlder = new Map<string, boolean>();
 
 // ── Bounded map/set helpers ─────────────────────────────────────────────
 const MAP_CAP = 100;
@@ -129,6 +137,7 @@ function restoreDistanceFromBottom(el: HTMLElement, dist: number): void {
 export function MessageList({ channelId }: { channelId: string }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
+  const prependMessages = useMessageStore((s) => s.prependMessages);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -137,6 +146,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     setScrollRoot(node);
   }, []);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   /** Always reflects the current channelId so the scroll handler is never stale. */
   const channelIdRef = useRef(channelId);
@@ -215,6 +225,47 @@ export function MessageList({ channelId }: { channelId: string }) {
         distanceFromBottom: dist,
         wasAtBottom: atBottom,
       });
+
+      // ── Load older messages when near top ──
+      if (
+        container.scrollTop <= NEAR_TOP_THRESHOLD &&
+        hasMoreHistory.get(id) !== false &&
+        !fetchingOlder.get(id)
+      ) {
+        const msgs = useMessageStore.getState().messages[id];
+        const oldest = msgs?.[0];
+        if (oldest && !oldest.id.startsWith("pending-")) {
+          fetchingOlder.set(id, true);
+          setLoadingOlder(true);
+          const prevScrollHeight = container.scrollHeight;
+          api
+            .fetchMessages(id, { before: oldest.id, limit: PAGE_SIZE })
+            .then((fetched) => {
+              // API returns newest-first, reverse to chronological
+              const older = fetched.reverse();
+              if (older.length < PAGE_SIZE) {
+                hasMoreHistory.set(id, false);
+              }
+              if (older.length > 0) {
+                prependMessages(id, older);
+                // Restore scroll position after prepend
+                requestAnimationFrame(() => {
+                  restoringRef.current = true;
+                  const newScrollHeight = container.scrollHeight;
+                  container.scrollTop += newScrollHeight - prevScrollHeight;
+                  requestAnimationFrame(() => {
+                    restoringRef.current = false;
+                  });
+                });
+              }
+            })
+            .catch((err) => console.error("loadOlder:", err))
+            .finally(() => {
+              fetchingOlder.set(id, false);
+              setLoadingOlder(false);
+            });
+        }
+      }
     };
 
     container.addEventListener("scroll", onScroll, { passive: true });
@@ -256,6 +307,8 @@ export function MessageList({ channelId }: { channelId: string }) {
         setMessages(channelId, reversed);
         cappedMapSet(lastFetchTime, channelId, Date.now());
         prevCountRef.current = reversed.length;
+        // If we got fewer than PAGE_SIZE, there's no more history
+        hasMoreHistory.set(channelId, reversed.length >= PAGE_SIZE);
 
         // Only scroll-to-bottom on truly uncached first loads.
         // For stale refetches, honour the user's saved position.
@@ -369,6 +422,16 @@ export function MessageList({ channelId }: { channelId: string }) {
         style={listStyle}
         className="scroll-container"
       >
+        {loadingOlder && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-sm) 0" }}>
+            <Spin size="small" />
+          </div>
+        )}
+        {!loadingOlder && hasMoreHistory.get(channelId) === false && messages.length > 0 && (
+          <div style={{ textAlign: "center", padding: "var(--space-sm) 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+            This is the beginning of the conversation
+          </div>
+        )}
         {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart =

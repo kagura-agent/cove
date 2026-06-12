@@ -24,8 +24,11 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
 export function fetchChannels(guildId: string) {
   return api<Channel[]>(`${API_PREFIX}/guilds/${guildId}/channels`);
 }
-export function fetchMessages(channelId: string) {
-  return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?limit=50`);
+export function fetchMessages(channelId: string, opts?: { before?: string; limit?: number }) {
+  const limit = opts?.limit ?? 50;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (opts?.before) params.set("before", opts.before);
+  return api<Message[]>(`${API_PREFIX}/channels/${channelId}/messages?${params}`);
 }
 export function sendMessage(channelId: string, content: string, nonce?: string) {
   return api<Message>(`${API_PREFIX}/channels/${channelId}/messages`, {
