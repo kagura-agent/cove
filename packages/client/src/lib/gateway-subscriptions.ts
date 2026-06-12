@@ -128,6 +128,11 @@ export function setupGatewaySubscriptions(): void {
       if (activeGuildChannels.length > 0 && !channelStore.activeChannelId) {
         channelStore.setActiveChannel(activeGuildChannels[0].id);
       }
+
+      // Pre-fetch members for all guilds (needed for @mention autocomplete)
+      for (const guild of guilds) {
+        useMemberStore.getState().fetchMembers(guild.id).catch(() => {});
+      }
     }
 
     if (data.presences) {
