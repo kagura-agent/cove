@@ -160,6 +160,8 @@ export function MessageList({ channelId }: { channelId: string }) {
     firstMessageIdRef.current = undefined;
     // Sync loadingOlder with the new channel's actual fetch state
     setLoadingOlder(fetchingOlder.get(channelId) === true);
+    // Clear any pending prepend scroll restore from the old channel
+    pendingPrependRestoreRef.current = null;
   }, [channelId]);
 
   /** Previous message count — used to detect newly-added messages. */
@@ -247,7 +249,7 @@ export function MessageList({ channelId }: { channelId: string }) {
         const msgs = useMessageStore.getState().messages[id];
         const oldest = msgs?.[0];
         if (oldest && !oldest.id.startsWith("pending-")) {
-          fetchingOlder.set(id, true);
+          cappedMapSet(fetchingOlder, id, true);
           setLoadingOlder(true);
           api
             .fetchMessages(id, { before: oldest.id, limit: PAGE_SIZE })
@@ -268,7 +270,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             })
             .catch((err) => console.error("loadOlder:", err))
             .finally(() => {
-              fetchingOlder.set(id, false);
+              cappedMapSet(fetchingOlder, id, false);
               // Only update React state if still on the same channel
               if (channelIdRef.current === id) {
                 setLoadingOlder(false);
@@ -373,8 +375,10 @@ export function MessageList({ channelId }: { channelId: string }) {
     pendingPrependRestoreRef.current = null;
     const container = scrollContainerRef.current;
     if (container) {
+      const delta = container.scrollHeight - prevHeight;
+      if (delta === 0) return;
       restoringRef.current = true;
-      container.scrollTop += container.scrollHeight - prevHeight;
+      container.scrollTop += delta;
       requestAnimationFrame(() => {
         restoringRef.current = false;
       });
