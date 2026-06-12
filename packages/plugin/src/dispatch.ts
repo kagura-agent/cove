@@ -281,6 +281,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
           provider: "cove",
           surface: "cove",
+          replyToId: message.message_reference?.message_id,
+          replyToBody: message.referenced_message?.content,
+          replyToSender: message.referenced_message?.author?.username,
           extraContext: {
             ChatType: "channel",
             SenderId: senderId,
