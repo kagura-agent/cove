@@ -31,8 +31,10 @@ const INLINE_RULES: Array<{ pattern: RegExp; guard?: (consumed: string) => boole
   },
   {
     // Underscore italic: only at word boundaries (Discord-compatible)
-    // Don't trigger when preceded by a word character (e.g. VIEW_CHANNEL)
-    pattern: /^_([^_]+?)_/,
+    // Opening boundary: guard rejects if preceded by a word char (e.g. VIEW_CHANNEL)
+    // Closing boundary: (?!\w) lookahead rejects when followed by a word char,
+    // preventing _PRIVATE_CHANNEL from matching "PRIVATE" as italic
+    pattern: /^_([^_]+?)_(?!\w)/,
     guard: (consumed) => {
       if (consumed.length === 0) return true;
       const lastChar = consumed[consumed.length - 1];

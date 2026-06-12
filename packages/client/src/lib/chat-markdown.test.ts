@@ -175,3 +175,25 @@ test("SNAKE_CASE in sentence stays literal", () => {
   const allText = tokens.every(t => t.type === "text" || t.type === "br");
   if (!allText) throw new Error("should all be text, got " + tokens.map(t => t.type).join(","));
 });
+
+test("closing underscore followed by word char stays literal", () => {
+  const tokens = parseChatMarkdown("_PRIVATE_CHANNEL");
+  if (tokens.length !== 1 || tokens[0].type !== "text") throw new Error("should be plain text, got " + tokens.map(t => t.type).join(","));
+  if ((tokens[0] as any).text !== "_PRIVATE_CHANNEL") throw new Error("text should be _PRIVATE_CHANNEL");
+});
+
+test("_foo_bar does NOT italicize (closing _ followed by word char)", () => {
+  const tokens = parseChatMarkdown("_foo_bar");
+  if (tokens.length !== 1 || tokens[0].type !== "text") throw new Error("should be plain text, got " + tokens.map(t => t.type).join(","));
+  if ((tokens[0] as any).text !== "_foo_bar") throw new Error("text should be _foo_bar");
+});
+
+test("_hello_ followed by punctuation italicizes", () => {
+  const tokens = parseChatMarkdown("_hello_.");
+  if (!tokens.some(t => t.type === "italic")) throw new Error("should contain italic");
+});
+
+test("_hello_ at end of string italicizes", () => {
+  const tokens = parseChatMarkdown("_hello_");
+  if (tokens.length !== 1 || tokens[0].type !== "italic") throw new Error("should be italic, got " + tokens.map(t => t.type).join(","));
+});
