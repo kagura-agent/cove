@@ -35,6 +35,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
   const mentionHasResults = useRef(false);
+  // Track active mentions: displayName → userId
+  const mentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   useLayoutEffect(() => {
@@ -79,8 +81,13 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   async function handleSubmit() {
-    const text = content.trim();
+    let text = content.trim();
     if (!text) return;
+    // Convert display mentions (@username) to wire format (<@userId>)
+    for (const [username, userId] of mentionMapRef.current) {
+      text = text.replaceAll(`@${username}`, `<@${userId}>`);
+    }
+    mentionMapRef.current.clear();
     setContent("");
     const ta = textareaRef.current;
     if (ta) {
@@ -142,8 +149,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const handleMentionSelect = useCallback((userId: string, username: string, startPos: number, endPos: number) => {
     const before = content.slice(0, startPos);
     const after = content.slice(endPos);
-    const mention = `<@${userId}> `;
+    // Display @username in textarea, convert to <@id> on send
+    const mention = `@${username} `;
     const newContent = before + mention + after;
+    mentionMapRef.current.set(username, userId);
     setContent(newContent);
     setShowMention(false);
     const newCursor = startPos + mention.length;
