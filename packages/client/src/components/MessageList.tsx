@@ -158,6 +158,8 @@ export function MessageList({ channelId }: { channelId: string }) {
     setHasMore(hasMoreHistory.get(channelId) !== false);
     // Reset firstMessageIdRef so effect #5 doesn't misdetect a prepend
     firstMessageIdRef.current = undefined;
+    // Sync loadingOlder with the new channel's actual fetch state
+    setLoadingOlder(fetchingOlder.get(channelId) === true);
   }, [channelId]);
 
   /** Previous message count — used to detect newly-added messages. */
