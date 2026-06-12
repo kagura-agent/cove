@@ -76,13 +76,13 @@ export class GatewayDispatcher {
   messageCreate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_CREATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_CREATE", { ...message, guild_id: guildId });
   }
 
   messageUpdate(message: Message): void {
     const guildId = this.resolveGuildForChannel(message.channel_id);
     if (!guildId) return;
-    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_UPDATE", message);
+    this.broadcastToGuildWithChannelFilter(guildId, message.channel_id, "MESSAGE_UPDATE", { ...message, guild_id: guildId });
   }
 
   messageDelete(channelId: string, messageId: string): void {

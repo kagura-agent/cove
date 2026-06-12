@@ -81,6 +81,26 @@ pnpm run check
 pnpm run build
 ```
 
+## Security
+
+The bridge spawns Claude Code with `--dangerously-skip-permissions`, which grants
+it full shell and filesystem access on the host machine. This has important
+security implications:
+
+- **Guild members ≈ shell access.** Any user who can post in a bridged channel
+  can execute arbitrary commands on the host via Claude. Treat guild membership
+  as equivalent to SSH access.
+- **Use a sandboxed account.** Run the bridge under a dedicated, least-privileged
+  OS user. Do not run as root. Consider containers or VMs for additional isolation.
+- **Restrict `COVE_GUILD_ID` to a trusted guild.** Only point the bridge at a
+  guild whose members you fully trust. Do not use a public or open-invite guild.
+- **Other bots can trigger execution.** The bridge filters out bot-authored
+  messages to prevent echo loops, but if that check is removed or bypassed,
+  any bot in the guild could trigger Claude commands. Ensure only trusted bots
+  are present.
+- **No prompt injection mitigation.** User messages are forwarded to Claude
+  as-is. Malicious prompts could attempt to manipulate Claude's behavior.
+
 ## Limitations (MVP)
 
 - No session persistence across messages (each message is a one-shot)

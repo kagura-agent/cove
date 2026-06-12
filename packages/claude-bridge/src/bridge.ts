@@ -98,14 +98,17 @@ export class Bridge {
       if (message.author.bot) return;
 
       // Only handle messages from our guild (default-deny)
-      if ((message as any).guild_id !== this.guildId) return;
+      if (message.guild_id !== this.guildId) return;
 
       // Only handle messages (ignore empty)
       if (!message.content?.trim()) return;
 
-      console.log(`[bridge] Message from ${message.author.username} in ${message.channel_id}: ${message.content.slice(0, 80)}`);
+      // Sanitize username before injecting into Claude prompt — strip control chars and limit length
+      const safeName = message.author.username.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 64);
 
-      this.handleUserMessage(message.channel_id, message.author.username, message.content);
+      console.log(`[bridge] Message from ${safeName} in ${message.channel_id}: ${message.content.slice(0, 80)}`);
+
+      this.handleUserMessage(message.channel_id, safeName, message.content);
     });
 
     this.gateway.on("close", () => {
