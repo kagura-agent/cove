@@ -84,7 +84,8 @@ export class GatewayClient extends (EventEmitter as new () => TypedEmitter<Gatew
       this.handlePayload(payload);
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
+      console.log(`[gateway] WS closed: code=${code}, reason=${reason?.toString()}`);
       this.stopHeartbeat();
       this.clearResumeTimer();
       if (!this.destroyed) {
@@ -94,6 +95,7 @@ export class GatewayClient extends (EventEmitter as new () => TypedEmitter<Gatew
     });
 
     ws.on("error", (err) => {
+      console.error(`[gateway] WS error:`, err.message);
       this.emit("error", err);
     });
   }
