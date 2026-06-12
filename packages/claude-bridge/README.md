@@ -15,10 +15,20 @@ Cove Server (remote)              Local machine
 
 The bridge connects to Cove's WebSocket gateway as a bot user, listens for messages, spawns Claude Code per message via `-p` flag, and writes responses back to Cove channels through the REST API.
 
-## Setup
+## Prerequisites
+
+- Node.js 22+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude --version`)
+- A Cove server instance with a bot user created
+
+## Installation
 
 ```bash
-# From the monorepo root
+# Clone the monorepo
+git clone https://github.com/kagura-agent/cove.git
+cd cove
+
+# Install dependencies
 pnpm install
 
 # Build the bridge
@@ -33,18 +43,63 @@ All configuration is via environment variables:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `COVE_BASE_URL` | ✅ | Cove server URL (e.g. `https://staging.cove.kagura-agent.com`) |
-| `COVE_BOT_TOKEN` | ✅ | Bot authentication token |
-| `COVE_GUILD_ID` | ✅ | Guild ID to scope message handling |
+| `COVE_BOT_TOKEN` | ✅ | Bot authentication token (create a bot user in Cove, use its token) |
+| `COVE_GUILD_ID` | ✅ | Guild ID (find via `GET /api/v10/users/@me/guilds` with bot auth) |
 | `CLAUDE_WORKING_DIR` | ❌ | Working directory for Claude processes (default: cwd) |
+
+### Getting a bot token
+
+1. Create a bot user in your Cove instance (via API: `POST /api/v10/users` with `{ "username": "claude", "bot": true }`)
+2. The response includes the bot's `token` — save it securely
+3. Ensure the bot is a member of the target guild and has `VIEW_CHANNEL` permission on the channels you want it to respond in
 
 ## Usage
 
 ```bash
-COVE_BASE_URL=https://staging.cove.kagura-agent.com \
+COVE_BASE_URL=https://your-cove-server.com \
 COVE_BOT_TOKEN=your-bot-token \
-COVE_GUILD_ID=1512349650185617408 \
+COVE_GUILD_ID=your-guild-id \
 CLAUDE_WORKING_DIR=/path/to/workspace \
   node dist/index.js
+```
+
+### Running as a systemd service
+
+Create `~/.config/systemd/user/cove-claude-bridge.service`:
+
+```ini
+[Unit]
+Description=Cove Claude Code Bridge
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/cove/packages/claude-bridge
+ExecStart=/bin/bash -c 'COVE_BASE_URL=https://your-cove-server.com COVE_BOT_TOKEN=your-token COVE_GUILD_ID=your-guild-id CLAUDE_WORKING_DIR=/path/to/workspace node dist/index.js'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now cove-claude-bridge
+systemctl --user status cove-claude-bridge  # check it's running
+```
+
+## Updating
+
+```bash
+cd /path/to/cove
+git pull
+pnpm install
+cd packages/claude-bridge
+pnpm run build
+
+# If using systemd:
+systemctl --user restart cove-claude-bridge
 ```
 
 ## How it works
