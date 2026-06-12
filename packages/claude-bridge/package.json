@@ -1,0 +1,23 @@
+{
+  "name": "@cove/claude-bridge",
+  "version": "0.1.0",
+  "description": "Bridge daemon connecting Cove chat to a local Claude Code CLI",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "cove-claude-bridge": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:ws --alias:@cove/shared=../shared/src/index.ts --banner:js='#!/usr/bin/env node'",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cove/shared": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}

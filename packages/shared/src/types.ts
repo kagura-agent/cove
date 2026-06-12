@@ -71,6 +71,8 @@ export interface Message {
   nonce?: string;
   reactions?: Reaction[];
   webhook_id?: string;
+  /** Guild the message belongs to. Present on gateway dispatches; absent on REST responses. */
+  guild_id?: string;
 }
 
 /** A reaction summary for a message. */
