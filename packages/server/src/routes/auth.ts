@@ -83,6 +83,13 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       const expiresAt = now + SESSION_TTL_MS;
       db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, existing.id);
+      // Ensure user is a member of the default guild (may have been missed on first registration)
+      const defaultGuild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string } | undefined;
+      if (defaultGuild) {
+        db.prepare(
+          "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+        ).run(defaultGuild.id, existing.id, null, '[]', now);
+      }
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }
