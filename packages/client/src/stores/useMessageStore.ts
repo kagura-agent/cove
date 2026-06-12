@@ -17,6 +17,7 @@ interface MessageState {
   updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null) => void;
   removeMessage: (channelId: string, messageId: string) => void;
   removeChannelMessages: (channelId: string) => void;
+  prependMessages: (channelId: string, messages: Message[]) => void;
   addReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
   removeReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
 }
@@ -86,6 +87,15 @@ export const useMessageStore = create<MessageState>((set) => ({
       if (!(channelId in s.messages)) return s;
       const { [channelId]: _, ...rest } = s.messages;
       return { messages: rest };
+    }),
+  prependMessages: (channelId, older) =>
+    set((s) => {
+      const existing = s.messages[channelId] ?? [];
+      // Deduplicate by id
+      const existingIds = new Set(existing.map((m) => m.id));
+      const unique = older.filter((m) => !existingIds.has(m.id));
+      if (unique.length === 0) return s;
+      return { messages: { ...s.messages, [channelId]: [...unique, ...existing] } };
     }),
   addReaction: (channelId, messageId, emoji, me, count) =>
     set((s) => {
