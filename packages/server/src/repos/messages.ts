@@ -237,7 +237,9 @@ export class MessagesRepo {
 
     const row = this.db.prepare(`${MSG_SELECT} WHERE m.id = ? AND m.channel_id = ?`)
       .get(messageId, channelId) as MessageRow;
-    return toMessage(row);
+    const msg = toMessage(row);
+    this.resolveMentions([msg]);
+    return msg;
   }
 
   delete(channelId: string, messageId: string): boolean {
@@ -289,22 +291,33 @@ export class MessagesRepo {
     }
   }
 
-  /** Resolve <@userId> mentions in message content to User objects. */
+  /** Resolve <@userId> mentions in message content to User objects.
+   *  Only resolves users who are members of the guild the channel belongs to. */
   private resolveMentions(messages: Message[]): void {
     const allIds = new Set<string>();
+    const channelIds = new Set<string>();
     for (const msg of messages) {
+      channelIds.add(msg.channel_id);
       for (const id of parseMentionIds(msg.content)) {
         allIds.add(id);
       }
     }
     if (allIds.size === 0) return;
 
+    // Get the guild ID from the first channel (all messages in a batch are same channel)
+    const channelId = [...channelIds][0];
+    const channel = this.db.prepare("SELECT guild_id FROM channels WHERE id = ?").get(channelId) as { guild_id: string } | undefined;
+    if (!channel) return;
+
     const userMap = new Map<string, User>();
     const idList = [...allIds];
     const placeholders = idList.map(() => "?").join(",");
+    // Only resolve users who are guild members
     const rows = this.db.prepare(
-      `SELECT id, username, bot, avatar FROM users WHERE id IN (${placeholders})`
-    ).all(...idList) as Array<{ id: string; username: string; bot: number; avatar: string | null }>;
+      `SELECT u.id, u.username, u.bot, u.avatar FROM users u
+       INNER JOIN guild_members gm ON gm.user_id = u.id AND gm.guild_id = ?
+       WHERE u.id IN (${placeholders})`
+    ).all(channel.guild_id, ...idList) as Array<{ id: string; username: string; bot: number; avatar: string | null }>;
     for (const row of rows) {
       userMap.set(row.id, {
         id: row.id,

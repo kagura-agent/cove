@@ -34,6 +34,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [showMention, setShowMention] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const mentionHasResults = useRef(false);
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   useLayoutEffect(() => {
@@ -51,6 +52,11 @@ export function MessageInput({ channelId }: { channelId: string }) {
     }
   }, [channelId]);
 
+  function syncCursor() {
+    const ta = textareaRef.current;
+    if (ta) setCursorPos(ta.selectionStart);
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setContent(e.target.value);
     setCursorPos(e.target.selectionStart);
@@ -62,9 +68,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
-    // Let mention autocomplete handle these keys
-    if (showMention && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape")) return;
-    if (showMention && e.key === "Enter") return;
+    // Only intercept keys when mention autocomplete is actually visible with results
+    if (showMention && mentionHasResults.current) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
@@ -160,6 +167,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
           cursorPos={cursorPos}
           onSelect={handleMentionSelect}
           onClose={() => setShowMention(false)}
+          onHasResults={(has) => { mentionHasResults.current = has; }}
         />
       )}
       <textarea
@@ -167,6 +175,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onSelect={syncCursor}
+        onClick={syncCursor}
         placeholder="Say something…"
         aria-label="Message"
         maxLength={2000}

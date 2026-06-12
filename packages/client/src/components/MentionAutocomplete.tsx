@@ -34,17 +34,15 @@ const itemActiveStyle: CSSProperties = {
 };
 
 interface Props {
-  /** Current input text */
   text: string;
-  /** Cursor position in the input */
   cursorPos: number;
-  /** Called when a mention is selected; returns the text to insert */
   onSelect: (userId: string, username: string, startPos: number, endPos: number) => void;
-  /** Called when popup closes without selection */
   onClose: () => void;
+  /** Report whether there are filtered results (for key intercept gating) */
+  onHasResults?: (has: boolean) => void;
 }
 
-export function MentionAutocomplete({ text, cursorPos, onSelect, onClose }: Props) {
+export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasResults }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +59,11 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose }: Prop
   const filtered = query !== null
     ? members.filter((m) => m.user.username.toLowerCase().includes(query)).slice(0, 10)
     : [];
+
+  // Report whether we have results
+  useEffect(() => {
+    onHasResults?.(filtered.length > 0);
+  }, [filtered.length, onHasResults]);
 
   // Reset active index when filtered list changes
   useEffect(() => {
