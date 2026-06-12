@@ -5,6 +5,7 @@ import * as api from "../lib/api";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
+import { MentionAutocomplete } from "./MentionAutocomplete";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -29,8 +30,11 @@ const textareaStyle: CSSProperties = {
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
+  const [cursorPos, setCursorPos] = useState(0);
+  const [showMention, setShowMention] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const mentionHasResults = useRef(false);
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   useLayoutEffect(() => {
@@ -48,13 +52,26 @@ export function MessageInput({ channelId }: { channelId: string }) {
     }
   }, [channelId]);
 
+  function syncCursor() {
+    const ta = textareaRef.current;
+    if (ta) setCursorPos(ta.selectionStart);
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setContent(e.target.value);
+    setCursorPos(e.target.selectionStart);
+    // Check if we should show mention autocomplete
+    const before = e.target.value.slice(0, e.target.selectionStart);
+    setShowMention(/@\w*$/.test(before));
     if (e.target.value.trim()) sendTypingThrottled();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
+    // Only intercept keys when mention autocomplete is actually visible with results
+    if (showMention && mentionHasResults.current) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
@@ -122,13 +139,44 @@ export function MessageInput({ channelId }: { channelId: string }) {
     }
   }
 
+  const handleMentionSelect = useCallback((userId: string, username: string, startPos: number, endPos: number) => {
+    const before = content.slice(0, startPos);
+    const after = content.slice(endPos);
+    const mention = `<@${userId}> `;
+    const newContent = before + mention + after;
+    setContent(newContent);
+    setShowMention(false);
+    const newCursor = startPos + mention.length;
+    setCursorPos(newCursor);
+    // Focus and set cursor position
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.selectionStart = newCursor;
+        ta.selectionEnd = newCursor;
+      }
+    });
+  }, [content]);
+
   return (
-    <div style={{ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }}>
+    <div style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}>
+      {showMention && (
+        <MentionAutocomplete
+          text={content}
+          cursorPos={cursorPos}
+          onSelect={handleMentionSelect}
+          onClose={() => setShowMention(false)}
+          onHasResults={(has) => { mentionHasResults.current = has; }}
+        />
+      )}
       <textarea
         ref={textareaRef}
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onSelect={syncCursor}
+        onClick={syncCursor}
         placeholder="Say something…"
         aria-label="Message"
         maxLength={2000}
