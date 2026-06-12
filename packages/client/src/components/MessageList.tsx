@@ -147,11 +147,15 @@ export function MessageList({ channelId }: { channelId: string }) {
   }, []);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  /** Whether there are more older messages; drives the 'beginning' indicator. */
+  const [hasMore, setHasMore] = useState(true);
 
   /** Always reflects the current channelId so the scroll handler is never stale. */
   const channelIdRef = useRef(channelId);
   useLayoutEffect(() => {
     channelIdRef.current = channelId;
+    // Reset hasMore for the new channel from module-level cache
+    setHasMore(hasMoreHistory.get(channelId) !== false);
   }, [channelId]);
 
   /** Previous message count — used to detect newly-added messages. */
@@ -162,6 +166,10 @@ export function MessageList({ channelId }: { channelId: string }) {
   const restoringRef = useRef(false);
   /** Set after a fresh fetch; the next layout effect scrolls to bottom. */
   const pendingScrollToBottomRef = useRef(false);
+  /** Tracks the first message id to distinguish prepend from append in effect #5. */
+  const firstMessageIdRef = useRef<string | undefined>(undefined);
+  /** Pending scroll restore after prepend — stores prevScrollHeight. */
+  const pendingPrependRestoreRef = useRef<number | null>(null);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -237,26 +245,21 @@ export function MessageList({ channelId }: { channelId: string }) {
         if (oldest && !oldest.id.startsWith("pending-")) {
           fetchingOlder.set(id, true);
           setLoadingOlder(true);
-          const prevScrollHeight = container.scrollHeight;
           api
             .fetchMessages(id, { before: oldest.id, limit: PAGE_SIZE })
             .then((fetched) => {
+              // Guard: if user switched channels, discard stale results
+              if (channelIdRef.current !== id) return;
               // API returns newest-first, reverse to chronological
-              const older = fetched.reverse();
+              const older = [...fetched].reverse();
               if (older.length < PAGE_SIZE) {
-                hasMoreHistory.set(id, false);
+                cappedMapSet(hasMoreHistory, id, false);
+                setHasMore(false);
               }
               if (older.length > 0) {
+                // Save scrollHeight before prepend; restore in useLayoutEffect
+                pendingPrependRestoreRef.current = container.scrollHeight;
                 prependMessages(id, older);
-                // Restore scroll position after prepend
-                requestAnimationFrame(() => {
-                  restoringRef.current = true;
-                  const newScrollHeight = container.scrollHeight;
-                  container.scrollTop += newScrollHeight - prevScrollHeight;
-                  requestAnimationFrame(() => {
-                    restoringRef.current = false;
-                  });
-                });
               }
             })
             .catch((err) => console.error("loadOlder:", err))
@@ -308,7 +311,8 @@ export function MessageList({ channelId }: { channelId: string }) {
         cappedMapSet(lastFetchTime, channelId, Date.now());
         prevCountRef.current = reversed.length;
         // If we got fewer than PAGE_SIZE, there's no more history
-        hasMoreHistory.set(channelId, reversed.length >= PAGE_SIZE);
+        cappedMapSet(hasMoreHistory, channelId, reversed.length >= PAGE_SIZE);
+        setHasMore(reversed.length >= PAGE_SIZE);
 
         // Only scroll-to-bottom on truly uncached first loads.
         // For stale refetches, honour the user's saved position.
@@ -353,15 +357,40 @@ export function MessageList({ channelId }: { channelId: string }) {
     }
   });
 
+  // ── 4b. After prepend render → restore scroll position ────────────
+  // useLayoutEffect runs after React commits DOM but before paint,
+  // so scrollHeight is accurate (avoids React 18 batching issues with rAF).
+  useLayoutEffect(() => {
+    const prevHeight = pendingPrependRestoreRef.current;
+    if (prevHeight === null) return;
+    pendingPrependRestoreRef.current = null;
+    const container = scrollContainerRef.current;
+    if (container) {
+      restoringRef.current = true;
+      container.scrollTop += container.scrollHeight - prevHeight;
+      requestAnimationFrame(() => {
+        restoringRef.current = false;
+      });
+    }
+  });
+
   // ── 5. New message → auto-scroll if user was at bottom ────────────
   //
   // Own messages (optimistic pending-* ids) ALWAYS trigger scroll-to-bottom
   // so the user sees their own message immediately, even if they had
   // scrolled up. Other people's messages only scroll if we were already
   // near the bottom.
+  //
+  // Prepend (loading older messages) is detected by a change in the first
+  // message id — in that case we skip auto-scroll since position is
+  // restored by effect 4b above.
   useEffect(() => {
     if (!messages) return;
-    if (messages.length > prevCountRef.current) {
+    const firstId = messages[0]?.id;
+    const wasPrepend = firstId !== firstMessageIdRef.current && firstMessageIdRef.current !== undefined;
+    firstMessageIdRef.current = firstId;
+
+    if (messages.length > prevCountRef.current && !wasPrepend) {
       const lastMsg = messages[messages.length - 1];
       const isOwnMessage = lastMsg && lastMsg.id.startsWith("pending-");
       if (isOwnMessage || wasNearBottomRef.current) {
@@ -427,7 +456,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             <Spin size="small" />
           </div>
         )}
-        {!loadingOlder && hasMoreHistory.get(channelId) === false && messages.length > 0 && (
+        {!loadingOlder && !hasMore && messages.length > 0 && (
           <div style={{ textAlign: "center", padding: "var(--space-sm) 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
             This is the beginning of the conversation
           </div>
