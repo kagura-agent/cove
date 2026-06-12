@@ -46,8 +46,8 @@ $SCRIPT channel list
 # Update channel
 $SCRIPT channel update --id <channel-id> [--name <name>] [--topic <topic>]
 
-# Delete channel
-$SCRIPT channel delete --id <channel-id>
+# Delete channel (requires --yes or --force)
+$SCRIPT channel delete --id <channel-id> --yes
 ```
 
 ## Direct API Usage
@@ -55,8 +55,8 @@ $SCRIPT channel delete --id <channel-id>
 If the script doesn't cover your case, call the API directly:
 
 ```javascript
-const fs = require('fs');
-const c = JSON.parse(fs.readFileSync(process.env.HOME + '/.openclaw/openclaw.json', 'utf-8'));
+import { readFileSync } from 'node:fs';
+const c = JSON.parse(readFileSync(process.env.HOME + '/.openclaw/openclaw.json', 'utf-8'));
 const cove = c.channels.cove;
 const API = cove.baseUrl + '/api/v10';
 const headers = { Authorization: 'Bot ' + cove.token, 'Content-Type': 'application/json' };

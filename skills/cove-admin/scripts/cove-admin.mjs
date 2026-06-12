@@ -103,30 +103,42 @@ async function channelUpdate(args) {
 
 async function channelDelete(args) {
   const idIdx = args.indexOf("--id");
+  const force = args.includes("--yes") || args.includes("--force");
   if (idIdx === -1 || !args[idIdx + 1]) {
-    console.error("Usage: channel delete --id <id>");
+    console.error("Usage: channel delete --id <id> [--yes|--force]");
     process.exit(1);
   }
   const id = args[idIdx + 1];
+  if (!force) {
+    console.error(`⚠️  This will permanently delete channel ${id}. Pass --yes or --force to confirm.`);
+    process.exit(1);
+  }
   await api(`/channels/${id}`, { method: "DELETE" });
   console.log(`✅ Deleted channel ${id}`);
 }
 
 const [resource, action, ...rest] = process.argv.slice(2);
 
-if (resource === "channel" || resource === "channels") {
-  switch (action) {
-    case "create": await channelCreate(rest); break;
-    case "list": case "ls": await channelList(); break;
-    case "update": await channelUpdate(rest); break;
-    case "delete": case "rm": await channelDelete(rest); break;
-    default:
-      console.error(`Unknown action: ${action}`);
-      console.error("Available: create, list, update, delete");
-      process.exit(1);
+try {
+  if (resource === "channel" || resource === "channels") {
+    switch (action) {
+      case "create": await channelCreate(rest); break;
+      case "list": case "ls": await channelList(); break;
+      case "update": await channelUpdate(rest); break;
+      case "delete": case "rm": await channelDelete(rest); break;
+      default:
+        console.error(`Unknown action: ${action}`);
+        console.error("Available: create, list, update, delete");
+        process.exit(1);
+    }
+  } else {
+    console.error("Usage: cove-admin.mjs <resource> <action> [options]");
+    console.error("Resources: channel");
+    process.exit(1);
   }
-} else {
-  console.error("Usage: cove-admin.mjs <resource> <action> [options]");
-  console.error("Resources: channel");
+} catch (err) {
+  // Redact potential token leakage from error messages
+  const msg = (err.message || String(err)).replace(/Bot\s+[\w-]+/g, "Bot ***");
+  console.error(`❌ ${msg}`);
   process.exit(1);
 }
