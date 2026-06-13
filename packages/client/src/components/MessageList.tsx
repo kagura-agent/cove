@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
+import { useUserStore } from "../stores/useUserStore";
 import { MessageItem } from "./MessageItem";
 import { LazyMessageItem } from "./LazyMessageItem";
 import { TypingIndicator } from "./TypingIndicator";
+import { MessageContextMenu } from "./MessageContextMenu";
 import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
+import type { Message } from "../types";
 
 /* ══════════════════════════════════════════════════════════════════════════
  * SCROLL ARCHITECTURE
@@ -149,6 +152,17 @@ export function MessageList({ channelId }: { channelId: string }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   /** Whether there are more older messages; drives the 'beginning' indicator. */
   const [hasMore, setHasMore] = useState(true);
+  const currentUserId = useUserStore((s) => s.id);
+  const pendingStatus = useMessageStore((s) => s.pendingStatus);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: Message } | null>(null);
+  const handleContextMenu = useCallback((e: React.MouseEvent, message: Message) => {
+    // Don't show menu for pending messages
+    if (pendingStatus[message.id]) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, message });
+  }, [pendingStatus]);
 
   /** Always reflects the current channelId so the scroll handler is never stale. */
   const channelIdRef = useRef(channelId);
@@ -505,7 +519,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                 eager={eager}
                 scrollRoot={scrollRoot}
               >
-                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} />
+                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} />
               </LazyMessageItem>
             );
           })}
@@ -513,6 +527,17 @@ export function MessageList({ channelId }: { channelId: string }) {
         </div>
       </div>
       <TypingIndicator channelId={channelId} />
+      {contextMenu && (
+        <MessageContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          messageId={contextMenu.message.id}
+          channelId={channelId}
+          content={contextMenu.message.content}
+          isOwnMessage={contextMenu.message.author.id === currentUserId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </>
   );
 }
