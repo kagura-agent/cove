@@ -38,6 +38,9 @@ export function sendMessage(channelId: string, content: string, nonce?: string, 
     method: "POST", body: JSON.stringify(body),
   });
 }
+export function deleteMessage(channelId: string, messageId: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}`, { method: "DELETE" });
+}
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }

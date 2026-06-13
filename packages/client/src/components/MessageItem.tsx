@@ -63,6 +63,7 @@ interface MessageItemProps {
   message: Message;
   isGroupStart: boolean;
   onJumpToMessage?: (messageId: string) => void;
+  onContextMenu?: (e: React.MouseEvent, message: Message) => void;
 }
 
 function MessageActions({ message }: { message: Message }) {
@@ -201,7 +202,7 @@ function PendingIndicator({ status, messageId, channelId, content, author, messa
   );
 }
 
-export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageItemProps) {
+export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextMenu }: MessageItemProps) {
   const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
   const currentUserId = useUserStore((s) => s.id);
   const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
@@ -209,6 +210,13 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
   const textColor = getContrastTextColor(bgColor);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Don't show context menu for pending messages
+    if (pendingStatus) return;
+    e.preventDefault();
+    onContextMenu?.(e, message);
+  };
 
   // Build mention user map for rendering
   const mentionUsers = new Map<string, string>();
@@ -230,6 +238,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
       <div
         className="discord-msg-row"
         data-message-id={message.id}
+        onContextMenu={handleContextMenu}
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -322,6 +331,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
     <div
       className="discord-msg-row"
       data-message-id={message.id}
+      onContextMenu={handleContextMenu}
       style={{
         display: "flex",
         alignItems: "flex-start",

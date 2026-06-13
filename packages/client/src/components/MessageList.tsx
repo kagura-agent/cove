@@ -4,9 +4,12 @@ import { useReadStateStore } from "../stores/useReadStateStore";
 import { MessageItem } from "./MessageItem";
 import { LazyMessageItem } from "./LazyMessageItem";
 import { TypingIndicator } from "./TypingIndicator";
+import { ContextMenu, INITIAL_CONTEXT_MENU } from "./ContextMenu";
+import type { ContextMenuState } from "./ContextMenu";
 import { Spin, Empty } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
+import type { Message } from "../types";
 
 /* ══════════════════════════════════════════════════════════════════════════
  * SCROLL ARCHITECTURE
@@ -149,6 +152,14 @@ export function MessageList({ channelId }: { channelId: string }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   /** Whether there are more older messages; drives the 'beginning' indicator. */
   const [hasMore, setHasMore] = useState(true);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(INITIAL_CONTEXT_MENU);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, message: Message) => {
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, message });
+  }, []);
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(INITIAL_CONTEXT_MENU);
+  }, []);
 
   /** Always reflects the current channelId so the scroll handler is never stale. */
   const channelIdRef = useRef(channelId);
@@ -505,7 +516,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                 eager={eager}
                 scrollRoot={scrollRoot}
               >
-                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} />
+                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} />
               </LazyMessageItem>
             );
           })}
@@ -513,6 +524,7 @@ export function MessageList({ channelId }: { channelId: string }) {
         </div>
       </div>
       <TypingIndicator channelId={channelId} />
+      <ContextMenu state={contextMenu} onClose={closeContextMenu} />
     </>
   );
 }
