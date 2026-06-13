@@ -156,14 +156,17 @@ export function MessageList({ channelId }: { channelId: string }) {
   const pendingStatus = useMessageStore((s) => s.pendingStatus);
   const getLastReadId = useReadStateStore((s) => s.getLastReadId);
 
-  // Snapshot the last-read ID when entering a channel so the NEW line stays fixed
+  // ── Unread indicators (per confirmed spec) ─────────────────────
+  // Snapshot the last-read ID on channel entry — frozen, never changes
   const lastReadIdSnapshotRef = useRef<string | undefined>(undefined);
-  // Track whether the user has actively scrolled (not initial load)
-  const userHasScrolledRef = useRef(false);
-  // Track unread count for the banner
-  const [unreadAboveCount, setUnreadAboveCount] = useState(0);
-  // Track if we should show the NEW line (hide after user scrolls past it)
+  // Whether the unread count has been computed for this channel entry
+  const unreadComputedForRef = useRef<string | null>(null);
+  // Entry indicators (frozen on channel entry)
   const [showNewLine, setShowNewLine] = useState(false);
+  const [entryUnreadCount, setEntryUnreadCount] = useState(0);
+  const [showTopBanner, setShowTopBanner] = useState(false);
+  // Real-time indicator: bottom pill for messages arriving while scrolled up
+  const [newMessagesBelowCount, setNewMessagesBelowCount] = useState(0);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: Message } | null>(null);
@@ -189,52 +192,53 @@ export function MessageList({ channelId }: { channelId: string }) {
     // Snapshot the last-read ID for the NEW separator
     const lastReadId = getLastReadId(channelId);
     lastReadIdSnapshotRef.current = lastReadId;
-    setShowNewLine(!!lastReadId);
-    setUnreadAboveCount(0);
-    userHasScrolledRef.current = false;
-    unreadComputedForChannelRef.current = null;
+    // Reset all unread indicators for fresh computation
+    setShowNewLine(false);
+    setEntryUnreadCount(0);
+    setShowTopBanner(false);
+    setNewMessagesBelowCount(0);
+    unreadComputedForRef.current = null;
   }, [channelId, getLastReadId]);
 
   // Compute unread count ONCE when messages first load for this channel.
-  // After that, count only decreases (never increases from new messages).
-  const unreadComputedForChannelRef = useRef<string | null>(null);
   useEffect(() => {
-    // Only compute once per channel entry
-    if (unreadComputedForChannelRef.current === channelId) return;
+    if (unreadComputedForRef.current === channelId) return;
     if (!messages?.length) return;
 
     const lastReadId = lastReadIdSnapshotRef.current;
     if (!lastReadId) {
-      // No read cursor — either fresh channel or never visited
-      // Check if the last message is also the first (no unread)
-      setUnreadAboveCount(0);
+      // No read cursor — no unread indicators
+      setEntryUnreadCount(0);
       setShowNewLine(false);
-      unreadComputedForChannelRef.current = channelId;
+      setShowTopBanner(false);
+      unreadComputedForRef.current = channelId;
       return;
     }
 
     const lastReadIdx = messages.findIndex((m) => m.id === lastReadId);
     if (lastReadIdx === -1) {
-      // lastReadId not in loaded messages — might be very old, all visible are unread
-      // But we don't know for sure, so show NEW at the top
-      setUnreadAboveCount(messages.length);
+      // lastReadId not in loaded messages — all visible are unread
+      setEntryUnreadCount(messages.length);
       setShowNewLine(true);
-      unreadComputedForChannelRef.current = channelId;
+      setShowTopBanner(true);
+      unreadComputedForRef.current = channelId;
       return;
     }
 
     if (lastReadIdx === messages.length - 1) {
       // Last read is the latest message — no unread
-      setUnreadAboveCount(0);
+      setEntryUnreadCount(0);
       setShowNewLine(false);
-      unreadComputedForChannelRef.current = channelId;
+      setShowTopBanner(false);
+      unreadComputedForRef.current = channelId;
       return;
     }
 
     const count = messages.length - lastReadIdx - 1;
-    setUnreadAboveCount(count);
+    setEntryUnreadCount(count);
     setShowNewLine(true);
-    unreadComputedForChannelRef.current = channelId;
+    setShowTopBanner(true);
+    unreadComputedForRef.current = channelId;
   }, [channelId, messages]);
 
   /** Previous message count — used to detect newly-added messages. */
@@ -320,12 +324,11 @@ export function MessageList({ channelId }: { channelId: string }) {
       const id = channelIdRef.current;
       const atBottom = isNearBottom(container);
       wasNearBottomRef.current = atBottom;
-      userHasScrolledRef.current = true;
 
-      // Clear unread indicators when user scrolls to bottom
-      if (atBottom && (unreadAboveCount > 0 || showNewLine)) {
-        setUnreadAboveCount(0);
-        setShowNewLine(false);
+      // Per spec: scrolling to bottom clears top banner and bottom pill
+      if (atBottom) {
+        setShowTopBanner(false);
+        setNewMessagesBelowCount(0);
       }
       const dist = distanceFromBottom(container);
       cappedMapSet(scrollMemory, id, {
@@ -497,11 +500,16 @@ export function MessageList({ channelId }: { channelId: string }) {
     if (messages.length > prevCountRef.current && !wasPrepend) {
       const lastMsg = messages[messages.length - 1];
       const isOwnMessage = lastMsg && lastMsg.id.startsWith("pending-");
+      if (isOwnMessage) {
+        // Per spec: sending a message clears the NEW line
+        setShowNewLine(false);
+      }
       if (isOwnMessage || wasNearBottomRef.current) {
         requestAnimationFrame(() => scrollToBottom());
-        // After scrolling for own message, mark as near-bottom so
-        // subsequent messages from others also auto-scroll.
         wasNearBottomRef.current = true;
+      } else {
+        // User is scrolled up and a new message arrived — show bottom pill
+        setNewMessagesBelowCount((c) => c + 1);
       }
     }
     prevCountRef.current = messages.length;
@@ -560,7 +568,7 @@ export function MessageList({ channelId }: { channelId: string }) {
             <Spin size="small" />
           </div>
         )}
-        {unreadAboveCount > 0 && (
+        {showTopBanner && entryUnreadCount > 0 && (
           <div
             style={{
               position: "absolute", top: 0, left: 0, right: 0, zIndex: 2,
@@ -568,18 +576,16 @@ export function MessageList({ channelId }: { channelId: string }) {
               padding: "var(--space-xs) var(--content-pad)",
               background: "var(--accent, #5865f2)", color: "#fff",
               fontSize: "var(--font-size-sm)", fontWeight: 500,
-              cursor: "pointer",
-            }}
-            onClick={() => {
-              // Jump to the NEW separator
-              const sep = scrollContainerRef.current?.querySelector("[data-new-separator]");
-              if (sep) {
-                sep.scrollIntoView({ behavior: "smooth", block: "start" });
-              }
             }}
           >
-            <span>{unreadAboveCount} new {unreadAboveCount === 1 ? "message" : "messages"}</span>
-            <span style={{ fontWeight: 600 }}>Jump ↑</span>
+            <span>{entryUnreadCount} new {entryUnreadCount === 1 ? "message" : "messages"}</span>
+            <span
+              style={{ fontWeight: 600, cursor: "pointer", padding: "0 var(--space-xs)" }}
+              onClick={() => {
+                scrollToBottom();
+                setShowTopBanner(false);
+              }}
+            >Mark as Read</span>
           </div>
         )}
         <div
@@ -626,6 +632,23 @@ export function MessageList({ channelId }: { channelId: string }) {
         <div ref={bottomRef} />
         </div>
       </div>
+      {newMessagesBelowCount > 0 && (
+        <div
+          style={{
+            position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+            background: "var(--accent, #5865f2)", color: "#fff",
+            borderRadius: 20, padding: "var(--space-xs) var(--space-md)",
+            fontSize: "var(--font-size-sm)", fontWeight: 500,
+            cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+          }}
+          onClick={() => {
+            scrollToBottom();
+            setNewMessagesBelowCount(0);
+          }}
+        >
+          {newMessagesBelowCount} new {newMessagesBelowCount === 1 ? "message" : "messages"} ↓
+        </div>
+      )}
       <TypingIndicator channelId={channelId} />
       {contextMenu && (
         <MessageContextMenu
