@@ -64,14 +64,6 @@ export function registerRoutes(db: Database.Database): Hono {
 
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
 
-      // Auto-join the default guild
-      const defaultGuild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string } | undefined;
-      if (defaultGuild) {
-        db.prepare(
-          "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-        ).run(defaultGuild.id, userId, null, '[]', now);
-      }
-
       return token;
     });
     const result = register();
