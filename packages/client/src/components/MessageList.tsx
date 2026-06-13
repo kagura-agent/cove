@@ -192,28 +192,50 @@ export function MessageList({ channelId }: { channelId: string }) {
     setShowNewLine(!!lastReadId);
     setUnreadAboveCount(0);
     userHasScrolledRef.current = false;
+    unreadComputedForChannelRef.current = null;
   }, [channelId, getLastReadId]);
 
-  // Compute unread count when messages change
+  // Compute unread count ONCE when messages first load for this channel.
+  // After that, count only decreases (never increases from new messages).
+  const unreadComputedForChannelRef = useRef<string | null>(null);
   useEffect(() => {
-    // If user has actively scrolled to bottom, clear indicators
-    if (userHasScrolledRef.current && wasNearBottomRef.current) {
+    // Only compute once per channel entry
+    if (unreadComputedForChannelRef.current === channelId) return;
+    if (!messages?.length) return;
+
+    const lastReadId = lastReadIdSnapshotRef.current;
+    if (!lastReadId) {
+      // No read cursor — either fresh channel or never visited
+      // Check if the last message is also the first (no unread)
       setUnreadAboveCount(0);
       setShowNewLine(false);
+      unreadComputedForChannelRef.current = channelId;
       return;
     }
-    const lastReadId = lastReadIdSnapshotRef.current;
-    if (!lastReadId || !messages?.length) {
-      setUnreadAboveCount(0);
-      return;
-    }
+
     const lastReadIdx = messages.findIndex((m) => m.id === lastReadId);
     if (lastReadIdx === -1) {
+      // lastReadId not in loaded messages — might be very old, all visible are unread
+      // But we don't know for sure, so show NEW at the top
+      setUnreadAboveCount(messages.length);
+      setShowNewLine(true);
+      unreadComputedForChannelRef.current = channelId;
       return;
     }
-    const unreadCount = messages.length - lastReadIdx - 1;
-    setUnreadAboveCount(unreadCount > 0 ? unreadCount : 0);
-  }, [messages]);
+
+    if (lastReadIdx === messages.length - 1) {
+      // Last read is the latest message — no unread
+      setUnreadAboveCount(0);
+      setShowNewLine(false);
+      unreadComputedForChannelRef.current = channelId;
+      return;
+    }
+
+    const count = messages.length - lastReadIdx - 1;
+    setUnreadAboveCount(count);
+    setShowNewLine(true);
+    unreadComputedForChannelRef.current = channelId;
+  }, [channelId, messages]);
 
   /** Previous message count — used to detect newly-added messages. */
   const prevCountRef = useRef(0);
