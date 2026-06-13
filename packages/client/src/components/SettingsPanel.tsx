@@ -113,13 +113,71 @@ function AppearanceSection() {
 }
 
 function ProfileSection() {
-  const { username } = useUserStore();
+  const { username, global_name, setGlobalName } = useUserStore();
+  const [displayName, setDisplayName] = useState(global_name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Sync local state when store changes
+  useEffect(() => {
+    setDisplayName(global_name ?? "");
+  }, [global_name]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const trimmed = displayName.trim();
+      const value = trimmed || null; // empty string → null (clear)
+      const updated = await api.updateMe({ global_name: value });
+      setGlobalName(updated.global_name);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error("update display name:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasChanged = (displayName.trim() || null) !== (global_name ?? null);
 
   return (
     <div>
       <h2 style={sectionTitleStyle}>Profile</h2>
       <div style={categoryLabelStyle}>Signed in as</div>
-      <div style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--text-normal)" }}>{username}</div>
+      <div style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--text-normal)", marginBottom: "var(--space-xl)" }}>{username}</div>
+      <div style={categoryLabelStyle}>Display Name</div>
+      <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center", marginBottom: "var(--space-xs)" }}>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder={username}
+          maxLength={80}
+          style={{
+            flex: 1, padding: "var(--space-sm) var(--space-md)",
+            background: "var(--bg-input)", border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--input-radius)", color: "var(--text-normal)",
+            fontSize: "var(--font-size-md)", fontFamily: "inherit",
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && hasChanged) handleSave(); }}
+        />
+        <button
+          onClick={handleSave}
+          disabled={!hasChanged || saving}
+          style={{
+            padding: "var(--space-sm) var(--space-lg)",
+            background: hasChanged ? "var(--accent, #5865f2)" : "var(--bg-modifier-hover)",
+            color: hasChanged ? "#fff" : "var(--text-muted)",
+            border: "none", borderRadius: "var(--input-radius)",
+            cursor: hasChanged ? "pointer" : "default",
+            fontSize: "var(--font-size-md)", fontWeight: 500,
+          }}
+        >{saved ? "✓ Saved" : "Save"}</button>
+      </div>
+      <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>
+        Leave empty to use your Google account name.
+      </div>
     </div>
   );
 }

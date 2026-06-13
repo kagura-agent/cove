@@ -274,7 +274,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
                 cursor: "pointer",
               }}
             >
-              {message.author.username}
+              {message.author.global_name || message.author.username}
             </span>
             {isBot && <span style={botBadgeStyle}>APP</span>}
             <Typography.Text

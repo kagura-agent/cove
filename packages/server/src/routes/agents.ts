@@ -77,11 +77,15 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       username?: string;
       avatar?: string | null;
       bio?: string | null;
+      global_name?: string | null;
     }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.username, "username", { maxLength: 80 });
     if (err) return validationError(c, err);
+
+    const gnErr = validateString(body.global_name, "global_name", { maxLength: 80 });
+    if (gnErr) return validationError(c, gnErr);
 
     const updated = repos.users.update(id!, body)!;
     return c.json(updated);

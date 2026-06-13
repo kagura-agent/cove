@@ -106,7 +106,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       const cookieToken = getCookie(c, SESSION_COOKIE);
       if (cookieToken) setCookie(c, SESSION_COOKIE, cookieToken, COOKIE_OPTIONS);
     }
-    return c.json({ id: result.user.id, username: result.user.username, avatar: result.user.avatar, bot: result.user.bot, expires_at: result.user.expires_at });
+    return c.json({ id: result.user.id, username: result.user.username, avatar: result.user.avatar, bot: result.user.bot, global_name: result.user.global_name, expires_at: result.user.expires_at });
   });
 
   app.get("/api/auth/pending-status", (c) => {

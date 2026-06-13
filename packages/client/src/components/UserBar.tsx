@@ -16,7 +16,8 @@ const nameStyle: CSSProperties = { flex: 1, fontSize: "var(--font-size-sm)", fon
 const settingsBtnStyle: CSSProperties = { color: "var(--interactive-normal)", fontSize: "var(--font-size-md)" };
 
 export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: () => void; onSettingsOpen?: () => void }) {
-  const { id, username } = useUserStore();
+  const { id, username, global_name } = useUserStore();
+  const displayName = global_name || username;
   const online = usePresenceStore((s) => s.isOnline(id));
 
   const handleSettingsClick = () => {
@@ -32,7 +33,7 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
         </Avatar>
         <StatusDot online={online} />
       </div>
-      <Typography.Text ellipsis style={nameStyle}>{username}</Typography.Text>
+      <Typography.Text ellipsis style={nameStyle}>{displayName}</Typography.Text>
       <Button type="text" icon={<SettingOutlined />} onClick={handleSettingsClick} style={settingsBtnStyle} />
     </div>
   );
