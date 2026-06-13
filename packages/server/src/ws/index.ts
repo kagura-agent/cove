@@ -42,7 +42,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
         const row = users.findByToken(sessionToken);
         if (row) {
           (req as IncomingMessage & { __coveUser?: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null; expires_at: number | null } }).__coveUser = {
-            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null,
+            id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: row.global_name ?? null, expires_at: row.expires_at ?? null,
           };
         }
       }
@@ -96,7 +96,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
             if (identifyToken) {
               const row = users.findByToken(identifyToken);
               if (row) {
-                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: null, expires_at: row.expires_at ?? null };
+                user = { id: row.id, username: row.username, bot: row.bot, avatar: row.avatar ?? null, discriminator: "0", global_name: row.global_name ?? null, expires_at: row.expires_at ?? null };
               }
             }
 
