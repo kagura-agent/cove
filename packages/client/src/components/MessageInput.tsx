@@ -84,7 +84,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
     let text = content.trim();
     if (!text) return;
     // Convert display mentions (@username) to wire format (<@userId>)
-    for (const [username, userId] of mentionMapRef.current) {
+    // Replace longer usernames first to avoid substring collision
+    const entries = [...mentionMapRef.current.entries()]
+      .sort((a, b) => b[0].length - a[0].length);
+    for (const [username, userId] of entries) {
       text = text.replaceAll(`@${username}`, `<@${userId}>`);
     }
     mentionMapRef.current.clear();

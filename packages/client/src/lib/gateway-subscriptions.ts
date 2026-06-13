@@ -13,6 +13,8 @@ import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
+// Track which messages have already incremented mention count (prevents double-counting on MESSAGE_UPDATE)
+const mentionedMessageIds = new Set<string>();
 
 function subscribe<K extends keyof GatewayEventMap>(event: K, handler: (data: GatewayEventMap[K]) => void): void {
   dispatcher.on(event, handler);
@@ -46,6 +48,7 @@ export function setupGatewaySubscriptions(): void {
       useReadStateStore.getState().setUnread(msg.channel_id);
       // Mark mentioned if current user is in mentions
       if (selfId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
+        mentionedMessageIds.add(msg.id);
         useReadStateStore.getState().setMentioned(msg.channel_id);
       }
     }
@@ -59,10 +62,14 @@ export function setupGatewaySubscriptions(): void {
   subscribe("MESSAGE_UPDATE", (msg) => {
     useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp, msg.mentions);
     // Check if an edit added a mention of the current user (draft streaming)
+    // Only increment if this message hasn't already been counted as a mention
     const selfId = useUserStore.getState().id;
     const activeChannelId = useChannelStore.getState().activeChannelId;
     if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
-      useReadStateStore.getState().setMentioned(msg.channel_id);
+      if (!mentionedMessageIds.has(msg.id)) {
+        mentionedMessageIds.add(msg.id);
+        useReadStateStore.getState().setMentioned(msg.channel_id);
+      }
     }
   });
 
@@ -221,4 +228,5 @@ export function teardownGatewaySubscriptions(): void {
     clearTimeout(id);
   }
   typingTimeoutIds.clear();
+  mentionedMessageIds.clear();
 }
