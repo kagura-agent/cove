@@ -193,6 +193,12 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   // Compute unread count when messages change
   useEffect(() => {
+    // If user is at the bottom watching messages arrive, don't show unread banner
+    if (wasNearBottomRef.current) {
+      setUnreadAboveCount(0);
+      setShowNewLine(false);
+      return;
+    }
     const lastReadId = lastReadIdSnapshotRef.current;
     if (!lastReadId || !messages?.length) {
       setUnreadAboveCount(0);
@@ -200,8 +206,6 @@ export function MessageList({ channelId }: { channelId: string }) {
     }
     const lastReadIdx = messages.findIndex((m) => m.id === lastReadId);
     if (lastReadIdx === -1) {
-      // lastReadId not in current messages — all messages might be unread
-      // or all might be read (if we scrolled past). Don't show banner.
       return;
     }
     const unreadCount = messages.length - lastReadIdx - 1;
@@ -391,6 +395,9 @@ export function MessageList({ channelId }: { channelId: string }) {
         const mem = scrollMemory.get(channelId);
         if (!mem || mem.wasAtBottom) {
           pendingScrollToBottomRef.current = true;
+          // User will be at bottom — no unread indicators needed
+          setShowNewLine(false);
+          setUnreadAboveCount(0);
         }
 
         // Auto-ack last message
