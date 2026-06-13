@@ -332,7 +332,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         // Skip bot messages from others
         if (message.author.bot && !message.webhook_id) return;
 
-        log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
+        log?.info?.(`cove: [${message.channel_id}] ${message.author.username}: ${message.content.slice(0, 50)}`);
 
         await dispatchMessage({
           message,
