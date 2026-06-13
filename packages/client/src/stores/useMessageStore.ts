@@ -14,7 +14,7 @@ interface MessageState {
   reconcilePending: (channelId: string, nonce: string, realMessage: Message) => void;
   markFailed: (messageId: string) => void;
   removePendingMessage: (channelId: string, messageId: string) => void;
-  updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null) => void;
+  updateMessage: (channelId: string, messageId: string, content: string, editedTimestamp?: string | null, mentions?: Message["mentions"]) => void;
   removeMessage: (channelId: string, messageId: string) => void;
   removeChannelMessages: (channelId: string) => void;
   prependMessages: (channelId: string, messages: Message[]) => void;
@@ -70,11 +70,11 @@ export const useMessageStore = create<MessageState>((set) => ({
         pendingStatus: restPending,
       };
     }),
-  updateMessage: (channelId, messageId, content, editedTimestamp) =>
+  updateMessage: (channelId, messageId, content, editedTimestamp, mentions) =>
     set((s) => {
       const msgs = s.messages[channelId];
       if (!msgs) return s;
-      return { messages: { ...s.messages, [channelId]: msgs.map((m) => m.id === messageId ? { ...m, content, ...(editedTimestamp !== undefined ? { edited_timestamp: editedTimestamp } : {}) } : m) } };
+      return { messages: { ...s.messages, [channelId]: msgs.map((m) => m.id === messageId ? { ...m, content, ...(editedTimestamp !== undefined ? { edited_timestamp: editedTimestamp } : {}), ...(mentions !== undefined ? { mentions } : {}) } : m) } };
     }),
   removeMessage: (channelId, messageId) =>
     set((s) => {

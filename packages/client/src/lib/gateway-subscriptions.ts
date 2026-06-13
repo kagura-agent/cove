@@ -53,7 +53,7 @@ export function setupGatewaySubscriptions(): void {
   });
 
   subscribe("MESSAGE_UPDATE", (msg) => {
-    useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp);
+    useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp, msg.mentions);
   });
 
   subscribe("MESSAGE_DELETE", (data) => {
