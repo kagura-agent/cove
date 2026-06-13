@@ -3,9 +3,11 @@ import { create } from "zustand";
 interface ReadStateState {
   readStates: Record<string, string>; // channelId → lastReadMessageId
   unreadChannels: Record<string, boolean>;
+  mentionedChannels: Record<string, boolean>;
   initReadStates: (states: Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }>) => void;
   markRead: (channelId: string, messageId: string) => void;
   setUnread: (channelId: string) => void;
+  setMentioned: (channelId: string) => void;
   clearUnread: (channelId: string) => void;
   removeChannel: (channelId: string) => void;
   getLastReadId: (channelId: string) => string | undefined;
@@ -14,6 +16,7 @@ interface ReadStateState {
 export const useReadStateStore = create<ReadStateState>((set, get) => ({
   readStates: {},
   unreadChannels: {},
+  mentionedChannels: {},
   initReadStates: (states) => {
     const rs: Record<string, string> = {};
     const unread: Record<string, boolean> = {};
@@ -31,17 +34,24 @@ export const useReadStateStore = create<ReadStateState>((set, get) => ({
   markRead: (channelId, messageId) => set((s) => ({
     readStates: { ...s.readStates, [channelId]: messageId },
     unreadChannels: { ...s.unreadChannels, [channelId]: false },
+    mentionedChannels: { ...s.mentionedChannels, [channelId]: false },
   })),
   setUnread: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: true },
   })),
+  setMentioned: (channelId) => set((s) => ({
+    unreadChannels: { ...s.unreadChannels, [channelId]: true },
+    mentionedChannels: { ...s.mentionedChannels, [channelId]: true },
+  })),
   clearUnread: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: false },
+    mentionedChannels: { ...s.mentionedChannels, [channelId]: false },
   })),
   removeChannel: (channelId) => set((s) => {
     const { [channelId]: _rs, ...restReadStates } = s.readStates;
     const { [channelId]: _ur, ...restUnread } = s.unreadChannels;
-    return { readStates: restReadStates, unreadChannels: restUnread };
+    const { [channelId]: _mr, ...restMentioned } = s.mentionedChannels;
+    return { readStates: restReadStates, unreadChannels: restUnread, mentionedChannels: restMentioned };
   }),
   getLastReadId: (channelId) => get().readStates[channelId],
 }));

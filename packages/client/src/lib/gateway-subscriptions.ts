@@ -44,6 +44,10 @@ export function setupGatewaySubscriptions(): void {
     const activeChannelId = useChannelStore.getState().activeChannelId;
     if (msg.author.id !== selfId && msg.channel_id !== activeChannelId) {
       useReadStateStore.getState().setUnread(msg.channel_id);
+      // Mark mentioned if current user is in mentions
+      if (selfId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
+        useReadStateStore.getState().setMentioned(msg.channel_id);
+      }
     }
 
     // Auto-ack incoming messages in the active channel from other users
@@ -54,6 +58,12 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("MESSAGE_UPDATE", (msg) => {
     useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp, msg.mentions);
+    // Check if an edit added a mention of the current user (draft streaming)
+    const selfId = useUserStore.getState().id;
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
+      useReadStateStore.getState().setMentioned(msg.channel_id);
+    }
   });
 
   subscribe("MESSAGE_DELETE", (data) => {

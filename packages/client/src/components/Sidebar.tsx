@@ -24,8 +24,8 @@ const styles = {
   addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
 };
 
-function ChannelItem({ name, isActive, isUnread, onSelect, onSettings }: {
-  name: string; isActive: boolean; isUnread: boolean; onSelect: () => void; onSettings: () => void;
+function ChannelItem({ name, isActive, isUnread, isMentioned, onSelect, onSettings }: {
+  name: string; isActive: boolean; isUnread: boolean; isMentioned: boolean; onSelect: () => void; onSettings: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -38,6 +38,9 @@ function ChannelItem({ name, isActive, isUnread, onSelect, onSettings }: {
     >
       <span style={styles.hash}>#</span>
       <span style={{ ...styles.channelName, ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}>{name}</span>
+      {isMentioned && !isActive && (
+        <span style={{ marginLeft: "auto", background: "var(--status-danger, #ed4245)", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>@</span>
+      )}
       <Button
         type="text"
         size="small"
@@ -53,7 +56,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const activeGuildId = useGuildStore((s) => s.activeGuildId);
   const { activeChannelId, setActiveChannel, addChannel, getChannels } = useChannelStore();
   const channels = getChannels(activeGuildId);
-  const { unreadChannels } = useReadStateStore();
+  const { unreadChannels, mentionedChannels } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
                 name={ch.name}
                 isActive={ch.id === activeChannelId}
                 isUnread={!!unreadChannels[ch.id]}
+                isMentioned={!!mentionedChannels[ch.id]}
                 onSelect={() => handleSelectChannel(ch.id)}
                 onSettings={() => setSettingsChannelId(ch.id)}
               />
