@@ -73,6 +73,7 @@ export function createAllTables(db: Database.Database): void {
       email         TEXT,
       username      TEXT,
       avatar        TEXT,
+      global_name   TEXT,
       created_at    INTEGER
     );
 

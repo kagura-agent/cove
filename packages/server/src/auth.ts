@@ -79,7 +79,7 @@ export function resolveUser(users: UsersRepo, authHeader: string | undefined, co
     }
   }
 
-  return { user: { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: null, expires_at: user.expires_at }, refreshed };
+  return { user: { id: user.id, username: user.username, avatar: user.avatar ?? null, bot: user.bot, discriminator: "0", global_name: user.global_name ?? null, expires_at: user.expires_at }, refreshed };
 }
 
 export function requireAuth(users: UsersRepo) {
