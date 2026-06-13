@@ -3,8 +3,8 @@ import { create } from "zustand";
 interface ReadStateState {
   readStates: Record<string, string>; // channelId → lastReadMessageId
   unreadChannels: Record<string, boolean>;
-  mentionedChannels: Record<string, boolean>;
-  initReadStates: (states: Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }>) => void;
+  mentionCounts: Record<string, number>;
+  initReadStates: (states: Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null; mention_count?: number }>) => void;
   markRead: (channelId: string, messageId: string) => void;
   setUnread: (channelId: string) => void;
   setMentioned: (channelId: string) => void;
@@ -16,10 +16,11 @@ interface ReadStateState {
 export const useReadStateStore = create<ReadStateState>((set, get) => ({
   readStates: {},
   unreadChannels: {},
-  mentionedChannels: {},
+  mentionCounts: {},
   initReadStates: (states) => {
     const rs: Record<string, string> = {};
     const unread: Record<string, boolean> = {};
+    const mentions: Record<string, number> = {};
     for (const s of states) {
       if (s.last_read_message_id) {
         rs[s.channel_id] = s.last_read_message_id;
@@ -28,30 +29,33 @@ export const useReadStateStore = create<ReadStateState>((set, get) => ({
       if (s.last_message_id && s.last_read_message_id !== s.last_message_id) {
         unread[s.channel_id] = true;
       }
+      if (s.mention_count && s.mention_count > 0) {
+        mentions[s.channel_id] = s.mention_count;
+      }
     }
-    set({ readStates: rs, unreadChannels: unread });
+    set({ readStates: rs, unreadChannels: unread, mentionCounts: mentions });
   },
   markRead: (channelId, messageId) => set((s) => ({
     readStates: { ...s.readStates, [channelId]: messageId },
     unreadChannels: { ...s.unreadChannels, [channelId]: false },
-    mentionedChannels: { ...s.mentionedChannels, [channelId]: false },
+    mentionCounts: { ...s.mentionCounts, [channelId]: 0 },
   })),
   setUnread: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: true },
   })),
   setMentioned: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: true },
-    mentionedChannels: { ...s.mentionedChannels, [channelId]: true },
+    mentionCounts: { ...s.mentionCounts, [channelId]: (s.mentionCounts[channelId] || 0) + 1 },
   })),
   clearUnread: (channelId) => set((s) => ({
     unreadChannels: { ...s.unreadChannels, [channelId]: false },
-    mentionedChannels: { ...s.mentionedChannels, [channelId]: false },
+    mentionCounts: { ...s.mentionCounts, [channelId]: 0 },
   })),
   removeChannel: (channelId) => set((s) => {
     const { [channelId]: _rs, ...restReadStates } = s.readStates;
     const { [channelId]: _ur, ...restUnread } = s.unreadChannels;
-    const { [channelId]: _mr, ...restMentioned } = s.mentionedChannels;
-    return { readStates: restReadStates, unreadChannels: restUnread, mentionedChannels: restMentioned };
+    const { [channelId]: _mc, ...restMentions } = s.mentionCounts;
+    return { readStates: restReadStates, unreadChannels: restUnread, mentionCounts: restMentions };
   }),
   getLastReadId: (channelId) => get().readStates[channelId],
 }));

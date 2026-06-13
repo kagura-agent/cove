@@ -101,6 +101,15 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     // Update sender's read state so their own message doesn't show unread on reload
     const acked = repos.readStates.set(user.id, channelId, message.id);
 
+    // Increment mention_count for each mentioned user (except sender)
+    if (message.mentions?.length) {
+      for (const mentioned of message.mentions) {
+        if (mentioned.id !== user.id) {
+          repos.readStates.incrementMentionCount(mentioned.id, channelId);
+        }
+      }
+    }
+
     dispatcher?.messageCreate(message);
 
     // Notify sender's other sessions so unread badges clear everywhere
@@ -142,6 +151,16 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const updated = repos.messages.update(channelId, msgId, body.content);
     if (!updated) {
       return unknownMessage(c);
+    }
+
+    // Increment mention_count for newly mentioned users (draft streaming may add mentions on edit)
+    if (updated.mentions?.length) {
+      const existingMentionIds = new Set(existing.mentions?.map((u) => u.id) ?? []);
+      for (const mentioned of updated.mentions) {
+        if (mentioned.id !== user.id && !existingMentionIds.has(mentioned.id)) {
+          repos.readStates.incrementMentionCount(mentioned.id, channelId);
+        }
+      }
     }
 
     dispatcher?.messageUpdate(updated);
