@@ -207,10 +207,10 @@ export function MessageList({ channelId }: { channelId: string }) {
 
     const lastReadId = lastReadIdSnapshotRef.current;
     if (!lastReadId) {
-      // No read cursor — no unread indicators
-      setEntryUnreadCount(0);
-      setShowNewLine(false);
-      setShowTopBanner(false);
+      // No read cursor — channel never visited, all messages are unread
+      setEntryUnreadCount(messages.length);
+      setShowNewLine(true);
+      setShowTopBanner(true);
       unreadComputedForRef.current = channelId;
       return;
     }
@@ -582,8 +582,17 @@ export function MessageList({ channelId }: { channelId: string }) {
             <span
               style={{ fontWeight: 600, cursor: "pointer", padding: "0 var(--space-xs)" }}
               onClick={() => {
+                // Ack the latest message to clear unread state
+                if (messages?.length) {
+                  const lastMsg = messages[messages.length - 1];
+                  if (lastMsg && !lastMsg.id.startsWith("pending-")) {
+                    useReadStateStore.getState().markRead(channelId, lastMsg.id);
+                    api.ackMessage(channelId, lastMsg.id).catch(() => {});
+                  }
+                }
                 scrollToBottom();
                 setShowTopBanner(false);
+                setShowNewLine(false);
               }}
             >Mark as Read</span>
           </div>
@@ -607,9 +616,18 @@ export function MessageList({ channelId }: { channelId: string }) {
                 7 * 60 * 1000;
             const eager = i >= messages.length - EAGER_COUNT;
 
-            // NEW separator: show before the first message after lastReadId
+            // NEW separator logic:
+            // Case A: lastReadId is in loaded messages → show between lastReadId and next msg
+            // Case B: lastReadId is NOT in loaded messages (too old) → show before first message
+            // Case C: lastReadId is null (never visited) → show before first message
             const lastReadId = lastReadIdSnapshotRef.current;
-            const isFirstUnread = showNewLine && lastReadId && prev && prev.id === lastReadId && msg.id !== lastReadId;
+            const lastReadIdInMessages = lastReadId ? messages.some((m) => m.id === lastReadId) : false;
+            const isFirstUnread = showNewLine && (
+              // Case A: prev message is the last-read one
+              (lastReadId && lastReadIdInMessages && prev && prev.id === lastReadId) ||
+              // Case B & C: lastReadId not in messages or null → separator before first message
+              (i === 0 && (!lastReadId || !lastReadIdInMessages))
+            );
 
             return (
               <div key={msg.id}>
