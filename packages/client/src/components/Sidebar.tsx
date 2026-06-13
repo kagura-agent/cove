@@ -39,7 +39,7 @@ function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSe
       <span style={styles.hash}>#</span>
       <span style={{ ...styles.channelName, ...(isUnread && !isActive ? { color: "var(--interactive-active)", fontWeight: 600 } : {}) }}>{name}</span>
       {isMentioned && !isActive && (
-        <span style={{ marginLeft: "auto", background: "var(--status-danger, #ed4245)", color: "#fff", borderRadius: 8, minWidth: 16, height: 16, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: "0 4px" }}>{mentionCount}</span>
+        <span style={{ marginLeft: "auto", background: "var(--status-danger, #ed4245)", color: "#fff", borderRadius: 8, minWidth: 16, height: 16, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: "0 4px" }}>{mentionCount > 99 ? "99+" : mentionCount}</span>
       )}
       <Button
         type="text"

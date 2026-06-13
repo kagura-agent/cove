@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useLayoutEffect } from "react";
+import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
 import { Button } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -38,6 +38,12 @@ export function MessageInput({ channelId }: { channelId: string }) {
   // Track active mentions: displayName → userId
   const mentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
+
+  // Clear mention state when switching channels
+  useEffect(() => {
+    mentionMapRef.current.clear();
+    setShowMention(false);
+  }, [channelId]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -84,11 +90,12 @@ export function MessageInput({ channelId }: { channelId: string }) {
     let text = content.trim();
     if (!text) return;
     // Convert display mentions (@username) to wire format (<@userId>)
-    // Replace longer usernames first to avoid substring collision
+    // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
     const entries = [...mentionMapRef.current.entries()]
       .sort((a, b) => b[0].length - a[0].length);
     for (const [username, userId] of entries) {
-      text = text.replaceAll(`@${username}`, `<@${userId}>`);
+      const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      text = text.replace(new RegExp(`@${escaped}(?!\\w)`, "g"), `<@${userId}>`);
     }
     mentionMapRef.current.clear();
     setContent("");
@@ -189,6 +196,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
         onKeyDown={handleKeyDown}
         onSelect={syncCursor}
         onClick={syncCursor}
+        onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
         placeholder="Say something…"
         aria-label="Message"
         maxLength={2000}

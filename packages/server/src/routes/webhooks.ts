@@ -194,6 +194,13 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
 
     repos.channels.updateLastMessageId(webhook.channel_id, message.id);
 
+    // Increment mention_count for each mentioned user
+    if (message.mentions?.length) {
+      for (const mentioned of message.mentions) {
+        repos.readStates.incrementMentionCount(mentioned.id, webhook.channel_id);
+      }
+    }
+
     dispatcher?.messageCreate(message);
 
     return c.json(message, 201);

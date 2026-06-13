@@ -201,7 +201,7 @@ export class MessagesRepo {
       "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, webhook_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(id, channelId, null, webhookName, content, now, null, null, webhookId);
 
-    return {
+    const msg: Message = {
       id,
       channel_id: channelId,
       content,
@@ -225,6 +225,11 @@ export class MessagesRepo {
       mention_everyone: false,
       webhook_id: webhookId,
     };
+
+    // Resolve @mentions in webhook messages
+    this.resolveMentions([msg]);
+
+    return msg;
   }
 
   update(channelId: string, messageId: string, content: string): Message | null {

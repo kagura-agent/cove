@@ -219,7 +219,10 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage }: MessageI
   }
 
   // Check if current user is mentioned
-  const isMentioned = currentUserId ? message.mentions?.some(u => u.id === currentUserId) : false;
+  // Highlight if current user is mentioned, but not if the message is from the current user
+  const isMentioned = currentUserId && message.author.id !== currentUserId
+    ? message.mentions?.some(u => u.id === currentUserId)
+    : false;
   const mentionHighlight = isMentioned ? { background: "color-mix(in srgb, #faa61a 8%, transparent)", borderLeft: "2px solid #faa61a" } : {};
 
   if (isGroupStart) {
