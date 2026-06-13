@@ -13,6 +13,8 @@ import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
+// Track which messages have already incremented mention count (prevents double-counting on MESSAGE_UPDATE)
+const mentionedMessageIds = new Set<string>();
 
 function subscribe<K extends keyof GatewayEventMap>(event: K, handler: (data: GatewayEventMap[K]) => void): void {
   dispatcher.on(event, handler);
@@ -44,6 +46,11 @@ export function setupGatewaySubscriptions(): void {
     const activeChannelId = useChannelStore.getState().activeChannelId;
     if (msg.author.id !== selfId && msg.channel_id !== activeChannelId) {
       useReadStateStore.getState().setUnread(msg.channel_id);
+      // Mark mentioned if current user is in mentions
+      if (selfId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
+        mentionedMessageIds.add(msg.id);
+        useReadStateStore.getState().setMentioned(msg.channel_id);
+      }
     }
 
     // Auto-ack incoming messages in the active channel from other users
@@ -53,7 +60,17 @@ export function setupGatewaySubscriptions(): void {
   });
 
   subscribe("MESSAGE_UPDATE", (msg) => {
-    useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp);
+    useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp, msg.mentions);
+    // Check if an edit added a mention of the current user (draft streaming)
+    // Only increment if this message hasn't already been counted as a mention
+    const selfId = useUserStore.getState().id;
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
+      if (!mentionedMessageIds.has(msg.id)) {
+        mentionedMessageIds.add(msg.id);
+        useReadStateStore.getState().setMentioned(msg.channel_id);
+      }
+    }
   });
 
   subscribe("MESSAGE_DELETE", (data) => {
@@ -127,6 +144,11 @@ export function setupGatewaySubscriptions(): void {
       const activeGuildChannels = data.guilds[0].channels ?? [];
       if (activeGuildChannels.length > 0 && !channelStore.activeChannelId) {
         channelStore.setActiveChannel(activeGuildChannels[0].id);
+      }
+
+      // Pre-fetch members for all guilds (needed for @mention autocomplete)
+      for (const guild of guilds) {
+        useMemberStore.getState().fetchMembers(guild.id).catch(() => {});
       }
     }
 
@@ -206,4 +228,5 @@ export function teardownGatewaySubscriptions(): void {
     clearTimeout(id);
   }
   typingTimeoutIds.clear();
+  mentionedMessageIds.clear();
 }

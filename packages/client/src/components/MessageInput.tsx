@@ -1,10 +1,11 @@
-import { useRef, useState, useCallback, useLayoutEffect } from "react";
+import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
 import { Button } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
+import { MentionAutocomplete } from "./MentionAutocomplete";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -29,9 +30,20 @@ const textareaStyle: CSSProperties = {
 
 export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
+  const [cursorPos, setCursorPos] = useState(0);
+  const [showMention, setShowMention] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const mentionHasResults = useRef(false);
+  // Track active mentions: displayName → userId
+  const mentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
+
+  // Clear mention state when switching channels
+  useEffect(() => {
+    mentionMapRef.current.clear();
+    setShowMention(false);
+  }, [channelId]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -48,13 +60,26 @@ export function MessageInput({ channelId }: { channelId: string }) {
     }
   }, [channelId]);
 
+  function syncCursor() {
+    const ta = textareaRef.current;
+    if (ta) setCursorPos(ta.selectionStart);
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setContent(e.target.value);
+    setCursorPos(e.target.selectionStart);
+    // Check if we should show mention autocomplete
+    const before = e.target.value.slice(0, e.target.selectionStart);
+    setShowMention(/@\w*$/.test(before));
     if (e.target.value.trim()) sendTypingThrottled();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
+    // Only intercept keys when mention autocomplete is actually visible with results
+    if (showMention && mentionHasResults.current) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
@@ -62,8 +87,17 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   async function handleSubmit() {
-    const text = content.trim();
+    let text = content.trim();
     if (!text) return;
+    // Convert display mentions (@username) to wire format (<@userId>)
+    // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
+    const entries = [...mentionMapRef.current.entries()]
+      .sort((a, b) => b[0].length - a[0].length);
+    for (const [username, userId] of entries) {
+      const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      text = text.replace(new RegExp(`@${escaped}(?!\\w)`, "g"), `<@${userId}>`);
+    }
+    mentionMapRef.current.clear();
     setContent("");
     const ta = textareaRef.current;
     if (ta) {
@@ -122,13 +156,47 @@ export function MessageInput({ channelId }: { channelId: string }) {
     }
   }
 
+  const handleMentionSelect = useCallback((userId: string, username: string, startPos: number, endPos: number) => {
+    const before = content.slice(0, startPos);
+    const after = content.slice(endPos);
+    // Display @username in textarea, convert to <@id> on send
+    const mention = `@${username} `;
+    const newContent = before + mention + after;
+    mentionMapRef.current.set(username, userId);
+    setContent(newContent);
+    setShowMention(false);
+    const newCursor = startPos + mention.length;
+    setCursorPos(newCursor);
+    // Focus and set cursor position
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.selectionStart = newCursor;
+        ta.selectionEnd = newCursor;
+      }
+    });
+  }, [content]);
+
   return (
-    <div style={{ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }}>
+    <div style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}>
+      {showMention && (
+        <MentionAutocomplete
+          text={content}
+          cursorPos={cursorPos}
+          onSelect={handleMentionSelect}
+          onClose={() => setShowMention(false)}
+          onHasResults={(has) => { mentionHasResults.current = has; }}
+        />
+      )}
       <textarea
         ref={textareaRef}
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onSelect={syncCursor}
+        onClick={syncCursor}
+        onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
         placeholder="Say something…"
         aria-label="Message"
         maxLength={2000}
