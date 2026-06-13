@@ -158,6 +158,8 @@ export function MessageList({ channelId }: { channelId: string }) {
 
   // Snapshot the last-read ID when entering a channel so the NEW line stays fixed
   const lastReadIdSnapshotRef = useRef<string | undefined>(undefined);
+  // Track whether the user has actively scrolled (not initial load)
+  const userHasScrolledRef = useRef(false);
   // Track unread count for the banner
   const [unreadAboveCount, setUnreadAboveCount] = useState(0);
   // Track if we should show the NEW line (hide after user scrolls past it)
@@ -189,12 +191,13 @@ export function MessageList({ channelId }: { channelId: string }) {
     lastReadIdSnapshotRef.current = lastReadId;
     setShowNewLine(!!lastReadId);
     setUnreadAboveCount(0);
+    userHasScrolledRef.current = false;
   }, [channelId, getLastReadId]);
 
   // Compute unread count when messages change
   useEffect(() => {
-    // If user is at the bottom watching messages arrive, don't show unread banner
-    if (wasNearBottomRef.current) {
+    // If user has actively scrolled to bottom, clear indicators
+    if (userHasScrolledRef.current && wasNearBottomRef.current) {
       setUnreadAboveCount(0);
       setShowNewLine(false);
       return;
@@ -295,6 +298,7 @@ export function MessageList({ channelId }: { channelId: string }) {
       const id = channelIdRef.current;
       const atBottom = isNearBottom(container);
       wasNearBottomRef.current = atBottom;
+      userHasScrolledRef.current = true;
 
       // Clear unread indicators when user scrolls to bottom
       if (atBottom && (unreadAboveCount > 0 || showNewLine)) {
@@ -395,9 +399,6 @@ export function MessageList({ channelId }: { channelId: string }) {
         const mem = scrollMemory.get(channelId);
         if (!mem || mem.wasAtBottom) {
           pendingScrollToBottomRef.current = true;
-          // User will be at bottom — no unread indicators needed
-          setShowNewLine(false);
-          setUnreadAboveCount(0);
         }
 
         // Auto-ack last message
