@@ -41,6 +41,9 @@ export function sendMessage(channelId: string, content: string, nonce?: string, 
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }
+export function deleteMessage(channelId: string, messageId: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}`, { method: "DELETE" });
+}
 export function createChannel(guildId: string, name: string, topic?: string) {
   return api<Channel>(`${API_PREFIX}/guilds/${guildId}/channels`, {
     method: "POST", body: JSON.stringify({ name, topic }),
