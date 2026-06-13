@@ -578,7 +578,7 @@ export function MessageList({ channelId }: { channelId: string }) {
               fontSize: "var(--font-size-sm)", fontWeight: 500,
             }}
           >
-            <span>{entryUnreadCount} new {entryUnreadCount === 1 ? "message" : "messages"}</span>
+            <span>{entryUnreadCount}{entryUnreadCount >= (messages?.length ?? 0) ? "+" : ""} new {entryUnreadCount === 1 ? "message" : "messages"}</span>
             <span
               style={{ fontWeight: 600, cursor: "pointer", padding: "0 var(--space-xs)" }}
               onClick={() => {
@@ -607,7 +607,10 @@ export function MessageList({ channelId }: { channelId: string }) {
               This is the beginning of the conversation
             </div>
           )}
-          {messages.map((msg, i) => {
+          {(() => {
+          const lastReadId = lastReadIdSnapshotRef.current;
+          const lastReadIdInMessages = lastReadId ? messages.some((m) => m.id === lastReadId) : false;
+          return messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart =
             !prev ||
@@ -620,12 +623,8 @@ export function MessageList({ channelId }: { channelId: string }) {
             // Case A: lastReadId is in loaded messages → show between lastReadId and next msg
             // Case B: lastReadId is NOT in loaded messages (too old) → show before first message
             // Case C: lastReadId is null (never visited) → show before first message
-            const lastReadId = lastReadIdSnapshotRef.current;
-            const lastReadIdInMessages = lastReadId ? messages.some((m) => m.id === lastReadId) : false;
             const isFirstUnread = showNewLine && (
-              // Case A: prev message is the last-read one
               (lastReadId && lastReadIdInMessages && prev && prev.id === lastReadId) ||
-              // Case B & C: lastReadId not in messages or null → separator before first message
               (i === 0 && (!lastReadId || !lastReadIdInMessages))
             );
 
@@ -646,27 +645,28 @@ export function MessageList({ channelId }: { channelId: string }) {
                 </LazyMessageItem>
               </div>
             );
-          })}
+          });
+          })()}
         <div ref={bottomRef} />
         </div>
+        {newMessagesBelowCount > 0 && (
+          <div
+            style={{
+              position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+              background: "var(--accent, #5865f2)", color: "#fff",
+              borderRadius: 20, padding: "var(--space-xs) var(--space-md)",
+              fontSize: "var(--font-size-sm)", fontWeight: 500,
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+            }}
+            onClick={() => {
+              scrollToBottom();
+              setNewMessagesBelowCount(0);
+            }}
+          >
+            {newMessagesBelowCount} new {newMessagesBelowCount === 1 ? "message" : "messages"} ↓
+          </div>
+        )}
       </div>
-      {newMessagesBelowCount > 0 && (
-        <div
-          style={{
-            position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)", zIndex: 2,
-            background: "var(--accent, #5865f2)", color: "#fff",
-            borderRadius: 20, padding: "var(--space-xs) var(--space-md)",
-            fontSize: "var(--font-size-sm)", fontWeight: 500,
-            cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-          }}
-          onClick={() => {
-            scrollToBottom();
-            setNewMessagesBelowCount(0);
-          }}
-        >
-          {newMessagesBelowCount} new {newMessagesBelowCount === 1 ? "message" : "messages"} ↓
-        </div>
-      )}
       <TypingIndicator channelId={channelId} />
       {contextMenu && (
         <MessageContextMenu
