@@ -154,6 +154,19 @@ export function MessageList({ channelId }: { channelId: string }) {
   const [hasMore, setHasMore] = useState(true);
   const currentUserId = useUserStore((s) => s.id);
   const pendingStatus = useMessageStore((s) => s.pendingStatus);
+  const getLastReadId = useReadStateStore((s) => s.getLastReadId);
+
+  // ── Unread indicators (per confirmed spec) ─────────────────────
+  // Snapshot the last-read ID on channel entry — frozen, never changes
+  const lastReadIdSnapshotRef = useRef<string | undefined>(undefined);
+  // Whether the unread count has been computed for this channel entry
+  const unreadComputedForRef = useRef<string | null>(null);
+  // Entry indicators (frozen on channel entry)
+  const [showNewLine, setShowNewLine] = useState(false);
+  const [entryUnreadCount, setEntryUnreadCount] = useState(0);
+  const [showTopBanner, setShowTopBanner] = useState(false);
+  // Real-time indicator: bottom pill for messages arriving while scrolled up
+  const [newMessagesBelowCount, setNewMessagesBelowCount] = useState(0);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: Message } | null>(null);
@@ -176,7 +189,57 @@ export function MessageList({ channelId }: { channelId: string }) {
     setLoadingOlder(fetchingOlder.get(channelId) === true);
     // Clear any pending prepend scroll restore from the old channel
     pendingPrependRestoreRef.current = null;
-  }, [channelId]);
+    // Snapshot the last-read ID for the NEW separator
+    const lastReadId = getLastReadId(channelId);
+    lastReadIdSnapshotRef.current = lastReadId;
+    // Reset all unread indicators for fresh computation
+    setShowNewLine(false);
+    setEntryUnreadCount(0);
+    setShowTopBanner(false);
+    setNewMessagesBelowCount(0);
+    unreadComputedForRef.current = null;
+  }, [channelId, getLastReadId]);
+
+  // Compute unread count ONCE when messages first load for this channel.
+  useEffect(() => {
+    if (unreadComputedForRef.current === channelId) return;
+    if (!messages?.length) return;
+
+    const lastReadId = lastReadIdSnapshotRef.current;
+    if (!lastReadId) {
+      // No read cursor — channel never visited, all messages are unread
+      setEntryUnreadCount(messages.length);
+      setShowNewLine(true);
+      setShowTopBanner(true);
+      unreadComputedForRef.current = channelId;
+      return;
+    }
+
+    const lastReadIdx = messages.findIndex((m) => m.id === lastReadId);
+    if (lastReadIdx === -1) {
+      // lastReadId not in loaded messages — all visible are unread
+      setEntryUnreadCount(messages.length);
+      setShowNewLine(true);
+      setShowTopBanner(true);
+      unreadComputedForRef.current = channelId;
+      return;
+    }
+
+    if (lastReadIdx === messages.length - 1) {
+      // Last read is the latest message — no unread
+      setEntryUnreadCount(0);
+      setShowNewLine(false);
+      setShowTopBanner(false);
+      unreadComputedForRef.current = channelId;
+      return;
+    }
+
+    const count = messages.length - lastReadIdx - 1;
+    setEntryUnreadCount(count);
+    setShowNewLine(true);
+    setShowTopBanner(true);
+    unreadComputedForRef.current = channelId;
+  }, [channelId, messages]);
 
   /** Previous message count — used to detect newly-added messages. */
   const prevCountRef = useRef(0);
@@ -261,6 +324,12 @@ export function MessageList({ channelId }: { channelId: string }) {
       const id = channelIdRef.current;
       const atBottom = isNearBottom(container);
       wasNearBottomRef.current = atBottom;
+
+      // Per spec: scrolling to bottom clears top banner and bottom pill
+      if (atBottom) {
+        setShowTopBanner(false);
+        setNewMessagesBelowCount(0);
+      }
       const dist = distanceFromBottom(container);
       cappedMapSet(scrollMemory, id, {
         distanceFromBottom: dist,
@@ -431,11 +500,16 @@ export function MessageList({ channelId }: { channelId: string }) {
     if (messages.length > prevCountRef.current && !wasPrepend) {
       const lastMsg = messages[messages.length - 1];
       const isOwnMessage = lastMsg && lastMsg.id.startsWith("pending-");
+      if (isOwnMessage) {
+        // Per spec: sending a message clears the NEW line
+        setShowNewLine(false);
+      }
       if (isOwnMessage || wasNearBottomRef.current) {
         requestAnimationFrame(() => scrollToBottom());
-        // After scrolling for own message, mark as near-bottom so
-        // subsequent messages from others also auto-scroll.
         wasNearBottomRef.current = true;
+      } else {
+        // User is scrolled up and a new message arrived — show bottom pill
+        setNewMessagesBelowCount((c) => c + 1);
       }
     }
     prevCountRef.current = messages.length;
@@ -494,6 +568,35 @@ export function MessageList({ channelId }: { channelId: string }) {
             <Spin size="small" />
           </div>
         )}
+        {showTopBanner && entryUnreadCount > 0 && (
+          <div
+            style={{
+              position: "absolute", top: 0, left: 0, right: 0, zIndex: 2,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "var(--space-xs) var(--content-pad)",
+              background: "var(--accent, #5865f2)", color: "#fff",
+              fontSize: "var(--font-size-sm)", fontWeight: 500,
+            }}
+          >
+            <span>{entryUnreadCount}{entryUnreadCount >= (messages?.length ?? 0) ? "+" : ""} new {entryUnreadCount === 1 ? "message" : "messages"}</span>
+            <span
+              style={{ fontWeight: 600, cursor: "pointer", padding: "0 var(--space-xs)" }}
+              onClick={() => {
+                // Ack the latest message to clear unread state
+                if (messages?.length) {
+                  const lastMsg = messages[messages.length - 1];
+                  if (lastMsg && !lastMsg.id.startsWith("pending-")) {
+                    useReadStateStore.getState().markRead(channelId, lastMsg.id);
+                    api.ackMessage(channelId, lastMsg.id).catch(() => {});
+                  }
+                }
+                scrollToBottom();
+                setShowTopBanner(false);
+                setShowNewLine(false);
+              }}
+            >Mark as Read</span>
+          </div>
+        )}
         <div
           ref={scrollContainerCallbackRef}
           style={listStyle}
@@ -504,7 +607,10 @@ export function MessageList({ channelId }: { channelId: string }) {
               This is the beginning of the conversation
             </div>
           )}
-          {messages.map((msg, i) => {
+          {(() => {
+          const lastReadId = lastReadIdSnapshotRef.current;
+          const lastReadIdInMessages = lastReadId ? messages.some((m) => m.id === lastReadId) : false;
+          return messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart =
             !prev ||
@@ -512,19 +618,54 @@ export function MessageList({ channelId }: { channelId: string }) {
               Date.parse(msg.timestamp) - Date.parse(prev.timestamp) >
                 7 * 60 * 1000;
             const eager = i >= messages.length - EAGER_COUNT;
-            return (
-              <LazyMessageItem
-                key={msg.id}
-                messageId={msg.id}
-                eager={eager}
-                scrollRoot={scrollRoot}
-              >
-                <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} />
-              </LazyMessageItem>
+
+            // NEW separator logic:
+            // Case A: lastReadId is in loaded messages → show between lastReadId and next msg
+            // Case B: lastReadId is NOT in loaded messages (too old) → show before first message
+            // Case C: lastReadId is null (never visited) → show before first message
+            const isFirstUnread = showNewLine && (
+              (lastReadId && lastReadIdInMessages && prev && prev.id === lastReadId) ||
+              (i === 0 && (!lastReadId || !lastReadIdInMessages))
             );
-          })}
+
+            return (
+              <div key={msg.id}>
+                {isFirstUnread && (
+                  <div style={{ display: "flex", alignItems: "center", padding: "var(--space-xs) var(--content-pad)", gap: "var(--space-sm)" }} data-new-separator>
+                    <div style={{ flex: 1, height: 1, background: "var(--status-danger, #ed4245)" }} />
+                    <span style={{ color: "var(--status-danger, #ed4245)", fontSize: "var(--font-size-xs)", fontWeight: 700, textTransform: "uppercase", flexShrink: 0 }}>New</span>
+                  </div>
+                )}
+                <LazyMessageItem
+                  messageId={msg.id}
+                  eager={eager}
+                  scrollRoot={scrollRoot}
+                >
+                  <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} />
+                </LazyMessageItem>
+              </div>
+            );
+          });
+          })()}
         <div ref={bottomRef} />
         </div>
+        {newMessagesBelowCount > 0 && (
+          <div
+            style={{
+              position: "absolute", bottom: 48, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+              background: "var(--accent, #5865f2)", color: "#fff",
+              borderRadius: 20, padding: "var(--space-xs) var(--space-md)",
+              fontSize: "var(--font-size-sm)", fontWeight: 500,
+              cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+            }}
+            onClick={() => {
+              scrollToBottom();
+              setNewMessagesBelowCount(0);
+            }}
+          >
+            {newMessagesBelowCount} new {newMessagesBelowCount === 1 ? "message" : "messages"} ↓
+          </div>
+        )}
       </div>
       <TypingIndicator channelId={channelId} />
       {contextMenu && (
