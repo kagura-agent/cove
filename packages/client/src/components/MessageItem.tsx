@@ -215,7 +215,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const mentionUsers = new Map<string, string>();
   if (message.mentions) {
     for (const u of message.mentions) {
-      mentionUsers.set(u.id, u.username);
+      mentionUsers.set(u.id, u.global_name || u.username);
     }
   }
 
