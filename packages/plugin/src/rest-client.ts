@@ -176,8 +176,10 @@ export class CoveRestClient {
   async getChannelFile(channelId: string, filename: string): Promise<{ content: string; filename: string; size: number } | null> {
     try {
       return await this.request("GET", `${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`);
-    } catch {
-      return null;
+    } catch (err) {
+      // 404 (not found) and 403 (no permission) are expected — return null
+      if (err instanceof Error && /\b(404|403)\b/.test(err.message)) return null;
+      throw err;
     }
   }
 }

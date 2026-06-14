@@ -175,8 +175,11 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
   const [showNewFile, setShowNewFile] = useState(false);
 
   useEffect(() => {
+    // Clear stale file selection when switching channels
+    clearFileContent();
+    setEditing(false);
     fetchFiles(channelId);
-  }, [channelId, fetchFiles]);
+  }, [channelId, fetchFiles, clearFileContent]);
 
   const handleFileClick = useCallback(
     (filename: string) => {
@@ -209,7 +212,11 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
 
   const handleDelete = useCallback(async () => {
     if (!selectedFile) return;
-    await deleteFile(channelId, selectedFile);
+    try {
+      await deleteFile(channelId, selectedFile);
+    } catch {
+      message.error("Failed to delete file");
+    }
   }, [channelId, selectedFile, deleteFile]);
 
   const handleCreateFile = useCallback(async () => {
