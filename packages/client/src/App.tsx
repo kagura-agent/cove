@@ -12,6 +12,8 @@ import { UserBar } from "./components/UserBar";
 import { MessageInput } from "./components/MessageInput";
 import { ReplyBar } from "./components/ReplyBar";
 import { MemberList } from "./components/MemberList";
+import { FilesSidebar } from "./components/FilesSidebar";
+import { useChannelFilesStore } from "./stores/useChannelFilesStore";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
@@ -147,6 +149,8 @@ export default function App() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
@@ -259,8 +263,9 @@ export default function App() {
         <ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
         <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
+        <div onClick={() => { setFilesOpen(false); setFilesStoreOpen(false); }} style={{...styles.overlay, ...(filesOpen ? styles.overlayVisible : {})}} className="mobile-files-backdrop" />
 
-        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
+        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""} ${filesOpen ? "files-open" : ""}`}>
           <div style={styles.sidebarColumn} className="sidebar-column">
             <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
             <div style={styles.sidebarFooter} className="sidebar-footer-cell">
@@ -270,7 +275,22 @@ export default function App() {
 
           <div style={styles.chatColumn} className="chat-column">
             <div style={styles.chatBody} className="chat-body-cell">
-              <ChatArea onMenuClick={() => setSidebarOpen(!sidebarOpen)} onMembersClick={() => setMembersOpen(!membersOpen)} membersOpen={membersOpen} />
+              <ChatArea
+                onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+                onMembersClick={() => {
+                  const next = !membersOpen;
+                  setMembersOpen(next);
+                  if (next) { setFilesOpen(false); setFilesStoreOpen(false); }
+                }}
+                membersOpen={membersOpen}
+                onFilesClick={() => {
+                  const next = !filesOpen;
+                  setFilesOpen(next);
+                  setFilesStoreOpen(next);
+                  if (next) setMembersOpen(false);
+                }}
+                filesOpen={filesOpen}
+              />
             </div>
             <div style={styles.chatFooter} className="chat-footer-cell">
               {activeChannelId && <ReplyBar channelId={activeChannelId} />}
@@ -279,6 +299,7 @@ export default function App() {
           </div>
 
           {membersOpen && <MemberList />}
+          {filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
         </div>
 
         <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -469,12 +469,14 @@ textarea:focus-visible {
 
 .mobile-only { display: none !important; }
 .mobile-sidebar-backdrop,
-.mobile-members-backdrop { display: none; }
+.mobile-members-backdrop,
+.mobile-files-backdrop { display: none; }
 
 @media (max-width: 640px) {
   .mobile-only { display: inline-flex !important; }
   .mobile-sidebar-backdrop,
-  .mobile-members-backdrop { display: block; }
+  .mobile-members-backdrop,
+  .mobile-files-backdrop { display: block; }
 
   /* Grid collapses to single column on mobile */
   .app-layout {
@@ -519,6 +521,22 @@ textarea:focus-visible {
     will-change: transform;
   }
   .members-open .member-list {
+    transform: translateX(0);
+  }
+
+  .files-sidebar {
+    position: fixed !important;
+    z-index: 30 !important;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--member-list-width) !important;
+    min-width: var(--member-list-width) !important;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+  .files-open .files-sidebar {
     transform: translateX(0);
   }
 

@@ -12,6 +12,13 @@ import { API_PREFIX } from "@cove/shared";
 const MAX_RETRIES = 3;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+export class CoveApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "CoveApiError";
+  }
+}
+
 export class CoveRestClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -61,7 +68,7 @@ export class CoveRestClient {
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+          throw new CoveApiError(res.status, `Cove API ${method} ${path} failed: ${res.status} ${text}`);
         }
 
         if (res.status === 204) return undefined as unknown as T;
@@ -160,8 +167,7 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/channels/${channelId}/webhooks`);
   }
 
-  /**
-   * POST /api/v10/webhooks/:id/:token — execute webhook (no auth needed).
+  /** POST /api/v10/webhooks/:id/:token — execute webhook (no auth needed).
    * Sends a message to the webhook's channel with the webhook's identity.
    * Use `username` to override display name (e.g. "From #home").
    */
@@ -171,5 +177,16 @@ export class CoveRestClient {
       ...(username ? { username } : {}),
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     });
+  }
+
+  /** GET /api/v10/channels/:channelId/files/:filename — get a channel file. */
+  async getChannelFile(channelId: string, filename: string, signal?: AbortSignal): Promise<{ content: string; filename: string; size: number } | null> {
+    try {
+      return await this.request("GET", `${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`, undefined, signal);
+    } catch (err) {
+      // 404 (not found) and 403 (no permission) are expected — return null
+      if (err instanceof CoveApiError && (err.status === 404 || err.status === 403)) return null;
+      throw err;
+    }
   }
 }

@@ -263,6 +263,18 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Yield event loop so WS typing frame flushes before heavy bootstrap work
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
+    // Read channel's cove.md for bot context injection
+    let coveMdContent: string | undefined;
+    try {
+      const coveMd = await restClient.getChannelFile(channelId, 'cove.md', AbortSignal.timeout(2000));
+      if (coveMd?.content && Buffer.byteLength(coveMd.content, 'utf8') <= 8000) {
+        coveMdContent = coveMd.content;
+      }
+    } catch (err) {
+      // cove.md is optional — log unexpected errors for observability but don't block dispatch
+      log?.warn?.(`cove: failed to fetch cove.md for [${channelId}]: ${err instanceof Error ? err.message : err}`);
+    }
+
     try {
       await dispatchInboundDirectDmWithRuntime({
           cfg,
@@ -286,6 +298,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             SenderId: senderId,
             SenderName: senderName,
             ChannelId: channelId,
+            ...(coveMdContent ? {
+              UntrustedStructuredContext: [{
+                label: "Channel cove.md",
+                source: "cove",
+                type: "channel-context",
+                payload: coveMdContent,
+              }],
+            } : {}),
             ...(message.message_reference?.message_id ? {
               ReplyToId: message.message_reference.message_id,
               ReplyToBody: message.referenced_message?.content,

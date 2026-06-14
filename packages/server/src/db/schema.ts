@@ -94,6 +94,17 @@ export function createAllTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_reactions_message_id ON reactions(message_id);
 
+    CREATE TABLE IF NOT EXISTS channel_files (
+      channel_id   TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      filename     TEXT NOT NULL,
+      content      TEXT NOT NULL DEFAULT '',
+      content_type TEXT NOT NULL DEFAULT 'text/plain',
+      size         INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL,
+      updated_at   INTEGER NOT NULL,
+      PRIMARY KEY (channel_id, filename)
+    );
+
     CREATE TABLE IF NOT EXISTS channel_permission_overwrites (
       channel_id   TEXT NOT NULL,
       target_id    TEXT NOT NULL,
