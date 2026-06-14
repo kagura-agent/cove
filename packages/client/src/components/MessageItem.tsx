@@ -274,6 +274,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
                 cursor: "pointer",
               }}
             >
+              {/* TODO: add nick (guild member nickname) when server-level nick support lands */}
               {message.author.global_name || message.author.username}
             </span>
             {isBot && <span style={botBadgeStyle}>APP</span>}

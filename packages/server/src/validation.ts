@@ -22,6 +22,23 @@ export function validateFiniteNumber(value: unknown, name: string): string | nul
   return null;
 }
 
+/**
+ * Reject display names containing control characters, zero-width / invisible
+ * formatting characters, or bidirectional-override codepoints.
+ */
+const DISPLAY_NAME_BAD_CHARS =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF]/;
+
+export function validateDisplayName(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return "global_name must be a string";
+  if (DISPLAY_NAME_BAD_CHARS.test(value)) {
+    return "global_name contains invalid characters";
+  }
+  return null;
+}
+
 export function validationError(c: Context, message: string) {
   return c.json({ message, code: 50035 }, 400);
 }

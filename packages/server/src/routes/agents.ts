@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
-import { validateString, validationError, parseJsonBody } from "../validation.js";
+import { validateString, validateDisplayName, validationError, parseJsonBody } from "../validation.js";
 import { unknownGuild } from "./helpers.js";
 
 export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
@@ -87,7 +87,23 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     const gnErr = validateString(body.global_name, "global_name", { maxLength: 80 });
     if (gnErr) return validationError(c, gnErr);
 
-    const updated = repos.users.update(id!, body)!;
+    const dnErr = validateDisplayName(body.global_name);
+    if (dnErr) return validationError(c, dnErr);
+
+    // Normalize empty / whitespace-only global_name to null
+    const normalizedGlobalName =
+      body.global_name !== undefined
+        ? (typeof body.global_name === "string" && body.global_name.trim() === "" ? null : body.global_name)
+        : undefined;
+
+    // Build an explicit patch object — only pass fields the client actually sent
+    const patch: { username?: string; avatar?: string | null; bio?: string | null; global_name?: string | null } = {};
+    if (body.username !== undefined) patch.username = body.username;
+    if (body.avatar !== undefined) patch.avatar = body.avatar;
+    if (body.bio !== undefined) patch.bio = body.bio;
+    if (normalizedGlobalName !== undefined) patch.global_name = normalizedGlobalName;
+
+    const updated = repos.users.update(id!, patch)!;
     return c.json(updated);
   });
 

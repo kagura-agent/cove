@@ -176,7 +176,7 @@ function ProfileSection() {
         >{saved ? "✓ Saved" : "Save"}</button>
       </div>
       <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>
-        Leave empty to use your Google account name.
+        Leave empty to use your account name.
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ export class UsersRepo {
       return null;
     }
 
-    return { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: (row as UserRow).global_name ?? null, expires_at: row.expires_at };
+    return { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: row.global_name ?? null, expires_at: row.expires_at };
   }
 
   refreshTTL(id: string): void {
