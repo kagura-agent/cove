@@ -3,7 +3,7 @@ import { createApp } from "../app.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
-import { API_PREFIX } from "@cove/shared";
+import { API_PREFIX, PermissionFlags } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Channel Files API", () => {
@@ -342,6 +342,114 @@ describe("Channel Files API", () => {
       expect(res.status).toBe(200);
       const file = await res.json();
       expect(file.content_type).toBe("application/json");
+    });
+  });
+
+  // ─── Bot permission overwrite ───────────────────────────────────────────
+
+  describe("Bot with VIEW_CHANNEL denied", () => {
+    let botToken: string;
+
+    beforeEach(async () => {
+      const now = Date.now();
+      botToken = "bot-denied-token";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("bot-denied", "DeniedBot", null, 1, null, botToken, now, now);
+      db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run(defaultGuildId, "bot-denied", null, "[]", now);
+      // Explicitly deny VIEW_CHANNEL
+      await app.request(`${API_PREFIX}/channels/${generalId}/permissions/bot-denied`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ type: 1, allow: "0", deny: PermissionFlags.VIEW_CHANNEL }),
+      });
+    });
+
+    it("denied bot cannot list files", async () => {
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/files`, {
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("denied bot cannot get file", async () => {
+      // Create a file first as admin
+      await app.request(`${API_PREFIX}/channels/${generalId}/files/cove.md`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ content: "secret context" }),
+      });
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/files/cove.md`, {
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("denied bot cannot create file", async () => {
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/files/test.md`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${botToken}` },
+        body: JSON.stringify({ content: "injected content" }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("denied bot cannot delete file", async () => {
+      // Create a file first as admin
+      await app.request(`${API_PREFIX}/channels/${generalId}/files/test.md`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ content: "content" }),
+      });
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/files/test.md`, {
+        method: "DELETE",
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // ─── Bot with VIEW_CHANNEL granted ─────────────────────────────────────
+
+  describe("Bot with VIEW_CHANNEL granted", () => {
+    let botToken: string;
+
+    beforeEach(async () => {
+      const now = Date.now();
+      botToken = "bot-allowed-token";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("bot-allowed", "AllowedBot", null, 1, null, botToken, now, now);
+      db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run(defaultGuildId, "bot-allowed", null, "[]", now);
+      // Grant VIEW_CHANNEL
+      await app.request(`${API_PREFIX}/channels/${generalId}/permissions/bot-allowed`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" }),
+      });
+    });
+
+    it("granted bot can list files", async () => {
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/files`, {
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("granted bot can create and read files", async () => {
+      const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/files/bot-file.md`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${botToken}` },
+        body: JSON.stringify({ content: "bot content" }),
+      });
+      expect(createRes.status).toBe(200);
+
+      const getRes = await app.request(`${API_PREFIX}/channels/${generalId}/files/bot-file.md`, {
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+      expect(getRes.status).toBe(200);
+      const file = await getRes.json();
+      expect(file.content).toBe("bot content");
     });
   });
 });

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { AppEnv } from "../auth.js";
 import { parseJsonBody, validationError } from "../validation.js";
-import { requireGuildMember, unknownChannel } from "./helpers.js";
+import { requireGuildMember, requireBotChannelPermission, unknownChannel } from "./helpers.js";
 
 const FILENAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}$/;
 const MAX_CONTENT_SIZE = 100 * 1024; // 100KB
@@ -16,6 +16,9 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     const channelId = c.req.param("channelId");
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const files = repos.channelFiles.list(channelId);
     return c.json(files);
@@ -27,8 +30,14 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     const channelId = c.req.param("channelId");
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const filename = c.req.param("filename");
+    if (!FILENAME_RE.test(filename)) {
+      return validationError(c, "Invalid filename");
+    }
     const file = repos.channelFiles.get(channelId, filename);
     if (!file) return c.json({ message: "Unknown File", code: 10014 }, 404);
 
@@ -41,6 +50,9 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     const channelId = c.req.param("channelId");
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {
@@ -53,8 +65,9 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     if (Buffer.byteLength(body.content, "utf8") > MAX_CONTENT_SIZE) {
       return validationError(c, "File content exceeds 100KB limit");
     }
-    if (body.content_type !== undefined && typeof body.content_type !== "string") {
-      return validationError(c, "content_type must be a string");
+    if (body.content_type !== undefined) {
+      if (typeof body.content_type !== "string") return validationError(c, "content_type must be a string");
+      if (body.content_type.length > 255) return validationError(c, "content_type must be at most 255 characters");
     }
 
     const file = repos.channelFiles.upsert(channelId, filename, body.content, body.content_type);
@@ -69,8 +82,14 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     const channelId = c.req.param("channelId");
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const filename = c.req.param("filename");
+    if (!FILENAME_RE.test(filename)) {
+      return validationError(c, "Invalid filename");
+    }
     const deleted = repos.channelFiles.delete(channelId, filename);
     if (!deleted) return c.json({ message: "Unknown File", code: 10014 }, 404);
 

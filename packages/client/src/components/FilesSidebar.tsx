@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Button, Spin, Input, Popconfirm } from "antd";
+import { Button, Spin, Input, Popconfirm, message } from "antd";
 import {
   FileTextOutlined,
   PlusOutlined,
@@ -201,7 +201,7 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
       await saveFile(channelId, selectedFile, editContent);
       setEditing(false);
     } catch {
-      // error logged in store
+      message.error("Failed to save file");
     } finally {
       setSaving(false);
     }
@@ -222,7 +222,7 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
       setShowNewFile(false);
       handleFileClick(name);
     } catch {
-      // error logged in store
+      message.error("Failed to create file");
     } finally {
       setSaving(false);
     }

@@ -267,7 +267,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let coveMdContent: string | undefined;
     try {
       const coveMd = await restClient.getChannelFile(channelId, 'cove.md');
-      if (coveMd?.content && coveMd.content.length <= 8000) {
+      if (coveMd?.content && Buffer.byteLength(coveMd.content, 'utf8') <= 8000) {
         coveMdContent = coveMd.content;
       }
     } catch { /* ignore - cove.md is optional */ }
