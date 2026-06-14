@@ -14,7 +14,7 @@ describe("versioned migration system", () => {
   it("fresh DB gets user_version = 10", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(11);
+    expect(version).toBe(13);
     db.close();
   });
 
@@ -100,7 +100,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(11);
+      expect(version).toBe(13);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -171,7 +171,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(11);
+      expect(version).toBe(13);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -197,7 +197,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(11);
+      expect(version).toBe(13);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -319,7 +319,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(11);
+      expect(version).toBe(13);
 
       db2.close();
     } finally {
@@ -391,7 +391,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(11);
+      expect(db.pragma("user_version", { simple: true })).toBe(13);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };

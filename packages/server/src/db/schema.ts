@@ -29,6 +29,7 @@ export function createAllTables(db: Database.Database): void {
       avatar      TEXT,
       bot         INTEGER NOT NULL DEFAULT 1,
       bio         TEXT,
+      global_name TEXT,
       token       TEXT UNIQUE,
       google_id   TEXT UNIQUE,
       email       TEXT UNIQUE,
@@ -72,6 +73,7 @@ export function createAllTables(db: Database.Database): void {
       email         TEXT,
       username      TEXT,
       avatar        TEXT,
+      global_name   TEXT,
       created_at    INTEGER
     );
 

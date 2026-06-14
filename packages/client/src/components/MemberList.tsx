@@ -36,7 +36,7 @@ function MemberRow({ member, online }: { member: GuildMember; online: boolean })
         </Avatar>
         <StatusDot online={online} />
       </div>
-      <span style={styles.username}>{member.nick || user.username}</span>
+      <span style={styles.username}>{member.nick || user.global_name || user.username}</span>
       {user.bot && <span style={styles.badge}>APP</span>}
     </div>
   );

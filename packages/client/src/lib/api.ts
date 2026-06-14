@@ -81,7 +81,14 @@ export function removeReaction(channelId: string, messageId: string, emoji: stri
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`, { method: "DELETE" });
 }
 export function fetchMe() {
-  return api<{ id: string; username: string; avatar: string | null; bot: boolean }>("/api/auth/me");
+  return api<{ id: string; username: string; avatar: string | null; bot: boolean; global_name?: string | null }>("/api/auth/me");
+}
+
+export function updateMe(fields: { global_name?: string | null }) {
+  return api<{ id: string; username: string; avatar: string | null; global_name: string | null }>(
+    `${API_PREFIX}/users/@me`,
+    { method: "PATCH", body: JSON.stringify(fields) },
+  );
 }
 
 export function fetchPendingStatus() {

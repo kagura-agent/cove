@@ -57,7 +57,11 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   const atStart = atMatch ? beforeCursor.length - atMatch[0].length : -1;
 
   const filtered = query !== null
-    ? members.filter((m) => m.user.username.toLowerCase().includes(query)).slice(0, 10)
+    ? members.filter((m) => {
+        const displayName = (m.user.global_name || m.user.username).toLowerCase();
+        const uname = m.user.username.toLowerCase();
+        return displayName.includes(query) || uname.includes(query);
+      }).slice(0, 10)
     : [];
 
   // Report whether we have results
@@ -84,7 +88,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
       e.stopImmediatePropagation();
       const member = filtered[activeIndex];
       if (member) {
-        onSelect(member.user.id, member.user.username, atStart, cursorPos);
+        onSelect(member.user.id, member.user.global_name || member.user.username, atStart, cursorPos);
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
@@ -113,7 +117,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
             onMouseEnter={() => setActiveIndex(i)}
             onMouseDown={(e) => {
               e.preventDefault();
-              onSelect(member.user.id, member.user.username, atStart, cursorPos);
+              onSelect(member.user.id, member.user.global_name || member.user.username, atStart, cursorPos);
             }}
           >
             <div style={{
@@ -123,7 +127,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
             }}>
               {member.user.username.charAt(0).toUpperCase()}
             </div>
-            <span style={{ color: "var(--text-normal)" }}>{member.user.username}</span>
+            <span style={{ color: "var(--text-normal)" }}>{member.user.global_name || member.user.username}</span>
             {member.user.bot && (
               <span style={{
                 fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-on-accent)",

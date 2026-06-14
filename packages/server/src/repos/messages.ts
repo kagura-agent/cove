@@ -13,11 +13,12 @@ interface MessageRow {
   edited_timestamp: number | null;
   sender_username: string | null;
   sender_bot: number | null;
+  sender_global_name: string | null;
   webhook_id: string | null;
   referenced_message_id: string | null;
 }
 
-const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot FROM messages m LEFT JOIN users u ON u.id = m.sender";
+const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot, u.global_name AS sender_global_name FROM messages m LEFT JOIN users u ON u.id = m.sender";
 
 function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   let author: Message["author"];
@@ -37,7 +38,7 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
       bot: row.sender_bot === 1,
       avatar: null,
       discriminator: "0",
-      global_name: null,
+      global_name: row.sender_global_name ?? null,
     };
   } else {
     author = {
@@ -319,10 +320,10 @@ export class MessagesRepo {
     const placeholders = idList.map(() => "?").join(",");
     // Only resolve users who are guild members
     const rows = this.db.prepare(
-      `SELECT u.id, u.username, u.bot, u.avatar FROM users u
+      `SELECT u.id, u.username, u.bot, u.avatar, u.global_name FROM users u
        INNER JOIN guild_members gm ON gm.user_id = u.id AND gm.guild_id = ?
        WHERE u.id IN (${placeholders})`
-    ).all(channel.guild_id, ...idList) as Array<{ id: string; username: string; bot: number; avatar: string | null }>;
+    ).all(channel.guild_id, ...idList) as Array<{ id: string; username: string; bot: number; avatar: string | null; global_name: string | null }>;
     for (const row of rows) {
       userMap.set(row.id, {
         id: row.id,
@@ -330,7 +331,7 @@ export class MessagesRepo {
         bot: row.bot === 1,
         avatar: row.avatar,
         discriminator: "0",
-        global_name: null,
+        global_name: row.global_name ?? null,
       });
     }
 

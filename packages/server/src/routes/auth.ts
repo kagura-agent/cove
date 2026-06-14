@@ -7,6 +7,7 @@ import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
 import { SESSION_TTL_MS } from "../config.js";
+import { validateDisplayName } from "../validation.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -65,6 +66,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       id: string;
       email: string;
       name: string;
+      given_name?: string;
       picture: string;
     };
 
@@ -89,9 +91,11 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
 
     // New user: store in pending_registrations, require invite code
     const pendingToken = crypto.randomUUID();
+    const rawGivenName = googleUser.given_name ?? null;
+    const givenNameNew = (rawGivenName && !validateDisplayName(rawGivenName) && rawGivenName.length <= 80) ? rawGivenName : null;
     db.prepare(
-      "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, now);
+      "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, global_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, givenNameNew, now);
 
     setCookie(c, PENDING_COOKIE, pendingToken, COOKIE_OPTIONS);
     return c.redirect("/");
@@ -106,7 +110,7 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       const cookieToken = getCookie(c, SESSION_COOKIE);
       if (cookieToken) setCookie(c, SESSION_COOKIE, cookieToken, COOKIE_OPTIONS);
     }
-    return c.json({ id: result.user.id, username: result.user.username, avatar: result.user.avatar, bot: result.user.bot, expires_at: result.user.expires_at });
+    return c.json({ id: result.user.id, username: result.user.username, avatar: result.user.avatar, bot: result.user.bot, global_name: result.user.global_name, expires_at: result.user.expires_at });
   });
 
   app.get("/api/auth/pending-status", (c) => {

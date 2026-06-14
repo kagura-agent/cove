@@ -28,8 +28,8 @@ export function registerRoutes(db: Database.Database): Hono {
     const normalizedCode = inviteCode.trim().toUpperCase();
 
     const pending = db.prepare(
-      "SELECT id, google_id, email, username, avatar FROM pending_registrations WHERE pending_token = ?"
-    ).get(pendingToken) as { id: string; google_id: string; email: string; username: string; avatar: string } | undefined;
+      "SELECT id, google_id, email, username, avatar, global_name FROM pending_registrations WHERE pending_token = ?"
+    ).get(pendingToken) as { id: string; google_id: string; email: string; username: string; avatar: string; global_name: string | null } | undefined;
     if (!pending) {
       return c.json({ message: "Invalid pending token", code: 50035 }, 400);
     }
@@ -49,8 +49,8 @@ export function registerRoutes(db: Database.Database): Hono {
       }
 
       db.prepare(
-        "INSERT INTO users (id, username, avatar, bot, bio, token, google_id, email, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(userId, pending.username, pending.avatar, 0, null, token, pending.google_id, pending.email, now, now, now + SESSION_TTL_MS);
+        "INSERT INTO users (id, username, avatar, bot, bio, global_name, token, google_id, email, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(userId, pending.username, pending.avatar, 0, null, pending.global_name ?? null, token, pending.google_id, pending.email, now, now, now + SESSION_TTL_MS);
 
       // #209: Atomic invite consumption — conditional UPDATE (race-safe within transaction)
       const inviteResult = db.prepare(

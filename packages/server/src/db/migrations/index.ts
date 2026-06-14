@@ -10,8 +10,10 @@ import { migrateV7ToV8 } from "./v8-webhooks.js";
 import { migrateV8ToV9 } from "./v9-permissions.js";
 import { migrateV9ToV10 } from "./v10-message-reference.js";
 import { migrateV11 } from "./v11-mention-count.js";
+import { migrateV12 } from "./v12-global-name.js";
+import { migrateV13 } from "./v13-pending-global-name.js";
 
-const LATEST_VERSION = 11;
+const LATEST_VERSION = 13;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -27,6 +29,8 @@ const migrations: Record<number, MigrationFn> = {
   9: migrateV8ToV9,
   10: migrateV9ToV10,
   11: migrateV11,
+  12: migrateV12,
+  13: migrateV13,
 };
 
 export function runMigrations(db: Database.Database): void {
