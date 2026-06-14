@@ -3,10 +3,22 @@ import type { CoveRestClient } from "./rest-client.js";
 interface CacheEntry {
   content: string | null;  // null = confirmed no cove.md
   fetchedAt: number;
+  lastAccessedAt: number;
 }
 
 const TTL_MS = 60_000; // 1 minute TTL
+const MAX_ENTRIES = 500;
 const cache = new Map<string, CacheEntry>();
+
+function evictIfNeeded(): void {
+  if (cache.size <= MAX_ENTRIES) return;
+  // Evict oldest accessed entries
+  const entries = [...cache.entries()].sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt);
+  const toRemove = entries.slice(0, cache.size - MAX_ENTRIES);
+  for (const [key] of toRemove) {
+    cache.delete(key);
+  }
+}
 
 export async function getCoveMd(
   restClient: CoveRestClient,
@@ -15,6 +27,7 @@ export async function getCoveMd(
 ): Promise<string | null> {
   const cached = cache.get(channelId);
   if (cached && Date.now() - cached.fetchedAt < TTL_MS) {
+    cached.lastAccessedAt = Date.now();
     return cached.content;
   }
 
@@ -23,7 +36,9 @@ export async function getCoveMd(
     const content = file?.content && Buffer.byteLength(file.content, "utf8") <= 8000
       ? file.content
       : null;
-    cache.set(channelId, { content, fetchedAt: Date.now() });
+    const now = Date.now();
+    cache.set(channelId, { content, fetchedAt: now, lastAccessedAt: now });
+    evictIfNeeded();
     return content;
   } catch (err) {
     log?.warn?.(`cove: failed to fetch cove.md for [${channelId}]: ${err instanceof Error ? err.message : err}`);

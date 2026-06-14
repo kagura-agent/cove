@@ -220,14 +220,16 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_FILE_CREATE", (data) => {
     const store = useChannelFilesStore.getState();
-    if (store.filesOpen) {
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
     }
   });
 
   subscribe("CHANNEL_FILE_UPDATE", (data) => {
     const store = useChannelFilesStore.getState();
-    if (store.filesOpen) {
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
       if (store.selectedFile === data.filename) {
         store.fetchFile(data.channel_id, data.filename);
@@ -237,7 +239,8 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_FILE_DELETE", (data) => {
     const store = useChannelFilesStore.getState();
-    if (store.filesOpen) {
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
       if (store.selectedFile === data.filename) {
         store.clearFileContent();
