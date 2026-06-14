@@ -66,7 +66,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
   const { message, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
-  const senderName = message.author.username;
+  const senderName = message.author.global_name || message.author.username;
 
   // Register controller synchronously BEFORE any await to prevent ordering race
   const existingDispatch = pendingDispatches.get(channelId);
@@ -289,7 +289,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             ...(message.message_reference?.message_id ? {
               ReplyToId: message.message_reference.message_id,
               ReplyToBody: message.referenced_message?.content,
-              ReplyToSender: message.referenced_message?.author?.username,
+              ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
             } : {}),
           },
           deliver: async (_payload) => {

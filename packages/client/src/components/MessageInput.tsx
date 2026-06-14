@@ -125,7 +125,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
         bot: false,
         avatar: null,
         discriminator: "0",
-        global_name: null,
+        global_name: user.global_name ?? null,
       },
       timestamp: new Date().toISOString(),
       type: 0,

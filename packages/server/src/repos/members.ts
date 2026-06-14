@@ -7,6 +7,7 @@ interface UserRow {
   avatar: string | null;
   bot: number;
   bio: string | null;
+  global_name: string | null;
   token: string | null;
   created_at: number;
   updated_at: number;
@@ -28,7 +29,7 @@ function toUser(row: UserRow): CoveAgent {
     bot: row.bot === 1,
     bio: row.bio,
     discriminator: "0",
-    global_name: null,
+    global_name: row.global_name ?? null,
   };
 }
 

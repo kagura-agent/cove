@@ -215,7 +215,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const mentionUsers = new Map<string, string>();
   if (message.mentions) {
     for (const u of message.mentions) {
-      mentionUsers.set(u.id, u.username);
+      mentionUsers.set(u.id, u.global_name || u.username);
     }
   }
 
@@ -274,7 +274,8 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
                 cursor: "pointer",
               }}
             >
-              {message.author.username}
+              {/* TODO: add nick (guild member nickname) when server-level nick support lands */}
+              {message.author.global_name || message.author.username}
             </span>
             {isBot && <span style={botBadgeStyle}>APP</span>}
             <Typography.Text

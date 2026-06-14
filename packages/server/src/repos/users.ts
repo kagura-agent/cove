@@ -12,6 +12,7 @@ interface UserRow {
   avatar: string | null;
   bot: number;
   bio: string | null;
+  global_name: string | null;
   token: string | null;
   created_at: number;
   updated_at: number;
@@ -26,7 +27,7 @@ function toUser(row: UserRow): CoveAgent {
     bot: row.bot === 1,
     bio: row.bio,
     discriminator: "0",
-    global_name: null,
+    global_name: row.global_name ?? null,
   };
 }
 
@@ -59,13 +60,14 @@ export class UsersRepo {
     return { ...toUser(row), token };
   }
 
-  update(id: string, fields: { username?: string; avatar?: string | null; bio?: string | null }): CoveAgent | null {
+  update(id: string, fields: { username?: string; avatar?: string | null; bio?: string | null; global_name?: string | null }): CoveAgent | null {
     const updates: string[] = [];
     const params: unknown[] = [];
 
     if (fields.username !== undefined) { updates.push("username = ?"); params.push(fields.username); }
     if (fields.avatar !== undefined) { updates.push("avatar = ?"); params.push(fields.avatar); }
     if (fields.bio !== undefined) { updates.push("bio = ?"); params.push(fields.bio); }
+    if (fields.global_name !== undefined) { updates.push("global_name = ?"); params.push(fields.global_name); }
 
     if (updates.length === 0) return this.getById(id);
 
@@ -95,7 +97,7 @@ export class UsersRepo {
   }
 
   findByToken(token: string): (CoveAgent & { bot: boolean; expires_at: number | null }) | null {
-    const row = this.db.prepare("SELECT id, username, avatar, bot, bio, expires_at FROM users WHERE token = ?").get(token) as (UserRow & { expires_at: number | null }) | undefined;
+    const row = this.db.prepare("SELECT id, username, avatar, bot, bio, global_name, expires_at FROM users WHERE token = ?").get(token) as (UserRow & { expires_at: number | null }) | undefined;
     if (!row) return null;
 
     // Check expiry: non-null expires_at that's in the past means expired
@@ -104,7 +106,7 @@ export class UsersRepo {
       return null;
     }
 
-    return { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: null, expires_at: row.expires_at };
+    return { id: row.id, username: row.username, avatar: row.avatar, bot: row.bot === 1, bio: row.bio, discriminator: "0" as const, global_name: row.global_name ?? null, expires_at: row.expires_at };
   }
 
   refreshTTL(id: string): void {
