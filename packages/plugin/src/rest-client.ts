@@ -160,8 +160,7 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/channels/${channelId}/webhooks`);
   }
 
-  /**
-   * POST /api/v10/webhooks/:id/:token — execute webhook (no auth needed).
+  /** POST /api/v10/webhooks/:id/:token — execute webhook (no auth needed).
    * Sends a message to the webhook's channel with the webhook's identity.
    * Use `username` to override display name (e.g. "From #home").
    */
@@ -171,5 +170,14 @@ export class CoveRestClient {
       ...(username ? { username } : {}),
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     });
+  }
+
+  /** GET /api/v10/channels/:channelId/files/:filename — get a channel file. */
+  async getChannelFile(channelId: string, filename: string): Promise<{ content: string; filename: string; size: number } | null> {
+    try {
+      return await this.request("GET", `${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`);
+    } catch {
+      return null;
+    }
   }
 }

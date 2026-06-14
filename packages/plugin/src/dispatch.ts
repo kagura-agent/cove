@@ -263,6 +263,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Yield event loop so WS typing frame flushes before heavy bootstrap work
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
+    // Read channel's cove.md for bot context injection
+    let coveMdContent: string | undefined;
+    try {
+      const coveMd = await restClient.getChannelFile(channelId, 'cove.md');
+      if (coveMd?.content && coveMd.content.length <= 8000) {
+        coveMdContent = coveMd.content;
+      }
+    } catch { /* ignore - cove.md is optional */ }
+
     try {
       await dispatchInboundDirectDmWithRuntime({
           cfg,
@@ -286,6 +295,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             SenderId: senderId,
             SenderName: senderName,
             ChannelId: channelId,
+            ...(coveMdContent ? { ChannelContext: coveMdContent } : {}),
             ...(message.message_reference?.message_id ? {
               ReplyToId: message.message_reference.message_id,
               ReplyToBody: message.referenced_message?.content,

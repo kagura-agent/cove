@@ -9,6 +9,7 @@ import { registerRoutes } from "./routes/register.js";
 import { reactionRoutes } from "./routes/reactions.js";
 import { webhookRoutes, webhookExecuteRoutes } from "./routes/webhooks.js";
 import { permissionRoutes } from "./routes/permissions.js";
+import { channelFilesRoutes } from "./routes/channel-files.js";
 import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
@@ -58,6 +59,7 @@ export function createApp(
   app.route(API_PREFIX, webhookRoutes(repos));
   app.route(API_PREFIX, agentRoutes(repos, dispatcher));
   app.route(API_PREFIX, permissionRoutes(repos));
+  app.route(API_PREFIX, channelFilesRoutes(repos));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get(`${API_PREFIX}/gateway`, (c) => c.json({ url: gwUrl }));

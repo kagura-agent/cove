@@ -2,7 +2,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { Typography, Button, Popconfirm } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
@@ -18,7 +18,7 @@ const styles = {
   membersBtnActive: { color: "var(--interactive-active)" } as CSSProperties,
 };
 
-export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean }) {
+export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClick, filesOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean; onFilesClick?: () => void; filesOpen?: boolean }) {
   const activeGuildId = useGuildStore((s) => s.activeGuildId);
   const { activeChannelId, getChannels } = useChannelStore();
   const channels = getChannels(activeGuildId);
@@ -55,6 +55,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen }: { onMenuC
           <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />
         </Popconfirm>
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
+        {onFilesClick && <Button type="text" icon={<FileTextOutlined />} onClick={onFilesClick} style={filesOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
       <MessageList channelId={channel.id} />
     </div>

@@ -118,3 +118,34 @@ export function putPermissionOverwrite(channelId: string, targetId: string, data
 export function deletePermissionOverwrite(channelId: string, targetId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/permissions/${targetId}`, { method: "DELETE" });
 }
+
+// ─── Channel Files ────────────────────────────────────────────────────
+
+export interface ChannelFileMeta {
+  channel_id: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ChannelFile extends ChannelFileMeta {
+  content: string;
+}
+
+export function getChannelFiles(channelId: string) {
+  return api<ChannelFileMeta[]>(`${API_PREFIX}/channels/${channelId}/files`);
+}
+export function getChannelFile(channelId: string, filename: string) {
+  return api<ChannelFile>(`${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`);
+}
+export function putChannelFile(channelId: string, filename: string, content: string, contentType?: string) {
+  return api<ChannelFile>(`${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`, {
+    method: "PUT",
+    body: JSON.stringify({ content, ...(contentType ? { content_type: contentType } : {}) }),
+  });
+}
+export function deleteChannelFile(channelId: string, filename: string) {
+  return api<void>(`${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`, { method: "DELETE" });
+}
