@@ -263,8 +263,9 @@ export default function App() {
         <ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
         <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
         <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
+        <div onClick={() => { setFilesOpen(false); setFilesStoreOpen(false); }} style={{...styles.overlay, ...(filesOpen ? styles.overlayVisible : {})}} className="mobile-files-backdrop" />
 
-        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""}`}>
+        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""} ${filesOpen ? "files-open" : ""}`}>
           <div style={styles.sidebarColumn} className="sidebar-column">
             <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
             <div style={styles.sidebarFooter} className="sidebar-footer-cell">

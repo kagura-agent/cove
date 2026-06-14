@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { Button, Spin, Input, Popconfirm, message } from "antd";
 import {
   FileTextOutlined,
@@ -13,7 +13,29 @@ import {
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import type { CSSProperties } from "react";
 
-const { TextArea } = Input;
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+
+function getLanguageFromFilename(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    md: "markdown",
+    json: "json",
+    ts: "typescript",
+    tsx: "typescript",
+    js: "javascript",
+    jsx: "javascript",
+    css: "css",
+    html: "html",
+    xml: "xml",
+    yaml: "yaml",
+    yml: "yaml",
+    py: "python",
+    sh: "shell",
+    bash: "shell",
+    sql: "sql",
+  };
+  return map[ext ?? ""] ?? "plaintext";
+}
 
 const styles = {
   root: {
@@ -111,6 +133,20 @@ const styles = {
     gap: "var(--space-xs)",
     alignItems: "center",
   } as CSSProperties,
+  coveMdPrompt: {
+    margin: "var(--space-sm) var(--space-lg)",
+    padding: "var(--space-md)",
+    background: "var(--bg-modifier-hover)",
+    borderRadius: "var(--space-sm)",
+    border: "1px solid var(--border-subtle)",
+  } as CSSProperties,
+  monacoWrapper: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: "var(--space-xs)",
+    overflow: "hidden",
+    border: "1px solid var(--border-subtle)",
+  } as CSSProperties,
 };
 
 function formatSize(bytes: number): string {
@@ -152,6 +188,15 @@ function FileRow({
     </div>
   );
 }
+
+const MONACO_OPTIONS = {
+  minimap: { enabled: false },
+  lineNumbers: "on" as const,
+  wordWrap: "on" as const,
+  scrollBeyondLastLine: false,
+  fontSize: 13,
+  automaticLayout: true,
+};
 
 export function FilesSidebar({ channelId }: { channelId: string }) {
   const {
@@ -235,6 +280,21 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
     }
   }, [channelId, newFileName, saveFile, handleFileClick]);
 
+  const handleQuickCreateCoveMd = useCallback(async () => {
+    setSaving(true);
+    try {
+      await saveFile(channelId, "cove.md", "");
+      selectFile("cove.md");
+      await fetchFile(channelId, "cove.md");
+      setEditContent("");
+      setEditing(true);
+    } catch {
+      message.error("Failed to create cove.md");
+    } finally {
+      setSaving(false);
+    }
+  }, [channelId, saveFile, selectFile, fetchFile]);
+
   const handleBack = useCallback(() => {
     clearFileContent();
     setEditing(false);
@@ -242,6 +302,8 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
 
   // File detail view
   if (selectedFile) {
+    const language = getLanguageFromFilename(selectedFile);
+
     return (
       <div style={styles.root} className="files-sidebar scroll-container">
         <div style={styles.editorArea}>
@@ -305,37 +367,22 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
             <div style={styles.loading}>
               <Spin />
             </div>
-          ) : editing ? (
-            <TextArea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              autoSize={{ minRows: 8, maxRows: 24 }}
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "var(--font-size-sm)",
-                background: "var(--bg-primary)",
-                color: "var(--text-normal)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            />
           ) : (
-            <pre
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "var(--font-size-sm)",
-                color: "var(--text-normal)",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                margin: 0,
-                padding: "var(--space-sm)",
-                background: "var(--bg-primary)",
-                borderRadius: "var(--space-xs)",
-                flex: 1,
-                overflowY: "auto",
-              }}
-            >
-              {fileContent?.content ?? ""}
-            </pre>
+            <div style={styles.monacoWrapper}>
+              <Suspense fallback={<div style={styles.loading}><Spin /></div>}>
+                <MonacoEditor
+                  height="100%"
+                  language={language}
+                  theme="vs-dark"
+                  value={editing ? editContent : (fileContent?.content ?? "")}
+                  onChange={(value) => { if (editing) setEditContent(value ?? ""); }}
+                  options={{
+                    ...MONACO_OPTIONS,
+                    readOnly: !editing,
+                  }}
+                />
+              </Suspense>
+            </div>
           )}
         </div>
       </div>
@@ -373,6 +420,20 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
             loading={saving}
           >
             Create
+          </Button>
+        </div>
+      )}
+
+      {!loading && !files.some(f => f.filename === 'cove.md') && (
+        <div style={styles.coveMdPrompt}>
+          <div style={{ fontSize: "var(--font-size-md)", fontWeight: 600, marginBottom: 4 }}>
+            📝 No cove.md yet
+          </div>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", marginBottom: 8 }}>
+            Create one to give bots context about this channel
+          </div>
+          <Button size="small" type="primary" onClick={() => handleQuickCreateCoveMd()}>
+            Create cove.md
           </Button>
         </div>
       )}
