@@ -262,6 +262,21 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
         break;
       }
 
+      case "CHANNEL_FILE_CREATE": {
+        this.emit("channelFileCreate", payload.d as { channel_id: string; guild_id: string; filename: string; content_type: string; size: number });
+        break;
+      }
+
+      case "CHANNEL_FILE_UPDATE": {
+        this.emit("channelFileUpdate", payload.d as { channel_id: string; guild_id: string; filename: string; content_type: string; size: number });
+        break;
+      }
+
+      case "CHANNEL_FILE_DELETE": {
+        this.emit("channelFileDelete", payload.d as { channel_id: string; guild_id: string; filename: string });
+        break;
+      }
+
       default:
         break;
     }

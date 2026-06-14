@@ -9,6 +9,7 @@ import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useReplyStore } from "../stores/useReplyStore";
+import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,6 +216,36 @@ export function setupGatewaySubscriptions(): void {
     const selfId = useUserStore.getState().id;
     const me = data.user_id === selfId;
     useMessageStore.getState().removeReaction(data.channel_id, data.message_id, data.emoji.name, me, data.count);
+  });
+
+  subscribe("CHANNEL_FILE_CREATE", (data) => {
+    const store = useChannelFilesStore.getState();
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
+      store.fetchFiles(data.channel_id);
+    }
+  });
+
+  subscribe("CHANNEL_FILE_UPDATE", (data) => {
+    const store = useChannelFilesStore.getState();
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
+      store.fetchFiles(data.channel_id);
+      if (store.selectedFile === data.filename) {
+        store.fetchFile(data.channel_id, data.filename);
+      }
+    }
+  });
+
+  subscribe("CHANNEL_FILE_DELETE", (data) => {
+    const store = useChannelFilesStore.getState();
+    const activeChannelId = useChannelStore.getState().activeChannelId;
+    if (store.filesOpen && data.channel_id === activeChannelId) {
+      store.fetchFiles(data.channel_id);
+      if (store.selectedFile === data.filename) {
+        store.clearFileContent();
+      }
+    }
   });
 }
 

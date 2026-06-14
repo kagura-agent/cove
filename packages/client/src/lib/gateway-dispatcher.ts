@@ -22,6 +22,9 @@ export interface GatewayEventMap {
   GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
   GUILD_CREATE: { id: string; name: string };
   GUILD_DELETE: { id: string };
+  CHANNEL_FILE_CREATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
+  CHANNEL_FILE_UPDATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
+  CHANNEL_FILE_DELETE: { channel_id: string; guild_id: string; filename: string };
 }
 
 type Handler<T> = (data: T) => void;

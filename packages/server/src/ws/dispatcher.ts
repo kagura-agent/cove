@@ -215,6 +215,30 @@ export class GatewayDispatcher {
     return presences;
   }
 
+  channelFileCreate(channelId: string, file: { filename: string; content_type: string; size: number }): void {
+    const guildId = this.resolveGuildForChannel(channelId);
+    if (!guildId) return;
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "CHANNEL_FILE_CREATE", {
+      channel_id: channelId, guild_id: guildId, ...file
+    });
+  }
+
+  channelFileUpdate(channelId: string, file: { filename: string; content_type: string; size: number }): void {
+    const guildId = this.resolveGuildForChannel(channelId);
+    if (!guildId) return;
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "CHANNEL_FILE_UPDATE", {
+      channel_id: channelId, guild_id: guildId, ...file
+    });
+  }
+
+  channelFileDelete(channelId: string, filename: string): void {
+    const guildId = this.resolveGuildForChannel(channelId);
+    if (!guildId) return;
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "CHANNEL_FILE_DELETE", {
+      channel_id: channelId, guild_id: guildId, filename
+    });
+  }
+
   reactionAdd(channelId: string, messageId: string, userId: string, emoji: string, guildId: string, count: number): void {
     this.broadcastToGuildWithChannelFilter(guildId, channelId, "MESSAGE_REACTION_ADD", {
       user_id: userId,
