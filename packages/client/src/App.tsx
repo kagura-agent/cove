@@ -13,7 +13,9 @@ import { MessageInput } from "./components/MessageInput";
 import { ReplyBar } from "./components/ReplyBar";
 import { MemberList } from "./components/MemberList";
 import { FilesSidebar } from "./components/FilesSidebar";
+import { ThreadPanel } from "./components/ThreadPanel";
 import { useChannelFilesStore } from "./stores/useChannelFilesStore";
+import { useThreadStore } from "./stores/useThreadStore";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
@@ -130,6 +132,12 @@ function LoginPage() {
       </Button>
     </div>
   );
+}
+
+function ThreadPanelWrapper() {
+  const activeThread = useThreadStore((s) => s.activeThread);
+  if (!activeThread) return null;
+  return <ThreadPanel />;
 }
 
 export default function App() {
@@ -300,6 +308,7 @@ export default function App() {
 
           {membersOpen && <MemberList />}
           {filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
+          <ThreadPanelWrapper />
         </div>
 
         <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

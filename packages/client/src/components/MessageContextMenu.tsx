@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import * as api from "../lib/api";
+import { useThreadStore } from "../stores/useThreadStore";
 
 const menuStyle: CSSProperties = {
   position: "fixed",
@@ -42,10 +43,11 @@ interface Props {
   channelId: string;
   content: string;
   isOwnMessage: boolean;
+  hasThread: boolean;
   onClose: () => void;
 }
 
-export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, onClose }: Props) {
+export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,6 +95,18 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
     onClose();
   }
 
+  async function handleCreateThread() {
+    const name = content.slice(0, 40).trim() || "Thread";
+    try {
+      const thread = await api.createThreadFromMessage(channelId, messageId, name);
+      useThreadStore.getState().openThread(thread);
+      useThreadStore.getState().addThread(thread);
+    } catch (err) {
+      console.error("create thread:", err);
+    }
+    onClose();
+  }
+
   async function handleDelete() {
     if (!confirmDelete) {
       setConfirmDelete(true);
@@ -124,6 +138,16 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
       >
         Copy Message ID
       </div>
+      {!hasThread && (
+        <div
+          style={{ ...itemStyle, background: hoveredItem === "create-thread" ? hoverBg : undefined }}
+          onClick={handleCreateThread}
+          onMouseEnter={() => setHoveredItem("create-thread")}
+          onMouseLeave={() => setHoveredItem(null)}
+        >
+          Create Thread
+        </div>
+      )}
       {isOwnMessage && (
         <>
           <div style={separatorStyle} />
