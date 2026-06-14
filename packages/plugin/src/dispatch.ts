@@ -266,7 +266,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Read channel's cove.md for bot context injection
     let coveMdContent: string | undefined;
     try {
-      const coveMd = await restClient.getChannelFile(channelId, 'cove.md');
+      const coveMd = await restClient.getChannelFile(channelId, 'cove.md', AbortSignal.timeout(2000));
       if (coveMd?.content && Buffer.byteLength(coveMd.content, 'utf8') <= 8000) {
         coveMdContent = coveMd.content;
       }
