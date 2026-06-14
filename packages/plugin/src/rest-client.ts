@@ -12,6 +12,13 @@ import { API_PREFIX } from "@cove/shared";
 const MAX_RETRIES = 3;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+export class CoveApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "CoveApiError";
+  }
+}
+
 export class CoveRestClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -61,7 +68,7 @@ export class CoveRestClient {
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(`Cove API ${method} ${path} failed: ${res.status} ${text}`);
+          throw new CoveApiError(res.status, `Cove API ${method} ${path} failed: ${res.status} ${text}`);
         }
 
         if (res.status === 204) return undefined as unknown as T;
@@ -178,7 +185,7 @@ export class CoveRestClient {
       return await this.request("GET", `${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`);
     } catch (err) {
       // 404 (not found) and 403 (no permission) are expected — return null
-      if (err instanceof Error && /\b(404|403)\b/.test(err.message)) return null;
+      if (err instanceof CoveApiError && (err.status === 404 || err.status === 403)) return null;
       throw err;
     }
   }

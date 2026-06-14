@@ -270,7 +270,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       if (coveMd?.content && Buffer.byteLength(coveMd.content, 'utf8') <= 8000) {
         coveMdContent = coveMd.content;
       }
-    } catch { /* ignore - cove.md is optional */ }
+    } catch (err) {
+      // cove.md is optional — log unexpected errors for observability but don't block dispatch
+      log?.warn?.(`cove: failed to fetch cove.md for [${channelId}]: ${err instanceof Error ? err.message : err}`);
+    }
 
     try {
       await dispatchInboundDirectDmWithRuntime({
