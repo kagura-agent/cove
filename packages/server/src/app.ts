@@ -59,7 +59,7 @@ export function createApp(
   app.route(API_PREFIX, webhookRoutes(repos));
   app.route(API_PREFIX, agentRoutes(repos, dispatcher));
   app.route(API_PREFIX, permissionRoutes(repos));
-  app.route(API_PREFIX, channelFilesRoutes(repos));
+  app.route(API_PREFIX, channelFilesRoutes(repos, dispatcher));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get(`${API_PREFIX}/gateway`, (c) => c.json({ url: gwUrl }));

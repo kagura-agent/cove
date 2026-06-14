@@ -3,11 +3,12 @@ import type { Repos } from "../repos/index.js";
 import type { AppEnv } from "../auth.js";
 import { parseJsonBody, validationError } from "../validation.js";
 import { requireGuildMember, requireBotChannelPermission, unknownChannel } from "./helpers.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const FILENAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}$/;
 const MAX_CONTENT_SIZE = 100 * 1024; // 100KB
 
-export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
+export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   // List files (metadata only)
@@ -70,8 +71,18 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
       if (body.content_type.length > 255) return validationError(c, "content_type must be at most 255 characters");
     }
 
+    const existing = repos.channelFiles.get(channelId, filename);
     const file = repos.channelFiles.upsert(channelId, filename, body.content, body.content_type);
     if (!file) return validationError(c, "File content exceeds 100KB limit");
+
+    if (dispatcher) {
+      const fileInfo = { filename, content_type: file.content_type, size: file.size };
+      if (existing) {
+        dispatcher.channelFileUpdate(channelId, fileInfo);
+      } else {
+        dispatcher.channelFileCreate(channelId, fileInfo);
+      }
+    }
 
     return c.json(file, 200);
   });
@@ -92,6 +103,10 @@ export function channelFilesRoutes(repos: Repos): Hono<AppEnv> {
     }
     const deleted = repos.channelFiles.delete(channelId, filename);
     if (!deleted) return c.json({ message: "Unknown File", code: 10014 }, 404);
+
+    if (dispatcher) {
+      dispatcher.channelFileDelete(channelId, filename);
+    }
 
     return c.body(null, 204);
   });

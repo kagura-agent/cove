@@ -13,6 +13,7 @@ import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 
 
@@ -352,6 +353,17 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       gatewayClient.on("close", () => {
         log?.info?.("cove: gateway disconnected, will reconnect...");
+      });
+
+      // Invalidate cove.md cache when file events affect cove.md
+      gatewayClient.on("channelFileCreate", (payload) => {
+        if (payload.filename === "cove.md") invalidateCoveMd(payload.channel_id);
+      });
+      gatewayClient.on("channelFileUpdate", (payload) => {
+        if (payload.filename === "cove.md") invalidateCoveMd(payload.channel_id);
+      });
+      gatewayClient.on("channelFileDelete", (payload) => {
+        if (payload.filename === "cove.md") invalidateCoveMd(payload.channel_id);
       });
 
       ctx.abortSignal.addEventListener("abort", () => {

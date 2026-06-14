@@ -43,6 +43,9 @@ export interface GatewayEvents {
   typingStart: (payload: { channel_id: string; user_id: string; timestamp: number }) => void;
   messageReactionAdd: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
   messageReactionRemove: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
+  channelFileCreate: (payload: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number }) => void;
+  channelFileUpdate: (payload: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number }) => void;
+  channelFileDelete: (payload: { channel_id: string; guild_id: string; filename: string }) => void;
   error: (error: Error) => void;
   close: () => void;
   reconnect: () => void;
