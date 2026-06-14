@@ -7,6 +7,7 @@ import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
 import { SESSION_TTL_MS } from "../config.js";
+import { validateDisplayName } from "../validation.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -82,17 +83,19 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       // Single atomic UPDATE includes expires_at to prevent token/expiry mismatch on crash
       const token = crypto.randomUUID();
       const expiresAt = now + SESSION_TTL_MS;
-      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
-        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, existing.id);
+      const givenName = (!validateDisplayName(googleUser.given_name)) ? (googleUser.given_name ?? null) : null;
+      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ?, global_name = COALESCE(global_name, ?) WHERE id = ?")
+        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, givenName, existing.id);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }
 
     // New user: store in pending_registrations, require invite code
     const pendingToken = crypto.randomUUID();
+    const givenNameNew = (!validateDisplayName(googleUser.given_name)) ? (googleUser.given_name ?? null) : null;
     db.prepare(
       "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, global_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, googleUser.given_name ?? null, now);
+    ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, givenNameNew, now);
 
     setCookie(c, PENDING_COOKIE, pendingToken, COOKIE_OPTIONS);
     return c.redirect("/");
