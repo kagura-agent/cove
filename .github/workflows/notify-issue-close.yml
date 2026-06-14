@@ -59,6 +59,10 @@ jobs:
           MSG="${EMOJI} ${TEXT}\n${TITLE}\n${URL}"
           echo "message=${MSG}" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for staging deploy
+        if: github.event.action == 'closed'
+        run: sleep 120
+
       - name: Send to Cove #cove-product
         run: |
           curl -s -X POST "${{ secrets.COVE_PRODUCT_WEBHOOK_URL }}" \
