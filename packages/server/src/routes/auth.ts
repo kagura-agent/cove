@@ -83,16 +83,16 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       // Single atomic UPDATE includes expires_at to prevent token/expiry mismatch on crash
       const token = crypto.randomUUID();
       const expiresAt = now + SESSION_TTL_MS;
-      const givenName = (!validateDisplayName(googleUser.given_name)) ? (googleUser.given_name ?? null) : null;
-      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ?, global_name = COALESCE(global_name, ?) WHERE id = ?")
-        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, givenName, existing.id);
+      db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
+        .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, existing.id);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }
 
     // New user: store in pending_registrations, require invite code
     const pendingToken = crypto.randomUUID();
-    const givenNameNew = (!validateDisplayName(googleUser.given_name)) ? (googleUser.given_name ?? null) : null;
+    const rawGivenName = googleUser.given_name ?? null;
+    const givenNameNew = (rawGivenName && !validateDisplayName(rawGivenName) && rawGivenName.length <= 80) ? rawGivenName : null;
     db.prepare(
       "INSERT INTO pending_registrations (id, pending_token, google_id, email, username, avatar, global_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(generateSnowflake(), pendingToken, googleUser.id, googleUser.email, googleUser.name, googleUser.picture, givenNameNew, now);
