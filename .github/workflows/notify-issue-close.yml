@@ -1,17 +1,66 @@
-name: Notify Cove on issue close
+name: Notify Cove on issue changes
 
 on:
   issues:
-    types: [closed]
+    types: [opened, closed, reopened, labeled, unlabeled, assigned, unassigned]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for staging deploy to complete
-        run: sleep 120
-      - name: Send issue close notification to Cove
+      - name: Build notification message
+        id: msg
+        run: |
+          ACTION="${{ github.event.action }}"
+          NUM="${{ github.event.issue.number }}"
+          TITLE="${{ github.event.issue.title }}"
+          URL="${{ github.event.issue.html_url }}"
+          ACTOR="${{ github.actor }}"
+
+          case "$ACTION" in
+            opened)
+              EMOJI="🆕"
+              TEXT="Issue #${NUM} created by ${ACTOR}"
+              ;;
+            closed)
+              EMOJI="✅"
+              TEXT="Issue #${NUM} closed by ${ACTOR}"
+              ;;
+            reopened)
+              EMOJI="🔓"
+              TEXT="Issue #${NUM} reopened by ${ACTOR}"
+              ;;
+            labeled)
+              LABEL="${{ github.event.label.name }}"
+              EMOJI="🏷️"
+              TEXT="Issue #${NUM} labeled [${LABEL}] by ${ACTOR}"
+              ;;
+            unlabeled)
+              LABEL="${{ github.event.label.name }}"
+              EMOJI="🏷️"
+              TEXT="Issue #${NUM} unlabeled [${LABEL}] by ${ACTOR}"
+              ;;
+            assigned)
+              ASSIGNEE="${{ github.event.assignee.login }}"
+              EMOJI="👤"
+              TEXT="Issue #${NUM} assigned to ${ASSIGNEE} by ${ACTOR}"
+              ;;
+            unassigned)
+              ASSIGNEE="${{ github.event.assignee.login }}"
+              EMOJI="👤"
+              TEXT="Issue #${NUM} unassigned ${ASSIGNEE} by ${ACTOR}"
+              ;;
+            *)
+              EMOJI="📌"
+              TEXT="Issue #${NUM} [${ACTION}] by ${ACTOR}"
+              ;;
+          esac
+
+          MSG="${EMOJI} ${TEXT}\n${TITLE}\n${URL}"
+          echo "message=${MSG}" >> "$GITHUB_OUTPUT"
+
+      - name: Send to Cove #cove-product
         run: |
           curl -s -X POST "${{ secrets.COVE_PRODUCT_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ Issue #${{ github.event.issue.number }} closed: ${{ github.event.issue.title }}\", \"username\": \"GitHub\"}"
+            -d "{\"content\": \"${{ steps.msg.outputs.message }}\", \"username\": \"GitHub\"}"
