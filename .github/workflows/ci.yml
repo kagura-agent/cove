@@ -42,3 +42,10 @@ jobs:
             --outfile=/dev/null \
             --external:better-sqlite3 --external:ws \
             --alias:@cove/shared=./packages/shared/src/index.ts
+
+      - name: Notify Cove on CI failure
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          curl -sf -X POST "${{ secrets.COVE_DEV_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"❌ CI failed on PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}\\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"username\": \"GitHub CI\"}"
