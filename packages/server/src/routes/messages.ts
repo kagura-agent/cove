@@ -26,6 +26,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const around = c.req.query("around");
 
     const messages = repos.messages.list(channelId, { limit, before, after, around }, user.id);
+    // Enrich messages with thread indicators
+    for (const msg of messages) {
+      const threadInfo = repos.threads.getThreadForMessage(msg.id);
+      if (threadInfo) {
+        msg.thread = threadInfo;
+      }
+    }
     return c.json(messages);
   });
 
@@ -44,6 +51,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const message = repos.messages.getById(channelId, msgId, user.id);
     if (!message) {
       return unknownMessage(c);
+    }
+    // Enrich with thread indicator
+    const threadInfo = repos.threads.getThreadForMessage(message.id);
+    if (threadInfo) {
+      message.thread = threadInfo;
     }
     return c.json(message);
   });
@@ -93,6 +105,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     // Pass through client nonce for optimistic send reconciliation
     if (body.nonce) {
       message.nonce = body.nonce;
+    }
+
+    // Thread-specific: auto-add sender as member + increment message count
+    if (channel.type === 11) {
+      repos.threads.addMember(channelId, user.id);
+      repos.threads.incrementMessageCount(channelId);
     }
 
     // Update channel's last_message_id
@@ -190,6 +208,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     if (!repos.messages.delete(channelId, msgId)) {
       return unknownMessage(c);
+    }
+
+    // Thread-specific: decrement message count
+    if (ch.type === 11) {
+      repos.threads.decrementMessageCount(channelId);
     }
 
     // Recompute last_message_id if we just deleted the latest message

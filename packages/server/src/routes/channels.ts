@@ -90,6 +90,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
       topic?: string;
       position?: number;
       type?: number;
+      archived?: boolean;
+      locked?: boolean;
     }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
@@ -113,6 +115,28 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     if (errors.length > 0) return validationError(c, errors[0]);
 
     const { name, topic, position, type } = body;
+
+    // Handle thread-specific fields (archived/locked) for type=11 channels
+    if (channel.type === 11) {
+      let threadUpdated: import("@cove/shared").Channel | null = null;
+      if (body.archived !== undefined) {
+        threadUpdated = repos.threads.setArchived(id, body.archived);
+      }
+      if (body.locked !== undefined) {
+        threadUpdated = repos.threads.setLocked(id, body.locked);
+      }
+      if (threadUpdated) {
+        // Also apply name/topic updates if present
+        if (name !== undefined || topic !== undefined || position !== undefined) {
+          const finalUpdated = repos.channels.update(id, { name, topic, position })!;
+          dispatcher?.threadUpdate(finalUpdated);
+          return c.json(finalUpdated);
+        }
+        dispatcher?.threadUpdate(threadUpdated);
+        return c.json(threadUpdated);
+      }
+    }
+
     if (name === undefined && topic === undefined && position === undefined && type === undefined) {
       return c.json(channel);
     }

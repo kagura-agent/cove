@@ -215,6 +215,44 @@ export class GatewayDispatcher {
     return presences;
   }
 
+  threadCreate(thread: Channel): void {
+    const guildId = thread.guild_id;
+    if (thread.parent_id) {
+      this.broadcastToGuildWithChannelFilter(guildId, thread.parent_id, "THREAD_CREATE", thread);
+    }
+  }
+
+  threadUpdate(thread: Channel): void {
+    const guildId = thread.guild_id;
+    if (thread.parent_id) {
+      this.broadcastToGuildWithChannelFilter(guildId, thread.parent_id, "THREAD_UPDATE", thread);
+    }
+  }
+
+  threadDelete(thread: Channel): void {
+    const guildId = thread.guild_id;
+    if (thread.parent_id) {
+      this.broadcastToGuildWithChannelFilter(guildId, thread.parent_id, "THREAD_DELETE", {
+        id: thread.id, guild_id: guildId, parent_id: thread.parent_id, type: 11,
+      });
+    }
+  }
+
+  threadMemberUpdate(threadId: string, userId: string, guildId: string): void {
+    this.sendToUser(userId, "THREAD_MEMBER_UPDATE", { id: threadId, user_id: userId });
+  }
+
+  threadMembersUpdate(threadId: string, guildId: string, addedMembers: string[], removedMembers: string[]): void {
+    const thread = this.channelsRepo.getById(threadId);
+    if (!thread?.parent_id) return;
+    this.broadcastToGuildWithChannelFilter(guildId, thread.parent_id, "THREAD_MEMBERS_UPDATE", {
+      id: threadId,
+      guild_id: guildId,
+      added_members: addedMembers.map((id) => ({ user_id: id })),
+      removed_members: removedMembers.map((id) => ({ user_id: id })),
+    });
+  }
+
   channelFileCreate(channelId: string, file: { filename: string; content_type: string; size: number }): void {
     const guildId = this.resolveGuildForChannel(channelId);
     if (!guildId) return;

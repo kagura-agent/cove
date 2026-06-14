@@ -9,8 +9,9 @@ import { ReactionsRepo } from "./reactions.js";
 import { WebhooksRepo } from "./webhooks.js";
 import { PermissionsRepo } from "./permissions.js";
 import { ChannelFilesRepo } from "./channel-files.js";
+import { ThreadsRepo } from "./threads.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -24,6 +25,7 @@ export interface Repos {
   webhooks: WebhooksRepo;
   permissions: PermissionsRepo;
   channelFiles: ChannelFilesRepo;
+  threads: ThreadsRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -43,5 +45,6 @@ export function createRepos(db: Database.Database): Repos {
     webhooks: new WebhooksRepo(db),
     permissions,
     channelFiles: new ChannelFilesRepo(db),
+    threads: new ThreadsRepo(db, channels),
   };
 }
