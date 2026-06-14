@@ -37,6 +37,15 @@ export const PermissionFlags = {
   MANAGE_WEBHOOKS: (1n << 29n).toString(),
 } as const;
 
+/** Thread metadata — stored as JSON in the channel row. */
+export interface ThreadMetadata {
+  archived: boolean;
+  auto_archive_duration: number; // minutes
+  archive_timestamp: string; // ISO 8601
+  locked: boolean;
+  create_timestamp: string; // ISO 8601
+}
+
 /** Channel object — channels are mapped to GUILD_TEXT. */
 export interface Channel {
   id: string;
@@ -49,6 +58,13 @@ export interface Channel {
   permission_overwrites: PermissionOverwrite[];
   nsfw: boolean;
   rate_limit_per_user: number;
+  parent_id?: string | null;
+  message_id?: string | null;
+  thread_metadata?: ThreadMetadata | null;
+  message_count?: number;
+  member_count?: number;
+  owner_id?: string | null;
+  total_message_sent?: number;
 }
 
 /** Message object (Discord-compatible). */
@@ -77,6 +93,8 @@ export interface Message {
   referenced_message?: Message | null;
   /** Guild the message belongs to. Present on gateway dispatches; absent on REST responses. */
   guild_id?: string;
+  /** Thread spawned from this message (present on parent messages that have threads). */
+  thread?: { id: string; name: string; message_count: number } | null;
 }
 
 /** A reaction summary for a message. */
@@ -152,4 +170,11 @@ export interface Webhook {
   name: string;
   avatar: string | null;
   token?: string;
+}
+
+/** A thread member entry. */
+export interface ThreadMember {
+  id?: string; // thread id
+  user_id?: string;
+  join_timestamp: string; // ISO 8601
 }

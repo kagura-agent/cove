@@ -20,7 +20,14 @@ export function createAllTables(db: Database.Database): void {
       type             INTEGER NOT NULL DEFAULT 0,
       topic            TEXT,
       position         INTEGER NOT NULL DEFAULT 0,
-      last_message_id  TEXT
+      last_message_id  TEXT,
+      parent_id        TEXT REFERENCES channels(id) ON DELETE CASCADE,
+      message_id       TEXT,
+      thread_metadata  TEXT,
+      message_count    INTEGER NOT NULL DEFAULT 0,
+      member_count     INTEGER NOT NULL DEFAULT 0,
+      owner_id         TEXT REFERENCES users(id) ON DELETE SET NULL,
+      total_message_sent INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -114,6 +121,14 @@ export function createAllTables(db: Database.Database): void {
       PRIMARY KEY (channel_id, target_id),
       FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS thread_members (
+      thread_id      TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      join_timestamp INTEGER NOT NULL,
+      PRIMARY KEY (thread_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_thread_members_user ON thread_members(user_id);
   `);
 }
 
