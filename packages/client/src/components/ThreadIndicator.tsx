@@ -1,6 +1,5 @@
 import { useState, type CSSProperties } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
-import type { Channel } from "../types";
 
 const barStyle: CSSProperties = {
   display: "flex",
@@ -33,23 +32,11 @@ interface Props {
 }
 
 export function ThreadIndicator({ thread }: Props) {
-  const openThread = useThreadStore((s) => s.openThread);
+  const fetchAndOpenThread = useThreadStore((s) => s.fetchAndOpenThread);
   const [hovered, setHovered] = useState(false);
 
   const handleClick = () => {
-    openThread({
-      id: thread.id,
-      name: thread.name,
-      type: 11,
-      guild_id: "",
-      topic: null,
-      position: 0,
-      last_message_id: null,
-      permission_overwrites: [],
-      nsfw: false,
-      rate_limit_per_user: 0,
-      message_count: thread.message_count,
-    } as Channel);
+    fetchAndOpenThread(thread.id);
   };
 
   const count = thread.message_count;

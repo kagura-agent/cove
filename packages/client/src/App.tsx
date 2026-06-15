@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ConfigProvider, theme, Button, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
@@ -134,79 +134,6 @@ function LoginPage() {
   );
 }
 
-function ThreadPanelWrapper({ width }: { width: number }) {
-  const activeThread = useThreadStore((s) => s.activeThread);
-  if (!activeThread) return null;
-  return <ThreadPanel />;
-}
-
-const dividerStyle: CSSProperties = {
-  width: 4,
-  cursor: "col-resize",
-  background: "var(--border-subtle)",
-  flexShrink: 0,
-  position: "relative",
-  transition: "background 0.15s",
-  zIndex: 1,
-};
-
-const dividerActiveStyle: CSSProperties = {
-  background: "var(--accent)",
-};
-
-const dividerDotStyle: CSSProperties = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  display: "flex",
-  flexDirection: "column",
-  gap: 3,
-  opacity: 0.4,
-};
-
-function ResizeDivider({ onResize }: { onResize: (delta: number) => void }) {
-  const [dragging, setDragging] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const startXRef = useRef(0);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    startXRef.current = e.clientX;
-    setDragging(true);
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - startXRef.current;
-      startXRef.current = ev.clientX;
-      onResize(delta);
-    };
-
-    const handleMouseUp = () => {
-      setDragging(false);
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-  }, [onResize]);
-
-  return (
-    <div
-      style={{ ...dividerStyle, ...(dragging || hovered ? dividerActiveStyle : {}) }}
-      onMouseDown={handleMouseDown}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div style={dividerDotStyle}>
-        <span style={{ width: 2, height: 2, borderRadius: "50%", background: "currentColor" }} />
-        <span style={{ width: 2, height: 2, borderRadius: "50%", background: "currentColor" }} />
-        <span style={{ width: 2, height: 2, borderRadius: "50%", background: "currentColor" }} />
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
@@ -229,13 +156,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
-  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const activeThread = useThreadStore((s) => s.activeThread);
-
-  const handleThreadResize = useCallback((delta: number) => {
-    // Dragging right makes delta positive, but we want panel to shrink (panel is on the right)
-    setThreadPanelWidth((prev) => Math.min(600, Math.max(300, prev - delta)));
-  }, []);
 
   useEffect(() => {
     // BFF: tokens are in HttpOnly cookies, not URL or localStorage
@@ -380,12 +301,11 @@ export default function App() {
             </div>
           </div>
 
-          {membersOpen && <MemberList />}
-          {filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
-          {activeThread && <ResizeDivider onResize={handleThreadResize} />}
+          {!activeThread && membersOpen && <MemberList />}
+          {!activeThread && filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
           {activeThread && (
-            <div style={{ width: threadPanelWidth, flexShrink: 0, height: "100%", overflow: "hidden" }}>
-              <ThreadPanelWrapper width={threadPanelWidth} />
+            <div style={{ width: 400, flexShrink: 0, height: "100%", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" }}>
+              <ThreadPanel />
             </div>
           )}
         </div>

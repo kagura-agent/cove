@@ -23,6 +23,7 @@ interface ThreadState {
   updateThread: (thread: Channel) => void;
   removeThread: (threadId: string) => void;
   sendMessage: (threadId: string, content: string) => Promise<void>;
+  fetchAndOpenThread: (threadId: string) => Promise<void>;
 }
 
 export const useThreadStore = create<ThreadState>((set, get) => ({
@@ -110,5 +111,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   sendMessage: async (threadId, content) => {
     const nonce = crypto.randomUUID();
     await api.sendMessage(threadId, content, nonce);
+  },
+
+  fetchAndOpenThread: async (threadId) => {
+    try {
+      const channel = await api.fetchChannel(threadId);
+      get().openThread(channel);
+    } catch (err) {
+      console.error("Failed to fetch thread channel:", err);
+    }
   },
 }));
