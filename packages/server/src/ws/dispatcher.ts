@@ -178,10 +178,18 @@ export class GatewayDispatcher {
   }
 
   private broadcastToGuildWithChannelFilter(guildId: string, channelId: string, event: string, data: unknown): void {
+    // For threads (type=11), permission overwrites live on the parent channel,
+    // not the thread itself. Look up once before the loop.
+    let permChannelId = channelId;
+    const channel = this.channelsRepo.getById(channelId);
+    if (channel?.parent_id && channel.type === 11) {
+      permChannelId = channel.parent_id;
+    }
+
     for (const session of this.sessions) {
       if (!session.guildIds.has(guildId)) continue;
       if (session.user?.bot && this.permissionsRepo) {
-        if (!this.permissionsRepo.hasPermission(channelId, session.user.id, VIEW_CHANNEL_BIT)) {
+        if (!this.permissionsRepo.hasPermission(permChannelId, session.user.id, VIEW_CHANNEL_BIT)) {
           continue;
         }
       }
