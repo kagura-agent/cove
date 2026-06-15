@@ -178,6 +178,10 @@ export function fetchActiveThreads(channelId: string) {
   return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/channels/${channelId}/threads/active`);
 }
 
+export function fetchArchivedThreads(channelId: string) {
+  return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/channels/${channelId}/threads/archived/public`);
+}
+
 export function fetchGuildActiveThreads(guildId: string) {
   return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/guilds/${guildId}/threads/active`);
 }

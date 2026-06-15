@@ -117,6 +117,21 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     return c.json({ threads, has_more: false });
   });
 
+  // List archived threads in channel
+  app.get("/channels/:channelId/threads/archived/public", (c) => {
+    const channelId = c.req.param("channelId");
+    const user = c.get("botUser");
+
+    const channel = requireGuildMember(repos, channelId, user.id);
+    if (!channel) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
+
+    const threads = repos.threads.listArchivedByChannel(channelId);
+    return c.json({ threads, has_more: false });
+  });
+
   // List active threads in guild
   app.get("/guilds/:guildId/threads/active", (c) => {
     const guildId = c.req.param("guildId");

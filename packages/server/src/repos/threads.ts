@@ -24,6 +24,14 @@ export class ThreadsRepo {
     return rows.map(toChannel);
   }
 
+  /** List archived threads in a channel. */
+  listArchivedByChannel(channelId: string): Channel[] {
+    const rows = this.db.prepare(
+      "SELECT * FROM channels WHERE parent_id = ? AND type = 11 AND json_extract(thread_metadata, '$.archived') = 1"
+    ).all(channelId) as ChannelRow[];
+    return rows.map(toChannel);
+  }
+
   /** List active threads in a guild. */
   listActiveByGuild(guildId: string): Channel[] {
     const rows = this.db.prepare(

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { Typography, Button, Popconfirm } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined, CommentOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
+import { ThreadBrowser } from "./ThreadBrowser";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -24,6 +26,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClic
   const channels = getChannels(activeGuildId);
   const setMessages = useMessageStore((s) => s.setMessages);
   const channel = channels.find((c) => c.id === activeChannelId);
+  const [threadBrowserOpen, setThreadBrowserOpen] = useState(false);
 
   async function handleClear() {
     if (!channel) return;
@@ -54,10 +57,14 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClic
         <Popconfirm title="Clear all messages in this channel?" onConfirm={handleClear} okText="Clear" cancelText="Cancel" okButtonProps={{ danger: true }}>
           <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />
         </Popconfirm>
+        <Button type="text" icon={<CommentOutlined />} onClick={() => setThreadBrowserOpen(!threadBrowserOpen)} style={threadBrowserOpen ? styles.membersBtnActive : styles.membersBtn} />
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
         {onFilesClick && <Button type="text" icon={<FileTextOutlined />} onClick={onFilesClick} style={filesOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
       <MessageList channelId={channel.id} />
+      {threadBrowserOpen && channel && (
+        <ThreadBrowser channelId={channel.id} onClose={() => setThreadBrowserOpen(false)} />
+      )}
     </div>
   );
 }
