@@ -1,6 +1,7 @@
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
+import { useThreadStore } from "../stores/useThreadStore";
 import { Button, Input, Spin } from "antd";
 import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -22,6 +23,10 @@ const styles = {
   channelName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
   settingsBtn: { opacity: 0, fontSize: "var(--font-size-sm)", transition: "opacity 0.15s" } as CSSProperties,
   addBtn: { margin: "var(--space-xs) var(--space-sm) var(--space-sm)", opacity: 0.5, fontSize: "var(--font-size-sm)" } as CSSProperties,
+  threadItem: { display: "flex", alignItems: "center", gap: "var(--space-xs)", padding: "2px var(--space-sm) 2px 28px", borderRadius: "var(--space-xs)", cursor: "pointer", transition: "background 0.15s", fontSize: "var(--font-size-sm)", color: "var(--interactive-normal)" } as CSSProperties,
+  threadConnector: { width: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-muted)", opacity: 0.3, fontSize: "var(--font-size-xs)" } as CSSProperties,
+  threadIcon: { fontSize: "var(--font-size-sm)", opacity: 0.5, flexShrink: 0 } as CSSProperties,
+  threadName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
 };
 
 function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSelect, onSettings }: {
@@ -52,10 +57,33 @@ function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSe
   );
 }
 
+function ThreadItem({ name, isActive, onSelect }: {
+  name: string; isActive: boolean; onSelect: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      style={{ ...styles.threadItem, ...(isActive ? styles.channelActive : hovered ? styles.channelHover : {}) }}
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span style={styles.threadConnector}>└</span>
+      <span style={styles.threadIcon}>💬</span>
+      <span style={{ ...styles.threadName, ...(isActive ? { color: "var(--interactive-active)", fontWeight: 500 } : {}) }}>{name}</span>
+    </div>
+  );
+}
+
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
   const activeGuildId = useGuildStore((s) => s.activeGuildId);
   const { activeChannelId, setActiveChannel, addChannel, getChannels } = useChannelStore();
   const channels = getChannels(activeGuildId);
+  const parentChannels = channels.filter((ch) => ch.type !== 11);
+  const threadsByParent = useThreadStore((s) => s.threads);
+  const openThread = useThreadStore((s) => s.openThread);
+  const activeThread = useThreadStore((s) => s.activeThread);
   const { unreadChannels, mentionCounts } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -94,18 +122,30 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
               <span>Channels</span>
               <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)", opacity: 0.6 }} />
             </div>
-            {channels.map((ch) => (
-              <ChannelItem
-                key={ch.id}
-                name={ch.name}
-                isActive={ch.id === activeChannelId}
-                isUnread={!!unreadChannels[ch.id]}
-                isMentioned={!!mentionCounts[ch.id]}
-                mentionCount={mentionCounts[ch.id] || 0}
-                onSelect={() => handleSelectChannel(ch.id)}
-                onSettings={() => setSettingsChannelId(ch.id)}
-              />
-            ))}
+            {parentChannels.map((ch) => {
+              const chThreads = threadsByParent[ch.id] ?? [];
+              return (
+                <div key={ch.id}>
+                  <ChannelItem
+                    name={ch.name}
+                    isActive={ch.id === activeChannelId}
+                    isUnread={!!unreadChannels[ch.id]}
+                    isMentioned={!!mentionCounts[ch.id]}
+                    mentionCount={mentionCounts[ch.id] || 0}
+                    onSelect={() => handleSelectChannel(ch.id)}
+                    onSettings={() => setSettingsChannelId(ch.id)}
+                  />
+                  {chThreads.map((t) => (
+                    <ThreadItem
+                      key={t.id}
+                      name={t.name}
+                      isActive={activeThread?.id === t.id}
+                      onSelect={() => openThread(t)}
+                    />
+                  ))}
+                </div>
+              );
+            })}
             {adding && (
               <form onSubmit={handleAddChannel} style={{ padding: "var(--space-xs) var(--space-sm)" }}>
                 <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="channel-name" autoFocus size="small" style={{ marginBottom: "var(--space-xs)" }} />

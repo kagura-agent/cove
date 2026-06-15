@@ -1,18 +1,30 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
 import type { Channel } from "../types";
 
-const indicatorStyle: CSSProperties = {
-  display: "inline-flex",
+const barStyle: CSSProperties = {
+  display: "flex",
   alignItems: "center",
-  gap: "var(--space-xs)",
-  padding: "var(--space-xxs) var(--space-sm)",
-  marginTop: "var(--space-xxs)",
+  gap: "var(--space-sm)",
+  padding: "var(--space-xs) var(--space-md)",
+  marginTop: "var(--space-xs)",
   fontSize: "var(--font-size-sm)",
   color: "var(--accent)",
   cursor: "pointer",
   borderRadius: "var(--space-xs)",
+  borderLeft: "2px solid var(--accent)",
   fontWeight: 500,
+  transition: "background 0.15s",
+};
+
+const barHoverStyle: CSSProperties = {
+  background: "var(--bg-modifier-hover)",
+};
+
+const arrowStyle: CSSProperties = {
+  marginLeft: "auto",
+  fontSize: "var(--font-size-xs)",
+  opacity: 0.7,
 };
 
 interface Props {
@@ -22,6 +34,7 @@ interface Props {
 
 export function ThreadIndicator({ thread }: Props) {
   const openThread = useThreadStore((s) => s.openThread);
+  const [hovered, setHovered] = useState(false);
 
   const handleClick = () => {
     openThread({
@@ -40,16 +53,20 @@ export function ThreadIndicator({ thread }: Props) {
   };
 
   const count = thread.message_count;
-  const label = count === 1 ? "1 reply" : `${count} replies`;
+  const label = count === 1 ? "1 Reply" : `${count} Replies`;
 
   return (
     <div
       className="thread-indicator"
-      style={indicatorStyle}
+      style={{ ...barStyle, ...(hovered ? barHoverStyle : {}) }}
       onClick={handleClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <span>💬</span>
-      <span>{label}</span>
+      <span style={{ fontSize: "var(--font-size-md)" }}>💬</span>
+      <span style={{ fontWeight: 600 }}>{thread.name}</span>
+      <span style={{ opacity: 0.8 }}>{label}</span>
+      <span style={arrowStyle}>View Thread ›</span>
     </div>
   );
 }

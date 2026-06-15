@@ -1,29 +1,37 @@
 import { useState, useRef, useEffect, type CSSProperties } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
-import { ChatMarkdown } from "./ChatMarkdown";
-import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
+import { useMessageStore } from "../stores/useMessageStore";
+import { MessageItem } from "./MessageItem";
+import type { Message } from "../types";
 
 const panelStyle: CSSProperties = {
-  width: "var(--thread-panel-width, 400px)",
-  maxWidth: "100vw",
+  width: "100%",
   height: "100%",
   display: "flex",
   flexDirection: "column",
   background: "var(--bg-secondary)",
-  borderLeft: "1px solid var(--border-subtle)",
   flexShrink: 0,
 };
 
 const headerStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
-  padding: "var(--space-sm) var(--space-md)",
+  gap: "var(--space-sm)",
+  padding: "0 var(--space-md)",
   borderBottom: "1px solid var(--border-subtle)",
+  height: "var(--header-height)",
   flexShrink: 0,
 };
 
 const headerTitleStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--space-sm)",
+  flex: 1,
+  overflow: "hidden",
+};
+
+const headerNameStyle: CSSProperties = {
   fontWeight: 600,
   fontSize: "var(--font-size-lg)",
   color: "var(--header-primary)",
@@ -41,15 +49,20 @@ const closeBtnStyle: CSSProperties = {
   padding: "var(--space-xs)",
   borderRadius: "var(--space-xs)",
   lineHeight: 1,
+  flexShrink: 0,
+};
+
+const parentMessageStyle: CSSProperties = {
+  borderBottom: "1px solid var(--border-subtle)",
+  padding: "var(--space-sm) 0",
+  flexShrink: 0,
 };
 
 const messagesContainerStyle: CSSProperties = {
   flex: 1,
   overflowY: "auto",
-  padding: "var(--space-sm)",
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-xs)",
 };
 
 const inputContainerStyle: CSSProperties = {
@@ -79,47 +92,12 @@ const emptyStyle: CSSProperties = {
   fontSize: "var(--font-size-md)",
 };
 
-function formatTime(ts: string): string {
-  try {
-    const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch { return ""; }
-}
-
-interface ThreadMessageProps {
-  message: { id: string; content: string; author: { username: string; global_name?: string | null; bot: boolean }; timestamp: string };
-}
-
-function ThreadMessage({ message }: ThreadMessageProps) {
-  const initial = message.author.username.charAt(0).toUpperCase();
-  const bgColor = pickAvatarColor(message.author.username);
-  const textColor = getContrastTextColor(bgColor);
-  const displayName = message.author.global_name || message.author.username;
-
-  return (
-    <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "flex-start" }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: "50%", backgroundColor: bgColor,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "var(--font-size-sm)", fontWeight: 600, color: textColor, flexShrink: 0,
-      }}>
-        {initial}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-xs)" }}>
-          <span style={{ fontWeight: 500, fontSize: "var(--font-size-md)", color: "var(--header-primary)" }}>
-            {displayName}
-          </span>
-          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-            {formatTime(message.timestamp)}
-          </span>
-        </div>
-        <div style={{ fontSize: "var(--font-size-md)", color: "var(--text-normal)", wordBreak: "break-word" }}>
-          <ChatMarkdown content={message.content} mentionUsers={new Map()} />
-        </div>
-      </div>
-    </div>
-  );
+/** Check if two messages are from the same author within 5 minutes */
+function shouldGroup(prev: Message | undefined, curr: Message): boolean {
+  if (!prev) return false;
+  if (prev.author.id !== curr.author.id) return false;
+  const dt = new Date(curr.timestamp).getTime() - new Date(prev.timestamp).getTime();
+  return dt < 5 * 60 * 1000;
 }
 
 export function ThreadPanel() {
@@ -130,6 +108,15 @@ export function ThreadPanel() {
   const sendMsg = useThreadStore((s) => s.sendMessage);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Look up the parent message that spawned this thread
+  const parentChannelMessages = useMessageStore((s) => {
+    if (!activeThread?.parent_id) return [];
+    return s.messages[activeThread.parent_id] ?? [];
+  });
+  const parentMessage = activeThread?.message_id
+    ? parentChannelMessages.find((m) => m.id === activeThread.message_id)
+    : undefined;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -153,20 +140,37 @@ export function ThreadPanel() {
 
   return (
     <div style={panelStyle} className="thread-panel">
+      {/* Header */}
       <div style={headerStyle}>
-        <div style={headerTitleStyle}>Thread: {activeThread.name}</div>
+        <div style={headerTitleStyle}>
+          <span style={{ fontSize: "var(--font-size-lg)", opacity: 0.6 }}>💬</span>
+          <span style={headerNameStyle}>{activeThread.name}</span>
+        </div>
         <button style={closeBtnStyle} onClick={closeThread} title="Close thread">✕</button>
       </div>
 
-      <div style={messagesContainerStyle}>
+      {/* Parent message context */}
+      {parentMessage && (
+        <div style={parentMessageStyle}>
+          <MessageItem message={parentMessage} isGroupStart />
+        </div>
+      )}
+
+      {/* Thread messages */}
+      <div style={messagesContainerStyle} className="scroll-container">
         {loading && <div style={emptyStyle}>Loading...</div>}
         {!loading && messages.length === 0 && <div style={emptyStyle}>No messages yet</div>}
-        {messages.map((msg) => (
-          <ThreadMessage key={msg.id} message={msg} />
+        {messages.map((msg, i) => (
+          <MessageItem
+            key={msg.id}
+            message={msg}
+            isGroupStart={!shouldGroup(messages[i - 1], msg)}
+          />
         ))}
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Input */}
       <div style={inputContainerStyle}>
         <textarea
           style={inputStyle}
