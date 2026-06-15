@@ -126,6 +126,7 @@ export function createAllTables(db: Database.Database): void {
       thread_id      TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
       user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       join_timestamp INTEGER NOT NULL,
+      flags          INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (thread_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS idx_thread_members_user ON thread_members(user_id);

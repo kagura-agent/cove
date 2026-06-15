@@ -7,7 +7,8 @@ export class ThreadsRepo {
 
   /** Create a thread from a message. */
   createFromMessage(guildId: string, parentChannelId: string, messageId: string, name: string, ownerId: string, autoArchiveDuration?: number): Channel {
-    return this.createThread(guildId, parentChannelId, messageId, name, ownerId, autoArchiveDuration);
+    // Use messageId as the thread channel ID (Discord convention)
+    return this.createThread(guildId, parentChannelId, messageId, name, ownerId, autoArchiveDuration, messageId);
   }
 
   /** Create a standalone thread (not attached to a specific message). */
@@ -88,12 +89,13 @@ export class ThreadsRepo {
   /** List members of a thread. */
   listMembers(threadId: string): ThreadMember[] {
     const rows = this.db.prepare(
-      "SELECT thread_id, user_id, join_timestamp FROM thread_members WHERE thread_id = ?"
+      "SELECT thread_id, user_id, join_timestamp, flags FROM thread_members WHERE thread_id = ?"
     ).all(threadId) as ThreadMemberRow[];
     return rows.map((r) => ({
       id: r.thread_id,
       user_id: r.user_id,
       join_timestamp: r.join_timestamp,
+      flags: r.flags ?? 0,
     }));
   }
 
@@ -132,12 +134,16 @@ export class ThreadsRepo {
     ).run(threadId);
   }
 
-  /** Get thread info to attach to parent message. Returns { id, name, message_count } or null. */
-  getThreadForMessage(messageId: string): { id: string; name: string; message_count: number } | null {
+  /** Get thread channel for a parent message. Returns full Channel or null. */
+  getThreadForMessage(messageId: string): Channel | null {
+    // Discord convention: thread ID = message ID
+    const channel = this.channelsRepo.getById(messageId);
+    if (channel && channel.type === 11) return channel;
+    // Fallback for legacy: check message_id column
     const row = this.db.prepare(
-      "SELECT id, name, message_count FROM channels WHERE message_id = ? AND type = 11 LIMIT 1"
-    ).get(messageId) as { id: string; name: string; message_count: number } | undefined;
-    return row ?? null;
+      "SELECT id FROM channels WHERE message_id = ? AND type = 11 LIMIT 1"
+    ).get(messageId) as { id: string } | undefined;
+    return row ? this.channelsRepo.getById(row.id) ?? null : null;
   }
 
   private createThread(
@@ -147,14 +153,16 @@ export class ThreadsRepo {
     name: string,
     ownerId: string,
     autoArchiveDuration?: number,
+    explicitId?: string,
   ): Channel {
-    const id = generateSnowflake();
+    const id = explicitId ?? generateSnowflake();
     const now = new Date().toISOString();
     const metadata: ThreadMetadata = {
       archived: false,
       auto_archive_duration: autoArchiveDuration ?? 1440,
       archive_timestamp: now,
       locked: false,
+      invitable: true,
       create_timestamp: now,
     };
 
@@ -191,6 +199,7 @@ interface ThreadMemberRow {
   thread_id: string;
   user_id: string;
   join_timestamp: string;
+  flags: number;
 }
 
 function toChannel(row: ChannelRow): Channel {

@@ -266,12 +266,10 @@ export function setupGatewaySubscriptions(): void {
   // Thread events
   subscribe("THREAD_CREATE", (thread) => {
     useThreadStore.getState().addThread(thread);
-    if (thread.message_id && thread.parent_id) {
-      useMessageStore.getState().setMessageThread(thread.parent_id, thread.message_id, {
-        id: thread.id,
-        name: thread.name,
-        message_count: thread.message_count ?? 0,
-      });
+    if (thread.parent_id) {
+      // Thread ID = message ID in Discord convention
+      const messageId = thread.message_id ?? thread.id;
+      useMessageStore.getState().setMessageThread(thread.parent_id, messageId, thread);
     }
   });
 

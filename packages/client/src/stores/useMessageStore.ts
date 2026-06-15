@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Message } from "../types";
+import type { Message, Channel } from "../types";
 import type { Reaction } from "@cove/shared";
 
 export type PendingStatus = "pending" | "failed";
@@ -20,7 +20,7 @@ interface MessageState {
   prependMessages: (channelId: string, messages: Message[]) => void;
   addReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
   removeReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
-  setMessageThread: (channelId: string, messageId: string, thread: { id: string; name: string; message_count: number } | null) => void;
+  setMessageThread: (channelId: string, messageId: string, thread: Channel | null) => void;
 }
 
 export const useMessageStore = create<MessageState>((set) => ({

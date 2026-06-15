@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
+import type { Channel } from "../types";
 
 interface Props {
-  thread: { id: string; name: string; message_count: number };
+  thread: Channel;
   channelId: string;
 }
 
 export function ThreadIndicator({ thread }: Props) {
-  const fetchAndOpen = useThreadStore((s) => s.fetchAndOpenThread);
+  const openThread = useThreadStore((s) => s.openThread);
   const [hovered, setHovered] = useState(false);
 
   const count = thread.message_count;
@@ -15,7 +16,7 @@ export function ThreadIndicator({ thread }: Props) {
 
   return (
     <div
-      onClick={() => fetchAndOpen(thread.id)}
+      onClick={() => openThread(thread)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

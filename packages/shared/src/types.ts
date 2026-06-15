@@ -43,6 +43,7 @@ export interface ThreadMetadata {
   auto_archive_duration: number; // minutes
   archive_timestamp: string; // ISO 8601
   locked: boolean;
+  invitable?: boolean; // whether non-members can be invited
   create_timestamp: string; // ISO 8601
 }
 
@@ -94,7 +95,7 @@ export interface Message {
   /** Guild the message belongs to. Present on gateway dispatches; absent on REST responses. */
   guild_id?: string;
   /** Thread spawned from this message (present on parent messages that have threads). */
-  thread?: { id: string; name: string; message_count: number } | null;
+  thread?: Channel | null;
 }
 
 /** A reaction summary for a message. */
@@ -177,4 +178,5 @@ export interface ThreadMember {
   id?: string; // thread id
   user_id?: string;
   join_timestamp: string; // ISO 8601
+  flags: number; // default 0
 }
