@@ -49,7 +49,7 @@ export function createChannel(guildId: string, name: string, topic?: string) {
     method: "POST", body: JSON.stringify({ name, topic }),
   });
 }
-export function updateChannel(channelId: string, data: { name?: string; topic?: string }) {
+export function updateChannel(channelId: string, data: { name?: string; topic?: string; archived?: boolean }) {
   return api<Channel>(`${API_PREFIX}/channels/${channelId}`, {
     method: "PATCH", body: JSON.stringify(data),
   });
