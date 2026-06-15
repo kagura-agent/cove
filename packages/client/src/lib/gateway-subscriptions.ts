@@ -41,8 +41,6 @@ export function setupGatewaySubscriptions(): void {
     }
 
     store.addMessage(msg.channel_id, msg);
-    // Route to thread panel if open
-    useThreadStore.getState().addThreadMessage(msg);
     useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
 
     // Mark channel unread if the message is from someone else and not the active channel
@@ -80,7 +78,6 @@ export function setupGatewaySubscriptions(): void {
   subscribe("MESSAGE_DELETE", (data) => {
     useMessageStore.getState().removeMessage(data.channel_id, data.id);
     useReplyStore.getState().clearReplyForDeletedMessage(data.channel_id, data.id);
-    useThreadStore.getState().removeThreadMessage(data.id);
   });
 
   subscribe("MESSAGE_DELETE_BULK", (data) => {
