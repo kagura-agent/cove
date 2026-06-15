@@ -263,6 +263,13 @@ export function setupGatewaySubscriptions(): void {
   // Thread events
   subscribe("THREAD_CREATE", (thread) => {
     useThreadStore.getState().addThread(thread);
+    if (thread.message_id && thread.parent_id) {
+      useMessageStore.getState().setMessageThread(thread.parent_id, thread.message_id, {
+        id: thread.id,
+        name: thread.name,
+        message_count: thread.message_count ?? 0,
+      });
+    }
   });
 
   subscribe("THREAD_UPDATE", (thread) => {

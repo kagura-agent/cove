@@ -20,6 +20,7 @@ interface MessageState {
   prependMessages: (channelId: string, messages: Message[]) => void;
   addReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
   removeReaction: (channelId: string, messageId: string, emoji: string, me: boolean, count: number) => void;
+  setMessageThread: (channelId: string, messageId: string, thread: { id: string; name: string; message_count: number } | null) => void;
 }
 
 export const useMessageStore = create<MessageState>((set) => ({
@@ -148,6 +149,19 @@ export const useMessageStore = create<MessageState>((set) => ({
             }
             return { ...m, reactions };
           }),
+        },
+      };
+    }),
+  setMessageThread: (channelId, messageId, thread) =>
+    set((s) => {
+      const msgs = s.messages[channelId];
+      if (!msgs) return s;
+      return {
+        messages: {
+          ...s.messages,
+          [channelId]: msgs.map((m) =>
+            m.id === messageId ? { ...m, thread: thread ?? undefined } : m,
+          ),
         },
       };
     }),

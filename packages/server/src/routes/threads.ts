@@ -26,6 +26,13 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     const nameErr = validateString(body.name, "name", { required: true, maxLength: 100 });
     if (nameErr) return validationError(c, nameErr);
 
+    if (body.auto_archive_duration !== undefined) {
+      const valid = [60, 1440, 4320, 10080];
+      if (!valid.includes(body.auto_archive_duration)) {
+        return validationError(c, "auto_archive_duration must be one of 60, 1440, 4320, 10080");
+      }
+    }
+
     // Verify message exists in this channel
     const msg = repos.messages.getById(channelId, messageId);
     if (!msg) {
@@ -68,6 +75,13 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const nameErr = validateString(body.name, "name", { required: true, maxLength: 100 });
     if (nameErr) return validationError(c, nameErr);
+
+    if (body.auto_archive_duration !== undefined) {
+      const valid = [60, 1440, 4320, 10080];
+      if (!valid.includes(body.auto_archive_duration)) {
+        return validationError(c, "auto_archive_duration must be one of 60, 1440, 4320, 10080");
+      }
+    }
 
     const thread = repos.threads.createStandalone(
       channel.guild_id,
@@ -123,6 +137,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     if (!repos.members.exists(thread.guild_id, user.id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
     }
+    if (!requireBotChannelPermission(repos, thread.parent_id!, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     repos.threads.addMember(threadId, user.id);
     dispatcher?.threadMemberUpdate(threadId, user.id, thread.guild_id);
@@ -137,6 +154,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const thread = repos.channels.getById(threadId);
     if (!thread || thread.type !== 11) return unknownChannel(c);
+    if (!requireBotChannelPermission(repos, thread.parent_id!, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     repos.threads.removeMember(threadId, user.id);
     dispatcher?.threadMemberUpdate(threadId, user.id, thread.guild_id);
@@ -154,6 +174,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     if (!thread || thread.type !== 11) return unknownChannel(c);
     if (!repos.members.exists(thread.guild_id, user.id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+    if (!requireBotChannelPermission(repos, thread.parent_id!, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     // Verify target user exists in the guild
@@ -178,6 +201,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     if (!thread || thread.type !== 11) return unknownChannel(c);
     if (!repos.members.exists(thread.guild_id, user.id)) {
       return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    }
+    if (!requireBotChannelPermission(repos, thread.parent_id!, user.id, user.bot)) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
     const members = repos.threads.listMembers(threadId);
