@@ -72,6 +72,7 @@ export function ThreadPanel() {
   async function handleArchive() {
     try {
       await api.updateChannel(activeThread!.id, { archived: true });
+      useThreadStore.getState().removeThread(activeThread!.id);
     } catch (err) {
       console.error("archive thread:", err);
     }
@@ -86,6 +87,7 @@ export function ThreadPanel() {
     }
     try {
       await api.deleteChannel(activeThread!.id);
+      useThreadStore.getState().removeThread(activeThread!.id);
     } catch (err) {
       console.error("delete thread:", err);
     }

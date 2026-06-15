@@ -274,7 +274,12 @@ export function setupGatewaySubscriptions(): void {
   });
 
   subscribe("THREAD_UPDATE", (thread) => {
-    useThreadStore.getState().updateThread(thread);
+    // Remove archived threads from sidebar
+    if (thread.thread_metadata?.archived) {
+      useThreadStore.getState().removeThread(thread.id);
+    } else {
+      useThreadStore.getState().updateThread(thread);
+    }
   });
 
   subscribe("THREAD_DELETE", (data) => {
