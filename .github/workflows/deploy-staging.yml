@@ -100,6 +100,24 @@ jobs:
           $SSH "curl -sf http://localhost:3501/api/health" || { $SSH "sudo journalctl -u cove-staging --no-pager -n 20"; exit 1; }
           echo "✅ Staging deploy successful!"
 
+      - name: Notify #cove-dev
+        if: success()
+        env:
+          WEBHOOK_URL: ${{ secrets.COVE_DEV_WEBHOOK_URL }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PR_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          SHORT_SHA=${COMMIT_SHA:0:7}
+          if [ -n "$PR_NUMBER" ]; then
+            MSG="✅ Deployed: #${PR_NUMBER} \"${PR_TITLE}\" (${SHORT_SHA})"
+          else
+            MSG="✅ Deployed: ${PR_TITLE%$'\n'*} (${SHORT_SHA})"
+          fi
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg content "$MSG" '{content: $content}')"
+
       - name: Comment preview URL (PRs only)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
