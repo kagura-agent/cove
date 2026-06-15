@@ -69,12 +69,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
 
-  // Register controller synchronously BEFORE any await to prevent ordering race
-  const existingDispatch = pendingDispatches.get(channelId);
-  if (existingDispatch) {
-    log?.warn?.(`cove: aborting pending dispatch for [${channelId}] (superseded by new message)`);
-    existingDispatch.abort();
-  }
+  // Track this dispatch (for shutdown/reconnect cleanup, NOT for message superseding)
   const abortController = new AbortController();
   pendingDispatches.set(channelId, abortController);
 

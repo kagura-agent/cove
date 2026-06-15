@@ -13,6 +13,7 @@ import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { ChannelMessageQueue } from "./message-queue.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 
@@ -239,6 +240,22 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const pendingDispatches = new Map<string, AbortController>();
       const restClient = getRestClient(account.baseUrl, account.token);
 
+      const messageQueue = new ChannelMessageQueue(
+        async (message) => {
+          await dispatchMessage({
+            message,
+            account,
+            restClient,
+            channelRuntime,
+            cfg,
+            accountId: ctx.accountId,
+            pendingDispatches,
+            log,
+          });
+        },
+        log,
+      );
+
       gatewayClient.on("reconnect", () => {
         // Hard reconnect (IDENTIFY fallback after failed RESUME) — abort pending dispatches and clear stale state
         log?.info?.(`cove: hard reconnect — aborting ${pendingDispatches.size} pending dispatch(es)`);
@@ -246,6 +263,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
           controller.abort();
         }
         pendingDispatches.clear();
+        messageQueue.clearAll();
 
         // Re-fetch channel list to pick up any changes during disconnection
         if (account.guildId) {
@@ -335,16 +353,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
 
-        await dispatchMessage({
-          message,
-          account,
-          restClient,
-          channelRuntime,
-          cfg,
-          accountId: ctx.accountId,
-          pendingDispatches,
-          log,
-        });
+        messageQueue.enqueue(message);
       });
 
       gatewayClient.on("error", (err) => {
@@ -367,7 +376,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       });
 
       ctx.abortSignal.addEventListener("abort", () => {
-        // Abort all pending dispatches on plugin shutdown
+        // Clear queued messages and abort all pending dispatches on plugin shutdown
+        messageQueue.clearAll();
         for (const c of pendingDispatches.values()) c.abort();
         pendingDispatches.clear();
         gatewayClient.destroy();
