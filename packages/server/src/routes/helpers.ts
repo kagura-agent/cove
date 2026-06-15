@@ -38,5 +38,14 @@ export function requireBotChannelPermission(
 ): boolean {
   if (!isBotUser) return true;
   const VIEW_CHANNEL = 1n << 10n;
-  return repos.permissions.hasPermission(channelId, userId, VIEW_CHANNEL);
+  if (repos.permissions.hasPermission(channelId, userId, VIEW_CHANNEL)) {
+    return true;
+  }
+  // Thread channels (type 11) don't have their own permission overwrites;
+  // inherit from the parent channel.
+  const channel = repos.channels.getById(channelId);
+  if (channel && channel.type === 11 && channel.parent_id) {
+    return repos.permissions.hasPermission(channel.parent_id, userId, VIEW_CHANNEL);
+  }
+  return false;
 }
