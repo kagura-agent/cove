@@ -10,6 +10,13 @@ interface ChannelRow {
   topic: string | null;
   position: number;
   last_message_id: string | null;
+  parent_id: string | null;
+  message_id: string | null;
+  thread_metadata: string | null;
+  message_count: number;
+  member_count: number;
+  owner_id: string | null;
+  total_message_sent: number;
 }
 
 function toChannel(row: ChannelRow): Channel {
@@ -24,6 +31,13 @@ function toChannel(row: ChannelRow): Channel {
     permission_overwrites: [],
     nsfw: false,
     rate_limit_per_user: 0,
+    parent_id: row.parent_id ?? undefined,
+    message_id: row.message_id ?? undefined,
+    thread_metadata: row.thread_metadata ? JSON.parse(row.thread_metadata) : undefined,
+    message_count: row.message_count ?? undefined,
+    member_count: row.member_count ?? undefined,
+    owner_id: row.owner_id ?? undefined,
+    total_message_sent: row.total_message_sent ?? undefined,
   };
 }
 

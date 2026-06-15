@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { ConfigProvider, theme, Button, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
@@ -13,7 +13,9 @@ import { MessageInput } from "./components/MessageInput";
 import { ReplyBar } from "./components/ReplyBar";
 import { MemberList } from "./components/MemberList";
 import { FilesSidebar } from "./components/FilesSidebar";
+import { ThreadPanel } from "./components/ThreadPanel";
 import { useChannelFilesStore } from "./stores/useChannelFilesStore";
+import { useThreadStore } from "./stores/useThreadStore";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
 import * as api from "./lib/api";
@@ -154,6 +156,30 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
+  const activeThread = useThreadStore((s) => s.activeThread);
+  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [resizeDragging, setResizeDragging] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(400);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = threadPanelWidth;
+    setResizeDragging(true);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = dragStartX.current - ev.clientX;
+      setThreadPanelWidth(Math.min(600, Math.max(280, dragStartWidth.current + delta)));
+    };
+    const onMouseUp = () => {
+      setResizeDragging(false);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [threadPanelWidth]);
 
   useEffect(() => {
     // BFF: tokens are in HttpOnly cookies, not URL or localStorage
@@ -298,8 +324,27 @@ export default function App() {
             </div>
           </div>
 
-          {membersOpen && <MemberList />}
-          {filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
+          {!activeThread && membersOpen && <MemberList />}
+          {!activeThread && filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
+          {activeThread && (
+            <>
+              <div
+                style={{
+                  width: 4,
+                  flexShrink: 0,
+                  cursor: "col-resize",
+                  background: resizeDragging ? "var(--accent)" : undefined,
+                  transition: "background 0.15s",
+                }}
+                onMouseDown={handleResizeMouseDown}
+                onMouseEnter={(e) => { if (!resizeDragging) (e.currentTarget.style.background = "var(--border-subtle)"); }}
+                onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
+              />
+              <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
+                <ThreadPanel />
+              </div>
+            </>
+          )}
         </div>
 
         <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

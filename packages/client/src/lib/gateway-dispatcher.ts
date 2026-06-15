@@ -1,4 +1,5 @@
 import type { Message, Channel, Guild } from "../types";
+import type { ThreadMember } from "@cove/shared";
 
 export interface ReadyGuild extends Guild {
   channels: Channel[];
@@ -25,6 +26,12 @@ export interface GatewayEventMap {
   CHANNEL_FILE_CREATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
   CHANNEL_FILE_UPDATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
   CHANNEL_FILE_DELETE: { channel_id: string; guild_id: string; filename: string };
+  THREAD_CREATE: Channel;
+  THREAD_UPDATE: Channel;
+  THREAD_DELETE: { id: string; guild_id: string; parent_id: string; type: number };
+  THREAD_LIST_SYNC: { guild_id: string; channel_ids?: string[]; threads: Channel[]; members: ThreadMember[] };
+  THREAD_MEMBER_UPDATE: { id: string; user_id: string };
+  THREAD_MEMBERS_UPDATE: { id: string; guild_id: string; added_members: Array<{ user_id: string }>; removed_members: Array<{ user_id: string }> };
 }
 
 type Handler<T> = (data: T) => void;

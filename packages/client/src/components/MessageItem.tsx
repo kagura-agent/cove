@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { MessageReplyQuote } from "./MessageReplyQuote";
+import { ThreadIndicator } from "./ThreadIndicator";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useUserStore } from "../stores/useUserStore";
@@ -312,6 +313,11 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
           {/* Reactions */}
           <ReactionPills message={message} />
+
+          {/* Thread indicator */}
+          {message.thread && (
+            <ThreadIndicator thread={message.thread} channelId={message.channel_id} />
+          )}
         </div>
 
         {/* Hover toolbar */}
@@ -362,6 +368,11 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
         {/* Reactions */}
         <ReactionPills message={message} />
+
+        {/* Thread indicator */}
+        {message.thread && (
+          <ThreadIndicator thread={message.thread} channelId={message.channel_id} />
+        )}
       </div>
 
       {/* Hover toolbar */}

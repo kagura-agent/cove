@@ -49,7 +49,7 @@ export function createChannel(guildId: string, name: string, topic?: string) {
     method: "POST", body: JSON.stringify({ name, topic }),
   });
 }
-export function updateChannel(channelId: string, data: { name?: string; topic?: string }) {
+export function updateChannel(channelId: string, data: { name?: string; topic?: string; archived?: boolean }) {
   return api<Channel>(`${API_PREFIX}/channels/${channelId}`, {
     method: "PATCH", body: JSON.stringify(data),
   });
@@ -148,4 +148,56 @@ export function putChannelFile(channelId: string, filename: string, content: str
 }
 export function deleteChannelFile(channelId: string, filename: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`, { method: "DELETE" });
+}
+
+// ─── Single Channel / Message ───────────────────────────────────────
+
+export function fetchChannel(channelId: string) {
+  return api<Channel>(`${API_PREFIX}/channels/${channelId}`);
+}
+
+export function fetchMessage(channelId: string, messageId: string) {
+  return api<Message>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}`);
+}
+
+// ─── Threads ──────────────────────────────────────────────────────────
+
+export function createThreadFromMessage(channelId: string, messageId: string, name: string) {
+  return api<Channel>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/threads`, {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+}
+
+export function createThread(channelId: string, name: string) {
+  return api<Channel>(`${API_PREFIX}/channels/${channelId}/threads`, {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+}
+
+export function fetchActiveThreads(channelId: string) {
+  return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/channels/${channelId}/threads/active`);
+}
+
+export function fetchArchivedThreads(channelId: string) {
+  return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/channels/${channelId}/threads/archived/public`);
+}
+
+export function fetchGuildActiveThreads(guildId: string) {
+  return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/guilds/${guildId}/threads/active`);
+}
+
+export function joinThread(threadId: string) {
+  return api<void>(`${API_PREFIX}/channels/${threadId}/thread-members/@me`, { method: "PUT" });
+}
+
+export function leaveThread(threadId: string) {
+  return api<void>(`${API_PREFIX}/channels/${threadId}/thread-members/@me`, { method: "DELETE" });
+}
+
+export function fetchThreadMessages(threadId: string, opts?: { before?: string; limit?: number }) {
+  return fetchMessages(threadId, opts); // threads are channels, same endpoint
+}
+
+export function sendThreadMessage(threadId: string, content: string, nonce?: string) {
+  return sendMessage(threadId, content, nonce);
 }

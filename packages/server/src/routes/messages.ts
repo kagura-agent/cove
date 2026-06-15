@@ -26,6 +26,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const around = c.req.query("around");
 
     const messages = repos.messages.list(channelId, { limit, before, after, around }, user.id);
+    // Enrich messages with thread indicators
+    for (const msg of messages) {
+      const threadInfo = repos.threads.getThreadForMessage(msg.id);
+      if (threadInfo) {
+        msg.thread = threadInfo;
+      }
+    }
     return c.json(messages);
   });
 
@@ -45,6 +52,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!message) {
       return unknownMessage(c);
     }
+    // Enrich with thread indicator
+    const threadInfo = repos.threads.getThreadForMessage(message.id);
+    if (threadInfo) {
+      message.thread = threadInfo;
+    }
     return c.json(message);
   });
 
@@ -57,6 +69,17 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
     if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
+
+    // Reject messages in archived or locked threads
+    if (channel.type === 11 && channel.thread_metadata) {
+      const meta = channel.thread_metadata;
+      if (meta.archived) {
+        return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+      }
+      if (meta.locked) {
+        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
+      }
     }
 
     const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
@@ -93,6 +116,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     // Pass through client nonce for optimistic send reconciliation
     if (body.nonce) {
       message.nonce = body.nonce;
+    }
+
+    // Thread-specific: auto-add sender as member + increment message count
+    if (channel.type === 11) {
+      repos.threads.addMember(channelId, user.id);
+      repos.threads.incrementMessageCount(channelId);
     }
 
     // Update channel's last_message_id
@@ -192,6 +221,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return unknownMessage(c);
     }
 
+    // Thread-specific: decrement message count
+    if (ch.type === 11) {
+      repos.threads.decrementMessageCount(channelId);
+    }
+
     // Recompute last_message_id if we just deleted the latest message
     if (ch.last_message_id === msgId) {
       repos.channels.recomputeLastMessageId(channelId);
@@ -233,6 +267,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     })();
     if (deleted.length > 0) {
       repos.channels.recomputeLastMessageId(channelId);
+      // Update thread message_count for bulk deletes
+      if (ch.type === 11) {
+        repos.threads.decrementMessageCountBy(channelId, deleted.length);
+      }
       dispatcher?.messageDeleteBulk(channelId, deleted, ch.guild_id);
     }
 
@@ -254,6 +292,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const count = repos.messages.deleteAll(channelId);
     if (count > 0) {
       repos.channels.recomputeLastMessageId(channelId);
+      // Reset thread message_count when all messages are cleared
+      if (ch.type === 11) {
+        repos.threads.resetMessageCount(channelId);
+      }
     }
 
     return c.body(null, 204);
