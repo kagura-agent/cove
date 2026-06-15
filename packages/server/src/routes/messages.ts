@@ -71,6 +71,17 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
+    // Reject messages in archived or locked threads
+    if (channel.type === 11 && channel.thread_metadata) {
+      const meta = channel.thread_metadata;
+      if (meta.archived) {
+        return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+      }
+      if (meta.locked) {
+        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
+      }
+    }
+
     const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
@@ -256,6 +267,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     })();
     if (deleted.length > 0) {
       repos.channels.recomputeLastMessageId(channelId);
+      // Update thread message_count for bulk deletes
+      if (ch.type === 11) {
+        repos.threads.decrementMessageCountBy(channelId, deleted.length);
+      }
       dispatcher?.messageDeleteBulk(channelId, deleted, ch.guild_id);
     }
 
@@ -277,6 +292,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const count = repos.messages.deleteAll(channelId);
     if (count > 0) {
       repos.channels.recomputeLastMessageId(channelId);
+      // Reset thread message_count when all messages are cleared
+      if (ch.type === 11) {
+        repos.threads.resetMessageCount(channelId);
+      }
     }
 
     return c.body(null, 204);

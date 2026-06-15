@@ -129,7 +129,13 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
       return c.json({ message: "Unknown Guild", code: 10004 }, 404);
     }
 
-    const threads = repos.threads.listActiveByGuild(guildId);
+    let threads = repos.threads.listActiveByGuild(guildId);
+    // Filter threads by parent channel permissions for bots
+    if (user.bot) {
+      threads = threads.filter(t =>
+        t.parent_id && requireBotChannelPermission(repos, t.parent_id, user.id, true)
+      );
+    }
     return c.json({ threads, has_more: false });
   });
 

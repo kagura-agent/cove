@@ -117,7 +117,11 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     const { name, topic, position, type } = body;
 
     // Handle thread-specific fields (archived/locked) for type=11 channels
-    if (channel.type === 11) {
+    if (channel.type === 11 && (body.archived !== undefined || body.locked !== undefined)) {
+      // Only thread owner can archive/lock
+      if (channel.owner_id && channel.owner_id !== user.id) {
+        return c.json({ message: 'Missing Permissions', code: 50013 }, 403);
+      }
       let threadUpdated: import("@cove/shared").Channel | null = null;
       if (body.archived !== undefined) {
         threadUpdated = repos.threads.setArchived(id, body.archived);

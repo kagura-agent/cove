@@ -118,6 +118,20 @@ export class ThreadsRepo {
     ).run(threadId);
   }
 
+  /** Decrement message_count by n (floor at 0). */
+  decrementMessageCountBy(threadId: string, count: number): void {
+    this.db.prepare(
+      'UPDATE channels SET message_count = MAX(message_count - ?, 0) WHERE id = ? AND type = 11'
+    ).run(count, threadId);
+  }
+
+  /** Reset message_count to 0 (e.g. when all messages are cleared). */
+  resetMessageCount(threadId: string): void {
+    this.db.prepare(
+      "UPDATE channels SET message_count = 0 WHERE id = ? AND type = 11"
+    ).run(threadId);
+  }
+
   /** Get thread info to attach to parent message. Returns { id, name, message_count } or null. */
   getThreadForMessage(messageId: string): { id: string; name: string; message_count: number } | null {
     const row = this.db.prepare(
