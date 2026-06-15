@@ -89,6 +89,8 @@ export function ThreadPanel() {
       {parentMessage && (
         <div style={{
           flexShrink: 0,
+          maxHeight: 150,
+          overflowY: "auto",
           borderBottom: "2px solid var(--accent, #5865f2)",
           opacity: 0.85,
           background: "var(--bg-primary)",
