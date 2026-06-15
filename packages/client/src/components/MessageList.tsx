@@ -137,7 +137,7 @@ function restoreDistanceFromBottom(el: HTMLElement, dist: number): void {
 }
 
 // ── Component ───────────────────────────────────────────────────────────
-export function MessageList({ channelId }: { channelId: string }) {
+export function MessageList({ channelId, parentMessage }: { channelId: string; parentMessage?: Message | null }) {
   const messages = useMessageStore((s) => s.messages[channelId]);
   const setMessages = useMessageStore((s) => s.setMessages);
   const prependMessages = useMessageStore((s) => s.prependMessages);
@@ -602,9 +602,14 @@ export function MessageList({ channelId }: { channelId: string }) {
           style={listStyle}
           className="scroll-container"
         >
-          {!hasMore && messages.length > 0 && (
+          {!hasMore && messages.length > 0 && !parentMessage && (
             <div style={{ textAlign: "center", padding: "var(--space-sm) 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
               This is the beginning of the conversation
+            </div>
+          )}
+          {parentMessage && (
+            <div style={{ borderBottom: "2px solid var(--accent, #5865f2)", paddingBottom: "var(--space-sm)" }}>
+              <MessageItem message={parentMessage} isGroupStart={true} />
             </div>
           )}
           {(() => {

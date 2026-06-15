@@ -85,23 +85,9 @@ export function ThreadPanel() {
         >&#10005;</button>
       </div>
 
-      {/* Parent message context */}
-      {parentMessage && (
-        <div style={{
-          flexShrink: 0,
-          maxHeight: 150,
-          overflowY: "auto",
-          borderBottom: "2px solid var(--accent, #5865f2)",
-          opacity: 0.85,
-          background: "var(--bg-primary)",
-        }}>
-          <MessageItem message={parentMessage} isGroupStart={true} />
-        </div>
-      )}
-
-      {/* Reuse the exact same MessageList component as main chat */}
+      {/* Message area: parent message + thread messages in one scroll flow */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" }}>
-        <MessageList channelId={activeThread.id} />
+        <MessageList channelId={activeThread.id} parentMessage={parentMessage} />
       </div>
 
       {/* Reuse the exact same input as main chat */}
