@@ -1,30 +1,5 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
-
-const barStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-sm)",
-  padding: "var(--space-xs) var(--space-md)",
-  marginTop: "var(--space-xs)",
-  fontSize: "var(--font-size-sm)",
-  color: "var(--accent)",
-  cursor: "pointer",
-  borderRadius: "var(--space-xs)",
-  borderLeft: "2px solid var(--accent)",
-  fontWeight: 500,
-  transition: "background 0.15s",
-};
-
-const barHoverStyle: CSSProperties = {
-  background: "var(--bg-modifier-hover)",
-};
-
-const arrowStyle: CSSProperties = {
-  marginLeft: "auto",
-  fontSize: "var(--font-size-xs)",
-  opacity: 0.7,
-};
 
 interface Props {
   thread: { id: string; name: string; message_count: number };
@@ -32,28 +7,35 @@ interface Props {
 }
 
 export function ThreadIndicator({ thread }: Props) {
-  const fetchAndOpenThread = useThreadStore((s) => s.fetchAndOpenThread);
+  const fetchAndOpen = useThreadStore((s) => s.fetchAndOpenThread);
   const [hovered, setHovered] = useState(false);
-
-  const handleClick = () => {
-    fetchAndOpenThread(thread.id);
-  };
 
   const count = thread.message_count;
   const label = count === 1 ? "1 Reply" : `${count} Replies`;
 
   return (
     <div
-      className="thread-indicator"
-      style={{ ...barStyle, ...(hovered ? barHoverStyle : {}) }}
-      onClick={handleClick}
+      onClick={() => fetchAndOpen(thread.id)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-sm)",
+        padding: "4px var(--space-sm)",
+        marginTop: "4px",
+        borderRadius: "var(--space-xs)",
+        cursor: "pointer",
+        color: "var(--text-link, #00aff4)",
+        fontSize: "var(--font-size-sm)",
+        fontWeight: 500,
+        background: hovered ? "var(--bg-modifier-hover)" : "transparent",
+        transition: "background 0.15s",
+      }}
     >
-      <span style={{ fontSize: "var(--font-size-md)" }}>💬</span>
-      <span style={{ fontWeight: 600 }}>{thread.name}</span>
-      <span style={{ opacity: 0.8 }}>{label}</span>
-      <span style={arrowStyle}>View Thread ›</span>
+      <span style={{ display: "flex", alignItems: "center" }}>&#128172;</span>
+      <span>{label}</span>
+      {hovered && <span style={{ fontSize: "var(--font-size-xs)", opacity: 0.7 }}>View Thread &#8250;</span>}
     </div>
   );
 }

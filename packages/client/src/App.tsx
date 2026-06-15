@@ -304,7 +304,7 @@ export default function App() {
           {!activeThread && membersOpen && <MemberList />}
           {!activeThread && filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
           {activeThread && (
-            <div style={{ width: 400, flexShrink: 0, height: "100%", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" }}>
+            <div style={{ width: 400, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
               <ThreadPanel />
             </div>
           )}
