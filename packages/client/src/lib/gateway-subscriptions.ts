@@ -142,6 +142,17 @@ export function setupGatewaySubscriptions(): void {
       for (const guild of data.guilds) {
         if (guild.channels) {
           channelStore.setChannels(guild.id, guild.channels);
+
+          // Fetch active threads for each channel
+          for (const ch of (guild.channels ?? [])) {
+            if (ch.type !== 11) {
+              api.fetchActiveThreads(ch.id).then(({ threads }) => {
+                if (threads.length > 0) {
+                  useThreadStore.getState().setThreads(ch.id, threads);
+                }
+              }).catch(() => {});
+            }
+          }
         }
       }
 

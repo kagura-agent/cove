@@ -100,6 +100,8 @@ function shouldGroup(prev: Message | undefined, curr: Message): boolean {
   return dt < 5 * 60 * 1000;
 }
 
+const EMPTY_MESSAGES: Message[] = [];
+
 export function ThreadPanel() {
   const activeThread = useThreadStore((s) => s.activeThread);
   const messages = useThreadStore((s) => s.threadMessages);
@@ -110,9 +112,10 @@ export function ThreadPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Look up the parent message that spawned this thread
+  const parentId = activeThread?.parent_id;
   const parentChannelMessages = useMessageStore((s) => {
-    if (!activeThread?.parent_id) return [];
-    return s.messages[activeThread.parent_id] ?? [];
+    if (!parentId) return EMPTY_MESSAGES;
+    return s.messages[parentId] ?? EMPTY_MESSAGES;
   });
   const parentMessage = activeThread?.message_id
     ? parentChannelMessages.find((m) => m.id === activeThread.message_id)
