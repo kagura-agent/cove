@@ -1,11 +1,41 @@
+import { useState, useEffect } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
+import { useMessageStore } from "../stores/useMessageStore";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
+import { MessageItem } from "./MessageItem";
 import { ReplyBar } from "./ReplyBar";
+import * as api from "../lib/api";
+import type { Message } from "../types";
 
 export function ThreadPanel() {
   const activeThread = useThreadStore((s) => s.activeThread);
   const closeThread = useThreadStore((s) => s.closeThread);
+  const [parentMessage, setParentMessage] = useState<Message | null>(null);
+
+  useEffect(() => {
+    if (!activeThread?.message_id || !activeThread?.parent_id) {
+      setParentMessage(null);
+      return;
+    }
+
+    const parentId = activeThread.parent_id;
+    const messageId = activeThread.message_id;
+
+    // Try message store first
+    const storeMessages = useMessageStore.getState().messages[parentId] ?? [];
+    const found = storeMessages.find((m) => m.id === messageId);
+    if (found) {
+      setParentMessage(found);
+      return;
+    }
+
+    // Fetch from API
+    api
+      .fetchMessage(parentId, messageId)
+      .then((msg) => setParentMessage(msg))
+      .catch(() => setParentMessage(null));
+  }, [activeThread?.id, activeThread?.message_id, activeThread?.parent_id]);
 
   if (!activeThread) return null;
 
@@ -54,6 +84,18 @@ export function ThreadPanel() {
           }}
         >&#10005;</button>
       </div>
+
+      {/* Parent message context */}
+      {parentMessage && (
+        <div style={{
+          flexShrink: 0,
+          borderBottom: "2px solid var(--accent, #5865f2)",
+          opacity: 0.85,
+          background: "var(--bg-primary)",
+        }}>
+          <MessageItem message={parentMessage} isGroupStart={true} />
+        </div>
+      )}
 
       {/* Reuse the exact same MessageList component as main chat */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" }}>

@@ -150,10 +150,14 @@ export function deleteChannelFile(channelId: string, filename: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/files/${encodeURIComponent(filename)}`, { method: "DELETE" });
 }
 
-// ─── Single Channel ──────────────────────────────────────────────────
+// ─── Single Channel / Message ───────────────────────────────────────
 
 export function fetchChannel(channelId: string) {
   return api<Channel>(`${API_PREFIX}/channels/${channelId}`);
+}
+
+export function fetchMessage(channelId: string, messageId: string) {
+  return api<Message>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}`);
 }
 
 // ─── Threads ──────────────────────────────────────────────────────────
