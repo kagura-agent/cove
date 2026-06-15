@@ -682,6 +682,7 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
           content={contextMenu.message.content}
           isOwnMessage={contextMenu.message.author.id === currentUserId}
           hasThread={!!contextMenu.message.thread}
+          isThread={!!parentMessage}
           onClose={() => setContextMenu(null)}
         />
       )}

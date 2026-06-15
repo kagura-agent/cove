@@ -178,6 +178,10 @@ export function fetchActiveThreads(channelId: string) {
   return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/channels/${channelId}/threads/active`);
 }
 
+export function fetchGuildActiveThreads(guildId: string) {
+  return api<{ threads: Channel[]; has_more: boolean }>(`${API_PREFIX}/guilds/${guildId}/threads/active`);
+}
+
 export function joinThread(threadId: string) {
   return api<void>(`${API_PREFIX}/channels/${threadId}/thread-members/@me`, { method: "PUT" });
 }

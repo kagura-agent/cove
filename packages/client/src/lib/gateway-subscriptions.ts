@@ -11,6 +11,7 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useThreadStore } from "../stores/useThreadStore";
+import type { Channel } from "../types";
 import * as api from "./api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,18 +140,20 @@ export function setupGatewaySubscriptions(): void {
       for (const guild of data.guilds) {
         if (guild.channels) {
           channelStore.setChannels(guild.id, guild.channels);
+        }
 
-          // Fetch active threads for each channel
-          for (const ch of (guild.channels ?? [])) {
-            if (ch.type !== 11) {
-              api.fetchActiveThreads(ch.id).then(({ threads }) => {
-                if (threads.length > 0) {
-                  useThreadStore.getState().setThreads(ch.id, threads);
-                }
-              }).catch(() => {});
+        // Fetch active threads for entire guild in one call
+        api.fetchGuildActiveThreads(guild.id).then(({ threads }) => {
+          const byParent: Record<string, Channel[]> = {};
+          for (const t of threads) {
+            if (t.parent_id) {
+              (byParent[t.parent_id] ??= []).push(t);
             }
           }
-        }
+          for (const [parentId, parentThreads] of Object.entries(byParent)) {
+            useThreadStore.getState().setThreads(parentId, parentThreads);
+          }
+        }).catch(() => {});
       }
 
       // Auto-select first channel of active guild

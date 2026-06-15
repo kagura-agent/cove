@@ -163,6 +163,9 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     }
 
     dispatcher?.channelDelete(ch.guild_id, id);
+    if (ch.type === 11) {
+      dispatcher?.threadDelete(ch);
+    }
 
     return c.json(ch);
   });

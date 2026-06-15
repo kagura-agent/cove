@@ -44,10 +44,11 @@ interface Props {
   content: string;
   isOwnMessage: boolean;
   hasThread: boolean;
+  isThread: boolean;
   onClose: () => void;
 }
 
-export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, onClose }: Props) {
+export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, isThread, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -138,7 +139,7 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
       >
         Copy Message ID
       </div>
-      {!hasThread && (
+      {!hasThread && !isThread && (
         <div
           style={{ ...itemStyle, background: hoveredItem === "create-thread" ? hoverBg : undefined }}
           onClick={handleCreateThread}

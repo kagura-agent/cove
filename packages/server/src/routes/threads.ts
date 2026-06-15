@@ -16,6 +16,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (channel.type === 11) {
+      return c.json({ message: 'Cannot create a thread inside a thread', code: 50035 }, 400);
+    }
     if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
@@ -66,6 +69,9 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const channel = requireGuildMember(repos, channelId, user.id);
     if (!channel) return unknownChannel(c);
+    if (channel.type === 11) {
+      return c.json({ message: 'Cannot create a thread inside a thread', code: 50035 }, 400);
+    }
     if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
