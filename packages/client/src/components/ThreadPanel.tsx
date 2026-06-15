@@ -7,6 +7,7 @@ import { MessageItem } from "./MessageItem";
 import { ReplyBar } from "./ReplyBar";
 import * as api from "../lib/api";
 import type { Message } from "../types";
+import { ThreadIcon } from "./ThreadIcon";
 
 export function ThreadPanel() {
   const activeThread = useThreadStore((s) => s.activeThread);
@@ -117,7 +118,7 @@ export function ThreadPanel() {
         flexShrink: 0,
         background: "var(--bg-secondary)",
       }}>
-        <span style={{ fontSize: "var(--font-size-lg)", color: "var(--text-muted)" }}>#</span>
+        <ThreadIcon size={18} style={{ color: "var(--text-muted)" }} />
         <span style={{
           flex: 1,
           fontWeight: 600,

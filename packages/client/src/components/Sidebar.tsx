@@ -8,6 +8,7 @@ import * as api from "../lib/api";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { ChannelSettings } from "./ChannelSettings";
+import { ThreadIcon } from "./ThreadIcon";
 
 const styles = {
   root: { display: "flex", flexDirection: "column", background: "var(--bg-secondary)", borderRight: "none", minHeight: 0, overflow: "hidden" } as CSSProperties,
@@ -70,7 +71,7 @@ function ThreadItem({ name, isActive, onSelect }: {
       onMouseLeave={() => setHovered(false)}
     >
       <span style={styles.threadConnector}>└</span>
-      <span style={styles.threadIcon}>💬</span>
+      <ThreadIcon size={14} style={{ color: "var(--interactive-normal)" }} />
       <span style={{ ...styles.threadName, ...(isActive ? { color: "var(--interactive-active)", fontWeight: 500 } : {}) }}>{name}</span>
     </div>
   );

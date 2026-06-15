@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { Channel } from '../types';
 import { useThreadStore } from '../stores/useThreadStore';
 import * as api from '../lib/api';
+import { ThreadIcon } from './ThreadIcon';
 
 const overlayStyle: CSSProperties = {
   position: 'fixed',
@@ -141,7 +142,7 @@ export function ThreadBrowser({ channelId, onClose }: Props) {
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-modifier-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ opacity: 0.5 }}>#</span>
+                <ThreadIcon size={16} style={{ opacity: 0.5, color: 'var(--interactive-normal)' }} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                   {t.message_count ?? 0} messages

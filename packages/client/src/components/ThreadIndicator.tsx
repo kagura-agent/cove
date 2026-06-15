@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useThreadStore } from "../stores/useThreadStore";
 import type { Channel } from "../types";
+import { ThreadIcon } from "./ThreadIcon";
 
 interface Props {
   thread: Channel;
@@ -34,7 +35,7 @@ export function ThreadIndicator({ thread }: Props) {
         transition: "background 0.15s",
       }}
     >
-      <span style={{ display: "flex", alignItems: "center" }}>&#128172;</span>
+      <ThreadIcon size={16} style={{ color: "var(--text-link, #00aff4)" }} />
       <span>{label}</span>
       {hovered && <span style={{ fontSize: "var(--font-size-xs)", opacity: 0.7 }}>View Thread &#8250;</span>}
     </div>
