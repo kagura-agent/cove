@@ -62,11 +62,12 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
 
 function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
   const channelConfig = cfg.channels?.["cove"];
-  const merged = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: (accountId ?? undefined) as string });
+  const effectiveAccountId = accountId ?? resolveDefaultCoveAccountId(cfg) ?? undefined;
+  const merged = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: (effectiveAccountId ?? undefined) as string });
   const token = merged?.token;
-  if (!token) throw new Error("cove: account missing token (accountId=" + (accountId ?? "default") + ")");
+  if (!token) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing token — set channels.cove.accounts.<id>.token`);
   const agentId = merged?.agentId;
-  if (!agentId) throw new Error("cove: account missing agentId (accountId=" + (accountId ?? "default") + ")");
+  if (!agentId) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing agentId — set channels.cove.accounts.<id>.agentId`);
   return { accountId: accountId ?? null, token, baseUrl: merged?.baseUrl ?? "http://localhost:3400", guildId: merged?.guildId ?? null, agentId, agentName: merged?.agentName ?? agentId, allowFrom: merged?.allowFrom ?? [], dmPolicy: merged?.dmSecurity };
 }
 
@@ -88,7 +89,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     defaultAccountId: resolveDefaultCoveAccountId,
   },
   setup: {
-    resolveAccountId: (params) => resolveDefaultCoveAccountId(params.cfg) ?? "default",
+    resolveAccountId: (params) => resolveDefaultCoveAccountId(params.cfg),
     applyAccountConfig: ({ cfg }) => cfg,
   },
   security: {
@@ -105,18 +106,18 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   resolver: {
     resolveTargets: async ({ cfg, accountId, inputs, kind }) => {
       let account: CoveAccount | undefined;
+      let resolveError: string | undefined;
       try {
         account = resolveAccount(cfg, accountId);
-      } catch {
-        // Soft-fail if account config is missing
-        account = undefined;
+      } catch (err) {
+        resolveError = err instanceof Error ? err.message : String(err);
       }
 
       if (kind === "group") {
         return resolveTargetsWithOptionalToken({
           token: account?.token,
           inputs,
-          missingTokenNote: "missing Cove bot token",
+          missingTokenNote: resolveError ?? "missing Cove bot token",
           resolveWithToken: async ({ token, inputs: inputsValue }): Promise<Array<{ input: string; resolved: boolean; channelId?: string; channelName?: string; guildId?: string | null; note?: string }>> => {
             if (!account!.guildId) {
               return inputsValue.map((input) => ({
@@ -126,10 +127,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               }));
             }
 
-            const restClient = getRestClient(account!.baseUrl, token);
+            const accountBaseUrl = account!.baseUrl;
+            const accountGuildId = account!.guildId!;
+
+            const restClient = getRestClient(accountBaseUrl, token);
             let channels;
             try {
-              channels = await restClient.getChannels(account!.guildId!);
+              channels = await restClient.getChannels(accountGuildId);
             } catch (err: any) {
               return inputsValue.map((input) => ({
                 input,
@@ -148,7 +152,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                 resolved: Boolean(match),
                 channelId: match?.id,
                 channelName: match?.name,
-                guildId: account!.guildId,
+                guildId: accountGuildId,
                 note: match ? undefined : "channel not found",
               };
             });
@@ -167,7 +171,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       return resolveTargetsWithOptionalToken({
         token: account?.token,
         inputs,
-        missingTokenNote: "missing Cove bot token",
+        missingTokenNote: resolveError ?? "missing Cove bot token",
         resolveWithToken: async ({ inputs: inputsValue }) => {
           return inputsValue.map((input) => ({
             input,
