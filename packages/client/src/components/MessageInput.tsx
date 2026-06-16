@@ -215,7 +215,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   return (
     <div
-      style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}
+      style={{ position: "relative", background: "var(--bg-secondary)", borderTop: hasReply ? "none" : "1px solid var(--border-subtle)" }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -245,35 +245,37 @@ export function MessageInput({ channelId }: { channelId: string }) {
           ))}
         </div>
       )}
-      <textarea
-        ref={textareaRef}
-        value={content}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onSelect={syncCursor}
-        onClick={syncCursor}
-        onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
-        onPaste={handlePaste}
-        placeholder="Say something…"
-        aria-label="Message"
-        maxLength={2000}
-        autoComplete="off"
-        rows={1}
-        style={textareaStyle}
-        className="message-textarea"
-      />
-      <Button
-        type="text"
-        shape="circle"
-        icon={<SendOutlined />}
-        onClick={handleSubmit}
-        style={{
-          color: content.trim() ? "var(--accent)" : "var(--text-muted)",
-          width: "var(--icon-button-size-md)", height: "var(--icon-button-size-md)", minWidth: "var(--icon-button-size-md)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "var(--space-sm) 0", flexShrink: 0,
-        }}
-      />
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-sm)", padding: "0 var(--content-pad)" }}>
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onSelect={syncCursor}
+          onClick={syncCursor}
+          onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
+          onPaste={handlePaste}
+          placeholder="Say something…"
+          aria-label="Message"
+          maxLength={2000}
+          autoComplete="off"
+          rows={1}
+          style={textareaStyle}
+          className="message-textarea"
+        />
+        <Button
+          type="text"
+          shape="circle"
+          icon={<SendOutlined />}
+          onClick={handleSubmit}
+          style={{
+            color: content.trim() ? "var(--accent)" : "var(--text-muted)",
+            width: "var(--icon-button-size-md)", height: "var(--icon-button-size-md)", minWidth: "var(--icon-button-size-md)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "var(--space-sm) 0", flexShrink: 0,
+          }}
+        />
+      </div>
     </div>
   );
 }

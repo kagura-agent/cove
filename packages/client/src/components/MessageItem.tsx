@@ -10,6 +10,8 @@ import { useReplyStore } from "../stores/useReplyStore";
 import { useUserStore } from "../stores/useUserStore";
 import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
+import { useState } from "react";
+import { ImageLightbox } from "./ImageLightbox";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
 
@@ -211,6 +213,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const initial = message.author.username.charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
   const textColor = getContrastTextColor(bgColor);
+  const [lightboxSrc, setLightboxSrc] = useState<{src: string; alt: string} | null>(null);
 
   // Build mention user map for rendering
   const mentionUsers = new Map<string, string>();
@@ -229,6 +232,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
   if (isGroupStart) {
     return (
+      <>
       <div
         className="discord-msg-row"
         data-message-id={message.id}
@@ -324,7 +328,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
                   cursor: 'pointer',
                   display: 'block',
                 }}
-                onClick={() => window.open(att.url, '_blank')}
+                onClick={() => setLightboxSrc({src: att.url, alt: att.filename})}
                 loading='lazy'
               />
             </div>
@@ -342,11 +346,14 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
         {/* Hover toolbar */}
         <MessageActions message={message} />
       </div>
+      {lightboxSrc && <ImageLightbox src={lightboxSrc.src} alt={lightboxSrc.alt} onClose={() => setLightboxSrc(null)} />}
+      </>
     );
   }
 
   // Grouped (continuation) message — no avatar, show compact timestamp on hover
   return (
+    <>
     <div
       className="discord-msg-row"
       data-message-id={message.id}
@@ -398,7 +405,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
                 cursor: 'pointer',
                 display: 'block',
               }}
-              onClick={() => window.open(att.url, '_blank')}
+              onClick={() => setLightboxSrc({src: att.url, alt: att.filename})}
               loading='lazy'
             />
           </div>
@@ -416,5 +423,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
       {/* Hover toolbar */}
       <MessageActions message={message} />
     </div>
+    {lightboxSrc && <ImageLightbox src={lightboxSrc.src} alt={lightboxSrc.alt} onClose={() => setLightboxSrc(null)} />}
+    </>
   );
 }
