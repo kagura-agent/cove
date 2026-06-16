@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
@@ -56,14 +56,13 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   const query = trigger?.query ?? null;
   const atStart = trigger?.start ?? -1;
 
-  const filtered = useMemo(() => {
-    if (query === null) return [];
-    return members.filter((m) => {
-      const displayName = (m.user.global_name || m.user.username).toLowerCase();
-      const uname = m.user.username.toLowerCase();
-      return displayName.includes(query) || uname.includes(query);
-    }).slice(0, 10);
-  }, [members, query]);
+  const filtered = query !== null
+    ? members.filter((m) => {
+        const displayName = (m.user.global_name || m.user.username).toLowerCase();
+        const uname = m.user.username.toLowerCase();
+        return displayName.includes(query) || uname.includes(query);
+      }).slice(0, 10)
+    : [];
 
   // Report whether we have results
   useEffect(() => {
@@ -107,7 +106,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions" aria-activedescendant={filtered.length > 0 ? 'mention-option-' + filtered[activeIndex]?.user?.id : undefined}>
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions">
       {filtered.map((member, i) => {
         const bg = pickAvatarColor(member.user.username);
         const fg = getContrastTextColor(bg);

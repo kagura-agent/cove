@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { detectMentionTrigger } from "../lib/mention-trigger";
@@ -57,10 +57,9 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   const query = trigger?.query ?? null;
   const hashStart = trigger?.start ?? -1;
 
-  const filtered = useMemo(() => {
-    if (query === null) return [];
-    return textChannels.filter((c) => c.name.toLowerCase().includes(query)).slice(0, 10);
-  }, [textChannels, query]);
+  const filtered = query !== null
+    ? textChannels.filter((c) => c.name.toLowerCase().includes(query)).slice(0, 10)
+    : [];
 
   // Report whether we have results
   useEffect(() => {
@@ -104,7 +103,7 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle} role="listbox" aria-label="Channel suggestions" aria-activedescendant={filtered.length > 0 ? 'channel-option-' + filtered[activeIndex]?.id : undefined}>
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Channel suggestions">
       {filtered.map((ch, i) => (
         <div
           key={ch.id}
