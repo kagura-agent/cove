@@ -150,11 +150,14 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     let targetChannelId = webhook.channel_id;
     if (threadId) {
       const thread = repos.channels.getById(threadId);
-      if (!thread || thread.type !== 11 || thread.parent_id !== webhook.channel_id) {
+      if (!thread || ![10, 11, 12].includes(thread.type) || thread.parent_id !== webhook.channel_id) {
         return c.json({ message: 'Unknown Channel', code: 10003 }, 404);
       }
       if (thread.thread_metadata?.archived) {
         return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+      }
+      if (thread.thread_metadata?.locked) {
+        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
       }
       targetChannelId = threadId;
     }
@@ -225,7 +228,7 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
 
     dispatcher?.messageCreate(message);
 
-    // Return based on wait parameter
+    // Discord-compatible: default is 204 No Content (breaking change from always-201)
     if (wait) {
       return c.json(message, 200);
     }
