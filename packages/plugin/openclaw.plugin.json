@@ -27,7 +27,27 @@
           },
           "agentId": { "type": "string" },
           "agentName": { "type": "string" },
-          "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] }
+          "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] },
+          "accounts": {
+            "type": "object",
+            "propertyNames": { "type": "string" },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "enabled": { "type": "boolean" },
+                "token": { "type": "string" },
+                "baseUrl": { "type": "string" },
+                "guildId": { "type": "string" },
+                "agentId": { "type": "string" },
+                "agentName": { "type": "string" },
+                "allowFrom": { "type": "array", "items": { "type": "string" } },
+                "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] }
+              }
+            }
+          },
+          "defaultAccount": { "type": "string" },
+          "reactionNotifications": { "type": "string", "enum": ["off", "own", "all"] }
         }
       },
       "uiHints": {
