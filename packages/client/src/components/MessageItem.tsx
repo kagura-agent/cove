@@ -8,9 +8,10 @@ import { ThreadIndicator } from "./ThreadIndicator";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useUserStore } from "../stores/useUserStore";
+import { useChannelStore } from "../stores/useChannelStore";
 import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ImageLightbox } from "./ImageLightbox";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];

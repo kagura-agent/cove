@@ -11,6 +11,7 @@ export type Token =
   | { type: "blockquote"; children: Token[] }
   | { type: "spoiler"; children: Token[] }
   | { type: "mention"; userId: string }
+  | { type: "channelMention"; channelId: string }
   | { type: "br" };
 
 const INLINE_RULES: Array<{ pattern: RegExp; guard?: (consumed: string) => boolean; parse: (match: RegExpMatchArray, depth: number) => { token: Token; length: number } }> = [
@@ -54,6 +55,10 @@ const INLINE_RULES: Array<{ pattern: RegExp; guard?: (consumed: string) => boole
   {
     pattern: /^<@(\d+)>/,
     parse: (m) => ({ token: { type: "mention" as const, userId: m[1] }, length: m[0].length }),
+  },
+  {
+    pattern: /^<#(\d+)>/,
+    parse: (m) => ({ token: { type: "channelMention" as const, channelId: m[1] }, length: m[0].length }),
   },
   {
     pattern: /^(https?:\/\/[^\s<>]+)/,
