@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
+import { useRef, useState, useCallback, useLayoutEffect, useEffect, useMemo } from "react";
 import { Button } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -39,6 +39,14 @@ export function MessageInput({ channelId }: { channelId: string }) {
   // Track active mentions: displayName → userId
   const mentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
+
+  // Create preview URLs and clean up on change
+  const previewUrls = useMemo(() => pendingFiles.map(f => URL.createObjectURL(f)), [pendingFiles]);
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
 
   // Clear mention state when switching channels
   useEffect(() => {
@@ -225,7 +233,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
           {pendingFiles.map((file, i) => (
             <div key={i} style={{ position: 'relative' }}>
               <img
-                src={URL.createObjectURL(file)}
+                src={previewUrls[i]}
                 alt={file.name}
                 style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-color, #3f4147)' }}
               />

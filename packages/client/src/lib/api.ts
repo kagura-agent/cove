@@ -39,7 +39,7 @@ export function sendMessage(channelId: string, content: string, nonce?: string, 
   });
 }
 
-export function sendMessageWithAttachments(
+export async function sendMessageWithAttachments(
   channelId: string,
   content: string,
   files: File[],
@@ -56,12 +56,17 @@ export function sendMessageWithAttachments(
   });
   // Use fetch directly since our api() helper sets Content-Type to JSON
   const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
-  return fetch(API_BASE + API_PREFIX + '/channels/' + channelId + '/messages', {
+  const res = await fetch(API_BASE + API_PREFIX + '/channels/' + channelId + '/messages', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token },
     credentials: 'include',
     body: formData,
-  }).then(r => r.json()) as Promise<Message>;
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Upload failed');
+  }
+  return res.json() as Promise<Message>;
 }
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });

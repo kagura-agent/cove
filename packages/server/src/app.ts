@@ -17,7 +17,7 @@ import { API_PREFIX } from "@cove/shared";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { getAttachmentPath } from "./attachment-storage.js";
 import { readFile } from "fs/promises";
-import { resolve } from "path";
+import { resolve, relative } from "path";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -74,13 +74,25 @@ export function createApp(
       return c.json({ message: 'Invalid path', code: 50035 }, 400);
     }
 
+    // Authorization: check guild membership
+    const user = c.get('botUser');
+    const channel = repos.channels.getById(safeChannelId);
+    if (!channel) {
+      return c.json({ message: 'Unknown Channel', code: 10003 }, 404);
+    }
+    const member = repos.members.get(channel.guild_id, user.id);
+    if (!member) {
+      return c.json({ message: 'Missing Access', code: 50001 }, 403);
+    }
+
     try {
       const filePath = await getAttachmentPath(safeGuildId, safeChannelId, safeAttachmentId, safeFilename);
 
-      // Verify resolved path is under attachments dir
-      const ATTACHMENT_DIR = resolve(process.cwd(), 'data', 'attachments');
+      // Verify resolved path is under attachments dir with proper boundary check
+      const ATTACHMENT_ROOT = resolve(process.cwd(), 'data', 'attachments');
       const resolvedPath = resolve(filePath);
-      if (!resolvedPath.startsWith(ATTACHMENT_DIR)) {
+      const rel = relative(ATTACHMENT_ROOT, resolvedPath);
+      if (rel.startsWith('..') || resolve(ATTACHMENT_ROOT, rel) !== resolvedPath) {
         return c.json({ message: 'Invalid path', code: 50035 }, 400);
       }
 
@@ -88,18 +100,29 @@ export function createApp(
 
       // Determine content type from file extension
       let contentType = "application/octet-stream";
+      let isImage = false;
       if (safeFilename.endsWith(".jpg") || safeFilename.endsWith(".jpeg")) {
         contentType = "image/jpeg";
+        isImage = true;
       } else if (safeFilename.endsWith(".png")) {
         contentType = "image/png";
+        isImage = true;
       } else if (safeFilename.endsWith(".gif")) {
         contentType = "image/gif";
+        isImage = true;
       } else if (safeFilename.endsWith(".webp")) {
         contentType = "image/webp";
+        isImage = true;
+      } else if (safeFilename.endsWith(".svg")) {
+        contentType = "image/svg+xml";
+        isImage = true;
       }
 
       return c.body(fileData, 200, {
         "Content-Type": contentType,
+        "Content-Disposition": isImage
+          ? `inline; filename="${safeFilename}"`
+          : `attachment; filename="${safeFilename}"`,
         "Cache-Control": "public, max-age=31536000, immutable",
       });
     } catch (err) {
