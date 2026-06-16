@@ -444,4 +444,52 @@ describe("Webhooks", () => {
     expect(found!.author.username).toBe("Custom Name");
     expect(found!.author.bot).toBe(true);
   });
+
+  it("stores and returns reply_to metadata", async () => {
+    const wh = await createWebhook(generalId, "ReplyTo Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "test reply_to", reply_to: { id: "source-thread-123" } }),
+    });
+    expect(res.status).toBe(200);
+    const msg = (await res.json()) as any;
+    expect(msg.reply_to).toEqual({ id: "source-thread-123" });
+  });
+
+  it("reply_to persists in fetched messages", async () => {
+    const wh = await createWebhook(generalId, "Persist Hook");
+    await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "persist test", reply_to: { id: "persist-id" } }),
+    });
+    const listRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      headers: { Authorization: `Bot ${adminToken}` },
+    });
+    const messages = (await listRes.json()) as any[];
+    const found = messages.find((m) => m.content === "persist test");
+    expect(found).toBeDefined();
+    expect(found.reply_to).toEqual({ id: "persist-id" });
+  });
+
+  it("rejects reply_to.id over 64 characters", async () => {
+    const wh = await createWebhook(generalId, "Long ID Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "test", reply_to: { id: "x".repeat(65) } }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects non-string reply_to.id", async () => {
+    const wh = await createWebhook(generalId, "Bad Type Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "test", reply_to: { id: 123 } }),
+    });
+    expect(res.status).toBe(400);
+  });
 });

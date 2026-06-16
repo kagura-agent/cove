@@ -191,6 +191,12 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
     if (err) return validationError(c, err);
 
+    if (body.reply_to) {
+      if (!body.reply_to.id || typeof body.reply_to.id !== 'string' || body.reply_to.id.length > 64) {
+        return validationError(c, 'reply_to.id must be a string of at most 64 characters');
+      }
+    }
+
     if (body.username !== undefined) {
       const usernameErr = validateString(body.username, "username", { maxLength: 80 });
       if (usernameErr) return validationError(c, usernameErr);
