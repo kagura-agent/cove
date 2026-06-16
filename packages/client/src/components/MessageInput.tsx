@@ -5,6 +5,7 @@ import * as api from "../lib/api";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
+import { useEditStore } from "../stores/useEditStore";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { ChannelMentionAutocomplete } from "./ChannelMentionAutocomplete";
 import { detectMentionTrigger } from "../lib/mention-trigger";
@@ -45,6 +46,9 @@ export function MessageInput({ channelId }: { channelId: string }) {
   // Track active channel mentions: channelName → channelId
   const channelMentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
+  const editingMessage = useEditStore((s) => s.editingMessage);
+  const stopEditing = useEditStore((s) => s.stopEditing);
+  const isEditing = editingMessage && editingMessage.channelId === channelId;
 
   // Create preview URLs and clean up on change
   const previewUrls = useMemo(() => pendingFiles.map(f => URL.createObjectURL(f)), [pendingFiles]);
@@ -61,6 +65,23 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setShowMention(false);
     setShowChannelMention(false);
   }, [channelId]);
+
+  // When editing starts, populate textarea and focus
+  useEffect(() => {
+    if (isEditing && editingMessage) {
+      setContent(editingMessage.content);
+      setPendingFiles([]);
+      useReplyStore.getState().clearReply(channelId);
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus();
+          ta.selectionStart = ta.value.length;
+          ta.selectionEnd = ta.value.length;
+        }
+      });
+    }
+  }, [isEditing, editingMessage, channelId]);
 
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -115,6 +136,13 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
+    // Escape cancels editing
+    if (e.key === "Escape" && isEditing) {
+      e.preventDefault();
+      stopEditing();
+      setContent("");
+      return;
+    }
     // Only intercept keys when mention autocomplete is actually visible with results
     if (showMention && mentionHasResults.current) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
@@ -132,6 +160,19 @@ export function MessageInput({ channelId }: { channelId: string }) {
   async function handleSubmit() {
     let text = content.trim();
     if (!text && pendingFiles.length === 0) return;
+
+    // If editing, call editMessage API
+    if (isEditing && editingMessage) {
+      try {
+        await api.editMessage(editingMessage.channelId, editingMessage.messageId, text);
+        stopEditing();
+        setContent("");
+      } catch (err) {
+        console.error("edit message:", err);
+      }
+      return;
+    }
+
     // Convert display mentions (@username) to wire format (<@userId>)
     // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
     const mentionEntries = [...mentionMapRef.current.entries()]
@@ -259,10 +300,42 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   return (
     <div
-      style={{ position: "relative", background: "var(--bg-secondary)", borderTop: hasReply ? "none" : "1px solid var(--border-subtle)" }}
+      style={{ position: "relative", background: "var(--bg-secondary)", borderTop: hasReply || isEditing ? "none" : "1px solid var(--border-subtle)" }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {isEditing && editingMessage && (
+        <div
+          style={{
+            padding: "var(--space-sm) var(--content-pad)",
+            borderTop: "1px solid var(--border-subtle)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Editing message (Esc to cancel)</span>
+          <button
+            type="button"
+            onClick={() => {
+              stopEditing();
+              setContent("");
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: "var(--space-xs)",
+              fontSize: "var(--font-size-md)",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {showMention && (
         <MentionAutocomplete
           text={content}
