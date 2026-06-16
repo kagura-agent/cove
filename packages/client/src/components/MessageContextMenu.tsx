@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, type CSSProperties } from "react";
 import * as api from "../lib/api";
 import { useThreadStore } from "../stores/useThreadStore";
+import { useReplyStore } from "../stores/useReplyStore";
+import { useEditStore } from "../stores/useEditStore";
+import type { Message } from "../types";
 
 const menuStyle: CSSProperties = {
   position: "fixed",
@@ -45,13 +48,16 @@ interface Props {
   isOwnMessage: boolean;
   hasThread: boolean;
   isThread: boolean;
+  message?: Message;
   onClose: () => void;
 }
 
-export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, isThread, onClose }: Props) {
+export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, isThread, message, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const setReplyingTo = useReplyStore((s) => s.setReplyingTo);
+  const startEditing = useEditStore((s) => s.startEditing);
 
   // Position adjustment to keep menu in viewport
   const [pos, setPos] = useState({ x, y });
@@ -121,8 +127,29 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
     onClose();
   }
 
+  function handleReply() {
+    if (message) {
+      setReplyingTo(channelId, message);
+    }
+    onClose();
+  }
+
+  function handleEdit() {
+    startEditing(channelId, messageId, content);
+    onClose();
+  }
+
   return (
     <div ref={menuRef} style={{ ...menuStyle, left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
+      <div
+        style={{ ...itemStyle, background: hoveredItem === "reply" ? hoverBg : undefined }}
+        onClick={handleReply}
+        onMouseEnter={() => setHoveredItem("reply")}
+        onMouseLeave={() => setHoveredItem(null)}
+      >
+        Reply
+      </div>
+      <div style={separatorStyle} />
       <div
         style={{ ...itemStyle, background: hoveredItem === "copy-text" ? hoverBg : undefined }}
         onClick={handleCopyText}
@@ -152,6 +179,14 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
       {isOwnMessage && (
         <>
           <div style={separatorStyle} />
+          <div
+            style={{ ...itemStyle, background: hoveredItem === "edit" ? hoverBg : undefined }}
+            onClick={handleEdit}
+            onMouseEnter={() => setHoveredItem("edit")}
+            onMouseLeave={() => setHoveredItem(null)}
+          >
+            Edit Message
+          </div>
           <div
             style={{
               ...dangerItemStyle,

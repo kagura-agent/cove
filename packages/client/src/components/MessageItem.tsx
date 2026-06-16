@@ -7,6 +7,7 @@ import { MessageReplyQuote } from "./MessageReplyQuote";
 import { ThreadIndicator } from "./ThreadIndicator";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
+import { useEditStore } from "../stores/useEditStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useChannelStore } from "../stores/useChannelStore";
 import type { PendingStatus } from "../stores/useMessageStore";
@@ -72,6 +73,10 @@ interface MessageItemProps {
 
 function MessageActions({ message }: { message: Message }) {
   const setReplyingTo = useReplyStore((s) => s.setReplyingTo);
+  const startEditing = useEditStore((s) => s.startEditing);
+  const currentUserId = useUserStore((s) => s.id);
+  const isOwnMessage = currentUserId === message.author.id;
+
   return (
     <div className="message-actions">
       <button
@@ -82,6 +87,16 @@ function MessageActions({ message }: { message: Message }) {
       >
         ↩
       </button>
+      {isOwnMessage && (
+        <button
+          type="button"
+          className="message-actions-btn"
+          onClick={() => startEditing(message.channel_id, message.id, message.content)}
+          title="Edit"
+        >
+          ✏
+        </button>
+      )}
       {QUICK_EMOJIS.map((emoji) => (
         <button
           key={emoji}
