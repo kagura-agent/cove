@@ -232,20 +232,31 @@ export function MessageInput({ channelId }: { channelId: string }) {
         <div style={{
           display: 'flex',
           gap: 8,
-          padding: '16px',
+          padding: '8px 16px',
           flexWrap: 'wrap',
         }}>
           {pendingFiles.map((file, i) => (
             <div
               key={i}
-              style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', gap: 4 }}
               className="attachment-preview"
+              style={{
+                position: 'relative',
+                background: 'var(--bg-secondary, #2b2d31)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                maxWidth: 220,
+              }}
             >
-              <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-color, #3f4147)' }}>
+              <div style={{ position: 'relative' }}>
                 <img
                   src={previewUrls[i]}
                   alt={file.name}
-                  style={{ width: 200, height: 200, objectFit: 'cover', display: 'block' }}
+                  style={{
+                    display: 'block',
+                    maxWidth: 220,
+                    maxHeight: 200,
+                    objectFit: 'contain',
+                  }}
                 />
                 <div
                   className="attachment-preview-actions"
@@ -253,7 +264,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
                     position: 'absolute', top: 4, right: 4,
                     display: 'none',
                     gap: 2,
-                    background: 'var(--bg-primary, #2b2d31)',
+                    background: 'var(--bg-primary, #1e1f22)',
                     borderRadius: 4,
                     padding: '2px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
@@ -267,14 +278,21 @@ export function MessageInput({ channelId }: { channelId: string }) {
                       color: '#f23f43', padding: '4px 6px', borderRadius: 4,
                       fontSize: 14, lineHeight: 1,
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >🗑️</button>
                 </div>
               </div>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary, #949ba4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {file.name}
-              </span>
+              <div style={{ padding: '4px 8px 6px' }}>
+                <span style={{
+                  fontSize: 12,
+                  color: 'var(--text-secondary, #949ba4)',
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {file.name}
+                </span>
+              </div>
             </div>
           ))}
         </div>
