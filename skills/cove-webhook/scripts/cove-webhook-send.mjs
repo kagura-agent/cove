@@ -155,8 +155,21 @@ async function main() {
     targetId = await resolveChannelId(config.baseUrl, config.token, config.guildId, values.to);
   }
 
-  const fromName = values.from || "unknown";
+  let fromName = values.from || null;
   const replyTo = values["reply-to"] || null;
+
+  // Auto-resolve fromName from reply-to channel if not provided
+  if (!fromName && replyTo) {
+    try {
+      const ch = await apiRequest(`${config.baseUrl}/api/v10/channels/${replyTo}`, {
+        headers: { Authorization: `Bot ${config.token}` },
+      });
+      fromName = ch.name || replyTo;
+    } catch {
+      fromName = replyTo;
+    }
+  }
+  if (!fromName) fromName = "unknown";
 
   // Resolve target route (handles threads)
   const { targetChannelId, threadId } = await resolveTargetRoute(config.baseUrl, config.token, targetId);
