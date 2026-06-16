@@ -58,7 +58,7 @@ export function createApp(
   app.use("/api/*", rateLimitMiddleware());
 
   // Static file serving for attachments (requires auth)
-  app.get("/attachments/:guildId/:channelId/:attachmentId/:filename", authMw, async (c) => {
+  app.get(API_PREFIX + "/attachments/:guildId/:channelId/:attachmentId/:filename", authMw, async (c) => {
     const guildId = c.req.param("guildId")!;
     const channelId = c.req.param("channelId")!;
     const attachmentId = c.req.param("attachmentId")!;

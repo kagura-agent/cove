@@ -4,7 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
-import { generateSnowflake, type Attachment } from "@cove/shared";
+import { generateSnowflake, type Attachment, API_PREFIX } from "@cove/shared";
 import { storeAttachment } from "../attachment-storage.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
@@ -139,7 +139,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
           id: attId,
           filename: file.name,
           size: file.size,
-          url: '/attachments/' + channel.guild_id + '/' + channelId + '/' + attId + '/' + encodeURIComponent(safeFilename),
+          url: API_PREFIX + '/attachments/' + channel.guild_id + '/' + channelId + '/' + attId + '/' + encodeURIComponent(safeFilename),
           content_type: file.type || 'application/octet-stream',
         });
       }
