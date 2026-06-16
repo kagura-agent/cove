@@ -68,6 +68,21 @@ export interface Channel {
   total_message_sent?: number;
 }
 
+/** Attachment object (Discord-compatible). */
+export interface Attachment {
+  id: string;
+  filename: string;
+  description?: string;
+  content_type: string;
+  size: number;
+  url: string;
+  proxy_url?: string;
+  width?: number;
+  height?: number;
+  ephemeral?: boolean;
+  flags?: number;
+}
+
 /** Message object (Discord-compatible). */
 export interface Message {
   id: string;
@@ -77,7 +92,7 @@ export interface Message {
   timestamp: string; // ISO 8601
   edited_timestamp?: string | null;
   type: number; // 0 = DEFAULT
-  attachments: unknown[];
+  attachments: Attachment[];
   embeds: unknown[];
   mentions: User[];
   mention_roles: string[];

@@ -4,6 +4,27 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
+import { generateSnowflake, type Attachment, API_PREFIX } from "@cove/shared";
+import { storeAttachment, getAttachmentPath } from "../attachment-storage.js";
+import { unlink } from "fs/promises";
+
+async function cleanupAttachmentFiles(attachments: Attachment[]): Promise<void> {
+  for (const att of attachments) {
+    try {
+      const parts = att.url.split('/');
+      // URL: /api/v10/attachments/{guildId}/{channelId}/{attachmentId}/{filename}
+      const attIdx = parts.indexOf('attachments');
+      if (attIdx < 0) continue;
+      const guildId = parts[attIdx + 1];
+      const channelId = parts[attIdx + 2];
+      const attachmentId = parts[attIdx + 3];
+      const filename = decodeURIComponent(parts[attIdx + 4] || '');
+      if (!guildId || !channelId || !attachmentId || !filename) continue;
+      const filePath = await getAttachmentPath(guildId, channelId, attachmentId, filename);
+      await unlink(filePath).catch(() => {});
+    } catch {}
+  }
+}
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -26,6 +47,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const around = c.req.query("around");
 
     const messages = repos.messages.list(channelId, { limit, before, after, around }, user.id);
+    // Enrich messages with attachments
+    const msgIds = messages.map((m) => m.id);
+    const attachmentMap = repos.attachments.getByMessageIds(msgIds);
+    for (const msg of messages) {
+      msg.attachments = attachmentMap.get(msg.id) || [];
+    }
     // Enrich messages with thread indicators
     for (const msg of messages) {
       const threadInfo = repos.threads.getThreadForMessage(msg.id);
@@ -52,6 +79,8 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!message) {
       return unknownMessage(c);
     }
+    // Enrich with attachments
+    message.attachments = repos.attachments.getByMessageId(msgId);
     // Enrich with thread indicator
     const threadInfo = repos.threads.getThreadForMessage(message.id);
     if (threadInfo) {
@@ -82,40 +111,112 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     }
 
-    const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
-    if (!body) return validationError(c, "Invalid JSON");
+    const contentType = c.req.header('content-type') || '';
+    let content = '';
+    let nonce: string | undefined;
+    let referencedMessageId: string | undefined;
+    let attachmentList: Attachment[] = [];
 
-    const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
-    if (err) return validationError(c, err);
+    if (contentType.startsWith('multipart/form-data')) {
+      const formBody = await c.req.parseBody({ all: true });
+      const payloadRaw = formBody['payload_json'];
+      let payload: any = {};
+      try {
+        payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : {};
+      } catch {
+        return validationError(c, 'Invalid payload_json');
+      }
+      content = payload.content || '';
+      nonce = payload.nonce;
 
-    // Validate nonce before DB write to prevent orphan records
-    if (body.nonce) {
-      if (typeof body.nonce !== "string" || body.nonce.length > 64) {
-        return validationError(c, "nonce must be a string of at most 64 characters");
+      // Validate nonce before any file writes
+      if (nonce && (typeof nonce !== 'string' || nonce.length > 64)) {
+        return validationError(c, 'nonce must be a string of at most 64 characters');
+      }
+
+      if (payload.message_reference?.message_id) {
+        const refMsg = repos.messages.getById(channelId, payload.message_reference.message_id);
+        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        referencedMessageId = payload.message_reference.message_id;
+      }
+
+      const files: File[] = [];
+      for (const [key, value] of Object.entries(formBody)) {
+        if (key.startsWith('files[') && value instanceof File) {
+          files.push(value);
+        }
+      }
+
+      const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB per file
+      const MAX_FILES = 10;
+      const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+      if (files.length > MAX_FILES) {
+        return c.json({ message: 'Too many files (max ' + MAX_FILES + ')', code: 50035 }, 400);
+      }
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          return c.json({ message: 'File too large: ' + file.name + ' (max 8MB)', code: 40005 }, 400);
+        }
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+          return c.json({ message: 'Unsupported file type: ' + file.type + ' (allowed: jpeg, png, gif, webp)', code: 50035 }, 400);
+        }
+      }
+
+      for (const file of files) {
+        const attId = generateSnowflake();
+        const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const arrayBuffer = await file.arrayBuffer();
+        await storeAttachment(channel.guild_id, channelId, attId, safeFilename, Buffer.from(arrayBuffer));
+        attachmentList.push({
+          id: attId,
+          filename: file.name,
+          size: file.size,
+          url: API_PREFIX + '/attachments/' + channel.guild_id + '/' + channelId + '/' + attId + '/' + encodeURIComponent(safeFilename),
+          content_type: file.type || 'application/octet-stream',
+        });
+      }
+    } else {
+      const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
+      if (!body) return validationError(c, 'Invalid JSON');
+      content = body.content;
+      nonce = body.nonce;
+      if (body.message_reference?.message_id) {
+        if (typeof body.message_reference.message_id !== 'string') {
+          return validationError(c, 'message_reference.message_id must be a string');
+        }
+        const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
+        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        referencedMessageId = body.message_reference.message_id;
       }
     }
 
-    // Validate message_reference if provided
-    let referencedMessageId: string | undefined;
-    if (body.message_reference) {
-      if (typeof body.message_reference.message_id !== "string") {
-        return validationError(c, "message_reference.message_id must be a string");
+    // Allow empty content if attachments are present
+    if (!content && attachmentList.length === 0) {
+      return validationError(c, 'content is required when no attachments are provided');
+    }
+    if (content) {
+      const err = validateString(content, 'content', { maxLength: 4000 });
+      if (err) return validationError(c, err);
+    }
+
+    if (nonce) {
+      if (typeof nonce !== 'string' || nonce.length > 64) {
+        return validationError(c, 'nonce must be a string of at most 64 characters');
       }
-      // Verify the referenced message exists in this channel
-      const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
-      if (!refMsg) {
-        return c.json({ message: "Unknown Message", code: 10008 }, 400);
-      }
-      referencedMessageId = body.message_reference.message_id;
     }
 
     const author = user;
+    const message = repos.messages.create(channelId, author, content, referencedMessageId);
 
-    const message = repos.messages.create(channelId, author, body.content, referencedMessageId);
+    // Save attachments if any
+    if (attachmentList.length > 0) {
+      repos.attachments.createMany(message.id, channelId, channel.guild_id, attachmentList);
+      message.attachments = attachmentList;
+    }
 
-    // Pass through client nonce for optimistic send reconciliation
-    if (body.nonce) {
-      message.nonce = body.nonce;
+    if (nonce) {
+      message.nonce = nonce;
     }
 
     // Thread-specific: auto-add sender as member + increment message count
@@ -217,9 +318,15 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
     // For now, any guild member can delete any message in channels they have access to
 
+    // Before delete: get attachments for cleanup
+    const msgAttachments = repos.attachments.getByMessageId(msgId);
+
     if (!repos.messages.delete(channelId, msgId)) {
       return unknownMessage(c);
     }
+
+    // After delete: clean up attachment files
+    cleanupAttachmentFiles(msgAttachments).catch(() => {});
 
     // Thread-specific: decrement message count
     if (ch.type === 11) {
@@ -257,6 +364,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return validationError(c, "messages must contain between 2 and 100 items");
     }
 
+    // Before delete: get attachments for cleanup
+    const allAttachments: Attachment[] = [];
+    for (const msgId of body.messages) {
+      const attachments = repos.attachments.getByMessageId(msgId);
+      allAttachments.push(...attachments);
+    }
+
     const deleted: string[] = [];
     repos.db.transaction(() => {
       for (const msgId of body.messages) {
@@ -266,6 +380,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     })();
     if (deleted.length > 0) {
+      // After delete: clean up attachment files
+      cleanupAttachmentFiles(allAttachments).catch(() => {});
+
       repos.channels.recomputeLastMessageId(channelId);
       // Update thread message_count for bulk deletes
       if (ch.type === 11) {
@@ -289,8 +406,14 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
+    // Before delete: get attachments for cleanup
+    const channelAttachments = repos.attachments.getByChannelId(channelId);
+
     const count = repos.messages.deleteAll(channelId);
     if (count > 0) {
+      // After delete: clean up attachment files
+      cleanupAttachmentFiles(channelAttachments).catch(() => {});
+
       repos.channels.recomputeLastMessageId(channelId);
       // Reset thread message_count when all messages are cleared
       if (ch.type === 11) {

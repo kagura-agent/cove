@@ -262,6 +262,21 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Read channel's cove.md for bot context injection (cached)
     const coveMdContent = await getCoveMd(restClient, channelId, log);
 
+    // Build attachment context for agent
+    const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
+    const attachmentUrls = imageAttachments.map((a: any) => a.url);
+    const fullAttachmentUrls = attachmentUrls.map((url: string) => {
+      if (url.startsWith('/')) return account.baseUrl + url;
+      return url;
+    });
+
+    // Append image URLs to body so agent sees them
+    let bodyForAgent = message.content;
+    if (fullAttachmentUrls.length > 0) {
+      const urlsText = fullAttachmentUrls.map((url: string) => '[image: ' + url + ']').join('\n');
+      bodyForAgent = bodyForAgent ? bodyForAgent + '\n\n' + urlsText : urlsText;
+    }
+
     try {
       await dispatchInboundDirectDmWithRuntime({
           cfg,
@@ -275,7 +290,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           recipientAddress: channelId,
           conversationLabel: `#${channelId}`,
           rawBody: message.content,
-          bodyForAgent: message.content,
+          bodyForAgent: bodyForAgent,
           messageId: message.id ?? `cove-${Date.now()}`,
           timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
           provider: "cove",
@@ -292,6 +307,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
               ReplyToId: message.message_reference.message_id,
               ReplyToBody: message.referenced_message?.content,
               ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
+            } : {}),
+            ...(fullAttachmentUrls.length > 0 ? {
+              MediaUrls: fullAttachmentUrls,
+              allowUnsafeExternalContent: true,
             } : {}),
           },
           deliver: async (_payload) => {

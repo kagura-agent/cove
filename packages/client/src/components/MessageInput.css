@@ -4,3 +4,7 @@
 .message-textarea:focus-visible {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+.attachment-preview:hover .attachment-preview-actions {
+  display: flex !important;
+}

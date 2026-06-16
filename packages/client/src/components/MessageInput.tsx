@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
+import { useRef, useState, useCallback, useLayoutEffect, useEffect, useMemo } from "react";
 import { Button } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -32,12 +32,21 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [showMention, setShowMention] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
   const mentionHasResults = useRef(false);
   // Track active mentions: displayName → userId
   const mentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
+
+  // Create preview URLs and clean up on change
+  const previewUrls = useMemo(() => pendingFiles.map(f => URL.createObjectURL(f)), [pendingFiles]);
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
 
   // Clear mention state when switching channels
   useEffect(() => {
@@ -74,6 +83,26 @@ export function MessageInput({ channelId }: { channelId: string }) {
     if (e.target.value.trim()) sendTypingThrottled();
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      e.preventDefault();
+      setPendingFiles(prev => [...prev, ...files]);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      setPendingFiles(prev => [...prev, ...files]);
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
     // Only intercept keys when mention autocomplete is actually visible with results
@@ -88,7 +117,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   async function handleSubmit() {
     let text = content.trim();
-    if (!text) return;
+    if (!text && pendingFiles.length === 0) return;
     // Convert display mentions (@username) to wire format (<@userId>)
     // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
     const entries = [...mentionMapRef.current.entries()]
@@ -147,9 +176,15 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
     try {
       const messageReference = replyMsg ? { message_id: replyMsg.id } : undefined;
-      const real = await api.sendMessage(channelId, text, nonce, messageReference);
-      // Reconcile immediately so the message resolves even if WS is down
-      useMessageStore.getState().reconcilePending(channelId, nonce, real);
+
+      if (pendingFiles.length > 0) {
+        const real = await api.sendMessageWithAttachments(channelId, text, pendingFiles, nonce, messageReference);
+        setPendingFiles([]);
+        useMessageStore.getState().reconcilePending(channelId, nonce, real);
+      } else {
+        const real = await api.sendMessage(channelId, text, nonce, messageReference);
+        useMessageStore.getState().reconcilePending(channelId, nonce, real);
+      }
     } catch (err) {
       console.error("send:", err);
       useMessageStore.getState().markFailed(tempId);
@@ -179,7 +214,11 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }, [content]);
 
   return (
-    <div style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}>
+    <div
+      style={{ position: "relative", background: "var(--bg-secondary)", borderTop: hasReply ? "none" : "1px solid var(--border-subtle)" }}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {showMention && (
         <MentionAutocomplete
           text={content}
@@ -189,34 +228,108 @@ export function MessageInput({ channelId }: { channelId: string }) {
           onHasResults={(has) => { mentionHasResults.current = has; }}
         />
       )}
-      <textarea
-        ref={textareaRef}
-        value={content}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onSelect={syncCursor}
-        onClick={syncCursor}
-        onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
-        placeholder="Say something…"
-        aria-label="Message"
-        maxLength={2000}
-        autoComplete="off"
-        rows={1}
-        style={textareaStyle}
-        className="message-textarea"
-      />
-      <Button
-        type="text"
-        shape="circle"
-        icon={<SendOutlined />}
-        onClick={handleSubmit}
-        style={{
-          color: content.trim() ? "var(--accent)" : "var(--text-muted)",
-          width: "var(--icon-button-size-md)", height: "var(--icon-button-size-md)", minWidth: "var(--icon-button-size-md)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "var(--space-sm) 0", flexShrink: 0,
-        }}
-      />
+      {pendingFiles.length > 0 && (
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          padding: '8px 16px',
+          flexWrap: 'wrap',
+        }}>
+          {pendingFiles.map((file, i) => (
+            <div
+              key={i}
+              className="attachment-preview"
+              style={{
+                position: 'relative',
+                background: 'var(--bg-secondary, #2b2d31)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                maxWidth: 220,
+              }}
+            >
+              <div style={{ position: 'relative' }}>
+                <img
+                  src={previewUrls[i]}
+                  alt={file.name}
+                  style={{
+                    display: 'block',
+                    maxWidth: 220,
+                    maxHeight: 200,
+                    objectFit: 'contain',
+                  }}
+                />
+                <div
+                  className="attachment-preview-actions"
+                  style={{
+                    position: 'absolute', top: 4, right: 4,
+                    display: 'none',
+                    gap: 2,
+                    background: 'var(--bg-primary, #1e1f22)',
+                    borderRadius: 4,
+                    padding: '2px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  <button
+                    onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
+                    title="Remove"
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: '#f23f43', padding: '4px', borderRadius: 4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14.25 1c.41 0 .75.34.75.75V3h5.25c.41 0 .75.34.75.75s-.34.75-.75.75H3.75A.75.75 0 0 1 3 3.75 .75.75 0 0 1 3.75 3H9V1.75c0-.41.34-.75.75-.75h4.5zM5.06 7a1 1 0 0 0-1 1.06l.76 12.13a3 3 0 0 0 3 2.81h8.36a3 3 0 0 0 3-2.81L19.94 8.06a1 1 0 0 0-1-1.06H5.06z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: '4px 8px 6px' }}>
+                <span style={{
+                  fontSize: 12,
+                  color: 'var(--text-secondary, #949ba4)',
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {file.name}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-sm)", padding: "0 var(--content-pad)" }}>
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onSelect={syncCursor}
+          onClick={syncCursor}
+          onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
+          onPaste={handlePaste}
+          placeholder="Say something…"
+          aria-label="Message"
+          maxLength={2000}
+          autoComplete="off"
+          rows={1}
+          style={textareaStyle}
+          className="message-textarea"
+        />
+        <Button
+          type="text"
+          shape="circle"
+          icon={<SendOutlined />}
+          onClick={handleSubmit}
+          style={{
+            color: content.trim() ? "var(--accent)" : "var(--text-muted)",
+            width: "var(--icon-button-size-md)", height: "var(--icon-button-size-md)", minWidth: "var(--icon-button-size-md)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "var(--space-sm) 0", flexShrink: 0,
+          }}
+        />
+      </div>
     </div>
   );
 }

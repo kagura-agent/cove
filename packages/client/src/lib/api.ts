@@ -38,6 +38,36 @@ export function sendMessage(channelId: string, content: string, nonce?: string, 
     method: "POST", body: JSON.stringify(body),
   });
 }
+
+export async function sendMessageWithAttachments(
+  channelId: string,
+  content: string,
+  files: File[],
+  nonce?: string,
+  messageReference?: { message_id: string },
+) {
+  const formData = new FormData();
+  const payload: Record<string, unknown> = { content };
+  if (nonce) payload.nonce = nonce;
+  if (messageReference) payload.message_reference = messageReference;
+  formData.append('payload_json', JSON.stringify(payload));
+  files.forEach((file, i) => {
+    formData.append('files[' + i + ']', file, file.name);
+  });
+  // Use fetch directly since our api() helper sets Content-Type to JSON
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+  const res = await fetch(API_BASE + API_PREFIX + '/channels/' + channelId + '/messages', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token },
+    credentials: 'include',
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Upload failed');
+  }
+  return res.json() as Promise<Message>;
+}
 export function clearMessages(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages`, { method: "DELETE" });
 }

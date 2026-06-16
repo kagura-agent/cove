@@ -15,6 +15,9 @@ import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
+import { getAttachmentPath } from "./attachment-storage.js";
+import { readFile } from "fs/promises";
+import { resolve, relative } from "path";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -48,11 +51,77 @@ export function createApp(
     if (c.req.method === "OPTIONS") return next();
     const path = c.req.path.replace(/\/+$/, "") || "/";
     if (PUBLIC_PATHS.has(path)) return next();
+    // Attachments are public (Discord-style, security through unguessable IDs)
+    if (path.startsWith(API_PREFIX + "/attachments/")) return next();
     return authMw(c, next);
   });
 
   // Rate limiting — after auth so we have userId, before routes
   app.use("/api/*", rateLimitMiddleware());
+
+  // Static file serving for attachments (public, security through unguessable IDs)
+  app.get(API_PREFIX + "/attachments/:guildId/:channelId/:attachmentId/:filename", async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const channelId = c.req.param("channelId")!;
+    const attachmentId = c.req.param("attachmentId")!;
+    const filename = c.req.param("filename")!;
+
+    // Sanitize to prevent path traversal
+    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '');
+    const safeGuildId = sanitize(guildId);
+    const safeChannelId = sanitize(channelId);
+    const safeAttachmentId = sanitize(attachmentId);
+    const safeFilename = sanitize(filename);
+    if (!safeGuildId || !safeChannelId || !safeAttachmentId || !safeFilename) {
+      return c.json({ message: 'Invalid path', code: 50035 }, 400);
+    }
+
+    // Verify attachment exists in DB (prevents access to deleted attachments)
+    if (!repos.attachments.exists(safeAttachmentId)) {
+      return c.json({ message: 'Attachment not found', code: 10008 }, 404);
+    }
+
+    try {
+      const filePath = await getAttachmentPath(safeGuildId, safeChannelId, safeAttachmentId, safeFilename);
+
+      // Verify resolved path is under attachments dir with proper boundary check
+      const ATTACHMENT_ROOT = resolve(process.cwd(), 'data', 'attachments');
+      const resolvedPath = resolve(filePath);
+      const rel = relative(ATTACHMENT_ROOT, resolvedPath);
+      if (rel.startsWith('..') || resolve(ATTACHMENT_ROOT, rel) !== resolvedPath) {
+        return c.json({ message: 'Invalid path', code: 50035 }, 400);
+      }
+
+      const fileData = await readFile(filePath);
+
+      // Determine content type from file extension
+      let contentType = "application/octet-stream";
+      let isImage = false;
+      if (safeFilename.endsWith(".jpg") || safeFilename.endsWith(".jpeg")) {
+        contentType = "image/jpeg";
+        isImage = true;
+      } else if (safeFilename.endsWith(".png")) {
+        contentType = "image/png";
+        isImage = true;
+      } else if (safeFilename.endsWith(".gif")) {
+        contentType = "image/gif";
+        isImage = true;
+      } else if (safeFilename.endsWith(".webp")) {
+        contentType = "image/webp";
+        isImage = true;
+      }
+
+      return c.body(fileData, 200, {
+        "Content-Type": contentType,
+        "Content-Disposition": isImage
+          ? `inline; filename="${safeFilename}"`
+          : `attachment; filename="${safeFilename}"`,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+    } catch (err) {
+      return c.json({ message: "Attachment not found", code: 10008 }, 404);
+    }
+  });
 
   app.route(API_PREFIX, channelRoutes(repos, dispatcher));
   app.route(API_PREFIX, messagesRoutes(repos, dispatcher));
