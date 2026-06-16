@@ -52,6 +52,15 @@ export function setupGatewaySubscriptions(): void {
       // Mark mentioned if current user is in mentions
       if (selfId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
         mentionedMessageIds.add(msg.id);
+        // Cap the set at 1000 entries
+        if (mentionedMessageIds.size > 1000) {
+          const entries = [...mentionedMessageIds];
+          mentionedMessageIds.clear();
+          // Keep the newest half
+          for (let i = Math.floor(entries.length / 2); i < entries.length; i++) {
+            mentionedMessageIds.add(entries[i]);
+          }
+        }
         useReadStateStore.getState().setMentioned(msg.channel_id);
       }
     }
@@ -71,6 +80,15 @@ export function setupGatewaySubscriptions(): void {
     if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
       if (!mentionedMessageIds.has(msg.id)) {
         mentionedMessageIds.add(msg.id);
+        // Cap the set at 1000 entries
+        if (mentionedMessageIds.size > 1000) {
+          const entries = [...mentionedMessageIds];
+          mentionedMessageIds.clear();
+          // Keep the newest half
+          for (let i = Math.floor(entries.length / 2); i < entries.length; i++) {
+            mentionedMessageIds.add(entries[i]);
+          }
+        }
         useReadStateStore.getState().setMentioned(msg.channel_id);
       }
     }

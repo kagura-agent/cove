@@ -86,8 +86,17 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setCursorPos(e.target.selectionStart);
     // Check if we should show mention autocomplete
     const before = e.target.value.slice(0, e.target.selectionStart);
-    setShowMention(/@\w*$/.test(before));
-    setShowChannelMention(/#\w*$/.test(before));
+    const atMatch = before.match(/@\w*$/);
+    const hashMatch = before.match(/#([\w-]*)$/);
+    // Word boundary check: trigger must not be preceded by a word character
+    const atCharIndex = atMatch ? before.length - atMatch[0].length : -1;
+    const charBeforeAt = atCharIndex > 0 ? before[atCharIndex - 1] : '';
+    const atTriggered = atMatch && !/\w/.test(charBeforeAt);
+    const hashCharIndex = hashMatch ? before.length - hashMatch[0].length : -1;
+    const charBeforeHash = hashCharIndex > 0 ? before[hashCharIndex - 1] : '';
+    const hashTriggered = hashMatch && !/\w/.test(charBeforeHash);
+    setShowMention(!!atTriggered);
+    setShowChannelMention(!!hashTriggered);
     if (e.target.value.trim()) sendTypingThrottled();
   }
 

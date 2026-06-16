@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
@@ -53,16 +53,21 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   // Find the @ trigger position
   const beforeCursor = text.slice(0, cursorPos);
   const atMatch = beforeCursor.match(/@(\w*)$/);
-  const query = atMatch ? atMatch[1].toLowerCase() : null;
-  const atStart = atMatch ? beforeCursor.length - atMatch[0].length : -1;
+  // Word boundary check: @ must not be preceded by a word character
+  const atCharIndex = atMatch ? beforeCursor.length - atMatch[0].length : -1;
+  const charBeforeAt = atCharIndex > 0 ? beforeCursor[atCharIndex - 1] : '';
+  const atTriggered = atMatch && !/\w/.test(charBeforeAt);
+  const query = atTriggered ? atMatch[1].toLowerCase() : null;
+  const atStart = atTriggered ? beforeCursor.length - atMatch[0].length : -1;
 
-  const filtered = query !== null
-    ? members.filter((m) => {
-        const displayName = (m.user.global_name || m.user.username).toLowerCase();
-        const uname = m.user.username.toLowerCase();
-        return displayName.includes(query) || uname.includes(query);
-      }).slice(0, 10)
-    : [];
+  const filtered = useMemo(() => {
+    if (query === null) return [];
+    return members.filter((m) => {
+      const displayName = (m.user.global_name || m.user.username).toLowerCase();
+      const uname = m.user.username.toLowerCase();
+      return displayName.includes(query) || uname.includes(query);
+    }).slice(0, 10);
+  }, [members, query]);
 
   // Report whether we have results
   useEffect(() => {
@@ -106,7 +111,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle}>
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions">
       {filtered.map((member, i) => {
         const bg = pickAvatarColor(member.user.username);
         const fg = getContrastTextColor(bg);
@@ -119,6 +124,9 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
               e.preventDefault();
               onSelect(member.user.id, member.user.global_name || member.user.username, atStart, cursorPos);
             }}
+            role="option"
+            aria-selected={i === activeIndex}
+            id={'mention-option-' + member.user.id}
           >
             <div style={{
               width: 24, height: 24, borderRadius: "50%", backgroundColor: bg,
