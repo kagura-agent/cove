@@ -5,7 +5,26 @@ import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
 import { generateSnowflake, type Attachment, API_PREFIX } from "@cove/shared";
-import { storeAttachment } from "../attachment-storage.js";
+import { storeAttachment, getAttachmentPath } from "../attachment-storage.js";
+import { unlink } from "fs/promises";
+
+async function cleanupAttachmentFiles(attachments: Attachment[]): Promise<void> {
+  for (const att of attachments) {
+    try {
+      const parts = att.url.split('/');
+      // URL: /api/v10/attachments/{guildId}/{channelId}/{attachmentId}/{filename}
+      const attIdx = parts.indexOf('attachments');
+      if (attIdx < 0) continue;
+      const guildId = parts[attIdx + 1];
+      const channelId = parts[attIdx + 2];
+      const attachmentId = parts[attIdx + 3];
+      const filename = decodeURIComponent(parts[attIdx + 4] || '');
+      if (!guildId || !channelId || !attachmentId || !filename) continue;
+      const filePath = await getAttachmentPath(guildId, channelId, attachmentId, filename);
+      await unlink(filePath).catch(() => {});
+    } catch {}
+  }
+}
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -299,9 +318,15 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
     // For now, any guild member can delete any message in channels they have access to
 
+    // Before delete: get attachments for cleanup
+    const msgAttachments = repos.attachments.getByMessageId(msgId);
+
     if (!repos.messages.delete(channelId, msgId)) {
       return unknownMessage(c);
     }
+
+    // After delete: clean up attachment files
+    cleanupAttachmentFiles(msgAttachments).catch(() => {});
 
     // Thread-specific: decrement message count
     if (ch.type === 11) {
@@ -339,6 +364,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return validationError(c, "messages must contain between 2 and 100 items");
     }
 
+    // Before delete: get attachments for cleanup
+    const allAttachments: Attachment[] = [];
+    for (const msgId of body.messages) {
+      const attachments = repos.attachments.getByMessageId(msgId);
+      allAttachments.push(...attachments);
+    }
+
     const deleted: string[] = [];
     repos.db.transaction(() => {
       for (const msgId of body.messages) {
@@ -348,6 +380,9 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     })();
     if (deleted.length > 0) {
+      // After delete: clean up attachment files
+      cleanupAttachmentFiles(allAttachments).catch(() => {});
+
       repos.channels.recomputeLastMessageId(channelId);
       // Update thread message_count for bulk deletes
       if (ch.type === 11) {
@@ -371,8 +406,14 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     }
 
+    // Before delete: get attachments for cleanup
+    const channelAttachments = repos.attachments.getByChannelId(channelId);
+
     const count = repos.messages.deleteAll(channelId);
     if (count > 0) {
+      // After delete: clean up attachment files
+      cleanupAttachmentFiles(channelAttachments).catch(() => {});
+
       repos.channels.recomputeLastMessageId(channelId);
       // Reset thread message_count when all messages are cleared
       if (ch.type === 11) {

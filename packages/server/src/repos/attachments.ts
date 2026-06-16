@@ -71,7 +71,29 @@ export class AttachmentRepo {
     return map;
   }
 
+  getByChannelId(channelId: string): Attachment[] {
+    const rows = this.db.prepare("SELECT * FROM attachments WHERE channel_id = ?").all(channelId) as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      filename: r.filename,
+      description: r.description ?? undefined,
+      content_type: r.content_type,
+      size: r.size,
+      url: r.url,
+      proxy_url: r.proxy_url ?? undefined,
+      width: r.width ?? undefined,
+      height: r.height ?? undefined,
+      ephemeral: r.ephemeral === 1 ? true : undefined,
+      flags: r.flags || undefined,
+    }));
+  }
+
   deleteByMessageId(messageId: string): void {
     this.db.prepare("DELETE FROM attachments WHERE message_id = ?").run(messageId);
+  }
+
+  exists(attachmentId: string): boolean {
+    const row = this.db.prepare("SELECT 1 FROM attachments WHERE id = ?").get(attachmentId);
+    return !!row;
   }
 }
