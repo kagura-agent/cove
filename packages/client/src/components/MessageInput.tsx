@@ -7,6 +7,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { ChannelMentionAutocomplete } from "./ChannelMentionAutocomplete";
+import { detectMentionTrigger } from "../lib/mention-trigger";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -85,18 +86,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setContent(e.target.value);
     setCursorPos(e.target.selectionStart);
     // Check if we should show mention autocomplete
-    const before = e.target.value.slice(0, e.target.selectionStart);
-    const atMatch = before.match(/@\w*$/);
-    const hashMatch = before.match(/#([\w-]*)$/);
-    // Word boundary check: trigger must not be preceded by a word character
-    const atCharIndex = atMatch ? before.length - atMatch[0].length : -1;
-    const charBeforeAt = atCharIndex > 0 ? before[atCharIndex - 1] : '';
-    const atTriggered = atMatch && !/\w/.test(charBeforeAt);
-    const hashCharIndex = hashMatch ? before.length - hashMatch[0].length : -1;
-    const charBeforeHash = hashCharIndex > 0 ? before[hashCharIndex - 1] : '';
-    const hashTriggered = hashMatch && !/\w/.test(charBeforeHash);
-    setShowMention(!!atTriggered);
-    setShowChannelMention(!!hashTriggered);
+    const atTrigger = detectMentionTrigger(e.target.value, e.target.selectionStart, '@');
+    const hashTrigger = detectMentionTrigger(e.target.value, e.target.selectionStart, '#');
+    setShowMention(!!atTrigger);
+    setShowChannelMention(!!hashTrigger);
     if (e.target.value.trim()) sendTypingThrottled();
   }
 

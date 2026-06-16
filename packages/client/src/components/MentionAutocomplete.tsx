@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties }
 import { useMemberStore } from "../stores/useMemberStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
+import { detectMentionTrigger } from "../lib/mention-trigger";
 
 const listStyle: CSSProperties = {
   position: "absolute",
@@ -51,14 +52,9 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   const members = activeGuildId ? getMembers(activeGuildId) : [];
 
   // Find the @ trigger position
-  const beforeCursor = text.slice(0, cursorPos);
-  const atMatch = beforeCursor.match(/@(\w*)$/);
-  // Word boundary check: @ must not be preceded by a word character
-  const atCharIndex = atMatch ? beforeCursor.length - atMatch[0].length : -1;
-  const charBeforeAt = atCharIndex > 0 ? beforeCursor[atCharIndex - 1] : '';
-  const atTriggered = atMatch && !/\w/.test(charBeforeAt);
-  const query = atTriggered ? atMatch[1].toLowerCase() : null;
-  const atStart = atTriggered ? beforeCursor.length - atMatch[0].length : -1;
+  const trigger = detectMentionTrigger(text, cursorPos, '@');
+  const query = trigger?.query ?? null;
+  const atStart = trigger?.start ?? -1;
 
   const filtered = useMemo(() => {
     if (query === null) return [];
@@ -111,7 +107,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions">
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions" aria-activedescendant={filtered.length > 0 ? 'mention-option-' + filtered[activeIndex]?.user?.id : undefined}>
       {filtered.map((member, i) => {
         const bg = pickAvatarColor(member.user.username);
         const fg = getContrastTextColor(bg);

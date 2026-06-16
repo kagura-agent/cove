@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
+import { detectMentionTrigger } from "../lib/mention-trigger";
 
 const listStyle: CSSProperties = {
   position: "absolute",
@@ -52,14 +53,9 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   const textChannels = channels.filter((c) => c.type !== 11);
 
   // Find the # trigger position
-  const beforeCursor = text.slice(0, cursorPos);
-  const hashMatch = beforeCursor.match(/#([\w-]*)$/);
-  // Word boundary check: # must not be preceded by a word character
-  const hashCharIndex = hashMatch ? beforeCursor.length - hashMatch[0].length : -1;
-  const charBeforeHash = hashCharIndex > 0 ? beforeCursor[hashCharIndex - 1] : '';
-  const hashTriggered = hashMatch && !/\w/.test(charBeforeHash);
-  const query = hashTriggered ? hashMatch[1].toLowerCase() : null;
-  const hashStart = hashTriggered ? beforeCursor.length - hashMatch[0].length : -1;
+  const trigger = detectMentionTrigger(text, cursorPos, '#');
+  const query = trigger?.query ?? null;
+  const hashStart = trigger?.start ?? -1;
 
   const filtered = useMemo(() => {
     if (query === null) return [];
@@ -108,7 +104,7 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle} role="listbox" aria-label="Mention suggestions">
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Channel suggestions" aria-activedescendant={filtered.length > 0 ? 'channel-option-' + filtered[activeIndex]?.id : undefined}>
       {filtered.map((ch, i) => (
         <div
           key={ch.id}
@@ -120,7 +116,7 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
           }}
           role="option"
           aria-selected={i === activeIndex}
-          id={'mention-option-' + ch.id}
+          id={'channel-option-' + ch.id}
         >
           <span style={{ color: "var(--text-muted)", fontSize: 18, fontWeight: 400, width: 24, textAlign: "center", flexShrink: 0 }}>#</span>
           <span style={{ color: "var(--text-normal)" }}>{ch.name}</span>
