@@ -17,6 +17,7 @@ import { API_PREFIX } from "@cove/shared";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { getAttachmentPath } from "./attachment-storage.js";
 import { readFile } from "fs/promises";
+import { resolve } from "path";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -34,38 +35,6 @@ export function createApp(
   const app = new Hono<AppEnv>();
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
-
-  // Static file serving for attachments
-  app.get("/attachments/:guildId/:channelId/:attachmentId/:filename", async (c) => {
-    const guildId = c.req.param("guildId");
-    const channelId = c.req.param("channelId");
-    const attachmentId = c.req.param("attachmentId");
-    const filename = c.req.param("filename");
-
-    try {
-      const filePath = await getAttachmentPath(guildId, channelId, attachmentId, filename);
-      const fileData = await readFile(filePath);
-
-      // Determine content type from file extension
-      let contentType = "application/octet-stream";
-      if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
-        contentType = "image/jpeg";
-      } else if (filename.endsWith(".png")) {
-        contentType = "image/png";
-      } else if (filename.endsWith(".gif")) {
-        contentType = "image/gif";
-      } else if (filename.endsWith(".webp")) {
-        contentType = "image/webp";
-      }
-
-      return c.body(fileData, 200, {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=31536000, immutable",
-      });
-    } catch (err) {
-      return c.json({ message: "Attachment not found", code: 10008 }, 404);
-    }
-  });
 
   app.route(API_PREFIX, registerRoutes(db));
 
@@ -87,6 +56,56 @@ export function createApp(
 
   // Rate limiting — after auth so we have userId, before routes
   app.use("/api/*", rateLimitMiddleware());
+
+  // Static file serving for attachments (requires auth)
+  app.get("/attachments/:guildId/:channelId/:attachmentId/:filename", authMw, async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const channelId = c.req.param("channelId")!;
+    const attachmentId = c.req.param("attachmentId")!;
+    const filename = c.req.param("filename")!;
+
+    // Sanitize to prevent path traversal
+    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '');
+    const safeGuildId = sanitize(guildId);
+    const safeChannelId = sanitize(channelId);
+    const safeAttachmentId = sanitize(attachmentId);
+    const safeFilename = sanitize(filename);
+    if (!safeGuildId || !safeChannelId || !safeAttachmentId || !safeFilename) {
+      return c.json({ message: 'Invalid path', code: 50035 }, 400);
+    }
+
+    try {
+      const filePath = await getAttachmentPath(safeGuildId, safeChannelId, safeAttachmentId, safeFilename);
+
+      // Verify resolved path is under attachments dir
+      const ATTACHMENT_DIR = resolve(process.cwd(), 'data', 'attachments');
+      const resolvedPath = resolve(filePath);
+      if (!resolvedPath.startsWith(ATTACHMENT_DIR)) {
+        return c.json({ message: 'Invalid path', code: 50035 }, 400);
+      }
+
+      const fileData = await readFile(filePath);
+
+      // Determine content type from file extension
+      let contentType = "application/octet-stream";
+      if (safeFilename.endsWith(".jpg") || safeFilename.endsWith(".jpeg")) {
+        contentType = "image/jpeg";
+      } else if (safeFilename.endsWith(".png")) {
+        contentType = "image/png";
+      } else if (safeFilename.endsWith(".gif")) {
+        contentType = "image/gif";
+      } else if (safeFilename.endsWith(".webp")) {
+        contentType = "image/webp";
+      }
+
+      return c.body(fileData, 200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+    } catch (err) {
+      return c.json({ message: "Attachment not found", code: 10008 }, 404);
+    }
+  });
 
   app.route(API_PREFIX, channelRoutes(repos, dispatcher));
   app.route(API_PREFIX, messagesRoutes(repos, dispatcher));

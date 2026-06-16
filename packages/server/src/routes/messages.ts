@@ -93,7 +93,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (contentType.startsWith('multipart/form-data')) {
       const formBody = await c.req.parseBody({ all: true });
       const payloadRaw = formBody['payload_json'];
-      const payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : {};
+      let payload: any = {};
+      try {
+        payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : {};
+      } catch {
+        return validationError(c, 'Invalid payload_json');
+      }
       content = payload.content || '';
       nonce = payload.nonce;
       if (payload.message_reference?.message_id) {
@@ -106,6 +111,22 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       for (const [key, value] of Object.entries(formBody)) {
         if (key.startsWith('files[') && value instanceof File) {
           files.push(value);
+        }
+      }
+
+      const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB per file
+      const MAX_FILES = 10;
+      const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+      if (files.length > MAX_FILES) {
+        return c.json({ message: 'Too many files (max ' + MAX_FILES + ')', code: 50035 }, 400);
+      }
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          return c.json({ message: 'File too large: ' + file.name + ' (max 8MB)', code: 40005 }, 400);
+        }
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+          return c.json({ message: 'Unsupported file type: ' + file.type + ' (allowed: jpeg, png, gif, webp)', code: 50035 }, 400);
         }
       }
 
