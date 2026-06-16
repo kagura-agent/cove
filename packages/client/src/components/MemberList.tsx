@@ -32,7 +32,7 @@ function MemberRow({ member, online }: { member: GuildMember; online: boolean })
     >
       <div style={styles.avatarWrapper}>
         <Avatar size="small" style={{ backgroundColor: color, color: getContrastTextColor(color), fontWeight: 700, ...styles.avatar }}>
-          {user.username.charAt(0).toUpperCase()}
+          {(user.global_name || user.username).charAt(0).toUpperCase()}
         </Avatar>
         <StatusDot online={online} />
       </div>

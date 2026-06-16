@@ -29,7 +29,7 @@ export function UserBar({ onCloseSidebar, onSettingsOpen }: { onCloseSidebar?: (
     <div style={barStyle}>
       <div style={{ position: "relative", display: "inline-block" }}>
         <Avatar style={{ ...avatarStyle, backgroundColor: pickAvatarColor(username), color: getContrastTextColor(pickAvatarColor(username)) }} size={28}>
-          {username.charAt(0).toUpperCase()}
+          {(global_name || username).charAt(0).toUpperCase()}
         </Avatar>
         <StatusDot online={online} />
       </div>

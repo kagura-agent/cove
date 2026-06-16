@@ -125,7 +125,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 12, fontWeight: 600, color: fg, flexShrink: 0,
             }}>
-              {member.user.username.charAt(0).toUpperCase()}
+              {(member.user.global_name || member.user.username).charAt(0).toUpperCase()}
             </div>
             <span style={{ color: "var(--text-normal)" }}>{member.user.global_name || member.user.username}</span>
             {member.user.bot && (

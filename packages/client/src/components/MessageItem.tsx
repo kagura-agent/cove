@@ -210,7 +210,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const currentUserId = useUserStore((s) => s.id);
   const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
   const isBot = message.author.bot;
-  const initial = message.author.username.charAt(0).toUpperCase();
+  const initial = (message.author.global_name || message.author.username).charAt(0).toUpperCase();
   const bgColor = avatarColor(message.author.username);
   const textColor = getContrastTextColor(bgColor);
   const [lightboxSrc, setLightboxSrc] = useState<{src: string; alt: string} | null>(null);
