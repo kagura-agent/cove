@@ -81,11 +81,6 @@ export function createApp(
       return c.json({ message: 'Attachment not found', code: 10008 }, 404);
     }
 
-    // Verify attachment exists in DB (prevents access to deleted attachments)
-    if (!repos.attachments.exists(safeAttachmentId)) {
-      return c.json({ message: 'Attachment not found', code: 10008 }, 404);
-    }
-
     try {
       const filePath = await getAttachmentPath(safeGuildId, safeChannelId, safeAttachmentId, safeFilename);
 
@@ -113,7 +108,6 @@ export function createApp(
         isImage = true;
       } else if (safeFilename.endsWith(".webp")) {
         contentType = "image/webp";
-        isImage = true;
         isImage = true;
       }
 
