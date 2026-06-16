@@ -229,18 +229,52 @@ export function MessageInput({ channelId }: { channelId: string }) {
         />
       )}
       {pendingFiles.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, padding: '8px 12px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color, #3f4147)' }}>
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          padding: '16px',
+          flexWrap: 'wrap',
+        }}>
           {pendingFiles.map((file, i) => (
-            <div key={i} style={{ position: 'relative' }}>
-              <img
-                src={previewUrls[i]}
-                alt={file.name}
-                style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-color, #3f4147)' }}
-              />
-              <button
-                onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
-                style={{ position: 'absolute', top: -6, right: -6, background: '#ed4245', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
-              >×</button>
+            <div
+              key={i}
+              style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', gap: 4 }}
+              className="attachment-preview"
+            >
+              <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-color, #3f4147)' }}>
+                <img
+                  src={previewUrls[i]}
+                  alt={file.name}
+                  style={{ width: 200, height: 200, objectFit: 'cover', display: 'block' }}
+                />
+                <div
+                  className="attachment-preview-actions"
+                  style={{
+                    position: 'absolute', top: 4, right: 4,
+                    display: 'none',
+                    gap: 2,
+                    background: 'var(--bg-primary, #2b2d31)',
+                    borderRadius: 4,
+                    padding: '2px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  <button
+                    onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
+                    title="Remove"
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: '#f23f43', padding: '4px 6px', borderRadius: 4,
+                      fontSize: 14, lineHeight: 1,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >🗑️</button>
+                </div>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary, #949ba4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {file.name}
+              </span>
             </div>
           ))}
         </div>
