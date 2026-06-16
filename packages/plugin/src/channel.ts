@@ -62,7 +62,7 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
 
 function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
   const channelConfig = cfg.channels?.["cove"];
-  const merged = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: accountId ?? undefined });
+  const merged = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: (accountId ?? undefined) as string });
   const token = merged?.token;
   if (!token) throw new Error("cove: account missing token (accountId=" + (accountId ?? "default") + ")");
   const agentId = merged?.agentId;
@@ -88,7 +88,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     defaultAccountId: resolveDefaultCoveAccountId,
   },
   setup: {
-    resolveAccountId: (cfg) => resolveDefaultCoveAccountId(cfg) ?? "default",
+    resolveAccountId: (params) => resolveDefaultCoveAccountId(params.cfg) ?? "default",
     applyAccountConfig: ({ cfg }) => cfg,
   },
   security: {
