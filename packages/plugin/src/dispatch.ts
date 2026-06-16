@@ -286,12 +286,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             SenderName: senderName,
             ChannelId: channelId,
             ...(coveMdContent ? {
-              UntrustedStructuredContext: [{
-                label: "Channel cove.md",
-                source: "cove",
-                type: "channel-context",
-                payload: coveMdContent,
-              }],
+              GroupSystemPrompt: coveMdContent,
             } : {}),
             ...(message.message_reference?.message_id ? {
               ReplyToId: message.message_reference.message_id,
