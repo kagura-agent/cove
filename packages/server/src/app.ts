@@ -51,6 +51,8 @@ export function createApp(
     if (c.req.method === "OPTIONS") return next();
     const path = c.req.path.replace(/\/+$/, "") || "/";
     if (PUBLIC_PATHS.has(path)) return next();
+    // Attachments are public (Discord-style, security through unguessable IDs)
+    if (path.startsWith(API_PREFIX + "/attachments/")) return next();
     return authMw(c, next);
   });
 
