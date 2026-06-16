@@ -44,6 +44,7 @@ async function cleanupAndSend(
 
 export interface DispatchMessageOptions {
   message: Message;
+  batchedMessages?: Message[];
   account: CoveAccount;
   restClient: CoveRestClient;
   channelRuntime: any;
@@ -64,7 +65,7 @@ export interface DispatchMessageOptions {
  * tool progress, and final message delivery with fallback.
  */
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
+  const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
@@ -262,9 +263,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Read channel's cove.md for bot context injection (cached)
     const coveMdContent = await getCoveMd(restClient, channelId, log);
 
-    // Extract batched messages if present
-    const batchedMessages = (message as any)._batchedMessages as Message[] | undefined;
-
     // Build attachment context for agent
     const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
     const attachmentUrls = imageAttachments.map((a: any) => a.url);
@@ -287,9 +285,16 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Build message body with batched context
     let bodyForAgent = message.content;
     if (batchedMessages && batchedMessages.length > 0) {
-      const contextLines = batchedMessages.map((m: any) => {
+      const contextLines = batchedMessages.map((m) => {
         const name = m.author?.global_name || m.author?.username || 'Unknown';
-        return name + ': ' + m.content;
+        let line = name + ': ' + m.content;
+        // Inline image markers next to the sending author
+        const msgImages = (m.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
+        for (const img of msgImages) {
+          const imgUrl = img.url.startsWith('/') ? account.baseUrl + img.url : img.url;
+          line += ' [image: ' + imgUrl + ']';
+        }
+        return line;
       });
       bodyForAgent = contextLines.join('\n') + '\n\n' + bodyForAgent;
     }
