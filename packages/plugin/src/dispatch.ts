@@ -261,7 +261,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
     // Read channel's cove.md for bot context injection (cached)
-    const coveMdContent = await getCoveMd(restClient, channelId, log);
+    // For threads, read cove.md from parent channel (threads don't have their own)
+    let coveMdChannelId = channelId;
+    try {
+      const channel = await restClient.getChannel(channelId);
+      if (channel.type === 11 && channel.parent_id) {
+        coveMdChannelId = channel.parent_id;
+      }
+    } catch { /* fall back to channelId */ }
+    const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
 
     // Build attachment context for agent
     const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
