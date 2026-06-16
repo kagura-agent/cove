@@ -103,7 +103,7 @@ async function getOrCreateWebhook(baseUrl, token, channelId, cache) {
 }
 
 async function executeWebhook(baseUrl, webhookId, webhookToken, content, username) {
-  return apiRequest(`${baseUrl}/api/v10/webhooks/${webhookId}/${webhookToken}`, {
+  return apiRequest(`${baseUrl}/api/v10/webhooks/${webhookId}/${webhookToken}?wait=true`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content, username }),

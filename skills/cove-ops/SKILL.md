@@ -138,10 +138,20 @@ curl -s -X POST "$COVE_BASE/api/v10/channels/CHANNEL_ID/webhooks" \
 ### Manual: Execute Webhook (send message)
 
 ```bash
-curl -s -X POST "$COVE_BASE/api/v10/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN" \
+# Send to channel (returns message body with ?wait=true)
+curl -s -X POST "$COVE_BASE/api/v10/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"content": "Message text", "username": "From #source-channel"}'
+
+# Send to a thread within the webhook's channel
+curl -s -X POST "$COVE_BASE/api/v10/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN?wait=true&thread_id=THREAD_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Message in thread", "username": "From #source-channel"}'
 ```
+
+Query params:
+- `?wait=true` — return created message (default: 204 No Content)
+- `?thread_id=ID` — post to a thread instead of the channel
 
 No auth header needed — the token in the URL is the auth.
 

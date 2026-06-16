@@ -142,6 +142,26 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     const webhook = repos.webhooks.findByIdAndToken(webhookId, webhookToken);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
+    // Parse query parameters
+    const wait = c.req.query('wait') === 'true';
+    const threadId = c.req.query('thread_id');
+
+    // Validate thread_id if provided
+    let targetChannelId = webhook.channel_id;
+    if (threadId) {
+      const thread = repos.channels.getById(threadId);
+      if (!thread || ![10, 11, 12].includes(thread.type) || thread.parent_id !== webhook.channel_id) {
+        return c.json({ message: 'Unknown Channel', code: 10003 }, 404);
+      }
+      if (thread.thread_metadata?.archived) {
+        return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+      }
+      if (thread.thread_metadata?.locked) {
+        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
+      }
+      targetChannelId = threadId;
+    }
+
     const now = Date.now();
     const windowStart = now - WINDOW_MS;
     const timestamps = buckets.get(webhookId) ?? [];
@@ -185,25 +205,34 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     const displayAvatar = body.avatar_url ?? webhook.avatar;
 
     const message = repos.messages.createFromWebhook(
-      webhook.channel_id,
+      targetChannelId,
       webhook.id,
       displayName,
       displayAvatar,
       body.content,
     );
 
-    repos.channels.updateLastMessageId(webhook.channel_id, message.id);
+    repos.channels.updateLastMessageId(targetChannelId, message.id);
 
     // Increment mention_count for each mentioned user
     if (message.mentions?.length) {
       for (const mentioned of message.mentions) {
-        repos.readStates.incrementMentionCount(mentioned.id, webhook.channel_id);
+        repos.readStates.incrementMentionCount(mentioned.id, targetChannelId);
       }
+    }
+
+    // If posting to a thread, increment message count
+    if (threadId) {
+      repos.threads.incrementMessageCount(targetChannelId);
     }
 
     dispatcher?.messageCreate(message);
 
-    return c.json(message, 201);
+    // Discord-compatible: default is 204 No Content (breaking change from always-201)
+    if (wait) {
+      return c.json(message, 200);
+    }
+    return c.body(null, 204);
   });
 
   return app;

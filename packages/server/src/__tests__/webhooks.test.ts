@@ -80,12 +80,12 @@ describe("Webhooks", () => {
 
   it("executes a webhook and creates a message", async () => {
     const wh = await createWebhook(generalId, "Exec Hook");
-    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}`, {
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "Hello from webhook" }),
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const msg: Message = await res.json();
     expect(msg.content).toBe("Hello from webhook");
     expect(msg.webhook_id).toBe(wh.id);
@@ -115,14 +115,155 @@ describe("Webhooks", () => {
 
   it("execute with username override uses override", async () => {
     const wh = await createWebhook(generalId, "Default Name");
-    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}`, {
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "custom", username: "Custom Bot" }),
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const msg: Message = await res.json();
     expect(msg.author.username).toBe("Custom Bot");
+  });
+
+  it("execute without ?wait returns 204 with no body", async () => {
+    const wh = await createWebhook(generalId, "No Wait Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "default behavior" }),
+    });
+    expect(res.status).toBe(204);
+    const body = await res.text();
+    expect(body).toBe("");
+  });
+
+  it("execute with ?wait=true returns 200 with message", async () => {
+    const wh = await createWebhook(generalId, "Wait Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "with wait param" }),
+    });
+    expect(res.status).toBe(200);
+    const msg: Message = await res.json();
+    expect(msg.content).toBe("with wait param");
+    expect(msg.webhook_id).toBe(wh.id);
+  });
+
+  it("execute with ?thread_id routes message to thread", async () => {
+    const wh = await createWebhook(generalId, "Thread Hook");
+
+    // Create a thread first
+    const msgRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "thread parent" }),
+    });
+    const parentMsg: Message = await msgRes.json();
+
+    const threadRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${parentMsg.id}/threads`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ name: "test thread" }),
+    });
+    const thread = await threadRes.json() as { id: string };
+
+    // Execute webhook with thread_id
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true&thread_id=${thread.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "message in thread" }),
+    });
+    expect(res.status).toBe(200);
+    const msg: Message = await res.json();
+    expect(msg.channel_id).toBe(thread.id);
+    expect(msg.content).toBe("message in thread");
+  });
+
+  it("execute with invalid thread_id returns 404", async () => {
+    const wh = await createWebhook(generalId, "Bad Thread Hook");
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?thread_id=invalid-thread-id`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "should fail" }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe(10003);
+  });
+
+  it("execute with archived thread returns 403", async () => {
+    const wh = await createWebhook(generalId, "Archived Thread Hook");
+
+    // Create a thread
+    const msgRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "archived parent" }),
+    });
+    const parentMsg: Message = await msgRes.json();
+
+    const threadRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${parentMsg.id}/threads`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ name: "archived thread" }),
+    });
+    const thread = await threadRes.json() as { id: string };
+
+    // Archive the thread
+    await app.request(`${API_PREFIX}/channels/${thread.id}`, {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ archived: true }),
+    });
+
+    // Try to execute webhook with archived thread
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?thread_id=${thread.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "should fail" }),
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50083);
+    expect(body.message).toBe("This thread is archived");
+  });
+
+  it("execute with locked thread returns 403", async () => {
+    const wh = await createWebhook(generalId, "Locked Thread Hook");
+
+    // Create a thread
+    const msgRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ content: "locked parent" }),
+    });
+    const parentMsg: Message = await msgRes.json();
+
+    const threadRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages/${parentMsg.id}/threads`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ name: "locked thread" }),
+    });
+    const thread = await threadRes.json() as { id: string };
+
+    // Lock the thread
+    await app.request(`${API_PREFIX}/channels/${thread.id}`, {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ locked: true }),
+    });
+
+    // Try to execute webhook with locked thread
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?thread_id=${thread.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "should fail" }),
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe(50083);
+    expect(body.message).toBe("This thread is locked");
   });
 
   // ─── Webhook message identity persists on reload ────────────────────
@@ -278,12 +419,12 @@ describe("Webhooks", () => {
     const webhook = (await createRes.json()) as { id: string; token: string };
 
     // Send a message via webhook
-    const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}`, {
+    const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "before delete", username: "Custom Name" }),
     });
-    expect(execRes.status).toBe(201);
+    expect(execRes.status).toBe(200);
     const msg = (await execRes.json()) as { id: string };
 
     // Delete the webhook
