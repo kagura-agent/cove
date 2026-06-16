@@ -16,6 +16,7 @@ function makeCfg(overrides: Record<string, unknown> = {}) {
         token: "test-token",
         baseUrl: "http://localhost:3400",
         guildId: "guild-1",
+        agentId: "test-agent",
         ...overrides,
       },
     },
@@ -101,20 +102,14 @@ describe("resolver — group kind", () => {
   });
 
   it("soft-fails when token is missing", async () => {
-    const saved = process.env["COVE_BOT_TOKEN"];
-    delete process.env["COVE_BOT_TOKEN"];
-    try {
-      const results = await resolveTargets({
-        cfg: makeCfg({ token: undefined }),
-        inputs: ["ch-1"],
-        kind: "group",
-      });
-      expect(results).toEqual([
-        { input: "ch-1", resolved: false, note: "missing Cove bot token" },
-      ]);
-    } finally {
-      if (saved !== undefined) process.env["COVE_BOT_TOKEN"] = saved;
-    }
+    const results = await resolveTargets({
+      cfg: makeCfg({ token: undefined }),
+      inputs: ["ch-1"],
+      kind: "group",
+    });
+    expect(results).toEqual([
+      { input: "ch-1", resolved: false, note: "missing Cove bot token" },
+    ]);
   });
 
   it("soft-fails when getChannels throws", async () => {
