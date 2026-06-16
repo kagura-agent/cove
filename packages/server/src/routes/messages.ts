@@ -4,6 +4,8 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
+import { generateSnowflake, type Attachment } from "@cove/shared";
+import { storeAttachment } from "../attachment-storage.js";
 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -82,40 +84,79 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
     }
 
-    const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
-    if (!body) return validationError(c, "Invalid JSON");
+    const contentType = c.req.header('content-type') || '';
+    let content = '';
+    let nonce: string | undefined;
+    let referencedMessageId: string | undefined;
+    let attachmentList: Attachment[] = [];
 
-    const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
-    if (err) return validationError(c, err);
+    if (contentType.startsWith('multipart/form-data')) {
+      const formBody = await c.req.parseBody({ all: true });
+      const payloadRaw = formBody['payload_json'];
+      const payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : {};
+      content = payload.content || '';
+      nonce = payload.nonce;
+      if (payload.message_reference?.message_id) {
+        const refMsg = repos.messages.getById(channelId, payload.message_reference.message_id);
+        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        referencedMessageId = payload.message_reference.message_id;
+      }
 
-    // Validate nonce before DB write to prevent orphan records
-    if (body.nonce) {
-      if (typeof body.nonce !== "string" || body.nonce.length > 64) {
-        return validationError(c, "nonce must be a string of at most 64 characters");
+      const files: File[] = [];
+      for (const [key, value] of Object.entries(formBody)) {
+        if (key.startsWith('files[') && value instanceof File) {
+          files.push(value);
+        }
+      }
+
+      for (const file of files) {
+        const attId = generateSnowflake();
+        const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const arrayBuffer = await file.arrayBuffer();
+        await storeAttachment(channel.guild_id, channelId, attId, safeFilename, Buffer.from(arrayBuffer));
+        attachmentList.push({
+          id: attId,
+          filename: file.name,
+          size: file.size,
+          url: '/attachments/' + channel.guild_id + '/' + channelId + '/' + attId + '/' + encodeURIComponent(safeFilename),
+          content_type: file.type || 'application/octet-stream',
+        });
+      }
+    } else {
+      const body = await parseJsonBody<{ content: string; username?: string; nonce?: string; message_reference?: { message_id: string } }>(c);
+      if (!body) return validationError(c, 'Invalid JSON');
+      content = body.content;
+      nonce = body.nonce;
+      if (body.message_reference?.message_id) {
+        if (typeof body.message_reference.message_id !== 'string') {
+          return validationError(c, 'message_reference.message_id must be a string');
+        }
+        const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
+        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        referencedMessageId = body.message_reference.message_id;
       }
     }
 
-    // Validate message_reference if provided
-    let referencedMessageId: string | undefined;
-    if (body.message_reference) {
-      if (typeof body.message_reference.message_id !== "string") {
-        return validationError(c, "message_reference.message_id must be a string");
+    // Allow empty content if attachments are present
+    if (!content && attachmentList.length === 0) {
+      return validationError(c, 'content is required when no attachments are provided');
+    }
+    if (content) {
+      const err = validateString(content, 'content', { maxLength: 4000 });
+      if (err) return validationError(c, err);
+    }
+
+    if (nonce) {
+      if (typeof nonce !== 'string' || nonce.length > 64) {
+        return validationError(c, 'nonce must be a string of at most 64 characters');
       }
-      // Verify the referenced message exists in this channel
-      const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
-      if (!refMsg) {
-        return c.json({ message: "Unknown Message", code: 10008 }, 400);
-      }
-      referencedMessageId = body.message_reference.message_id;
     }
 
     const author = user;
+    const message = repos.messages.create(channelId, author, content, referencedMessageId, attachmentList.length > 0 ? attachmentList : undefined);
 
-    const message = repos.messages.create(channelId, author, body.content, referencedMessageId);
-
-    // Pass through client nonce for optimistic send reconciliation
-    if (body.nonce) {
-      message.nonce = body.nonce;
+    if (nonce) {
+      message.nonce = nonce;
     }
 
     // Thread-specific: auto-add sender as member + increment message count

@@ -15,6 +15,8 @@ import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
+import { getAttachmentPath } from "./attachment-storage.js";
+import { readFile } from "fs/promises";
 
 export interface AppConfig {
   gatewayUrl?: string;
@@ -32,6 +34,38 @@ export function createApp(
   const app = new Hono<AppEnv>();
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+  // Static file serving for attachments
+  app.get("/attachments/:guildId/:channelId/:attachmentId/:filename", async (c) => {
+    const guildId = c.req.param("guildId");
+    const channelId = c.req.param("channelId");
+    const attachmentId = c.req.param("attachmentId");
+    const filename = c.req.param("filename");
+
+    try {
+      const filePath = await getAttachmentPath(guildId, channelId, attachmentId, filename);
+      const fileData = await readFile(filePath);
+
+      // Determine content type from file extension
+      let contentType = "application/octet-stream";
+      if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+        contentType = "image/jpeg";
+      } else if (filename.endsWith(".png")) {
+        contentType = "image/png";
+      } else if (filename.endsWith(".gif")) {
+        contentType = "image/gif";
+      } else if (filename.endsWith(".webp")) {
+        contentType = "image/webp";
+      }
+
+      return c.body(fileData, 200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+    } catch (err) {
+      return c.json({ message: "Attachment not found", code: 10008 }, 404);
+    }
+  });
 
   app.route(API_PREFIX, registerRoutes(db));
 

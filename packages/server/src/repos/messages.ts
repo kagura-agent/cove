@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { generateSnowflake, type Message, type Reaction, type User } from "@cove/shared";
+import { generateSnowflake, type Message, type Reaction, type User, type Attachment } from "@cove/shared";
 import type { ReactionsRepo } from "./reactions.js";
 
 interface MessageRow {
@@ -16,6 +16,7 @@ interface MessageRow {
   sender_global_name: string | null;
   webhook_id: string | null;
   referenced_message_id: string | null;
+  attachments: string | null;
 }
 
 const MSG_SELECT = "SELECT m.*, u.username AS sender_username, u.bot AS sender_bot, u.global_name AS sender_global_name FROM messages m LEFT JOIN users u ON u.id = m.sender";
@@ -51,6 +52,16 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
     };
   }
 
+  // Parse attachments from JSON
+  let attachments: Attachment[] = [];
+  if (row.attachments) {
+    try {
+      attachments = JSON.parse(row.attachments);
+    } catch {
+      attachments = [];
+    }
+  }
+
   const msg: Message = {
     id: row.id,
     channel_id: row.channel_id,
@@ -61,7 +72,7 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
       ? new Date(row.edited_timestamp).toISOString()
       : null,
     type: 0,
-    attachments: [],
+    attachments,
     embeds: [],
     mentions: [],
     mention_roles: [],
@@ -151,13 +162,13 @@ export class MessagesRepo {
     return msg;
   }
 
-  create(channelId: string, author: User, content: string, referencedMessageId?: string): Message {
+  create(channelId: string, author: User, content: string, referencedMessageId?: string, attachments?: Attachment[]): Message {
     const now = Date.now();
     const id = generateSnowflake();
 
     this.db.prepare(
-      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, referenced_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, author.id, author.username, content, now, null, null, referencedMessageId ?? null);
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, referenced_message_id, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, author.id, author.username, content, now, null, null, referencedMessageId ?? null, JSON.stringify(attachments || []));
 
     const msg: Message = {
       id,
@@ -172,7 +183,7 @@ export class MessagesRepo {
       timestamp: new Date(now).toISOString(),
       edited_timestamp: null,
       type: 0,
-      attachments: [],
+      attachments: attachments || [],
       embeds: [],
       mentions: [],
       mention_roles: [],

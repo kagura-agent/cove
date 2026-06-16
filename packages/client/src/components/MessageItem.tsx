@@ -297,7 +297,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
           {/* Message body */}
           <div
-            
+
             style={{
               whiteSpace: "pre-wrap",
               color: "var(--text-normal)",
@@ -310,6 +310,25 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
             <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
           </div>
+
+          {/* Image attachments */}
+          {message.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((att: any) => (
+            <div key={att.id} style={{ marginTop: 4 }}>
+              <img
+                src={att.url}
+                alt={att.filename}
+                style={{
+                  maxWidth: 400,
+                  maxHeight: 300,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'block',
+                }}
+                onClick={() => window.open(att.url, '_blank')}
+                loading='lazy'
+              />
+            </div>
+          ))}
 
           {/* Reactions */}
           <ReactionPills message={message} />
@@ -352,7 +371,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
           />
         )}
         <div
-          
+
           style={{
             whiteSpace: "pre-wrap",
             color: "var(--text-normal)",
@@ -365,6 +384,25 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
         </div>
+
+        {/* Image attachments */}
+        {message.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((att: any) => (
+          <div key={att.id} style={{ marginTop: 4 }}>
+            <img
+              src={att.url}
+              alt={att.filename}
+              style={{
+                maxWidth: 400,
+                maxHeight: 300,
+                borderRadius: 8,
+                cursor: 'pointer',
+                display: 'block',
+              }}
+              onClick={() => window.open(att.url, '_blank')}
+              loading='lazy'
+            />
+          </div>
+        ))}
 
         {/* Reactions */}
         <ReactionPills message={message} />

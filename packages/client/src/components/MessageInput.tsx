@@ -32,6 +32,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [showMention, setShowMention] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
   const mentionHasResults = useRef(false);
@@ -74,6 +75,26 @@ export function MessageInput({ channelId }: { channelId: string }) {
     if (e.target.value.trim()) sendTypingThrottled();
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      e.preventDefault();
+      setPendingFiles(prev => [...prev, ...files]);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      setPendingFiles(prev => [...prev, ...files]);
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
     // Only intercept keys when mention autocomplete is actually visible with results
@@ -88,7 +109,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   async function handleSubmit() {
     let text = content.trim();
-    if (!text) return;
+    if (!text && pendingFiles.length === 0) return;
     // Convert display mentions (@username) to wire format (<@userId>)
     // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
     const entries = [...mentionMapRef.current.entries()]
@@ -147,9 +168,15 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
     try {
       const messageReference = replyMsg ? { message_id: replyMsg.id } : undefined;
-      const real = await api.sendMessage(channelId, text, nonce, messageReference);
-      // Reconcile immediately so the message resolves even if WS is down
-      useMessageStore.getState().reconcilePending(channelId, nonce, real);
+
+      if (pendingFiles.length > 0) {
+        const real = await api.sendMessageWithAttachments(channelId, text, pendingFiles, nonce, messageReference);
+        setPendingFiles([]);
+        useMessageStore.getState().reconcilePending(channelId, nonce, real);
+      } else {
+        const real = await api.sendMessage(channelId, text, nonce, messageReference);
+        useMessageStore.getState().reconcilePending(channelId, nonce, real);
+      }
     } catch (err) {
       console.error("send:", err);
       useMessageStore.getState().markFailed(tempId);
@@ -179,7 +206,11 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }, [content]);
 
   return (
-    <div style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}>
+    <div
+      style={{ position: "relative", ...({ ...wrapperStyle, ...(hasReply ? { borderTop: "none" } : {}) }) }}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {showMention && (
         <MentionAutocomplete
           text={content}
@@ -189,6 +220,23 @@ export function MessageInput({ channelId }: { channelId: string }) {
           onHasResults={(has) => { mentionHasResults.current = has; }}
         />
       )}
+      {pendingFiles.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, padding: '8px 12px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color, #3f4147)' }}>
+          {pendingFiles.map((file, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <img
+                src={URL.createObjectURL(file)}
+                alt={file.name}
+                style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-color, #3f4147)' }}
+              />
+              <button
+                onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
+                style={{ position: 'absolute', top: -6, right: -6, background: '#ed4245', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}
+              >×</button>
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={content}
@@ -197,6 +245,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
         onSelect={syncCursor}
         onClick={syncCursor}
         onBlur={() => { setTimeout(() => setShowMention(false), 150); }}
+        onPaste={handlePaste}
         placeholder="Say something…"
         aria-label="Message"
         maxLength={2000}
