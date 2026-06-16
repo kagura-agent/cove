@@ -29,33 +29,51 @@ export function ImageLightbox({ src, alt, onClose }: { src: string; alt: string;
         onClick={e => e.stopPropagation()}
         style={{
           position: 'absolute', top: 16, right: 16,
-          display: 'flex', gap: 8, alignItems: 'center',
+          display: 'flex', gap: 4, alignItems: 'center',
         }}
       >
         <a
           href={src}
           target="_blank"
           rel="noopener noreferrer"
+          title="Open in browser"
           style={{
-            color: '#dbdee1', fontSize: 13,
-            textDecoration: 'none', padding: '4px 8px',
-            borderRadius: 4,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: 4,
+            background: 'transparent', color: '#b5bac1',
+            textDecoration: 'none', fontSize: 18,
           }}
-          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#b5bac1'; }}
         >
-          Open original
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </a>
         <button
-          onClick={onClose}
+          onClick={() => { navigator.clipboard.writeText(src); }}
+          title="Copy link"
           style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: '#dbdee1', fontSize: 20, padding: '4px 8px',
-            borderRadius: 4, lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: 4,
+            background: 'transparent', border: 'none', cursor: 'pointer', color: '#b5bac1',
           }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#dbdee1')}
-        >✕</button>
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#b5bac1'; }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+        <button
+          onClick={onClose}
+          title="Close"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: 4,
+            background: 'transparent', border: 'none', cursor: 'pointer', color: '#b5bac1',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#b5bac1'; }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
       <img
         src={src}
