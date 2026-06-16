@@ -11,10 +11,10 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 17", () => {
+  it("fresh DB gets user_version = 18", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(17);
+    expect(version).toBe(18);
     db.close();
   });
 
@@ -53,6 +53,7 @@ describe("versioned migration system", () => {
     expect(names).toContain("invite_codes");
     expect(names).toContain("pending_registrations");
     expect(names).toContain("read_states");
+    expect(names).toContain("attachments");
     db.close();
   });
 
@@ -100,7 +101,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(17);
+      expect(version).toBe(18);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -171,7 +172,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(17);
+      expect(version).toBe(18);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -197,7 +198,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(17);
+      expect(version).toBe(18);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -319,7 +320,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(17);
+      expect(version).toBe(18);
 
       db2.close();
     } finally {
@@ -391,7 +392,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(17);
+      expect(db.pragma("user_version", { simple: true })).toBe(18);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -545,6 +546,96 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       expect(pending.created_at).toBe(new Date(pendingIso).getTime());
 
       db.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+});
+
+describe("V17→V18 attachments table migration", () => {
+  it("creates attachments table when upgrading from v17 (JSON column)", () => {
+    const tmpFile = tmpDb();
+    try {
+      // Simulate a DB that already ran old v17 (column addition)
+      const db1 = initDb(tmpFile);
+      // Downgrade version to 17 to simulate the old state
+      db1.pragma("user_version = 17");
+      // Verify the messages.attachments column exists (from v17)
+      const cols = db1.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>;
+      expect(cols.some(c => c.name === "attachments")).toBe(true);
+      // Drop the attachments table if initDb created it (we want to test the upgrade)
+      db1.exec("DROP TABLE IF EXISTS attachments");
+      db1.close();
+
+      // Re-open — should run v18 and create the attachments table
+      const db2 = initDb(tmpFile);
+      const version = db2.pragma("user_version", { simple: true });
+      expect(version).toBe(18);
+
+      const tables = db2.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
+      ).all();
+      expect(tables).toHaveLength(1);
+
+      // Verify table schema
+      const tableCols = db2.prepare("PRAGMA table_info(attachments)").all() as Array<{ name: string }>;
+      const colNames = tableCols.map(c => c.name);
+      expect(colNames).toContain("id");
+      expect(colNames).toContain("message_id");
+      expect(colNames).toContain("channel_id");
+      expect(colNames).toContain("guild_id");
+      expect(colNames).toContain("filename");
+      expect(colNames).toContain("url");
+
+      db2.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+
+  it("migrates JSON attachment data from messages column to table", () => {
+    const tmpFile = tmpDb();
+    try {
+      const db1 = initDb(tmpFile);
+      db1.pragma("user_version = 17");
+      db1.exec("DROP TABLE IF EXISTS attachments");
+
+      // Insert a message with JSON attachments in the old column
+      const guild = db1.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+      const channel = db1.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string };
+      const user = db1.prepare("SELECT id FROM users LIMIT 1").get() as { id: string };
+      if (guild && channel && user) {
+        const now = Date.now();
+        db1.prepare(
+          "INSERT INTO messages (id, channel_id, author_id, content, timestamp, attachments) VALUES (?, ?, ?, ?, ?, ?)"
+        ).run(
+          "msg-test-1", channel.id, user.id, "test", now,
+          JSON.stringify([{
+            id: "att-1",
+            filename: "photo.png",
+            content_type: "image/png",
+            size: 12345,
+            url: `/api/v10/attachments/${guild.id}/${channel.id}/att-1/photo.png`
+          }])
+        );
+      }
+      db1.close();
+
+      const db2 = initDb(tmpFile);
+      expect(db2.pragma("user_version", { simple: true })).toBe(18);
+
+      if (guild && channel) {
+        const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
+        expect(att).toBeDefined();
+        if (att) {
+          expect(att.filename).toBe("photo.png");
+          expect(att.content_type).toBe("image/png");
+          expect(att.size).toBe(12345);
+          expect(att.message_id).toBe("msg-test-1");
+        }
+      }
+
+      db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
