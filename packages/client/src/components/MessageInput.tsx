@@ -7,6 +7,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { ChannelMentionAutocomplete } from "./ChannelMentionAutocomplete";
+import { detectMentionTrigger } from "../lib/mention-trigger";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -85,9 +86,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setContent(e.target.value);
     setCursorPos(e.target.selectionStart);
     // Check if we should show mention autocomplete
-    const before = e.target.value.slice(0, e.target.selectionStart);
-    setShowMention(/@\w*$/.test(before));
-    setShowChannelMention(/#\w*$/.test(before));
+    const atTrigger = detectMentionTrigger(e.target.value, e.target.selectionStart, '@');
+    const hashTrigger = detectMentionTrigger(e.target.value, e.target.selectionStart, '#');
+    setShowMention(!!atTrigger);
+    setShowChannelMention(!!hashTrigger);
     if (e.target.value.trim()) sendTypingThrottled();
   }
 

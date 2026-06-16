@@ -13,6 +13,7 @@ import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useThreadStore } from "../stores/useThreadStore";
 import type { Channel } from "../types";
 import * as api from "./api";
+import { pruneSetIfNeeded } from "./prune-set.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
@@ -52,6 +53,7 @@ export function setupGatewaySubscriptions(): void {
       // Mark mentioned if current user is in mentions
       if (selfId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
         mentionedMessageIds.add(msg.id);
+        pruneSetIfNeeded(mentionedMessageIds, 1000);
         useReadStateStore.getState().setMentioned(msg.channel_id);
       }
     }
@@ -71,6 +73,7 @@ export function setupGatewaySubscriptions(): void {
     if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
       if (!mentionedMessageIds.has(msg.id)) {
         mentionedMessageIds.add(msg.id);
+        pruneSetIfNeeded(mentionedMessageIds, 1000);
         useReadStateStore.getState().setMentioned(msg.channel_id);
       }
     }

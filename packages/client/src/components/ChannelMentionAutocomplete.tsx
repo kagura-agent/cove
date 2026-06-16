@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
+import { detectMentionTrigger } from "../lib/mention-trigger";
 
 const listStyle: CSSProperties = {
   position: "absolute",
@@ -52,10 +53,9 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   const textChannels = channels.filter((c) => c.type !== 11);
 
   // Find the # trigger position
-  const beforeCursor = text.slice(0, cursorPos);
-  const hashMatch = beforeCursor.match(/#(\w*)$/);
-  const query = hashMatch ? hashMatch[1].toLowerCase() : null;
-  const hashStart = hashMatch ? beforeCursor.length - hashMatch[0].length : -1;
+  const trigger = detectMentionTrigger(text, cursorPos, '#');
+  const query = trigger?.query ?? null;
+  const hashStart = trigger?.start ?? -1;
 
   const filtered = query !== null
     ? textChannels.filter((c) => c.name.toLowerCase().includes(query)).slice(0, 10)
@@ -103,7 +103,7 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   if (query === null || filtered.length === 0) return null;
 
   return (
-    <div ref={listRef} style={listStyle}>
+    <div ref={listRef} style={listStyle} role="listbox" aria-label="Channel suggestions">
       {filtered.map((ch, i) => (
         <div
           key={ch.id}
@@ -113,6 +113,9 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
             e.preventDefault();
             onSelect(ch.id, ch.name, hashStart, cursorPos);
           }}
+          role="option"
+          aria-selected={i === activeIndex}
+          id={'channel-option-' + ch.id}
         >
           <span style={{ color: "var(--text-muted)", fontSize: 18, fontWeight: 400, width: 24, textAlign: "center", flexShrink: 0 }}>#</span>
           <span style={{ color: "var(--text-normal)" }}>{ch.name}</span>
