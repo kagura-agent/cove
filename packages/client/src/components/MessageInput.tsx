@@ -6,6 +6,7 @@ import { useMessageStore } from "../stores/useMessageStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { MentionAutocomplete } from "./MentionAutocomplete";
+import { ChannelMentionAutocomplete } from "./ChannelMentionAutocomplete";
 import type { Message } from "../types";
 import type { CSSProperties } from "react";
 import "./MessageInput.css";
@@ -32,12 +33,16 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const [content, setContent] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [showMention, setShowMention] = useState(false);
+  const [showChannelMention, setShowChannelMention] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
   const mentionHasResults = useRef(false);
+  const channelMentionHasResults = useRef(false);
   // Track active mentions: displayName → userId
   const mentionMapRef = useRef<Map<string, string>>(new Map());
+  // Track active channel mentions: channelName → channelId
+  const channelMentionMapRef = useRef<Map<string, string>>(new Map());
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
 
   // Create preview URLs and clean up on change
@@ -51,7 +56,9 @@ export function MessageInput({ channelId }: { channelId: string }) {
   // Clear mention state when switching channels
   useEffect(() => {
     mentionMapRef.current.clear();
+    channelMentionMapRef.current.clear();
     setShowMention(false);
+    setShowChannelMention(false);
   }, [channelId]);
 
   useLayoutEffect(() => {
@@ -80,6 +87,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
     // Check if we should show mention autocomplete
     const before = e.target.value.slice(0, e.target.selectionStart);
     setShowMention(/@\w*$/.test(before));
+    setShowChannelMention(/#\w*$/.test(before));
     if (e.target.value.trim()) sendTypingThrottled();
   }
 
@@ -109,6 +117,10 @@ export function MessageInput({ channelId }: { channelId: string }) {
     if (showMention && mentionHasResults.current) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
     }
+    // Only intercept keys when channel mention autocomplete is actually visible with results
+    if (showChannelMention && channelMentionHasResults.current) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Escape" || e.key === "Enter") return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
@@ -120,13 +132,21 @@ export function MessageInput({ channelId }: { channelId: string }) {
     if (!text && pendingFiles.length === 0) return;
     // Convert display mentions (@username) to wire format (<@userId>)
     // Use word-boundary-aware replacement to prevent @alice matching @aliceWonderland
-    const entries = [...mentionMapRef.current.entries()]
+    const mentionEntries = [...mentionMapRef.current.entries()]
       .sort((a, b) => b[0].length - a[0].length);
-    for (const [username, userId] of entries) {
+    for (const [username, userId] of mentionEntries) {
       const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       text = text.replace(new RegExp(`@${escaped}(?!\\w)`, "g"), `<@${userId}>`);
     }
+    // Convert display channel mentions (#channelName) to wire format (<#channelId>)
+    const channelEntries = [...channelMentionMapRef.current.entries()]
+      .sort((a, b) => b[0].length - a[0].length);
+    for (const [channelName, channelId] of channelEntries) {
+      const escaped = channelName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      text = text.replace(new RegExp(`#${escaped}(?!\\w)`, "g"), `<#${channelId}>`);
+    }
     mentionMapRef.current.clear();
+    channelMentionMapRef.current.clear();
     setContent("");
     const ta = textareaRef.current;
     if (ta) {
@@ -213,6 +233,28 @@ export function MessageInput({ channelId }: { channelId: string }) {
     });
   }, [content]);
 
+  const handleChannelMentionSelect = useCallback((channelId: string, channelName: string, startPos: number, endPos: number) => {
+    const before = content.slice(0, startPos);
+    const after = content.slice(endPos);
+    // Display #channelName in textarea, convert to <#id> on send
+    const mention = `#${channelName} `;
+    const newContent = before + mention + after;
+    channelMentionMapRef.current.set(channelName, channelId);
+    setContent(newContent);
+    setShowChannelMention(false);
+    const newCursor = startPos + mention.length;
+    setCursorPos(newCursor);
+    // Focus and set cursor position
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.selectionStart = newCursor;
+        ta.selectionEnd = newCursor;
+      }
+    });
+  }, [content]);
+
   return (
     <div
       style={{ position: "relative", background: "var(--bg-secondary)", borderTop: hasReply ? "none" : "1px solid var(--border-subtle)" }}
@@ -226,6 +268,15 @@ export function MessageInput({ channelId }: { channelId: string }) {
           onSelect={handleMentionSelect}
           onClose={() => setShowMention(false)}
           onHasResults={(has) => { mentionHasResults.current = has; }}
+        />
+      )}
+      {showChannelMention && (
+        <ChannelMentionAutocomplete
+          text={content}
+          cursorPos={cursorPos}
+          onSelect={handleChannelMentionSelect}
+          onClose={() => setShowChannelMention(false)}
+          onHasResults={(has) => { channelMentionHasResults.current = has; }}
         />
       )}
       {pendingFiles.length > 0 && (
