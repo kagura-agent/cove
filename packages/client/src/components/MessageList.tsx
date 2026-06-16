@@ -7,7 +7,7 @@ import { MessageItem } from "./MessageItem";
 import { LazyMessageItem } from "./LazyMessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { MessageContextMenu } from "./MessageContextMenu";
-import { Spin, Empty } from "antd";
+import { Spin } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import type { Message } from "../types";
@@ -158,14 +158,13 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
   const getLastReadId = useReadStateStore((s) => s.getLastReadId);
 
   // ── Get channel info for Discord-style welcome screen ─────────
-  const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
-  const currentChannel = (() => {
-    for (const guildId of Object.keys(channelsByGuildId)) {
-      const found = channelsByGuildId[guildId].find((c) => c.id === channelId);
+  const currentChannel = useChannelStore((s) => {
+    for (const channels of Object.values(s.channelsByGuildId)) {
+      const found = channels.find((c) => c.id === channelId);
       if (found) return found;
     }
     return null;
-  })();
+  });
   const channelName = currentChannel?.name ?? "channel";
   const channelTopic = currentChannel?.topic;
 
