@@ -224,6 +224,18 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
     }
   }
 
+  // Build channel mention map for rendering
+  const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
+  const mentionChannels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const channels of Object.values(channelsByGuildId)) {
+      for (const ch of channels) {
+        map.set(ch.id, ch.name);
+      }
+    }
+    return map;
+  }, [channelsByGuildId]);
+
   // Check if current user is mentioned
   // Highlight if current user is mentioned, but not if the message is from the current user
   const isMentioned = currentUserId && message.author.id !== currentUserId
@@ -311,7 +323,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
               wordBreak: "break-word",
             }}
           >
-            <ChatMarkdown content={message.content} mentionUsers={mentionUsers} />
+            <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
             <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
           </div>
@@ -388,7 +400,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             wordBreak: "break-word",
           }}
         >
-          <ChatMarkdown content={message.content} mentionUsers={mentionUsers} />
+          <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
         </div>
