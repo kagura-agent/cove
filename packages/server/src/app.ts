@@ -113,8 +113,6 @@ export function createApp(
       } else if (safeFilename.endsWith(".webp")) {
         contentType = "image/webp";
         isImage = true;
-      } else if (safeFilename.endsWith(".svg")) {
-        contentType = "image/svg+xml";
         isImage = true;
       }
 

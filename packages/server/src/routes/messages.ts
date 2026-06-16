@@ -101,6 +101,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
       }
       content = payload.content || '';
       nonce = payload.nonce;
+
+      // Validate nonce before any file writes
+      if (nonce && (typeof nonce !== 'string' || nonce.length > 64)) {
+        return validationError(c, 'nonce must be a string of at most 64 characters');
+      }
+
       if (payload.message_reference?.message_id) {
         const refMsg = repos.messages.getById(channelId, payload.message_reference.message_id);
         if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
