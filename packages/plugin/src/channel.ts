@@ -348,6 +348,23 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         // Skip bot messages from others
         if (message.author.bot && !message.webhook_id) return;
 
+        // Auto-create thread for webhook messages arriving in a channel (not already in a thread)
+        if (message.webhook_id) {
+          try {
+            const channel = await restClient.getChannel(message.channel_id);
+            if (channel.type !== 11) {
+              const threadName = (message.content || 'Task').slice(0, 60).replace(/\n/g, ' ').trim() || 'Task';
+              const thread = await restClient.createThread(message.channel_id, threadName);
+              log?.info?.(`cove: auto-created thread [${thread.id}] (${threadName}) for webhook message`);
+              // Route this message to the thread (changes session key)
+              message.channel_id = thread.id;
+            }
+          } catch (err: any) {
+            log?.warn?.(`cove: auto-thread creation failed: ${err.message}`);
+            // Fall through to normal dispatch in original channel
+          }
+        }
+
         log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
 
         messageQueue.enqueue(message);

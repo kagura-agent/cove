@@ -120,6 +120,13 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/channels/${id}`);
   }
 
+  /** POST /api/v10/channels/:id/threads — create a standalone thread. */
+  async createThread(channelId: string, name: string): Promise<Channel> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/threads`, {
+      name,
+    });
+  }
+
   /** POST /api/v10/channels/:id/messages — send a message. */
   async sendMessage(channelId: string, content: string): Promise<Message> {
     return this.request("POST", `${API_PREFIX}/channels/${channelId}/messages`, {
