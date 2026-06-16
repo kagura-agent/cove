@@ -57,8 +57,8 @@ export function createApp(
   // Rate limiting — after auth so we have userId, before routes
   app.use("/api/*", rateLimitMiddleware());
 
-  // Static file serving for attachments (requires auth)
-  app.get(API_PREFIX + "/attachments/:guildId/:channelId/:attachmentId/:filename", authMw, async (c) => {
+  // Static file serving for attachments (public, security through unguessable IDs)
+  app.get(API_PREFIX + "/attachments/:guildId/:channelId/:attachmentId/:filename", async (c) => {
     const guildId = c.req.param("guildId")!;
     const channelId = c.req.param("channelId")!;
     const attachmentId = c.req.param("attachmentId")!;
@@ -72,17 +72,6 @@ export function createApp(
     const safeFilename = sanitize(filename);
     if (!safeGuildId || !safeChannelId || !safeAttachmentId || !safeFilename) {
       return c.json({ message: 'Invalid path', code: 50035 }, 400);
-    }
-
-    // Authorization: check guild membership
-    const user = c.get('botUser');
-    const channel = repos.channels.getById(safeChannelId);
-    if (!channel) {
-      return c.json({ message: 'Unknown Channel', code: 10003 }, 404);
-    }
-    const member = repos.members.get(channel.guild_id, user.id);
-    if (!member) {
-      return c.json({ message: 'Missing Access', code: 50001 }, 403);
     }
 
     try {
