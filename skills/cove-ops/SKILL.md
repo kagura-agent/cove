@@ -138,7 +138,7 @@ curl -s -X POST "$COVE_BASE/api/v10/channels/CHANNEL_ID/webhooks" \
 ### Manual: Execute Webhook (send message)
 
 ```bash
-curl -s -X POST "$COVE_BASE/api/v10/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN" \
+curl -s -X POST "$COVE_BASE/api/v10/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"content": "Message text", "username": "From #source-channel"}'
 ```
