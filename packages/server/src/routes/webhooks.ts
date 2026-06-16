@@ -185,7 +185,7 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
       for (let i = 0; i < removeCount; i++) buckets.delete(entries[i][0]);
     }
 
-    const body = await parseJsonBody<{ content: string; username?: string; avatar_url?: string }>(c);
+    const body = await parseJsonBody<{ content: string; username?: string; avatar_url?: string; reply_to?: { id: string } }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.content, "content", { required: true, maxLength: 4000 });
@@ -210,6 +210,7 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
       displayName,
       displayAvatar,
       body.content,
+      body.reply_to,
     );
 
     repos.channels.updateLastMessageId(targetChannelId, message.id);

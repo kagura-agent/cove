@@ -76,6 +76,17 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   if (row.referenced_message_id) {
     msg.message_reference = { message_id: row.referenced_message_id, channel_id: row.channel_id };
   }
+  // Parse metadata for reply_to
+  if (row.metadata) {
+    try {
+      const metadata = JSON.parse(row.metadata);
+      if (metadata.reply_to) {
+        msg.reply_to = metadata.reply_to;
+      }
+    } catch {
+      // Ignore malformed metadata
+    }
+  }
   return msg;
 }
 
@@ -194,13 +205,15 @@ export class MessagesRepo {
     return msg;
   }
 
-  createFromWebhook(channelId: string, webhookId: string, webhookName: string, webhookAvatar: string | null, content: string): Message {
+  createFromWebhook(channelId: string, webhookId: string, webhookName: string, webhookAvatar: string | null, content: string, replyTo?: { id: string }): Message {
     const now = Date.now();
     const id = generateSnowflake();
 
+    const metadata = replyTo ? JSON.stringify({ reply_to: replyTo }) : null;
+
     this.db.prepare(
       "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp, webhook_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, null, webhookName, content, now, null, null, webhookId);
+    ).run(id, channelId, null, webhookName, content, now, metadata, null, webhookId);
 
     const msg: Message = {
       id,
@@ -226,6 +239,10 @@ export class MessagesRepo {
       mention_everyone: false,
       webhook_id: webhookId,
     };
+
+    if (replyTo) {
+      msg.reply_to = replyTo;
+    }
 
     // Resolve @mentions in webhook messages
     this.resolveMentions([msg]);

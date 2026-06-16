@@ -344,6 +344,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
               ReplyToBody: message.referenced_message?.content,
               ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
             } : {}),
+            ...(message.reply_to?.id ? {
+              ReplyToChannelId: message.reply_to.id,
+            } : {}),
             ...(fullAttachmentUrls.length > 0 ? {
               MediaUrls: fullAttachmentUrls,
               allowUnsafeExternalContent: true,

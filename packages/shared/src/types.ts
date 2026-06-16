@@ -111,6 +111,8 @@ export interface Message {
   guild_id?: string;
   /** Thread spawned from this message (present on parent messages that have threads). */
   thread?: Channel | null;
+  /** Reference to a channel for reply context. */
+  reply_to?: { id: string };
 }
 
 /** A reaction summary for a message. */

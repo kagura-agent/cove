@@ -102,44 +102,77 @@ async function getOrCreateWebhook(baseUrl, token, channelId, cache) {
   return cache[channelId];
 }
 
-async function executeWebhook(baseUrl, webhookId, webhookToken, content, username) {
-  return apiRequest(`${baseUrl}/api/v10/webhooks/${webhookId}/${webhookToken}?wait=true`, {
+async function executeWebhook(baseUrl, webhookId, webhookToken, content, username, replyTo, threadId) {
+  const queryParams = new URLSearchParams({ wait: "true" });
+  if (threadId) queryParams.append("thread_id", threadId);
+
+  const body = { content, username };
+  if (replyTo) body.reply_to = { id: replyTo };
+
+  return apiRequest(`${baseUrl}/api/v10/webhooks/${webhookId}/${webhookToken}?${queryParams}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, username }),
+    body: JSON.stringify(body),
   });
+}
+
+async function resolveTargetRoute(baseUrl, token, targetId) {
+  const channel = await apiRequest(`${baseUrl}/api/v10/channels/${targetId}`, {
+    headers: { Authorization: `Bot ${token}` },
+  });
+
+  // If it's a thread (types 10, 11, 12) and has a parent, return parent as target and thread as threadId
+  if ([10, 11, 12].includes(channel.type) && channel.parent_id) {
+    return { targetChannelId: channel.parent_id, threadId: targetId };
+  }
+
+  return { targetChannelId: targetId, threadId: null };
 }
 
 async function main() {
   const { values } = parseArgs({
     options: {
       to: { type: "string" },
+      "to-id": { type: "string" },
       from: { type: "string" },
       message: { type: "string" },
+      "reply-to": { type: "string" },
     },
   });
 
-  if (!values.to || !values.message) {
-    console.error("Usage: cove-webhook-send.mjs --to <channel> --from <channel> --message <text>");
+  if ((!values.to && !values["to-id"]) || !values.message) {
+    console.error("Usage: cove-webhook-send.mjs --to <channel> [--to-id <id>] --from <channel> --message <text> [--reply-to <channel-id>]");
     process.exit(1);
   }
 
   const config = loadConfig();
   const cache = loadCache();
 
-  const targetId = await resolveChannelId(config.baseUrl, config.token, config.guildId, values.to);
-  const fromName = values.from || "unknown";
+  let targetId;
+  if (values["to-id"]) {
+    targetId = values["to-id"];
+  } else {
+    targetId = await resolveChannelId(config.baseUrl, config.token, config.guildId, values.to);
+  }
 
-  const webhook = await getOrCreateWebhook(config.baseUrl, config.token, targetId, cache);
+  const fromName = values.from || "unknown";
+  const replyTo = values["reply-to"] || null;
+
+  // Resolve target route (handles threads)
+  const { targetChannelId, threadId } = await resolveTargetRoute(config.baseUrl, config.token, targetId);
+
+  const webhook = await getOrCreateWebhook(config.baseUrl, config.token, targetChannelId, cache);
   const msg = await executeWebhook(
     config.baseUrl,
     webhook.id,
     webhook.token,
     values.message,
-    `From #${fromName}`
+    `From #${fromName}`,
+    replyTo,
+    threadId
   );
 
-  console.log(`✅ Sent to #${values.to} (From #${fromName})`);
+  console.log(`✅ Sent to #${values.to || targetId} (From #${fromName})`);
   console.log(`   Message ID: ${msg.id}`);
 }
 
