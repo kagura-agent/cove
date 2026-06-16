@@ -48,10 +48,11 @@ interface Props {
   isOwnMessage: boolean;
   hasThread: boolean;
   isThread: boolean;
+  message?: Message;
   onClose: () => void;
 }
 
-export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, isThread, onClose }: Props) {
+export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnMessage, hasThread, isThread, message, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,23 +128,9 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
   }
 
   function handleReply() {
-    // Construct minimal message object for reply
-    const message: Message = {
-      id: messageId,
-      channel_id: channelId,
-      content,
-      author: { id: "", username: "", bot: false, avatar: null, discriminator: "0", global_name: null },
-      timestamp: "",
-      type: 0,
-      attachments: [],
-      embeds: [],
-      mentions: [],
-      mention_roles: [],
-      pinned: false,
-      tts: false,
-      mention_everyone: false,
-    };
-    setReplyingTo(channelId, message);
+    if (message) {
+      setReplyingTo(channelId, message);
+    }
     onClose();
   }
 

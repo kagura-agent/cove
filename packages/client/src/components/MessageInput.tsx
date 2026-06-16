@@ -64,7 +64,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
     channelMentionMapRef.current.clear();
     setShowMention(false);
     setShowChannelMention(false);
-  }, [channelId]);
+    stopEditing();
+  }, [channelId, stopEditing]);
 
   // When editing starts, populate textarea and focus
   useEffect(() => {
@@ -115,6 +116,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
   }
 
   function handlePaste(e: React.ClipboardEvent) {
+    // Skip file handling during edit mode
+    if (isEditing) return;
     const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'));
     if (files.length > 0) {
       e.preventDefault();
@@ -128,6 +131,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
+    // Skip file handling during edit mode
+    if (isEditing) return;
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
     if (files.length > 0) {
       setPendingFiles(prev => [...prev, ...files]);
@@ -136,8 +141,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
-    // Escape cancels editing
-    if (e.key === "Escape" && isEditing) {
+    // Escape cancels editing (only if autocomplete is not visible)
+    if (e.key === "Escape" && isEditing && !showMention && !showChannelMention) {
       e.preventDefault();
       stopEditing();
       setContent("");
@@ -354,7 +359,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
           onHasResults={(has) => { channelMentionHasResults.current = has; }}
         />
       )}
-      {pendingFiles.length > 0 && (
+      {pendingFiles.length > 0 && !isEditing && (
         <div style={{
           display: 'flex',
           gap: 8,
