@@ -16,7 +16,9 @@ import { dispatchMessage } from "./dispatch.js";
 import { ChannelMessageQueue } from "./message-queue.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
+import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
 
+const { listAccountIds: listCoveAccountIds, resolveDefaultAccountId: resolveDefaultCoveAccountId } = createAccountListHelpers("cove");
 
 /**
  * Bounded LRU-style set to track message IDs sent by the bot.
@@ -58,44 +60,15 @@ function getRestClient(baseUrl: string, token: string): CoveRestClient {
   return client;
 }
 
-function readAccountConfig(cfg: any): { token?: string; baseUrl: string; guildId: string | null } {
-  const section = cfg?.channels?.["cove"] ?? {};
-  return {
-    token: section.token ?? process.env["COVE_BOT_TOKEN"] ?? undefined,
-    baseUrl: section.baseUrl ?? process.env["COVE_BASE_URL"] ?? "http://localhost:3400",
-    guildId: section.guildId ?? null,
-  };
-}
-
-function resolveAccount(
-  cfg: any,
-  accountId?: string | null,
-): CoveAccount {
-  const section = cfg.channels?.["cove"];
-  const token = section?.token ?? process.env["COVE_BOT_TOKEN"] ?? "";
-  const baseUrl = section?.baseUrl ?? process.env["COVE_BASE_URL"] ?? "http://localhost:3400";
-
-  if (!token) {
-    throw new Error("cove: bot token is required (set channels.cove.token or COVE_BOT_TOKEN env)");
-  }
-
-  const agentId = section?.agentId ?? process.env["COVE_AGENT_ID"] ?? "";
-  const agentName = section?.agentName ?? process.env["COVE_AGENT_NAME"] ?? "";
-
-  if (!agentId) {
-    throw new Error("cove: agent ID is required (set channels.cove.agentId or COVE_AGENT_ID env)");
-  }
-
-  return {
-    accountId: accountId ?? null,
-    token,
-    baseUrl,
-    guildId: section?.guildId ?? null,
-    agentId,
-    agentName: agentName || agentId,
-    allowFrom: section?.allowFrom ?? [],
-    dmPolicy: section?.dmSecurity,
-  };
+function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
+  const channelConfig = cfg.channels?.["cove"];
+  const effectiveAccountId = accountId ?? resolveDefaultCoveAccountId(cfg) ?? undefined;
+  const merged = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: (effectiveAccountId ?? undefined) as string });
+  const token = merged?.token;
+  if (!token) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing token — set channels.cove.accounts.<id>.token`);
+  const agentId = merged?.agentId;
+  if (!agentId) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing agentId — set channels.cove.accounts.<id>.agentId`);
+  return { accountId: accountId ?? null, token, baseUrl: merged?.baseUrl ?? "http://localhost:3400", guildId: merged?.guildId ?? null, agentId, agentName: merged?.agentName ?? agentId, allowFrom: merged?.allowFrom ?? [], dmPolicy: merged?.dmSecurity };
 }
 
 const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
@@ -111,11 +84,12 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
     chatTypes: ["direct", "channel"],
   },
   config: {
-    listAccountIds: () => ["default"],
+    listAccountIds: listCoveAccountIds,
     resolveAccount: (cfg: any, accountId?: string | null) => resolveAccount(cfg, accountId),
+    defaultAccountId: resolveDefaultCoveAccountId,
   },
   setup: {
-    resolveAccountId: () => "default",
+    resolveAccountId: (params) => resolveDefaultCoveAccountId(params.cfg),
     applyAccountConfig: ({ cfg }) => cfg,
   },
   security: {
@@ -131,15 +105,21 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   },
   resolver: {
     resolveTargets: async ({ cfg, accountId, inputs, kind }) => {
-      const account = readAccountConfig(cfg);
+      let account: CoveAccount | undefined;
+      let resolveError: string | undefined;
+      try {
+        account = resolveAccount(cfg, accountId);
+      } catch (err) {
+        resolveError = err instanceof Error ? err.message : String(err);
+      }
 
       if (kind === "group") {
         return resolveTargetsWithOptionalToken({
-          token: account.token,
+          token: account?.token,
           inputs,
-          missingTokenNote: "missing Cove bot token",
+          missingTokenNote: resolveError ?? "missing Cove bot token",
           resolveWithToken: async ({ token, inputs: inputsValue }): Promise<Array<{ input: string; resolved: boolean; channelId?: string; channelName?: string; guildId?: string | null; note?: string }>> => {
-            if (!account.guildId) {
+            if (!account!.guildId) {
               return inputsValue.map((input) => ({
                 input,
                 resolved: false,
@@ -147,10 +127,13 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
               }));
             }
 
-            const restClient = getRestClient(account.baseUrl, token);
+            const accountBaseUrl = account!.baseUrl;
+            const accountGuildId = account!.guildId!;
+
+            const restClient = getRestClient(accountBaseUrl, token);
             let channels;
             try {
-              channels = await restClient.getChannels(account.guildId);
+              channels = await restClient.getChannels(accountGuildId);
             } catch (err: any) {
               return inputsValue.map((input) => ({
                 input,
@@ -169,7 +152,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
                 resolved: Boolean(match),
                 channelId: match?.id,
                 channelName: match?.name,
-                guildId: account.guildId,
+                guildId: accountGuildId,
                 note: match ? undefined : "channel not found",
               };
             });
@@ -186,9 +169,9 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
       // User target resolution — not supported yet
       return resolveTargetsWithOptionalToken({
-        token: account.token,
+        token: account?.token,
         inputs,
-        missingTokenNote: "missing Cove bot token",
+        missingTokenNote: resolveError ?? "missing Cove bot token",
         resolveWithToken: async ({ inputs: inputsValue }) => {
           return inputsValue.map((input) => ({
             input,
@@ -207,8 +190,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   outbound: {
     deliveryMode: "direct",
     sendText: async (ctx) => {
-      const cfg = ctx.cfg;
-      const account = resolveAccount(cfg);
+      const account = resolveAccount(ctx.cfg, ctx.accountId);
       const client = getRestClient(account.baseUrl, account.token);
       const channelId = ctx.to ?? "home";
       const text = ctx.text ?? "";
@@ -392,4 +374,4 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
   },
 };
 
-export { coveChannelPlugin, resolveAccount, readAccountConfig, getRestClient };
+export { coveChannelPlugin, resolveAccount, getRestClient };
