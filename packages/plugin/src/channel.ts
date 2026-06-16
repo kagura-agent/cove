@@ -235,7 +235,19 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             log,
           });
         },
-        log,
+        {
+          log,
+          batchDispatchFn: async (messages) => {
+            const primary = messages[messages.length - 1];
+            const earlier = messages.slice(0, -1);
+            const batchedMessage = Object.assign({}, primary, { _batchedMessages: earlier });
+            await dispatchMessage({
+              message: batchedMessage,
+              account, restClient, channelRuntime, cfg,
+              accountId: ctx.accountId, pendingDispatches, log,
+            });
+          },
+        },
       );
 
       gatewayClient.on("reconnect", () => {

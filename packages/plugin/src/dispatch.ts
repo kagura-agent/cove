@@ -262,6 +262,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Read channel's cove.md for bot context injection (cached)
     const coveMdContent = await getCoveMd(restClient, channelId, log);
 
+    // Extract batched messages if present
+    const batchedMessages = (message as any)._batchedMessages as Message[] | undefined;
+
     // Build attachment context for agent
     const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
     const attachmentUrls = imageAttachments.map((a: any) => a.url);
@@ -270,8 +273,28 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       return url;
     });
 
-    // Append image URLs to body so agent sees them
+    // Collect image attachments from batched messages
+    if (batchedMessages) {
+      for (const bm of batchedMessages) {
+        const bmImages = (bm.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
+        for (const a of bmImages) {
+          const url = a.url.startsWith('/') ? account.baseUrl + a.url : a.url;
+          if (!fullAttachmentUrls.includes(url)) fullAttachmentUrls.push(url);
+        }
+      }
+    }
+
+    // Build message body with batched context
     let bodyForAgent = message.content;
+    if (batchedMessages && batchedMessages.length > 0) {
+      const contextLines = batchedMessages.map((m: any) => {
+        const name = m.author?.global_name || m.author?.username || 'Unknown';
+        return name + ': ' + m.content;
+      });
+      bodyForAgent = contextLines.join('\n') + '\n\n' + bodyForAgent;
+    }
+
+    // Append image URLs to body so agent sees them
     if (fullAttachmentUrls.length > 0) {
       const urlsText = fullAttachmentUrls.map((url: string) => '[image: ' + url + ']').join('\n');
       bodyForAgent = bodyForAgent ? bodyForAgent + '\n\n' + urlsText : urlsText;
