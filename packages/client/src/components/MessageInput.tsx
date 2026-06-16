@@ -48,6 +48,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
   const hasReply = useReplyStore((s) => !!s.replyingTo[channelId]);
   const editingMessage = useEditStore((s) => s.editingMessage);
   const stopEditing = useEditStore((s) => s.stopEditing);
+  const [editError, setEditError] = useState<string | null>(null);
   const isEditing = editingMessage && editingMessage.channelId === channelId;
 
   // Create preview URLs and clean up on change
@@ -65,6 +66,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
     setShowMention(false);
     setShowChannelMention(false);
     stopEditing();
+    setContent("");
   }, [channelId, stopEditing]);
 
   // When editing starts, populate textarea and focus
@@ -141,8 +143,8 @@ export function MessageInput({ channelId }: { channelId: string }) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (isTouchDevice) return;
-    // Escape cancels editing (only if autocomplete is not visible)
-    if (e.key === "Escape" && isEditing && !showMention && !showChannelMention) {
+    // Escape cancels editing (only if autocomplete with results is not visible)
+    if (e.key === "Escape" && isEditing && !(showMention && mentionHasResults.current) && !(showChannelMention && channelMentionHasResults.current)) {
       e.preventDefault();
       stopEditing();
       setContent("");
@@ -172,8 +174,11 @@ export function MessageInput({ channelId }: { channelId: string }) {
         await api.editMessage(editingMessage.channelId, editingMessage.messageId, text);
         stopEditing();
         setContent("");
+        setEditError(null);
       } catch (err) {
         console.error("edit message:", err);
+        setEditError("Failed to save edit");
+        setTimeout(() => setEditError(null), 3000);
       }
       return;
     }
@@ -321,7 +326,7 @@ export function MessageInput({ channelId }: { channelId: string }) {
             justifyContent: "space-between",
           }}
         >
-          <span>Editing message (Esc to cancel)</span>
+          <span style={editError ? { color: 'var(--status-danger, #ed4245)' } : undefined}>{editError || 'Editing message'} (Esc to cancel)</span>
           <button
             type="button"
             onClick={() => {
