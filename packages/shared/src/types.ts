@@ -72,12 +72,15 @@ export interface Channel {
 export interface Attachment {
   id: string;
   filename: string;
+  description?: string;
+  content_type: string;
   size: number;
   url: string;
   proxy_url?: string;
-  content_type: string;
   width?: number;
   height?: number;
+  ephemeral?: boolean;
+  flags?: number;
 }
 
 /** Message object (Discord-compatible). */

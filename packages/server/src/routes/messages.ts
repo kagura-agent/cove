@@ -28,6 +28,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const around = c.req.query("around");
 
     const messages = repos.messages.list(channelId, { limit, before, after, around }, user.id);
+    // Enrich messages with attachments
+    const msgIds = messages.map((m) => m.id);
+    const attachmentMap = repos.attachments.getByMessageIds(msgIds);
+    for (const msg of messages) {
+      msg.attachments = attachmentMap.get(msg.id) || [];
+    }
     // Enrich messages with thread indicators
     for (const msg of messages) {
       const threadInfo = repos.threads.getThreadForMessage(msg.id);
@@ -54,6 +60,8 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!message) {
       return unknownMessage(c);
     }
+    // Enrich with attachments
+    message.attachments = repos.attachments.getByMessageId(msgId);
     // Enrich with thread indicator
     const threadInfo = repos.threads.getThreadForMessage(message.id);
     if (threadInfo) {
@@ -180,7 +188,13 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
 
     const author = user;
-    const message = repos.messages.create(channelId, author, content, referencedMessageId, attachmentList.length > 0 ? attachmentList : undefined);
+    const message = repos.messages.create(channelId, author, content, referencedMessageId);
+
+    // Save attachments if any
+    if (attachmentList.length > 0) {
+      repos.attachments.createMany(message.id, channelId, channel.guild_id, attachmentList);
+      message.attachments = attachmentList;
+    }
 
     if (nonce) {
       message.nonce = nonce;
