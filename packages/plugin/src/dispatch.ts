@@ -44,6 +44,7 @@ async function cleanupAndSend(
 
 export interface DispatchMessageOptions {
   message: Message;
+  batchedMessages?: Message[];
   account: CoveAccount;
   restClient: CoveRestClient;
   channelRuntime: any;
@@ -64,7 +65,7 @@ export interface DispatchMessageOptions {
  * tool progress, and final message delivery with fallback.
  */
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
+  const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
@@ -270,8 +271,35 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       return url;
     });
 
-    // Append image URLs to body so agent sees them
+    // Collect image attachments from batched messages
+    if (batchedMessages) {
+      for (const bm of batchedMessages) {
+        const bmImages = (bm.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
+        for (const a of bmImages) {
+          const url = a.url.startsWith('/') ? account.baseUrl + a.url : a.url;
+          if (!fullAttachmentUrls.includes(url)) fullAttachmentUrls.push(url);
+        }
+      }
+    }
+
+    // Build message body with batched context
     let bodyForAgent = message.content;
+    if (batchedMessages && batchedMessages.length > 0) {
+      const contextLines = batchedMessages.map((m) => {
+        const name = m.author?.global_name || m.author?.username || 'Unknown';
+        let line = name + ': ' + m.content;
+        // Inline image markers next to the sending author
+        const msgImages = (m.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
+        for (const img of msgImages) {
+          const imgUrl = img.url.startsWith('/') ? account.baseUrl + img.url : img.url;
+          line += ' [image: ' + imgUrl + ']';
+        }
+        return line;
+      });
+      bodyForAgent = contextLines.join('\n') + '\n\n' + bodyForAgent;
+    }
+
+    // Append image URLs to body so agent sees them
     if (fullAttachmentUrls.length > 0) {
       const urlsText = fullAttachmentUrls.map((url: string) => '[image: ' + url + ']').join('\n');
       bodyForAgent = bodyForAgent ? bodyForAgent + '\n\n' + urlsText : urlsText;

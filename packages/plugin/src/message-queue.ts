@@ -5,9 +5,12 @@
  * queued and processed in order after the current dispatch completes.
  * Prevents the lost-reply problem where a new message would abort an
  * in-progress dispatch.
+ *
+ * When multiple messages are queued, they can be batched into a single
+ * dispatch via the optional batchDispatchFn.
  */
 
-import type { Message } from "@cove/shared";
+import type { Message } from '@cove/shared';
 
 export interface QueuedMessage {
   message: Message;
@@ -15,6 +18,13 @@ export interface QueuedMessage {
 }
 
 type DispatchFn = (message: Message) => Promise<void>;
+type BatchDispatchFn = (messages: Message[]) => Promise<void>;
+
+export interface ChannelMessageQueueOptions {
+  dispatchFn: DispatchFn;
+  batchDispatchFn?: BatchDispatchFn;
+  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void };
+}
 
 const MAX_QUEUE_SIZE = 5;
 
@@ -22,11 +32,13 @@ export class ChannelMessageQueue {
   private queues = new Map<string, QueuedMessage[]>();
   private processing = new Map<string, boolean>();
   private dispatchFn: DispatchFn;
+  private batchDispatchFn?: BatchDispatchFn;
   private log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void };
 
-  constructor(dispatchFn: DispatchFn, log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void }) {
-    this.dispatchFn = dispatchFn;
-    this.log = log;
+  constructor(opts: ChannelMessageQueueOptions) {
+    this.dispatchFn = opts.dispatchFn;
+    this.batchDispatchFn = opts.batchDispatchFn;
+    this.log = opts.log;
   }
 
   enqueue(message: Message): void {
@@ -47,6 +59,7 @@ export class ChannelMessageQueue {
     this.log?.info?.(`cove: enqueued message for [${channelId}] (queue: ${queue.length})`);
 
     // If not currently processing, start processing
+    // Enqueues during an active dispatch are held until processNext recurses.
     if (!this.processing.get(channelId)) {
       this.processNext(channelId);
     }
@@ -60,15 +73,26 @@ export class ChannelMessageQueue {
     }
 
     this.processing.set(channelId, true);
-    const item = queue.shift()!;
+
+    // Drain all queued messages at once
+    const items = queue.splice(0);
 
     try {
-      await this.dispatchFn(item.message);
+      if (items.length === 1 || !this.batchDispatchFn) {
+        // Single message or no batch handler — dispatch one by one
+        for (const item of items) {
+          await this.dispatchFn(item.message);
+        }
+      } else {
+        // Multiple messages — batch dispatch
+        this.log?.info?.(`cove: batching ${items.length} messages for [${channelId}]`);
+        await this.batchDispatchFn(items.map((i) => i.message));
+      }
     } catch (err: any) {
-      this.log?.warn?.(`cove: dispatch error for [${channelId}]: ${err.message}`);
+      this.log?.warn?.(`cove: dispatch error for [${channelId}] (batch: ${items.length}, ids: ${items.map((i) => i.message.id).join(',')}): ${err.message}`);
     }
 
-    // Process next in queue
+    // Process next in queue (messages may have arrived during dispatch)
     await this.processNext(channelId);
   }
 

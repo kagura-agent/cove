@@ -222,8 +222,8 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const pendingDispatches = new Map<string, AbortController>();
       const restClient = getRestClient(account.baseUrl, account.token);
 
-      const messageQueue = new ChannelMessageQueue(
-        async (message) => {
+      const messageQueue = new ChannelMessageQueue({
+        dispatchFn: async (message) => {
           await dispatchMessage({
             message,
             account,
@@ -235,8 +235,23 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             log,
           });
         },
+        batchDispatchFn: async (messages) => {
+          const primary = messages[messages.length - 1];
+          const earlier = messages.slice(0, -1);
+          await dispatchMessage({
+            message: primary,
+            batchedMessages: earlier,
+            account,
+            restClient,
+            channelRuntime,
+            cfg,
+            accountId: ctx.accountId,
+            pendingDispatches,
+            log,
+          });
+        },
         log,
-      );
+      });
 
       gatewayClient.on("reconnect", () => {
         // Hard reconnect (IDENTIFY fallback after failed RESUME) — abort pending dispatches and clear stale state
