@@ -2,11 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useUserStore } from "../stores/useUserStore";
+import { useChannelStore } from "../stores/useChannelStore";
 import { MessageItem } from "./MessageItem";
 import { LazyMessageItem } from "./LazyMessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { MessageContextMenu } from "./MessageContextMenu";
-import { Spin, Empty } from "antd";
+import { Spin } from "antd";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import type { Message } from "../types";
@@ -155,6 +156,17 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
   const currentUserId = useUserStore((s) => s.id);
   const pendingStatus = useMessageStore((s) => s.pendingStatus);
   const getLastReadId = useReadStateStore((s) => s.getLastReadId);
+
+  // ── Get channel info for Discord-style welcome screen ─────────
+  const currentChannel = useChannelStore((s) => {
+    for (const channels of Object.values(s.channelsByGuildId)) {
+      const found = channels.find((c) => c.id === channelId);
+      if (found) return found;
+    }
+    return null;
+  });
+  const channelName = currentChannel?.name ?? "channel";
+  const channelTopic = currentChannel?.topic;
 
   // ── Unread indicators (per confirmed spec) ─────────────────────
   // Snapshot the last-read ID on channel entry — frozen, never changes
@@ -546,12 +558,44 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
 
   if (messages.length === 0) {
     return (
-      <div style={centerStyle}>
-        <Empty
-          image="🌊"
-          imageStyle={{ fontSize: 48, lineHeight: "56px" }}
-          description="No messages yet — be the first!"
-        />
+      <div style={{
+        ...centerStyle,
+        flexDirection: "column",
+        padding: "0 16px",
+        textAlign: "center",
+      }}>
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          maxWidth: 480,
+          width: "100%",
+        }}>
+          <h1 style={{
+            fontSize: 32,
+            fontWeight: 700,
+            color: "var(--text-primary)",
+            margin: "0 0 8px 0",
+          }}>
+            # {channelName}
+          </h1>
+          <p style={{
+            fontSize: 14,
+            color: "var(--text-secondary, #949ba4)",
+            margin: "0 0 4px 0",
+          }}>
+            This is the beginning of the <strong>#{channelName}</strong> channel.
+          </p>
+          {channelTopic && (
+            <p style={{
+              fontSize: 14,
+              color: "var(--text-secondary, #949ba4)",
+              margin: "4px 0 0 0",
+            }}>
+              {channelTopic}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
