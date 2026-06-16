@@ -283,7 +283,7 @@ describe("Mentions & Context Menu", () => {
       const webhook = await whRes.json() as { id: string; token: string };
 
       // Execute webhook with mention
-      const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}`, {
+      const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}?wait=true`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "Hello <@9000000000000000001>!" }),

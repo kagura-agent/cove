@@ -80,12 +80,12 @@ describe("Webhooks", () => {
 
   it("executes a webhook and creates a message", async () => {
     const wh = await createWebhook(generalId, "Exec Hook");
-    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}`, {
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "Hello from webhook" }),
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const msg: Message = await res.json();
     expect(msg.content).toBe("Hello from webhook");
     expect(msg.webhook_id).toBe(wh.id);
@@ -115,12 +115,12 @@ describe("Webhooks", () => {
 
   it("execute with username override uses override", async () => {
     const wh = await createWebhook(generalId, "Default Name");
-    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}`, {
+    const res = await app.request(`${API_PREFIX}/webhooks/${wh.id}/${wh.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "custom", username: "Custom Bot" }),
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const msg: Message = await res.json();
     expect(msg.author.username).toBe("Custom Bot");
   });
@@ -278,12 +278,12 @@ describe("Webhooks", () => {
     const webhook = (await createRes.json()) as { id: string; token: string };
 
     // Send a message via webhook
-    const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}`, {
+    const execRes = await app.request(`${API_PREFIX}/webhooks/${webhook.id}/${webhook.token}?wait=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "before delete", username: "Custom Name" }),
     });
-    expect(execRes.status).toBe(201);
+    expect(execRes.status).toBe(200);
     const msg = (await execRes.json()) as { id: string };
 
     // Delete the webhook
