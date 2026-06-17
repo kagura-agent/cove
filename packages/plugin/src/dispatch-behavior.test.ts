@@ -36,15 +36,16 @@ vi.mock('openclaw/plugin-sdk/channel-inbound', () => ({
     }
     // Now capturedDeliverFn and capturedReplyOptions are set by the wrapper.
     // Execute behavior while dispatch is still "current".
-    if (mockDeliverBehavior) {
-      if (mockDeliverBehavior.partials && capturedReplyOptions?.onPartialReply) {
-        for (const text of mockDeliverBehavior.partials) {
+    const behavior = mockDeliverBehavior;
+    if (behavior) {
+      if (behavior.partials && capturedReplyOptions?.onPartialReply) {
+        for (const text of behavior.partials) {
           capturedReplyOptions.onPartialReply({ text });
         }
-        await new Promise(r => setTimeout(r, mockDeliverBehavior.partialDelayMs ?? 300));
+        await new Promise(r => setTimeout(r, behavior.partialDelayMs ?? 300));
       }
-      if (mockDeliverBehavior.deliverText && capturedDeliverFn) {
-        await capturedDeliverFn({ text: mockDeliverBehavior.deliverText }, { kind: 'final' });
+      if (behavior.deliverText && capturedDeliverFn) {
+        await capturedDeliverFn({ text: behavior.deliverText }, { kind: 'final' });
       }
     }
   }),
