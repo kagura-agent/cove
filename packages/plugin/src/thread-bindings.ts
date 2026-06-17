@@ -52,6 +52,7 @@ export interface CoveThreadBindingManager {
   runSweep(): void;
   startSweeper(): void;
   stopSweeper(): void;
+  stop(): void;
 }
 
 export function createCoveThreadBindingManager(params: {
@@ -228,6 +229,10 @@ export function createCoveThreadBindingManager(params: {
         clearInterval(sweepTimer);
         sweepTimer = null;
       }
+    },
+
+    stop() {
+      manager.stopSweeper();
     },
   };
 
