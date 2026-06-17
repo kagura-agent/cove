@@ -189,4 +189,25 @@ export class CoveRestClient {
       throw err;
     }
   }
+
+  /** POST /api/v10/channels/:channelId/messages/:messageId/threads — create thread from message. */
+  async createThreadFromMessage(channelId: string, messageId: string, name: string, autoArchiveDuration?: number): Promise<Channel> {
+    return this.request('POST', API_PREFIX + '/channels/' + channelId + '/messages/' + messageId + '/threads', {
+      name,
+      ...(autoArchiveDuration != null ? { auto_archive_duration: autoArchiveDuration } : {}),
+    });
+  }
+
+  /** POST /api/v10/channels/:channelId/threads — create standalone thread. */
+  async createStandaloneThread(channelId: string, name: string, autoArchiveDuration?: number): Promise<Channel> {
+    return this.request('POST', API_PREFIX + '/channels/' + channelId + '/threads', {
+      name,
+      ...(autoArchiveDuration != null ? { auto_archive_duration: autoArchiveDuration } : {}),
+    });
+  }
+
+  /** PATCH /api/v10/channels/:id — modify channel (name, archived, locked). */
+  async modifyChannel(channelId: string, updates: { name?: string; archived?: boolean; locked?: boolean }): Promise<Channel> {
+    return this.request('PATCH', API_PREFIX + '/channels/' + channelId, updates);
+  }
 }

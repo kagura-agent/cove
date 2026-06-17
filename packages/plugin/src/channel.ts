@@ -17,6 +17,7 @@ import { ChannelMessageQueue } from "./message-queue.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
+import { createCoveThreadBindingManager, type CoveThreadBindingManager } from './thread-bindings.js';
 
 const { listAccountIds: listCoveAccountIds, resolveDefaultAccountId: resolveDefaultCoveAccountId } = createAccountListHelpers("cove");
 
@@ -198,6 +199,30 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       return { channel: "cove", messageId: result.id };
     },
   },
+  conversationBindings: {
+    supportsCurrentConversationBinding: false,
+    defaultTopLevelPlacement: 'child' as const,
+    createManager: async ({ cfg, accountId }: { cfg: any; accountId?: string | null }) => {
+      const account = resolveAccount(cfg, accountId);
+      const restClient = getRestClient(account.baseUrl, account.token);
+
+      // Read threadBindings config
+      const channelConfig = cfg?.channels?.['cove'] ?? {};
+      const tbConfig = channelConfig.threadBindings ?? {};
+      const idleHours = typeof tbConfig.idleHours === 'number' ? tbConfig.idleHours : 24;
+      const maxAgeHours = typeof tbConfig.maxAgeHours === 'number' ? tbConfig.maxAgeHours : 168;
+
+      const manager = createCoveThreadBindingManager({
+        restClient,
+        accountId: accountId ?? 'default',
+        idleTimeoutMs: idleHours * 60 * 60 * 1000,
+        maxAgeMs: maxAgeHours * 60 * 60 * 1000,
+      });
+
+      manager.startSweeper();
+      return manager;
+    },
+  },
   gateway: {
     startAccount: async (ctx) => {
       const account = ctx.account;
@@ -222,6 +247,29 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
       const pendingDispatches = new Map<string, AbortController>();
       const restClient = getRestClient(account.baseUrl, account.token);
 
+      // Initialize thread binding manager
+      let threadBindingManager: CoveThreadBindingManager | undefined;
+      try {
+        const channelConfig = cfg?.channels?.['cove'] ?? {};
+        const tbConfig = channelConfig.threadBindings ?? {};
+        const tbEnabled = tbConfig.enabled !== false; // enabled by default
+        if (tbEnabled) {
+          const tbIdleHours = typeof tbConfig.idleHours === 'number' ? tbConfig.idleHours : 24;
+          const tbMaxAgeHours = typeof tbConfig.maxAgeHours === 'number' ? tbConfig.maxAgeHours : 168;
+          threadBindingManager = createCoveThreadBindingManager({
+            restClient,
+            accountId: ctx.accountId,
+            idleTimeoutMs: tbIdleHours * 60 * 60 * 1000,
+            maxAgeMs: tbMaxAgeHours * 60 * 60 * 1000,
+            log,
+          });
+          threadBindingManager.startSweeper();
+          log?.info?.('cove: thread binding manager initialized');
+        }
+      } catch (err: any) {
+        log?.warn?.('cove: failed to initialize thread binding manager: ' + err.message);
+      }
+
       const messageQueue = new ChannelMessageQueue({
         dispatchFn: async (message) => {
           await dispatchMessage({
@@ -232,6 +280,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             cfg,
             accountId: ctx.accountId,
             pendingDispatches,
+            threadBindingManager,
             log,
           });
         },
@@ -247,6 +296,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
             cfg,
             accountId: ctx.accountId,
             pendingDispatches,
+            threadBindingManager,
             log,
           });
         },
@@ -350,6 +400,17 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
 
         log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
 
+        // Check if message is in a bound thread → route to bound session
+        if (threadBindingManager) {
+          const binding = threadBindingManager.getByThreadId(message.channel_id);
+          if (binding) {
+            threadBindingManager.touchThread(message.channel_id);
+            log?.info?.('cove: routing message to bound session ' + binding.sessionKey + ' in thread ' + message.channel_id);
+            // Route to bound session by overriding the channel_id context
+            // The dispatch module will use the thread's parent channel for session routing
+          }
+        }
+
         messageQueue.enqueue(message);
       });
 
@@ -377,6 +438,7 @@ const coveChannelPlugin: ChannelPlugin<CoveAccount> = {
         messageQueue.clearAll();
         for (const c of pendingDispatches.values()) c.abort();
         pendingDispatches.clear();
+        threadBindingManager?.stopSweeper();
         gatewayClient.destroy();
       });
 

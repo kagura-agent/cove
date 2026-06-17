@@ -12,6 +12,7 @@
 import type { CoveAccount } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
+import type { CoveThreadBindingManager } from './thread-bindings.js';
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
@@ -51,6 +52,7 @@ export interface DispatchMessageOptions {
   cfg: any;
   accountId: string;
   pendingDispatches: Map<string, AbortController>;
+  threadBindingManager?: CoveThreadBindingManager;
   log?: {
     info?: (...a: any[]) => void;
     warn?: (...a: any[]) => void;
@@ -65,10 +67,22 @@ export interface DispatchMessageOptions {
  * tool progress, and final message delivery with fallback.
  */
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
+  const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, threadBindingManager, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
+
+  // Thread binding: if message is in a bound thread, route to the bound session
+  let effectiveChannelId = channelId;
+  let boundSessionKey: string | undefined;
+  if (threadBindingManager) {
+    const binding = threadBindingManager.getByThreadId(channelId);
+    if (binding) {
+      boundSessionKey = binding.sessionKey;
+      threadBindingManager.touchThread(channelId);
+      log?.info?.('cove: message in bound thread ' + channelId + ' → session ' + binding.sessionKey);
+    }
+  }
 
   // Track this dispatch (for shutdown/reconnect cleanup, NOT for message superseding)
   const abortController = new AbortController();
@@ -162,7 +176,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           ...originalRouting,
           resolveAgentRoute: (params: any) => {
             const route = originalRouting.resolveAgentRoute(params);
-            return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
+            const baseSessionKey = boundSessionKey ?? route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`);
+            return { ...route, agentId: targetAgent, sessionKey: baseSessionKey };
           },
         },
         reply: {
