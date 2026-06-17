@@ -122,7 +122,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       }
 
       // Chunk and send final message
-      const COVE_TEXT_CHUNK_LIMIT = 4000;
       const chunks = chunkTextForOutbound(text, COVE_TEXT_CHUNK_LIMIT);
       for (const chunk of chunks) {
         await restClient.sendMessage(channelId, chunk);
