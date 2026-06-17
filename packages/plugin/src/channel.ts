@@ -10,7 +10,6 @@
 
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
-import { createChannelMessageAdapterFromOutbound } from "openclaw/plugin-sdk/channel-outbound";
 import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
@@ -98,22 +97,6 @@ const coveOutbound = {
     return { channel: "cove", messageId: result.id };
   },
 };
-
-const coveMessageAdapter = createChannelMessageAdapterFromOutbound({
-  id: "cove",
-  outbound: coveOutbound,
-  live: {
-    capabilities: {
-      draftPreview: true,
-      previewFinalization: true,
-      progressUpdates: true,
-    },
-    finalizer: { capabilities: {
-      finalEdit: true,
-      normalFallback: true,
-    } },
-  },
-});
 
 const coveChannelPlugin = createChatChannelPlugin({
   base: {
