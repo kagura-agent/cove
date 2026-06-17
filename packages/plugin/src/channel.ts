@@ -11,6 +11,7 @@
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
 import type { CoveAccount } from "./types.js";
+import { COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
@@ -76,8 +77,6 @@ function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
  * Cove outbound adapter — mirrors Discord's pattern.
  * Declares chunker + textChunkLimit so SDK auto-chunks delivery.
  */
-const COVE_TEXT_CHUNK_LIMIT = 4000;
-
 const coveOutbound = {
   deliveryMode: "direct" as const,
   chunker: chunkTextForOutbound,
@@ -205,10 +204,12 @@ const coveChannelPlugin = createChatChannelPlugin({
       },
     },
     outbound: {
-      deliveryMode: "direct",
+      deliveryMode: coveOutbound.deliveryMode,
       sendText: coveOutbound.sendText,
       chunker: coveOutbound.chunker,
+      chunkerMode: coveOutbound.chunkerMode,
       textChunkLimit: coveOutbound.textChunkLimit,
+      deliveryCapabilities: coveOutbound.deliveryCapabilities,
     },
     gateway: {
       startAccount: async (ctx) => {

@@ -51,3 +51,6 @@ export interface GatewayEvents {
   reconnect: () => void;
   resumed: () => void;
 }
+
+/** Cove server message content length limit (chars). */
+export const COVE_TEXT_CHUNK_LIMIT = 4000;

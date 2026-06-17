@@ -10,6 +10,7 @@
  */
 
 import type { CoveAccount } from "./types.js";
+import { COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
@@ -25,8 +26,6 @@ const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
  * message. Reused by both the streaming-error path and the final-edit
  * failure path.
  */
-const COVE_TEXT_CHUNK_LIMIT = 4000;
-
 async function cleanupAndSend(
   restClient: CoveRestClient,
   channelId: string,
@@ -125,9 +124,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           if (draftState.stopped && !draftState.final) { resolve(false); return; }
           const trimmed = text.trimEnd();
           if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
-          // Clamp streaming preview to server limit
+          const STREAMING_SUFFIX = '\n\n… (streaming, full reply on completion)';
           const preview = trimmed.length > COVE_TEXT_CHUNK_LIMIT
-            ? trimmed.slice(0, COVE_TEXT_CHUNK_LIMIT - 30) + '\n\n… (streaming, full reply on completion)'
+            ? trimmed.slice(0, COVE_TEXT_CHUNK_LIMIT - STREAMING_SUFFIX.length) + STREAMING_SUFFIX
             : trimmed;
           if (preview === lastSentText) { resolve(false); return; }
           lastSentText = preview;
@@ -201,7 +200,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
                   if (draftMessageId && !draftState.stopped && text.length <= COVE_TEXT_CHUNK_LIMIT) {
                     log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
                     try {
-                      await restClient.editMessage(channelId, draftMessageId, text);
+                      await new Promise<void>((resolve, reject) => {
+                        editQueue = editQueue.then(async () => {
+                          try {
+                            await restClient.editMessage(channelId, draftMessageId!, text);
+                            resolve();
+                          } catch (err) { reject(err); }
+                        });
+                      });
                     } catch (editErr: any) {
                       log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
                       await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
