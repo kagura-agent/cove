@@ -14,15 +14,48 @@ import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
+import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
 import { createToolProgressTracker } from "./tool-progress.js";
 import { getCoveMd } from "./cove-md-cache.js";
 
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
 
 /**
+ * Server-enforced max content length per message (see
+ * packages/server/src/routes/messages.ts). Keep in sync.
+ */
+const MAX_MESSAGE_CONTENT_LENGTH = 4000;
+
+/**
+ * Chunk text into pieces under the server limit, then send each piece as a
+ * separate message. Returns the first (or last on error) message id.
+ */
+async function sendChunked(
+  restClient: CoveRestClient,
+  channelId: string,
+  text: string,
+  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
+): Promise<Message | undefined> {
+  const chunks = chunkTextForOutbound(text, MAX_MESSAGE_CONTENT_LENGTH);
+  if (chunks.length === 0) return undefined;
+  let firstMsg: Message | undefined;
+  for (let i = 0; i < chunks.length; i++) {
+    const piece = chunks[i];
+    log?.info?.(`cove: send chunk ${i + 1}/${chunks.length} → [${channelId}] (${piece.length} chars)`);
+    const msg = await restClient.sendMessage(channelId, piece);
+    if (i === 0) firstMsg = msg;
+  }
+  return firstMsg;
+}
+
+/**
  * Clean up an orphaned draft message and fall back to sending a fresh
  * message. Reused by both the streaming-error path and the final-edit
  * failure path.
+ *
+ * Safety order: send replacement first, only delete the draft after the
+ * replacement is confirmed. Prevents losing content when the replacement
+ * send also fails (e.g. content still exceeds server limits).
  */
 async function cleanupAndSend(
   restClient: CoveRestClient,
@@ -31,6 +64,16 @@ async function cleanupAndSend(
   text: string,
   log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
 ): Promise<void> {
+  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+  try {
+    await sendChunked(restClient, channelId, text, log);
+  } catch (sendErr: any) {
+    // Replacement send failed — keep the draft so content is not lost.
+    log?.warn?.(
+      `cove: cleanupAndSend replacement failed: ${sendErr.message}; keeping draft ${draftMessageId ?? "(none)"} so content is preserved`,
+    );
+    throw sendErr;
+  }
   if (draftMessageId) {
     try {
       await restClient.deleteMessage(channelId, draftMessageId);
@@ -38,8 +81,6 @@ async function cleanupAndSend(
       log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
     }
   }
-  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-  await restClient.sendMessage(channelId, text);
 }
 
 export interface DispatchMessageOptions {
@@ -117,12 +158,21 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           if (draftState.stopped && !draftState.final) { resolve(false); return; }
           const trimmed = text.trimEnd();
           if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
+          // Streaming preview is for live progress only; clamp to server
+          // limit so PATCH never 400s mid-stream. Final delivery (handled in
+          // the deliver callback) chunks into multiple messages.
+          let preview = trimmed;
+          if (!draftState.final && preview.length > MAX_MESSAGE_CONTENT_LENGTH) {
+            const suffix = "\n\n… (streaming, full reply on completion)";
+            const head = MAX_MESSAGE_CONTENT_LENGTH - suffix.length;
+            preview = preview.slice(0, head > 0 ? head : MAX_MESSAGE_CONTENT_LENGTH) + suffix;
+          }
           lastSentText = trimmed;
           try {
             if (draftMessageId) {
-              await restClient.editMessage(channelId, draftMessageId, trimmed);
+              await restClient.editMessage(channelId, draftMessageId, preview);
             } else {
-              const msg = await restClient.sendMessage(channelId, trimmed);
+              const msg = await restClient.sendMessage(channelId, preview);
               draftMessageId = msg.id;
             }
             resolve(true);
@@ -184,17 +234,27 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
                   if (!isCurrent()) return;
 
-                  if (draftMessageId && !draftState.stopped) {
-                    log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                    try {
-                      await restClient.editMessage(channelId, draftMessageId, text);
-                    } catch (editErr: any) {
-                      log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
+                  // Final text may exceed server's max content length
+                  // (#391). Chunk into multiple messages when it does.
+                  if (text.length <= MAX_MESSAGE_CONTENT_LENGTH) {
+                    if (draftMessageId && !draftState.stopped) {
+                      log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
+                      try {
+                        await restClient.editMessage(channelId, draftMessageId, text);
+                      } catch (editErr: any) {
+                        log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
+                        await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+                      }
+                    } else {
                       await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                     }
-                  } else {
-                    await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+                    return;
                   }
+
+                  // Long final: send chunked first, then drop draft only on
+                  // success so content is never lost if sends fail.
+                  log?.info?.(`cove: stream final long → [${channelId}] (${text.length} chars, chunked)`);
+                  await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                 },
               },
               replyOptions: {
