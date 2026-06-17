@@ -126,7 +126,7 @@ jobs:
             const body = `🏝️ **Preview deployed!**\n\n` +
               `**URL:** https://staging.cove.kagura-agent.com\n` +
               `**Port:** 3501 (separate DB)\n\n` +
-              `This preview will be torn down when the PR is merged or closed.`;
+              `Staging will redeploy main when this PR is merged or closed.`;
 
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -153,13 +153,39 @@ jobs:
               });
             }
 
-  teardown:
+  redeploy-main:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
 
     steps:
-      - name: Stop staging service
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Bundle server
+        run: |
+          npx esbuild packages/server/dist/index.js \
+            --bundle --platform=node --format=esm \
+            --outfile=server-bundle.js \
+            --external:better-sqlite3 --external:ws \
+            --alias:@cove/shared=./packages/shared/src/index.ts
+
+      - name: Deploy main to staging
         env:
           SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
           HOST: moltbook.kagura-agent.com
@@ -171,5 +197,19 @@ jobs:
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
 
           SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
-          $SSH "sudo systemctl stop cove-staging || true"
-          echo "✅ Staging torn down"
+          SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          $SSH "mkdir -p /home/azureuser/cove-staging"
+          $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
+
+          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
+
+          $SSH "sudo rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
+
+          $SSH "sudo systemctl restart cove-staging"
+
+          sleep 5
+          $SSH "curl -sf http://localhost:3501/api/health" || { $SSH "sudo journalctl -u cove-staging --no-pager -n 20"; exit 1; }
+          echo "✅ Staging redeployed to main"
