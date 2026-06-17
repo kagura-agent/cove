@@ -63,6 +63,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let draftMessageId: string | null = null;
     let lastSentText = '';
 
+    const COVE_TEXT_CHUNK_LIMIT = 4000;
+
     // Sequential edit queue for draft updates
     let editQueue: Promise<void> = Promise.resolve();
     const sendOrEdit = (text: string) => {
@@ -70,23 +72,27 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         if (!isCurrent()) return;
         if (draftState === 'stopped') return;
 
+        // Clamp streaming preview to server limit
+        const preview = text.length > COVE_TEXT_CHUNK_LIMIT
+          ? text.slice(0, COVE_TEXT_CHUNK_LIMIT - 30) + '\n\n… (streaming, full reply on completion)'
+          : text;
+
         try {
           if (draftState === 'none' || draftState === 'sending') {
             draftState = 'sending';
-            const result = await restClient.sendMessage(channelId, text);
+            const result = await restClient.sendMessage(channelId, preview);
             draftMessageId = result.id;
-            lastSentText = text;
+            lastSentText = preview;
             draftState = 'sent';
           } else if (draftState === 'sent' && draftMessageId) {
-            // Only edit if the text actually changed
-            if (text !== lastSentText) {
-              await restClient.editMessage(channelId, draftMessageId, text);
-              lastSentText = text;
+            if (preview !== lastSentText) {
+              await restClient.editMessage(channelId, draftMessageId, preview);
+              lastSentText = preview;
             }
           }
         } catch (err: any) {
           log?.warn?.(`cove: draft update failed in [${channelId}]: ${err.message}`);
-          draftState = 'stopped';
+          // Don't set stopped — finalizeDraft must still deliver
         }
       });
     };
@@ -96,22 +102,24 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // Draft management (no SDK dependency — simple manual state)
     const finalizeDraft = async (text: string) => {
       if (!isCurrent()) return;
-      if (draftState === 'stopped') return;
+
+      // Wait for any pending sendOrEdit to complete
+      await editQueue;
+      draftState = 'stopped';
+
+      if (!text) return;
 
       // If we have a draft and text is short enough, try to edit to final
-      if (draftState === 'sent' && draftMessageId && text.length <= 4000) {
+      if (draftMessageId && text.length <= COVE_TEXT_CHUNK_LIMIT) {
         try {
           if (text !== lastSentText) {
             await restClient.editMessage(channelId, draftMessageId, text);
           }
-          draftState = 'stopped';
           return;
         } catch (err: any) {
           log?.warn?.(`cove: draft finalize edit failed in [${channelId}], falling back to send: ${err.message}`);
         }
       }
-
-      draftState = 'stopped';
 
       // Chunk and send final message
       const COVE_TEXT_CHUNK_LIMIT = 4000;
