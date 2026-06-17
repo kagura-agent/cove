@@ -9,6 +9,8 @@
  */
 
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
+import { chunkTextForOutbound } from "openclaw/plugin-sdk/text-chunking";
+import { createChannelMessageAdapterFromOutbound } from "openclaw/plugin-sdk/channel-outbound";
 import type { CoveAccount } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
@@ -70,6 +72,48 @@ function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
   if (!agentId) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing agentId — set channels.cove.accounts.<id>.agentId`);
   return { accountId: accountId ?? null, token, baseUrl: merged?.baseUrl ?? "http://localhost:3400", guildId: merged?.guildId ?? null, agentId, agentName: merged?.agentName ?? agentId, allowFrom: merged?.allowFrom ?? [], dmPolicy: merged?.dmSecurity };
 }
+
+/**
+ * Cove outbound adapter — mirrors Discord's pattern.
+ * Declares chunker + textChunkLimit so SDK auto-chunks delivery.
+ */
+const COVE_TEXT_CHUNK_LIMIT = 4000;
+
+const coveOutbound = {
+  deliveryMode: "direct" as const,
+  chunker: chunkTextForOutbound,
+  chunkerMode: "markdown" as const,
+  textChunkLimit: COVE_TEXT_CHUNK_LIMIT,
+  deliveryCapabilities: { durableFinal: {
+    text: true,
+    media: false,
+    messageSendingHooks: true,
+  } },
+  sendText: async (ctx: any) => {
+    const account = resolveAccount(ctx.cfg, ctx.accountId);
+    const client = getRestClient(account.baseUrl, account.token);
+    const channelId = ctx.to ?? "home";
+    const text = ctx.text ?? "";
+    const result = await client.sendMessage(channelId, text);
+    return { channel: "cove", messageId: result.id };
+  },
+};
+
+const coveMessageAdapter = createChannelMessageAdapterFromOutbound({
+  id: "cove",
+  outbound: coveOutbound,
+  live: {
+    capabilities: {
+      draftPreview: true,
+      previewFinalization: true,
+      progressUpdates: true,
+    },
+    finalizer: { capabilities: {
+      finalEdit: true,
+      normalFallback: true,
+    } },
+  },
+});
 
 const coveChannelPlugin = createChatChannelPlugin({
   base: {
@@ -179,14 +223,9 @@ const coveChannelPlugin = createChatChannelPlugin({
     },
     outbound: {
       deliveryMode: "direct",
-      sendText: async (ctx) => {
-        const account = resolveAccount(ctx.cfg, ctx.accountId);
-        const client = getRestClient(account.baseUrl, account.token);
-        const channelId = ctx.to ?? "home";
-        const text = ctx.text ?? "";
-        const result = await client.sendMessage(channelId, text);
-        return { channel: "cove", messageId: result.id };
-      },
+      sendText: coveOutbound.sendText,
+      chunker: coveOutbound.chunker,
+      textChunkLimit: coveOutbound.textChunkLimit,
     },
     gateway: {
       startAccount: async (ctx) => {

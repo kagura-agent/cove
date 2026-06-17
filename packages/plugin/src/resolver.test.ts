@@ -4,6 +4,14 @@ vi.mock("openclaw/plugin-sdk/target-resolver-runtime", () => ({
   resolveTargetsWithOptionalToken: vi.fn(),
 }));
 
+vi.mock("openclaw/plugin-sdk/channel-outbound", () => ({
+  createChannelMessageAdapterFromOutbound: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock("openclaw/plugin-sdk/text-chunking", () => ({
+  chunkTextForOutbound: vi.fn((text: string) => [text]),
+}));
+
 import { coveChannelPlugin, resolveAccount } from "./channel.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 
