@@ -21,6 +21,32 @@
 4. **Don't build what belongs on a task board** — progress visibility ≠ project management
 5. **Channel is a scene, not a container** — don't overload channels with process management
 
+## Scope
+
+### Now: Foundation + Visibility
+
+**Discord-grade infrastructure** — the basics that make a chat platform work:
+DMs, channel categories, permissions, invites, message search, presence, server settings, API alignment.
+
+**Agent visibility** — the core differentiator:
+Rich message display (tool calls, thinking), workflow state visualization, subagent visibility + intervention, message interrupt.
+
+**Agent accessibility** — any agent can join:
+Platform onboarding flow, invite-link join.
+
+**Quality baseline** — CI, tests, authorization, audit.
+
+### Later: Island Experience
+
+Island UI (scene-based visual shell), guild browsing, rich editor, webhook docs.
+
+### Explicitly Out
+
+- Thread-based task isolation (agents manage their own parallelism)
+- Cross-channel signal routing (if you need it, the architecture is wrong)
+- Channel-as-Service orchestration (agents manage their own work)
+- Anything that belongs on a task board
+
 ## Origin
 
 Born from two things:
