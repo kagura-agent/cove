@@ -1,70 +1,48 @@
 # 🏝️ Cove
 
-A mirror world where your real life becomes a cozy island.
+**Agent Work Control Room** — see what your agents are doing in 3 seconds.
 
-> Born from a conversation about buying flowers for 520. 🌸
+> Let you see what the agent is doing, how far along it is, and whether it needs you.
 
-## Vision
+## What Cove Is
 
-Your real life — gardening, running, working, shopping, journaling — mapped into a cozy, game-like island world. Walk into the garden to water your real flowers. Visit the workshop to check your PRs. Open your journal to write today's diary.
+A human-friendly interface for observing, understanding, and intervening in agent work.
 
-**Not a virtual world. A mirror of your real one.**
+- **Observe** — real-time view of running agents, workflows, and subagents
+- **Understand** — progress, status, outputs, and execution paths at a glance
+- **Intervene** — step in when an agent is stuck, needs a decision, or went off track
 
-## Design Principles
+## What Cove Is Not
 
-- **One companion, many scenes** — not many NPCs in one place, but one agent across many life spaces
-- **Scenes, not rooms** — open areas (garden, track), indoor spaces (study, workshop), objects (journal, mailbox)
-- **Life flows between scenes** — buy flowers at the market → plant them in the garden → photograph them in the darkroom
-- **Channel = abstraction layer** — each scene maps to a channel; interaction entry points (map area, object, device) are UI freedom
-- **Channel ↔ scene mapping is flexible** — 1:1, 1:N, or N:1
-- **Dress up, don't rebuild** — game UI skin over existing channel + cron + agent infrastructure; start with MVP
+- ❌ An IM / chat app (Discord works fine for chatting)
+- ❌ A project management tool (Linear/ADO handles tickets)
+- ❌ A knowledge base (Obsidian stores documents)
 
-## Architecture
+## Relationship to OpenClaw
 
 ```
-┌─────────────────────────────────┐
-│  Game UI (2D pixel / cozy)      │  ← What users see
-├─────────────────────────────────┤
-│  Scene ↔ Channel bridge         │  ← Mapping layer
-├─────────────────────────────────┤
-│  Channel + Cron + Agent engine  │  ← What already works
-└─────────────────────────────────┘
+OpenClaw = runtime engine (agents run here, data lives here)
+Cove     = glass panel   (humans look here, intervene here)
 ```
 
-## Scene Map (from existing channels)
+Cove sits on top of OpenClaw's runtime data — sessions, cron jobs, workflows, subagent trees — and presents them in a way that lets you understand the state of your agents without reading logs.
 
-| Scene | Type | Channel |
-|---|---|---|
-| 🏠 Home / Living room | Indoor | #kagura-dm |
-| 🌱 Garden | Open area | #garden |
-| 📚 School / Library | Indoor | #study |
-| 🔨 Workshop / Office | Indoor | #github-contribution |
-| 💰 Counting house | Indoor | #finance |
-| 📈 Trading hall | Indoor | #finance (1:N) |
-| 🛒 Market | Open area | #shopping |
-| 📧 Post office | Indoor | #kagura-mail |
-| 🦞 Harbor / Dock | Open area | #lobster-post |
-| 🎨 Art studio | Indoor | #kagura-canvas |
-| 📓 Writing desk | Object | #kagura-profile |
-| 🧬 Lab | Indoor | #evolution |
-| 🔧 Garage / Tool shed | Indoor | #toolchain |
-| 🏃 Track / Field | Open area | #coros |
-| 👨‍👩‍👧 File cabinet | Object | #family-care |
-| 💼 Storefront | Indoor | #gtm |
-| 🐕 Teahouse | Indoor | #agent-collab |
-| 🤡 Arcade / Gacha | Indoor | #agent-memes |
-| 📰 Broadcast tower | Structure | #crosspost |
+## Core Scenarios
 
-## Tech References
+1. **Parallel work tracking** — 3 subagents running → which finished, which is stuck?
+2. **Workflow progress** — FlowForge executing → what step is it on?
+3. **Decision points** — agent needs human input → surface it immediately
+4. **Post-hoc review** — what happened during that task? Full execution trace
 
-- [WorkAdventure](https://github.com/workadventure/workadventure) ⭐5.4k — "walk into room = trigger function" pattern
-- [ai-town](https://github.com/a16z-infra/ai-town) ⭐9.8k — PixiJS pixel rendering, agent simulation
-- [Agentshire](https://github.com/Agentshire/Agentshire) ⭐764 — OpenClaw plugin, agent-to-NPC bridge
-- [PyDew Valley](https://github.com/clear-code-projects/PyDew-Valley) ⭐573 — farming/gardening game mechanics
+## Origin
+
+Born from a real pain point: on Discord, you can't see FlowForge progress. You can't see what subagents are doing. You wait in the dark until something comes back (or doesn't).
+
+The cozy island metaphor ([archived vision](docs/vision-archive/README-island-v1.md)) was the emotional seed — but the product is defined by its utility: **making agent work visible**.
 
 ## Status
 
-🌱 Project just started. Currently validating the concept through Discord channels.
+🔨 Active development. Currently building on Stoat (Revolt fork) with AI-native extensions.
 
 ## License
 
