@@ -1,46 +1,19 @@
 /**
  * Cove message dispatch pipeline.
  *
- * Extracted from channel.ts to keep the gateway handler focused on wiring
- * and delegation. Contains:
- * - Abort tracking and dispatch lifecycle
- * - Draft message streaming (send/edit queue)
- * - Tool progress integration
- * - Final delivery with fallback
+ * Refactored to use SDK's sendDurableMessageBatch for delivery,
+ * which auto-chunks via the registered coveMessageAdapter.
  */
 
-import type { CoveAccount } from "./types.js";
-import type { CoveRestClient } from "./rest-client.js";
-import type { Message } from "@cove/shared";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
-import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
-import { createToolProgressTracker } from "./tool-progress.js";
-import { getCoveMd } from "./cove-md-cache.js";
+import type { CoveAccount } from './types.js';
+import type { CoveRestClient } from './rest-client.js';
+import type { Message } from '@cove/shared';
+import { createTypingCallbacks } from 'openclaw/plugin-sdk/channel-message';
+import { sendDurableMessageBatch } from 'openclaw/plugin-sdk/channel-outbound';
+import { createToolProgressTracker } from './tool-progress.js';
+import { getCoveMd } from './cove-md-cache.js';
 
-const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
-
-/**
- * Clean up an orphaned draft message and fall back to sending a fresh
- * message. Reused by both the streaming-error path and the final-edit
- * failure path.
- */
-async function cleanupAndSend(
-  restClient: CoveRestClient,
-  channelId: string,
-  draftMessageId: string | undefined,
-  text: string,
-  log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
-): Promise<void> {
-  if (draftMessageId) {
-    try {
-      await restClient.deleteMessage(channelId, draftMessageId);
-    } catch (delErr: any) {
-      log?.warn?.(`cove: failed to delete orphaned draft ${draftMessageId}: ${delErr.message}`);
-    }
-  }
-  log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-  await restClient.sendMessage(channelId, text);
-}
+const loadDirectDm = () => import('openclaw/plugin-sdk/channel-inbound');
 
 export interface DispatchMessageOptions {
   message: Message;
@@ -58,23 +31,15 @@ export interface DispatchMessageOptions {
   };
 }
 
-/**
- * Dispatch an inbound message through the OpenClaw runtime.
- *
- * Handles: abort tracking, typing indicators, draft streaming lifecycle,
- * tool progress, and final message delivery with fallback.
- */
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
   const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
 
-  // Track this dispatch (for shutdown/reconnect cleanup, NOT for message superseding)
   const abortController = new AbortController();
   pendingDispatches.set(channelId, abortController);
 
-  // Fire-and-forget early typing cue via REST endpoint
   restClient.sendTyping(channelId).catch(() => {});
 
   const typingCallbacks = createTypingCallbacks({
@@ -91,69 +56,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const originalRouting = channelRuntime.routing;
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
 
-    const draftState = { stopped: false, final: false };
-    let draftMessageId: string | undefined;
-    let lastSentText = "";
-    const channelEntry = cfg?.channels?.["cove"] ?? {};
+    const channelEntry = cfg?.channels?.['cove'] ?? {};
     const toolProgress = createToolProgressTracker(channelEntry, {
       seed: message.id ?? String(Date.now()),
       onProgressUpdate: () => {
-        const combined = toolProgress.getCombinedText();
-        if (combined) draft.update(combined);
+        // Tool progress now relies on SDK streaming, not manual draft
       },
     });
 
-    // Sequential queue ensures PATCH requests land in order
-    let editQueue = Promise.resolve();
-
-    /** Returns true if this dispatch is still the current one for this channel. */
     const isCurrent = () => pendingDispatches.get(channelId) === abortController;
-
-    const sendOrEdit = async (text: string): Promise<boolean> => {
-      if (!isCurrent()) return false;
-      return new Promise<boolean>((resolve) => {
-        editQueue = editQueue.then(async () => {
-          if (!isCurrent()) { resolve(false); return; }
-          if (draftState.stopped && !draftState.final) { resolve(false); return; }
-          const trimmed = text.trimEnd();
-          if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
-          lastSentText = trimmed;
-          try {
-            if (draftMessageId) {
-              await restClient.editMessage(channelId, draftMessageId, trimmed);
-            } else {
-              const msg = await restClient.sendMessage(channelId, trimmed);
-              draftMessageId = msg.id;
-            }
-            resolve(true);
-          } catch (err: any) {
-            draftState.stopped = true;
-            log?.warn?.(`cove: stream preview failed: ${err.message}`);
-            resolve(false);
-          }
-        });
-      });
-    };
-
-    const draft = createFinalizableDraftLifecycle({
-      throttleMs: 250,
-      state: draftState,
-      sendOrEditStreamMessage: sendOrEdit,
-      readMessageId: () => draftMessageId,
-      clearMessageId: () => { draftMessageId = undefined; },
-      isValidMessageId: (v: unknown) => typeof v === "string",
-      deleteMessage: async (messageId?: string) => {
-        const idToDelete = messageId ?? draftMessageId;
-        if (idToDelete) {
-          try {
-            await restClient.deleteMessage(channelId, idToDelete);
-          } catch (err: any) {
-            log?.warn?.(`cove: failed to delete draft message ${idToDelete}: ${err.message}`);
-          }
-        }
-      },
-      warnPrefix: "cove",
-    });
 
     const patchedRuntime = {
       channel: {
@@ -176,24 +87,27 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
                 deliver: async (payload: any, _info: { kind: string }) => {
                   if (!isCurrent()) return;
                   typingCallbacks.onCleanup?.();
-                  const text = payload.text ?? "";
+                  const text = payload.text ?? '';
                   if (!text) return;
 
-                  draftState.final = true;
-                  await draft.seal();
+                  log?.info?.(`cove: delivering reply → [${channelId}] (${text.length} chars)`);
 
-                  if (!isCurrent()) return;
-
-                  if (draftMessageId && !draftState.stopped) {
-                    log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                    try {
-                      await restClient.editMessage(channelId, draftMessageId, text);
-                    } catch (editErr: any) {
-                      log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
-                      await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+                  try {
+                    await sendDurableMessageBatch({
+                      cfg,
+                      channel: 'cove',
+                      to: channelId,
+                      accountId,
+                      payloads: [payload],
+                    });
+                  } catch (err: any) {
+                    log?.warn?.(`cove: durable delivery failed, falling back to direct send: ${err.message}`);
+                    // Fallback: direct send with manual chunking
+                    const { chunkTextForOutbound } = await import('openclaw/plugin-sdk/text-chunking');
+                    const chunks = chunkTextForOutbound(text, 4000);
+                    for (const chunk of chunks) {
+                      await restClient.sendMessage(channelId, chunk);
                     }
-                  } else {
-                    await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
                   }
                 },
               },
@@ -205,7 +119,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
                   if (!isCurrent()) return;
                   if (payload?.text) {
                     toolProgress.onPartialReply(payload.text);
-                    draft.update(payload.text);
                   }
                 },
                 onToolStart: (payload: any) => {
@@ -240,8 +153,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
                 onCompactionStart: () => {
                   if (!isCurrent()) return;
                   toolProgress.onCompactionStart();
-                  const combined = toolProgress.getCombinedText();
-                  if (combined) draft.update(combined);
                 },
                 onCompactionEnd: () => {
                   if (!isCurrent()) return;
@@ -257,11 +168,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       },
     };
 
-    // Yield event loop so WS typing frame flushes before heavy bootstrap work
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
 
-    // Read channel's cove.md for bot context injection (cached)
-    // For threads, read cove.md from parent channel (threads don't have their own)
+    // Read cove.md (from parent channel for threads)
     let coveMdChannelId = channelId;
     try {
       const channel = await restClient.getChannel(channelId);
@@ -271,7 +180,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     } catch { /* fall back to channelId */ }
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
 
-    // Build attachment context for agent
+    // Image attachments
     const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
     const attachmentUrls = imageAttachments.map((a: any) => a.url);
     const fullAttachmentUrls = attachmentUrls.map((url: string) => {
@@ -279,7 +188,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       return url;
     });
 
-    // Collect image attachments from batched messages
     if (batchedMessages) {
       for (const bm of batchedMessages) {
         const bmImages = (bm.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
@@ -290,13 +198,12 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       }
     }
 
-    // Build message body with batched context
+    // Build message body
     let bodyForAgent = message.content;
     if (batchedMessages && batchedMessages.length > 0) {
       const contextLines = batchedMessages.map((m) => {
         const name = m.author?.global_name || m.author?.username || 'Unknown';
         let line = name + ': ' + m.content;
-        // Inline image markers next to the sending author
         const msgImages = (m.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
         for (const img of msgImages) {
           const imgUrl = img.url.startsWith('/') ? account.baseUrl + img.url : img.url;
@@ -307,7 +214,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       bodyForAgent = contextLines.join('\n') + '\n\n' + bodyForAgent;
     }
 
-    // Append image URLs to body so agent sees them
     if (fullAttachmentUrls.length > 0) {
       const urlsText = fullAttachmentUrls.map((url: string) => '[image: ' + url + ']').join('\n');
       bodyForAgent = bodyForAgent ? bodyForAgent + '\n\n' + urlsText : urlsText;
@@ -315,50 +221,50 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     try {
       await dispatchInboundDirectDmWithRuntime({
-          cfg,
-          runtime: patchedRuntime as any,
-          channel: "cove",
-          channelLabel: "Cove",
-          accountId,
-          peer: { kind: "group" as any, id: channelId },
-          senderId,
-          senderAddress: senderId,
-          recipientAddress: channelId,
-          conversationLabel: `#${channelId}`,
-          rawBody: message.content,
-          bodyForAgent: bodyForAgent,
-          messageId: message.id ?? `cove-${Date.now()}`,
-          timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
-          provider: "cove",
-          surface: "cove",
-          extraContext: {
-            ChatType: "channel",
-            SenderId: senderId,
-            SenderName: senderName,
-            ChannelId: channelId,
-            ...(coveMdContent ? {
-              GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent,
-            } : {}),
-            ...(message.message_reference?.message_id ? {
-              ReplyToId: message.message_reference.message_id,
-              ReplyToBody: message.referenced_message?.content,
-              ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
-            } : {}),
-            ...(fullAttachmentUrls.length > 0 ? {
-              MediaUrls: fullAttachmentUrls,
-              allowUnsafeExternalContent: true,
-            } : {}),
-          },
-          deliver: async (_payload) => {
-            // Delivery handled by the dispatcher's deliver callback above
-          },
-          onRecordError: (err) => {
-            log?.error?.(`cove: record error in [${channelId}]: ${err}`);
-          },
-          onDispatchError: (err, info) => {
-            log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
-          },
-        });
+        cfg,
+        runtime: patchedRuntime as any,
+        channel: 'cove',
+        channelLabel: 'Cove',
+        accountId,
+        peer: { kind: 'group' as any, id: channelId },
+        senderId,
+        senderAddress: senderId,
+        recipientAddress: channelId,
+        conversationLabel: `#${channelId}`,
+        rawBody: message.content,
+        bodyForAgent: bodyForAgent,
+        messageId: message.id ?? `cove-${Date.now()}`,
+        timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
+        provider: 'cove',
+        surface: 'cove',
+        extraContext: {
+          ChatType: 'channel',
+          SenderId: senderId,
+          SenderName: senderName,
+          ChannelId: channelId,
+          ...(coveMdContent ? {
+            GroupSystemPrompt: 'Channel rules from cove.md (channel-editable):\n\n' + coveMdContent,
+          } : {}),
+          ...(message.message_reference?.message_id ? {
+            ReplyToId: message.message_reference.message_id,
+            ReplyToBody: message.referenced_message?.content,
+            ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
+          } : {}),
+          ...(fullAttachmentUrls.length > 0 ? {
+            MediaUrls: fullAttachmentUrls,
+            allowUnsafeExternalContent: true,
+          } : {}),
+        },
+        deliver: async (_payload) => {
+          // Delivery handled by the dispatcher's deliver callback above
+        },
+        onRecordError: (err) => {
+          log?.error?.(`cove: record error in [${channelId}]: ${err}`);
+        },
+        onDispatchError: (err, info) => {
+          log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
+        },
+      });
     } catch (err: any) {
       if (abortController.signal.aborted) {
         typingCallbacks.onCleanup?.();
