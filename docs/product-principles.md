@@ -13,6 +13,10 @@
 - ❌ A knowledge base — Obsidian stores documents
 - ❌ A thread-based task isolation system — agents handle parallelism themselves
 
+## Design Principle: Discord Alignment
+
+All table schemas, API interfaces, and data models should match Discord as closely as possible. Extra features are additive extensions on top of the Discord baseline — never break or reshape the foundation.
+
 ## Design Boundaries (learned the hard way)
 
 1. **Don't solve parallel work with threads** — agents manage their own context
