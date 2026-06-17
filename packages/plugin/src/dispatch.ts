@@ -64,9 +64,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let lastSentText = '';
 
     // Sequential edit queue for draft updates
-    const editQueue = Promise.resolve();
-    const sendOrEdit = async (text: string) => {
-      return editQueue.then(async () => {
+    let editQueue: Promise<void> = Promise.resolve();
+    const sendOrEdit = (text: string) => {
+      editQueue = editQueue.then(async () => {
         if (!isCurrent()) return;
         if (draftState === 'stopped') return;
 
