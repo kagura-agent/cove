@@ -9,7 +9,7 @@ import type { CoveAccount } from './types.js';
 import type { CoveRestClient } from './rest-client.js';
 import type { Message } from '@cove/shared';
 import { createTypingCallbacks } from 'openclaw/plugin-sdk/channel-message';
-import { sendDurableMessageBatch } from 'openclaw/plugin-sdk/channel-outbound';
+import { chunkTextForOutbound } from 'openclaw/plugin-sdk/text-chunking';
 import { createToolProgressTracker } from './tool-progress.js';
 import { getCoveMd } from './cove-md-cache.js';
 
@@ -92,22 +92,11 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
                   log?.info?.(`cove: delivering reply → [${channelId}] (${text.length} chars)`);
 
-                  try {
-                    await sendDurableMessageBatch({
-                      cfg,
-                      channel: 'cove',
-                      to: channelId,
-                      accountId,
-                      payloads: [payload],
-                    });
-                  } catch (err: any) {
-                    log?.warn?.(`cove: durable delivery failed, falling back to direct send: ${err.message}`);
-                    // Fallback: direct send with manual chunking
-                    const { chunkTextForOutbound } = await import('openclaw/plugin-sdk/text-chunking');
-                    const chunks = chunkTextForOutbound(text, 4000);
-                    for (const chunk of chunks) {
-                      await restClient.sendMessage(channelId, chunk);
-                    }
+                  // Chunk using SDK's chunkTextForOutbound (same as Discord pattern)
+                  const COVE_TEXT_CHUNK_LIMIT = 4000;
+                  const chunks = chunkTextForOutbound(text, COVE_TEXT_CHUNK_LIMIT);
+                  for (const chunk of chunks) {
+                    await restClient.sendMessage(channelId, chunk);
                   }
                 },
               },
