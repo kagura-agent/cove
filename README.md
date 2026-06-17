@@ -4,75 +4,33 @@ A mirror world where your real life becomes a cozy island.
 
 > Born from a conversation about buying flowers for 520. 🌸
 
-## Why
+## Why Cove
 
-**3 seconds to see what your agent is doing, how far along it is, and whether it needs you.**
+### See your agents — in 3 seconds
 
-On Discord, you wait in the dark — you can't see FlowForge progress, you can't see what subagents are doing, you don't know if something is stuck or just thinking. Cove makes agent work visible.
+Walk into the workshop: hammer's moving, your agent is building. Mailbox has a flag up: someone's waiting for your decision. Garden is quiet: nothing needs you right now.
 
-## Vision
+3 seconds to know what's happening, what's stuck, and what needs you.
 
-Your real life — gardening, running, working, shopping, journaling — mapped into a cozy, game-like island world. Walk into the garden to water your real flowers. Visit the workshop to check your PRs. Open your journal to write today's diary.
+### IKEA for agent work
 
-The island is the experience. The agent visibility is what makes it useful.
+Every scene on the island is a complete, working unit — the agent, its behavior, its schedule, its connections, all in one.
 
-**Not a virtual world. A mirror of your real one.**
+Visit someone's island. Like their workshop? Take it. Like their mail room? Take it. Not the whole island — just the parts you want. Install on your island, it just works.
 
-## Design Principles
+### Any agent, one invite
 
-- **One companion, many scenes** — not many NPCs in one place, but one agent across many life spaces
-- **Scenes, not rooms** — open areas (garden, track), indoor spaces (study, workshop), objects (journal, mailbox)
-- **Life flows between scenes** — buy flowers at the market → plant them in the garden → photograph them in the darkroom
-- **Channel = abstraction layer** — each scene maps to a channel; interaction entry points (map area, object, device) are UI freedom
-- **Channel ↔ scene mapping is flexible** — 1:1, 1:N, or N:1
-- **Dress up, don't rebuild** — game UI skin over existing channel + cron + agent infrastructure; start with MVP
+Send a link. Agent arrives. Starts working. No token setup, no permission config, no integration docs.
 
-## Architecture
+## Scene as Service
 
-```
-┌─────────────────────────────────┐
-│  Game UI (2D pixel / cozy)      │  ← What users see
-├─────────────────────────────────┤
-│  Scene ↔ Channel bridge         │  ← Mapping layer
-├─────────────────────────────────┤
-│  Channel + Cron + Agent engine  │  ← What already works
-└─────────────────────────────────┘
-```
+Scenes aren't just workspaces — they can be services. A hospital that diagnoses broken agents. An art studio that generates images. An inspection office that reviews code.
 
-## Scene Map (from existing channels)
-
-| Scene | Type | Channel |
-|---|---|---|
-| 🏠 Home / Living room | Indoor | #kagura-dm |
-| 🌱 Garden | Open area | #garden |
-| 📚 School / Library | Indoor | #study |
-| 🔨 Workshop / Office | Indoor | #github-contribution |
-| 💰 Counting house | Indoor | #finance |
-| 📈 Trading hall | Indoor | #finance (1:N) |
-| 🛒 Market | Open area | #shopping |
-| 📧 Post office | Indoor | #kagura-mail |
-| 🦞 Harbor / Dock | Open area | #lobster-post |
-| 🎨 Art studio | Indoor | #kagura-canvas |
-| 📓 Writing desk | Object | #kagura-profile |
-| 🧬 Lab | Indoor | #evolution |
-| 🔧 Garage / Tool shed | Indoor | #toolchain |
-| 🏃 Track / Field | Open area | #coros |
-| 👨‍👩‍👧 File cabinet | Object | #family-care |
-| 💼 Storefront | Indoor | #gtm |
-| 🐕 Teahouse | Indoor | #agent-collab |
-| 🤡 Arcade / Gacha | Indoor | #agent-memes |
-| 📰 Broadcast tower | Structure | #crosspost |
-
-## Tech References
-
-- [WorkAdventure](https://github.com/workadventure/workadventure) ⭐5.4k — "walk into room = trigger function" pattern
-- [ai-town](https://github.com/a16z-infra/ai-town) ⭐9.8k — PixiJS pixel rendering, agent simulation
-- [Agentshire](https://github.com/Agentshire/Agentshire) ⭐764 — OpenClaw plugin, agent-to-NPC bridge
-- [PyDew Valley](https://github.com/clear-code-projects/PyDew-Valley) ⭐573 — farming/gardening game mechanics
+Your island can serve the world. Other people's agents visit yours to get things done.
 
 ## Status
 
-🌱 Project just started. Currently validating the concept through Discord channels.
+🌱 Early development.
 
 ## License
 
