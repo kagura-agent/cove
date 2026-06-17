@@ -10,7 +10,6 @@ import type { CoveRestClient } from './rest-client.js';
 import type { Message } from '@cove/shared';
 import { createTypingCallbacks } from 'openclaw/plugin-sdk/channel-message';
 import { chunkTextForOutbound } from 'openclaw/plugin-sdk/text-chunking';
-import { createFinalizableDraftLifecycle } from 'openclaw/plugin-sdk/channel-message';
 import { createToolProgressTracker } from './tool-progress.js';
 import { getCoveMd } from './cove-md-cache.js';
 
@@ -93,65 +92,50 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     const channelEntry = cfg?.channels?.['cove'] ?? {};
-    const draft = createFinalizableDraftLifecycle({
-      send: sendOrEdit,
-      edit: sendOrEdit,
-      update: sendOrEdit,
-      delete: async () => {
-        if (draftMessageId) {
-          try {
-            await restClient.deleteMessage(channelId, draftMessageId);
-          } catch (err: any) {
-            log?.warn?.(`cove: draft delete failed in [${channelId}]: ${err.message}`);
+
+    // Draft management (no SDK dependency — simple manual state)
+    const finalizeDraft = async (text: string) => {
+      if (!isCurrent()) return;
+      if (draftState === 'stopped') return;
+
+      // If we have a draft and text is short enough, try to edit to final
+      if (draftState === 'sent' && draftMessageId && text.length <= 4000) {
+        try {
+          if (text !== lastSentText) {
+            await restClient.editMessage(channelId, draftMessageId, text);
           }
-          draftMessageId = null;
           draftState = 'stopped';
+          return;
+        } catch (err: any) {
+          log?.warn?.(`cove: draft finalize edit failed in [${channelId}], falling back to send: ${err.message}`);
         }
-      },
-      finalize: async (text: string) => {
-        if (!isCurrent()) return;
-        if (draftState === 'stopped') return;
+      }
 
-        // If we have a draft and text is short enough, try to edit to final
-        if (draftState === 'sent' && draftMessageId && text.length <= 4000) {
-          try {
-            if (text !== lastSentText) {
-              await restClient.editMessage(channelId, draftMessageId, text);
-            }
-            draftState = 'stopped';
-            return;
-          } catch (err: any) {
-            log?.warn?.(`cove: draft finalize edit failed in [${channelId}], falling back to send: ${err.message}`);
-            // Fall through to chunk+send
-          }
+      draftState = 'stopped';
+
+      // Chunk and send final message
+      const COVE_TEXT_CHUNK_LIMIT = 4000;
+      const chunks = chunkTextForOutbound(text, COVE_TEXT_CHUNK_LIMIT);
+      for (const chunk of chunks) {
+        await restClient.sendMessage(channelId, chunk);
+      }
+
+      // Delete draft after successful send
+      if (draftMessageId) {
+        try {
+          await restClient.deleteMessage(channelId, draftMessageId);
+        } catch (err: any) {
+          log?.warn?.(`cove: post-finalize draft delete failed in [${channelId}]: ${err.message}`);
         }
-
-        // Delete draft before sending final (send-before-delete pattern for safety)
-        draftState = 'stopped';
-
-        // Chunk and send final message
-        const COVE_TEXT_CHUNK_LIMIT = 4000;
-        const chunks = chunkTextForOutbound(text, COVE_TEXT_CHUNK_LIMIT);
-        for (const chunk of chunks) {
-          await restClient.sendMessage(channelId, chunk);
-        }
-
-        // Delete draft after successful send
-        if (draftMessageId) {
-          try {
-            await restClient.deleteMessage(channelId, draftMessageId);
-          } catch (err: any) {
-            log?.warn?.(`cove: post-finalize draft delete failed in [${channelId}]: ${err.message}`);
-          }
-          draftMessageId = null;
-        }
-      },
-    });
+        draftMessageId = null;
+      }
+    };
 
     const toolProgress = createToolProgressTracker(channelEntry, {
       seed: message.id ?? String(Date.now()),
-      onProgressUpdate: (progressText: string) => {
-        draft.update(progressText);
+      onProgressUpdate: () => {
+        const combined = toolProgress.getCombinedText();
+        if (combined) sendOrEdit(combined);
       },
     });
 
@@ -182,7 +166,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
                   log?.info?.(`cove: delivering reply → [${channelId}] (${text.length} chars)`);
 
                   // Finalize the draft (handles edit-in-place or chunk+send)
-                  await draft.finalize(text);
+                  await finalizeDraft(text);
                 },
               },
               replyOptions: {

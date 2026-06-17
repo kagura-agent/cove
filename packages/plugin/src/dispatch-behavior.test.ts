@@ -25,11 +25,6 @@ vi.mock('openclaw/plugin-sdk/channel-message', () => ({
   createTypingCallbacks: vi.fn().mockReturnValue({
     onCleanup: vi.fn(),
   }),
-  createFinalizableDraftLifecycle: vi.fn().mockReturnValue({
-    update: vi.fn(),
-    seal: vi.fn().mockResolvedValue(undefined),
-    finalize: vi.fn().mockResolvedValue(undefined),
-  }),
 }));
 
 vi.mock('openclaw/plugin-sdk/text-chunking', () => ({
