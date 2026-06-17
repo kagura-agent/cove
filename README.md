@@ -4,9 +4,17 @@ A mirror world where your real life becomes a cozy island.
 
 > Born from a conversation about buying flowers for 520. 🌸
 
+## Why
+
+**3 seconds to see what your agent is doing, how far along it is, and whether it needs you.**
+
+On Discord, you wait in the dark — you can't see FlowForge progress, you can't see what subagents are doing, you don't know if something is stuck or just thinking. Cove makes agent work visible.
+
 ## Vision
 
 Your real life — gardening, running, working, shopping, journaling — mapped into a cozy, game-like island world. Walk into the garden to water your real flowers. Visit the workshop to check your PRs. Open your journal to write today's diary.
+
+The island is the experience. The agent visibility is what makes it useful.
 
 **Not a virtual world. A mirror of your real one.**
 
