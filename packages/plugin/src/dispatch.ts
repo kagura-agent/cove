@@ -194,6 +194,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
                   draftState.final = true;
                   await draft.seal();
+                  await editQueue; // wait for seal's flush to complete
 
                   if (!isCurrent()) return;
 
