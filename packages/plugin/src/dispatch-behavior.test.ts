@@ -28,7 +28,7 @@ vi.mock("openclaw/plugin-sdk/channel-inbound", () => ({
 }));
 
 vi.mock("openclaw/plugin-sdk/channel-message", () => ({
-  createTypingCallbacks: vi.fn(() => ({ onStart: vi.fn(), onCleanup: vi.fn() })),
+  createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
 }));
 
 vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
@@ -93,7 +93,7 @@ describe("A. Draft Streaming Lifecycle", () => {
   beforeEach(resetState);
 
   it("A1: First partial creates POST", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedSendOrEdit) await capturedSendOrEdit("First partial");
@@ -102,7 +102,7 @@ describe("A. Draft Streaming Lifecycle", () => {
   });
 
   it("A2: Subsequent partials PATCH", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedSendOrEdit) { await capturedSendOrEdit("First"); await capturedSendOrEdit("Updated"); }
@@ -111,7 +111,7 @@ describe("A. Draft Streaming Lifecycle", () => {
   });
 
   it("A3: Edits sequential (editQueue)", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const callOrder: string[] = [];
     restClient.sendMessage.mockImplementation(async () => { callOrder.push("send"); return { id: "msg-draft-1" }; });
     restClient.editMessage.mockImplementation(async () => { callOrder.push("edit"); return { id: "msg-draft-1" }; });
@@ -128,7 +128,7 @@ describe("A. Draft Streaming Lifecycle", () => {
   });
 
   it("A5: Duplicate text suppressed", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedSendOrEdit) { await capturedSendOrEdit("Same"); await capturedSendOrEdit("Same"); }
@@ -138,7 +138,7 @@ describe("A. Draft Streaming Lifecycle", () => {
   });
 
   it("A6: Draft stops on error", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     restClient.editMessage.mockRejectedValueOnce(new Error("Network error"));
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
@@ -156,7 +156,7 @@ describe("B. Final Delivery", () => {
   beforeEach(resetState);
 
   it("B1: Final edit when draft active", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
@@ -167,7 +167,7 @@ describe("B. Final Delivery", () => {
   });
 
   it("B2: Fallback on final edit failure", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
@@ -179,7 +179,7 @@ describe("B. Final Delivery", () => {
   });
 
   it("B3: Fresh send when no draft", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     restClient.sendMessage.mockClear();
@@ -190,7 +190,7 @@ describe("B. Final Delivery", () => {
   });
 
   it("B4: Draft deleted on cleanup", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     if (capturedDeleteMessage) await capturedDeleteMessage("msg-orphan");
@@ -199,7 +199,7 @@ describe("B. Final Delivery", () => {
   });
 
   it("B5: Empty reply = no message", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as MockRestClient;
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
@@ -229,7 +229,7 @@ describe("D. Context Injection", () => {
 
   it("D3: Thread uses parent cove.md", async () => {
     const opts = createBaseOpts();
-    (opts.restClient as MockRestClient).getChannel.mockResolvedValue({ id: "thread-1", type: 11, parent_id: "parent-ch" });
+    (opts.restClient as unknown as MockRestClient).getChannel.mockResolvedValue({ id: "thread-1", type: 11, parent_id: "parent-ch" });
     await dispatchMessage(opts);
     expect(getCoveMd).toHaveBeenCalledWith(expect.anything(), "parent-ch", expect.anything());
   });
@@ -288,7 +288,7 @@ describe("F. Lifecycle / Abort", () => {
   it("F1: Typing sent immediately", async () => {
     const opts = createBaseOpts();
     await dispatchMessage(opts);
-    expect((opts.restClient as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1");
+    expect((opts.restClient as unknown as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1");
   });
 
   it("F2: Typing keepalive 5s", async () => {
@@ -298,7 +298,7 @@ describe("F. Lifecycle / Abort", () => {
 
   it("F3: Typing cleaned on delivery", async () => {
     const mockCleanup = vi.fn();
-    vi.mocked(createTypingCallbacks).mockReturnValue({ onStart: vi.fn(), onCleanup: mockCleanup });
+    vi.mocked(createTypingCallbacks).mockReturnValue({ onReplyStart: vi.fn(async () => {}), onCleanup: mockCleanup });
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
