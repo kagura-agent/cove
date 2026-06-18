@@ -1,5 +1,5 @@
 /** Cove message dispatch — inbound turn, draft streaming, tool progress, final delivery. */
-import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
+import { type CoveAccount } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
@@ -92,12 +92,13 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
-    /** Chunked fresh send via sendDurableMessageBatch, then clean up orphaned draft. */
     /** Clean up orphaned draft and send fresh message (direct REST, no SDK indirection). */
     const freshSend = async (text: string) => {
+      if (!isCurrent()) return;
       if (draftMessageId) {
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
+        draftMessageId = undefined;
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       await restClient.sendMessage(channelId, text);
@@ -117,7 +118,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         },
       },
       buildFinalEdit: (payload) => payload.text || undefined,
-      editFinal: async (id, text) => { await restClient.editMessage(channelId, id, text); },
+      editFinal: async (id, text) => { if (isCurrent()) await restClient.editMessage(channelId, id, text); },
       handlePreviewEditError: () => "fallback",
       logPreviewEditFailure: (err: unknown) => {
         log?.warn?.(`cove: final edit failed: ${(err as Error).message}`);
