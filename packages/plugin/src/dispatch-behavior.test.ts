@@ -8,8 +8,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 let capturedDispatcherParams: any = null;
-let capturedSendOrEdit: ((text: string) => Promise<boolean>) | null = null;
-let capturedDeleteMessage: ((id?: string) => Promise<void>) | null = null;
 let capturedResolvedTurn: any = null;
 let dispatchBlocker: { resolve: () => void; promise: Promise<void> } | null = null;
 
@@ -37,31 +35,65 @@ vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
 vi.mock("openclaw/plugin-sdk/channel-message", () => ({
   createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
   sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
+  buildChannelProgressDraftLineForEntry: vi.fn((_entry: any, input: any) => input),
+  buildChannelProgressDraftLine: vi.fn((input: any) => input),
+  defineFinalizableLivePreviewAdapter: vi.fn((adapter: any) => adapter),
+  deliverWithFinalizableLivePreviewAdapter: vi.fn(async (params: any) => {
+    // By default, simulate that we fall through to normal delivery
+    if (params.deliverNormally) await params.deliverNormally(params.payload);
+    if (params.onNormalDelivered) params.onNormalDelivered();
+    return { kind: "normal-delivered" };
+  }),
+  resolveChannelStreamingBlockEnabled: vi.fn(() => undefined),
 }));
 
-vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
-  createFinalizableDraftLifecycle: vi.fn((opts: any) => {
-    capturedSendOrEdit = opts.sendOrEditStreamMessage;
-    capturedDeleteMessage = opts.deleteMessage;
-    return { update: vi.fn(), seal: vi.fn(async () => {}) };
+let mockDraftPreviewController: any = null;
+
+vi.mock("./draft-preview.js", () => ({
+  createCoveDraftPreviewController: vi.fn((_params: any) => {
+    const ctrl = {
+      draftStream: {
+        update: vi.fn(),
+        flush: vi.fn(async () => {}),
+        messageId: vi.fn(() => undefined),
+        clear: vi.fn(async () => {}),
+        deleteCurrentMessage: vi.fn(async () => {}),
+        discardPending: vi.fn(async () => {}),
+        seal: vi.fn(async () => {}),
+        stop: vi.fn(),
+        forceNewMessage: vi.fn(),
+      },
+      isProgressMode: false,
+      hasProgressDraftStarted: false,
+      finalizedViaPreviewMessage: false,
+      previewToolProgressEnabled: false,
+      commentaryProgressEnabled: false,
+      suppressDefaultToolProgressMessages: true,
+      disableBlockStreamingForDraft: true,
+      markFinalReplyStarted: vi.fn(),
+      markFinalReplyDelivered: vi.fn(),
+      markPreviewFinalized: vi.fn(),
+      startProgressDraft: vi.fn(async () => {}),
+      pushToolProgress: vi.fn(async () => {}),
+      pushReasoningProgress: vi.fn(async () => {}),
+      pushCommentaryProgress: vi.fn(async () => {}),
+      resolvePreviewFinalText: vi.fn(() => undefined),
+      updateFromPartial: vi.fn(),
+      handleAssistantMessageBoundary: vi.fn(),
+      flush: vi.fn(async () => {}),
+      cleanup: vi.fn(async () => {}),
+    };
+    mockDraftPreviewController = ctrl;
+    return ctrl;
   }),
 }));
 
 vi.mock("./cove-md-cache.js", () => ({ getCoveMd: vi.fn() }));
-vi.mock("./tool-progress.js", () => ({
-  createToolProgressTracker: vi.fn(() => ({
-    getCombinedText: vi.fn(() => ""), onPartialReply: vi.fn(), onToolStart: vi.fn(),
-    onItemEvent: vi.fn(), onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(),
-    onCommandOutput: vi.fn(), onPatchSummary: vi.fn(), onCompactionStart: vi.fn(),
-    onCompactionEnd: vi.fn(), onAssistantMessageStart: vi.fn(),
-  })),
-}));
 
 import { dispatchMessage, type DispatchMessageOptions } from "./dispatch.js";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
-import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { getCoveMd } from "./cove-md-cache.js";
-import { createToolProgressTracker } from "./tool-progress.js";
+import { createCoveDraftPreviewController } from "./draft-preview.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
@@ -96,127 +128,122 @@ const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): Dispat
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
 });
 
-const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; };
+const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedResolvedTurn = null; dispatchBlocker = null; mockDraftPreviewController = null; };
 
 describe("A. Draft Streaming Lifecycle", () => {
   beforeEach(resetState);
 
-  it("A1: First partial creates POST", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) await capturedSendOrEdit("First partial");
-    expect(restClient.sendMessage).toHaveBeenCalledWith("ch-1", "First partial");
-    blocker.resolve(); await p;
-  });
-
-  it("A2: Subsequent partials PATCH", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) { await capturedSendOrEdit("First"); await capturedSendOrEdit("Updated"); }
-    expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Updated");
-    blocker.resolve(); await p;
-  });
-
-  it("A3: Edits sequential (editQueue)", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    const callOrder: string[] = [];
-    restClient.sendMessage.mockImplementation(async () => { callOrder.push("send"); return { id: "msg-draft-1" }; });
-    restClient.editMessage.mockImplementation(async () => { callOrder.push("edit"); return { id: "msg-draft-1" }; });
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) { await capturedSendOrEdit("First"); await capturedSendOrEdit("E1"); await capturedSendOrEdit("E2"); }
-    expect(callOrder).toEqual(["send", "edit", "edit"]);
-    blocker.resolve(); await p;
-  });
-
-  it("A4: Throttled at 250ms", async () => {
+  it("A1: Draft preview controller created with correct params", async () => {
     await dispatchMessage(createBaseOpts());
-    expect(createFinalizableDraftLifecycle).toHaveBeenCalledWith(expect.objectContaining({ throttleMs: 250 }));
+    expect(createCoveDraftPreviewController).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "test-account",
+      deliverChannelId: "ch-1",
+      textLimit: expect.any(Number),
+    }));
   });
 
-  it("A5: Duplicate text suppressed", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) { await capturedSendOrEdit("Same"); await capturedSendOrEdit("Same"); }
-    expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
-    expect(restClient.editMessage).not.toHaveBeenCalled();
-    blocker.resolve(); await p;
-  });
-
-  it("A6: Draft stops on error", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    restClient.editMessage.mockRejectedValueOnce(new Error("Network error"));
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) { await capturedSendOrEdit("First"); await capturedSendOrEdit("Fail"); const r = await capturedSendOrEdit("After"); expect(r).toBe(false); }
-    blocker.resolve(); await p;
-  });
-
-  it("A7: Seal flushes pending", async () => {
+  it("A2: Draft stream passed through to replyOptions callbacks", async () => {
     await dispatchMessage(createBaseOpts());
-    expect(createFinalizableDraftLifecycle).toHaveBeenCalled();
+    // onPartialReply should be wired when draftStream exists and not progress mode
+    expect(capturedDispatcherParams?.replyOptions?.onPartialReply).toBeDefined();
+  });
+
+  it("A3: onPartialReply calls updateFromPartial on controller", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+    if (onPartialReply) onPartialReply({ text: "Hello" });
+    expect(mockDraftPreviewController?.updateFromPartial).toHaveBeenCalledWith("Hello");
+    blocker.resolve(); await p;
+  });
+
+  it("A4: onAssistantMessageStart calls handleAssistantMessageBoundary", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    const onAssistantMessageStart = capturedDispatcherParams?.replyOptions?.onAssistantMessageStart;
+    if (onAssistantMessageStart) onAssistantMessageStart();
+    expect(mockDraftPreviewController?.handleAssistantMessageBoundary).toHaveBeenCalled();
+    blocker.resolve(); await p;
+  });
+
+  it("A5: onReasoningEnd calls handleAssistantMessageBoundary", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    const onReasoningEnd = capturedDispatcherParams?.replyOptions?.onReasoningEnd;
+    if (onReasoningEnd) onReasoningEnd();
+    expect(mockDraftPreviewController?.handleAssistantMessageBoundary).toHaveBeenCalled();
+    blocker.resolve(); await p;
+  });
+
+  it("A6: onReasoningStream calls pushReasoningProgress", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    const onReasoningStream = capturedDispatcherParams?.replyOptions?.onReasoningStream;
+    if (onReasoningStream) await onReasoningStream({ text: "thinking...", isReasoningSnapshot: true });
+    expect(mockDraftPreviewController?.pushReasoningProgress).toHaveBeenCalledWith("thinking...", { snapshot: true });
+    blocker.resolve(); await p;
+  });
+
+  it("A7: disableBlockStreaming is config-driven", async () => {
+    await dispatchMessage(createBaseOpts());
+    // With default mock (disableBlockStreamingForDraft=true), should be true
+    expect(capturedDispatcherParams?.replyOptions?.disableBlockStreaming).toBe(true);
+  });
+
+  it("A8: suppressDefaultToolProgressMessages is config-driven", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(capturedDispatcherParams?.replyOptions?.suppressDefaultToolProgressMessages).toBe(true);
   });
 });
 
 describe("B. Final Delivery", () => {
   beforeEach(resetState);
 
-  it("B1: Final edit when draft active", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+  it("B1: Final delivery uses finalization adapter", async () => {
+    const { deliverWithFinalizableLivePreviewAdapter } = await import("openclaw/plugin-sdk/channel-message");
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    vi.mocked(deliverWithFinalizableLivePreviewAdapter).mockClear();
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Final" }, { kind: "final" });
-    expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Final");
+    expect(deliverWithFinalizableLivePreviewAdapter).toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
-  it("B2: Fallback on final edit failure", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
-    restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
-    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
-    if (deliver) await deliver({ text: "Fallback" }, { kind: "final" });
-    expect(restClient.deleteMessage).toHaveBeenCalled();
-    blocker.resolve(); await p;
-  });
-
-  it("B3: Fresh send when no draft", async () => {
+  it("B2: Fresh send via sendDurableMessageBatch as fallback", async () => {
     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
     vi.mocked(sendDurableMessageBatch).mockClear();
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fresh" }, { kind: "final" });
-    // Phase 2: fresh send now goes through sendDurableMessageBatch (gets chunking)
     expect(sendDurableMessageBatch).toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
-  it("B4: Draft deleted on cleanup", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+  it("B3: Empty reply = no message", async () => {
+    const { deliverWithFinalizableLivePreviewAdapter } = await import("openclaw/plugin-sdk/channel-message");
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedDeleteMessage) await capturedDeleteMessage("msg-orphan");
-    expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-orphan");
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    vi.mocked(deliverWithFinalizableLivePreviewAdapter).mockClear();
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: "" }, { kind: "final" });
+    expect(deliverWithFinalizableLivePreviewAdapter).not.toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
-  it("B5: Empty reply = no message", async () => {
-    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+  it("B4: markFinalReplyStarted called on final delivery", async () => {
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
-    if (deliver) await deliver({ text: "" }, { kind: "final" });
-    expect(restClient.editMessage).not.toHaveBeenCalled();
+    if (deliver) await deliver({ text: "Final" }, { kind: "final" });
+    expect(mockDraftPreviewController?.markFinalReplyStarted).toHaveBeenCalled();
     blocker.resolve(); await p;
+  });
+
+  it("B5: cleanup called in finally block", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(mockDraftPreviewController?.cleanup).toHaveBeenCalled();
   });
 });
 
@@ -266,9 +293,9 @@ describe("D. Context Injection", () => {
 describe("E. Tool Progress", () => {
   beforeEach(resetState);
 
-  it("E1: Progress lines rendered", async () => {
+  it("E1: Draft preview controller created", async () => {
     await dispatchMessage(createBaseOpts());
-    expect(createToolProgressTracker).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ onProgressUpdate: expect.any(Function) }));
+    expect(createCoveDraftPreviewController).toHaveBeenCalled();
   });
 
   it("E2: onPartialReply wired", async () => {
@@ -290,6 +317,40 @@ describe("E. Tool Progress", () => {
     await dispatchMessage(createBaseOpts());
     expect(capturedDispatcherParams?.replyOptions?.onToolStart).toBeDefined();
     expect(capturedDispatcherParams?.replyOptions?.onItemEvent).toBeDefined();
+  });
+
+  it("E6: onReasoningStream wired", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(capturedDispatcherParams?.replyOptions?.onReasoningStream).toBeDefined();
+  });
+
+  it("E7: onReasoningEnd wired", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(capturedDispatcherParams?.replyOptions?.onReasoningEnd).toBeDefined();
+  });
+
+  it("E8: onToolStart calls pushToolProgress with buildChannelProgressDraftLineForEntry", async () => {
+    const { buildChannelProgressDraftLineForEntry } = await import("openclaw/plugin-sdk/channel-message");
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
+    vi.mocked(buildChannelProgressDraftLineForEntry).mockClear();
+    const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
+    if (onToolStart) await onToolStart({ name: "Read", phase: "start", args: { file: "/foo" } });
+    expect(buildChannelProgressDraftLineForEntry).toHaveBeenCalled();
+    expect(mockDraftPreviewController?.pushToolProgress).toHaveBeenCalled();
+    blocker.resolve(); await p;
+  });
+
+  it("E9: onItemEvent preamble calls pushCommentaryProgress", async () => {
+    const blocker = createDispatchBlocker();
+    const opts = createBaseOpts();
+    // Enable commentary progress on the mock
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    if (mockDraftPreviewController) mockDraftPreviewController.commentaryProgressEnabled = true;
+    const onItemEvent = capturedDispatcherParams?.replyOptions?.onItemEvent;
+    if (onItemEvent) await onItemEvent({ kind: "preamble", progressText: "Starting...", itemId: "i1" });
+    expect(mockDraftPreviewController?.pushCommentaryProgress).toHaveBeenCalledWith("Starting...", { itemId: "i1" });
+    blocker.resolve(); await p;
   });
 });
 
@@ -338,7 +399,10 @@ describe("F. Lifecycle / Abort", () => {
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     opts.pendingDispatches.clear();
-    if (capturedSendOrEdit) expect(await capturedSendOrEdit("Stale")).toBe(false);
+    // Partial reply should not call updateFromPartial when not current
+    const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+    if (onPartialReply) onPartialReply({ text: "Stale" });
+    expect(mockDraftPreviewController?.updateFromPartial).not.toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 

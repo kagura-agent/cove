@@ -2,9 +2,15 @@
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
-import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
-import { createToolProgressTracker } from "./tool-progress.js";
+import {
+  createTypingCallbacks,
+  buildChannelProgressDraftLineForEntry,
+  buildChannelProgressDraftLine,
+  defineFinalizableLivePreviewAdapter,
+  deliverWithFinalizableLivePreviewAdapter,
+  resolveChannelStreamingBlockEnabled,
+} from "openclaw/plugin-sdk/channel-message";
+import { createCoveDraftPreviewController } from "./draft-preview.js";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 
@@ -39,61 +45,24 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
     const recordInboundSession = channelRuntime.session.recordInboundSession.bind(channelRuntime.session);
 
-    const draftState = { stopped: false, final: false };
-    let draftMessageId: string | undefined;
-    let lastSentText = "";
     const channelEntry = cfg?.channels?.["cove"] ?? {};
-    const toolProgress = createToolProgressTracker(channelEntry, {
-      seed: message.id ?? String(Date.now()),
-      onProgressUpdate: () => { const c = toolProgress.getCombinedText(); if (c) draft.update(c); },
+    const resolvedBlockStreamingEnabled = resolveChannelStreamingBlockEnabled(channelEntry);
+
+    const draftPreview = createCoveDraftPreviewController({
+      cfg,
+      channelConfig: channelEntry,
+      accountId,
+      sourceRepliesAreToolOnly: false,
+      textLimit: COVE_TEXT_CHUNK_LIMIT,
+      restClient,
+      deliverChannelId: channelId,
+      replyReference: { peek: () => undefined },
+      log: (msg: string) => log?.info?.(msg),
     });
 
-    let editQueue = Promise.resolve();
     const isCurrent = () => pendingDispatches.get(channelId) === abortController;
 
-    const sendOrEdit = async (text: string): Promise<boolean> => {
-      if (!isCurrent()) return false;
-      return new Promise<boolean>((resolve) => {
-        editQueue = editQueue.then(async () => {
-          if (!isCurrent()) { resolve(false); return; }
-          if (draftState.stopped && !draftState.final) { resolve(false); return; }
-          const trimmed = text.trimEnd();
-          if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
-          lastSentText = trimmed;
-          try {
-            if (draftMessageId) {
-              await restClient.editMessage(channelId, draftMessageId, trimmed);
-            } else {
-              const msg = await restClient.sendMessage(channelId, trimmed);
-              draftMessageId = msg.id;
-            }
-            resolve(true);
-          } catch (err: any) {
-            draftState.stopped = true;
-            log?.warn?.(`cove: stream preview failed: ${err.message}`);
-            resolve(false);
-          }
-        });
-      });
-    };
-
-    const draft = createFinalizableDraftLifecycle({
-      throttleMs: 250, state: draftState,
-      sendOrEditStreamMessage: sendOrEdit,
-      readMessageId: () => draftMessageId,
-      clearMessageId: () => { draftMessageId = undefined; },
-      isValidMessageId: (v: unknown) => typeof v === "string",
-      deleteMessage: async (messageId?: string) => {
-        const id = messageId ?? draftMessageId;
-        if (id) {
-          try { await restClient.deleteMessage(channelId, id); }
-          catch (e: any) { log?.warn?.(`cove: failed to delete draft ${id}: ${e.message}`); }
-        }
-      },
-      warnPrefix: "cove",
-    });
-
-    /** Chunked fresh send via sendDurableMessageBatch, then clean up orphaned draft. */
+    /** Chunked fresh send via sendDurableMessageBatch. */
     const freshSend = async (text: string) => {
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       const { sendDurableMessageBatch } = await loadMessageSend();
@@ -106,46 +75,182 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           return restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, chunk);
         } },
       });
-      if (draftMessageId) {
-        try { await restClient.deleteMessage(channelId, draftMessageId); }
-        catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
-      }
     };
 
-    const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
+    let userFacingFinalDelivered = false;
+    const markUserFacingFinalDelivered = () => {
+      userFacingFinalDelivered = true;
+      draftPreview.markFinalReplyDelivered();
+    };
 
     const dispatcherOptions = {
       typingCallbacks,
-      deliver: async (payload: any, _info: { kind: string }) => {
+      deliver: async (payload: any, info: { kind: string }) => {
         if (!isCurrent()) return;
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) return;
-        draftState.final = true;
-        await draft.seal();
-        if (!isCurrent()) return;
-        if (draftMessageId && !draftState.stopped) {
-          log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-          try { await restClient.editMessage(channelId, draftMessageId, text); }
-          catch (e: any) { log?.warn?.(`cove: final edit failed: ${e.message}`); await freshSend(text); }
-        } else {
-          await freshSend(text);
+
+        const draftStream = draftPreview.draftStream;
+        const isFinal = info.kind === "final";
+
+        if (isFinal) draftPreview.markFinalReplyStarted();
+
+        // Attempt live preview finalization (Layer 3)
+        if (draftStream && isFinal && (!draftPreview.isProgressMode || draftPreview.hasProgressDraftStarted) && !payload.isError) {
+          const previewFinalText = draftPreview.resolvePreviewFinalText(text);
+
+          const result = await deliverWithFinalizableLivePreviewAdapter({
+            kind: info.kind as "tool" | "block" | "final",
+            payload,
+            adapter: defineFinalizableLivePreviewAdapter({
+              draft: {
+                flush: () => draftPreview.flush(),
+                clear: () => draftStream.clear(),
+                discardPending: () => draftStream.discardPending(),
+                seal: () => draftStream.seal(),
+                id: draftStream.messageId,
+              },
+              buildFinalEdit: () => {
+                if (draftPreview.finalizedViaPreviewMessage) return;
+                if (typeof previewFinalText !== "string") return;
+                if (payload.isError) return;
+                return { content: previewFinalText };
+              },
+              editFinal: async (previewMessageId: string, edit: { content: string }) => {
+                await restClient.editMessage(channelId, previewMessageId, edit.content);
+              },
+              onPreviewFinalized: () => {
+                markUserFacingFinalDelivered();
+                draftPreview.markPreviewFinalized();
+              },
+              logPreviewEditFailure: (err: unknown) => {
+                log?.warn?.(`cove: preview final edit failed; falling back to standard send (${String(err)})`);
+              },
+            }),
+            deliverNormally: async () => {
+              if (!isCurrent()) return false;
+              await freshSend(text);
+              return true;
+            },
+            onNormalDelivered: () => {
+              markUserFacingFinalDelivered();
+            },
+          });
+
+          if (result.kind !== "normal-skipped") return;
         }
+
+        // Fallback: standard send
+        if (!isCurrent()) return;
+        await freshSend(text);
+        if (isFinal && !payload.isError) markUserFacingFinalDelivered();
       },
     };
 
     const replyOptions = {
-      disableBlockStreaming: true, suppressDefaultToolProgressMessages: true,
-      onPartialReply: (p: any) => { if (!isCurrent() || !p?.text) return; toolProgress.onPartialReply(p.text); draft.update(p.text); },
-      onToolStart: (p: any) => { if (!isCurrent()) return; toolProgress.onToolStart({ name: p?.name ?? p?.toolName, args: p?.args, phase: p?.phase, detailMode: p?.detailMode }); },
-      onItemEvent: guardFwd((p: any) => toolProgress.onItemEvent(p)),
-      onPlanUpdate: guardFwd((p: any) => toolProgress.onPlanUpdate(p)),
-      onApprovalEvent: guardFwd((p: any) => toolProgress.onApprovalEvent(p)),
-      onCommandOutput: guardFwd((p: any) => toolProgress.onCommandOutput(p)),
-      onPatchSummary: guardFwd((p: any) => toolProgress.onPatchSummary(p)),
-      onCompactionStart: guardFwd(() => { toolProgress.onCompactionStart(); const c = toolProgress.getCombinedText(); if (c) draft.update(c); }),
-      onCompactionEnd: guardFwd(() => toolProgress.onCompactionEnd()),
-      onAssistantMessageStart: guardFwd(() => toolProgress.onAssistantMessageStart()),
+      disableBlockStreaming:
+        draftPreview.disableBlockStreamingForDraft
+        ?? (typeof resolvedBlockStreamingEnabled === "boolean"
+          ? !resolvedBlockStreamingEnabled : undefined),
+
+      suppressDefaultToolProgressMessages:
+        draftPreview.suppressDefaultToolProgressMessages ? true : undefined,
+
+      commentaryProgressEnabled:
+        draftPreview.isProgressMode ? draftPreview.commentaryProgressEnabled : undefined,
+
+      onPartialReply: draftPreview.draftStream && !draftPreview.isProgressMode
+        ? (payload: any) => { if (isCurrent()) draftPreview.updateFromPartial(payload.text); }
+        : undefined,
+
+      onAssistantMessageStart: draftPreview.draftStream
+        ? () => { if (isCurrent()) draftPreview.handleAssistantMessageBoundary(); }
+        : undefined,
+
+      onReasoningEnd: draftPreview.draftStream
+        ? () => { if (isCurrent()) draftPreview.handleAssistantMessageBoundary(); }
+        : undefined,
+
+      onReasoningStream: async (payload: any) => {
+        if (!isCurrent()) return;
+        await draftPreview.pushReasoningProgress(payload?.text, {
+          snapshot: payload?.isReasoningSnapshot === true,
+        });
+      },
+
+      onToolStart: async (payload: any) => {
+        if (!isCurrent()) return;
+        await draftPreview.pushToolProgress(
+          buildChannelProgressDraftLineForEntry(channelEntry, {
+            event: "tool", name: payload.name, phase: payload.phase, args: payload.args,
+          }, payload.detailMode ? { detailMode: payload.detailMode } : undefined),
+          { toolName: payload.name },
+        );
+      },
+
+      onItemEvent: async (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload.kind === "preamble") {
+          if (draftPreview.commentaryProgressEnabled && payload.progressText) {
+            await draftPreview.pushCommentaryProgress(payload.progressText, { itemId: payload.itemId });
+          }
+          return;
+        }
+        await draftPreview.pushToolProgress(
+          buildChannelProgressDraftLineForEntry(channelEntry, {
+            event: "item", itemId: payload.itemId, itemKind: payload.kind,
+            title: payload.title, name: payload.name, phase: payload.phase,
+            status: payload.status, summary: payload.summary,
+            progressText: payload.progressText, meta: payload.meta,
+          }),
+        );
+      },
+
+      onPlanUpdate: async (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload.phase !== "update") return;
+        await draftPreview.pushToolProgress(buildChannelProgressDraftLine({
+          event: "plan", phase: payload.phase, title: payload.title,
+          explanation: payload.explanation, steps: payload.steps,
+        }));
+      },
+
+      onApprovalEvent: async (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload.phase !== "requested") return;
+        await draftPreview.pushToolProgress(buildChannelProgressDraftLine({
+          event: "approval", phase: payload.phase, title: payload.title,
+          command: payload.command, reason: payload.reason, message: payload.message,
+        }));
+      },
+
+      onCommandOutput: async (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload.phase !== "end") return;
+        await draftPreview.pushToolProgress(buildChannelProgressDraftLine({
+          event: "command-output", phase: payload.phase, title: payload.title,
+          name: payload.name, status: payload.status, exitCode: payload.exitCode,
+        }));
+      },
+
+      onPatchSummary: async (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload.phase !== "end") return;
+        await draftPreview.pushToolProgress(buildChannelProgressDraftLine({
+          event: "patch", phase: payload.phase, title: payload.title,
+          name: payload.name, added: payload.added, modified: payload.modified,
+          deleted: payload.deleted, summary: payload.summary,
+        }));
+      },
+
+      onCompactionStart: async () => {
+        // No draft preview update — Cove doesn't show compaction in preview
+      },
+
+      onCompactionEnd: async () => {
+        // No draft preview update — Cove doesn't show compaction in preview
+      },
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
@@ -195,6 +300,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
       } else { throw err; }
     } finally {
+      await draftPreview.cleanup();
       if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);
     }
   } catch (err: any) {
