@@ -37,10 +37,15 @@ vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
   }),
 }));
 
-vi.mock("openclaw/plugin-sdk/channel-message", () => ({
-  createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
-  sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
-}));
+vi.mock("openclaw/plugin-sdk/channel-message", async () => {
+  const real = await vi.importActual<typeof import("openclaw/plugin-sdk/channel-message")>("openclaw/plugin-sdk/channel-message");
+  return {
+    createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
+    sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
+    deliverWithFinalizableLivePreviewAdapter: real.deliverWithFinalizableLivePreviewAdapter,
+    defineFinalizableLivePreviewAdapter: real.defineFinalizableLivePreviewAdapter,
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
   createFinalizableDraftLifecycle: vi.fn((opts: any) => {
@@ -48,9 +53,12 @@ vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
     capturedDeleteMessage = opts.deleteMessage;
     const update = vi.fn();
     const seal = vi.fn(async () => {});
+    const discardPending = vi.fn(async () => {});
+    const clear = vi.fn(async () => {});
+    const loop = { flush: vi.fn(async () => {}) };
     capturedDraftUpdate = update;
     capturedDraftSeal = seal;
-    return { update, seal };
+    return { update, seal, discardPending, clear, loop };
   }),
 }));
 

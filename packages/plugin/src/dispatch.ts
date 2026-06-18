@@ -2,7 +2,7 @@
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
+import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 import { getCoveMd } from "./cove-md-cache.js";
@@ -106,11 +106,28 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           return restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, chunk);
         } },
       });
-      if (draftMessageId) {
-        try { await restClient.deleteMessage(channelId, draftMessageId); }
-        catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
-      }
     };
+
+    const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({
+      draft: {
+        flush: () => draft.loop.flush(),
+        id: () => draftMessageId,
+        seal: () => draft.seal(),
+        discardPending: () => draft.discardPending(),
+        clear: async () => {
+          if (draftMessageId) {
+            try { await restClient.deleteMessage(channelId, draftMessageId); }
+            catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
+          }
+        },
+      },
+      buildFinalEdit: (payload) => payload.text || undefined,
+      editFinal: async (id, text) => { await restClient.editMessage(channelId, id, text); },
+      handlePreviewEditError: () => "fallback",
+      logPreviewEditFailure: (err: unknown) => {
+        log?.warn?.(`cove: final edit failed: ${(err as Error).message}`);
+      },
+    });
 
     const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
 
@@ -121,16 +138,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) return;
-        draftState.final = true;
-        await draft.seal();
         if (!isCurrent()) return;
-        if (draftMessageId && !draftState.stopped) {
-          log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-          try { await restClient.editMessage(channelId, draftMessageId, text); }
-          catch (e: any) { log?.warn?.(`cove: final edit failed: ${e.message}`); await freshSend(text); }
-        } else {
-          await freshSend(text);
-        }
+        const canFinalize = Boolean(draftMessageId && !draftState.stopped);
+        await deliverWithFinalizableLivePreviewAdapter({
+          kind: "final",
+          payload: { text },
+          liveState: { phase: canFinalize ? "previewing" : "idle", canFinalizeInPlace: canFinalize },
+          adapter,
+          deliverNormally: (p) => freshSend(p.text),
+        });
       },
     };
 
