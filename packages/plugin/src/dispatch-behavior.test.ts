@@ -35,8 +35,6 @@ vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
 vi.mock("openclaw/plugin-sdk/channel-message", () => ({
   createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
   sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
-  buildChannelProgressDraftLineForEntry: vi.fn((_entry: any, input: any) => input),
-  buildChannelProgressDraftLine: vi.fn((input: any) => input),
   defineFinalizableLivePreviewAdapter: vi.fn((adapter: any) => adapter),
   deliverWithFinalizableLivePreviewAdapter: vi.fn(async (params: any) => {
     // By default, simulate that we fall through to normal delivery
@@ -44,6 +42,11 @@ vi.mock("openclaw/plugin-sdk/channel-message", () => ({
     if (params.onNormalDelivered) params.onNormalDelivered();
     return { kind: "normal-delivered" };
   }),
+}));
+
+vi.mock("openclaw/plugin-sdk/channel-streaming", () => ({
+  buildChannelProgressDraftLineForEntry: vi.fn((_entry: any, input: any) => input),
+  buildChannelProgressDraftLine: vi.fn((input: any) => input),
   resolveChannelStreamingBlockEnabled: vi.fn(() => undefined),
 }));
 
@@ -330,7 +333,7 @@ describe("E. Tool Progress", () => {
   });
 
   it("E8: onToolStart calls pushToolProgress with buildChannelProgressDraftLineForEntry", async () => {
-    const { buildChannelProgressDraftLineForEntry } = await import("openclaw/plugin-sdk/channel-message");
+    const { buildChannelProgressDraftLineForEntry } = await import("openclaw/plugin-sdk/channel-streaming");
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(createBaseOpts()); await new Promise((r) => setTimeout(r, 50));
     vi.mocked(buildChannelProgressDraftLineForEntry).mockClear();

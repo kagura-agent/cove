@@ -10,7 +10,7 @@ import {
   createFinalizableDraftLifecycle,
   type FinalizableDraftStreamState,
   type DraftStreamLoop,
-} from "openclaw/plugin-sdk/channel-message";
+} from "openclaw/plugin-sdk/channel-outbound";
 
 /** Cove messages cap at 4000 characters. */
 const COVE_STREAM_MAX_CHARS = 4000;

@@ -4,12 +4,14 @@ import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 import {
   createTypingCallbacks,
-  buildChannelProgressDraftLineForEntry,
-  buildChannelProgressDraftLine,
   defineFinalizableLivePreviewAdapter,
   deliverWithFinalizableLivePreviewAdapter,
-  resolveChannelStreamingBlockEnabled,
 } from "openclaw/plugin-sdk/channel-message";
+import {
+  buildChannelProgressDraftLineForEntry,
+  buildChannelProgressDraftLine,
+  resolveChannelStreamingBlockEnabled,
+} from "openclaw/plugin-sdk/channel-streaming";
 import { createCoveDraftPreviewController } from "./draft-preview.js";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";

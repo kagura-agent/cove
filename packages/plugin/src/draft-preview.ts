@@ -15,14 +15,16 @@
 import type { CoveRestClient } from "./rest-client.js";
 import { createCoveDraftStream } from "./draft-stream.js";
 import {
-  createChannelProgressDraftCompositor,
   resolveChannelPreviewStreamMode,
   resolveChannelStreamingBlockEnabled,
   resolveChannelStreamingPreviewToolProgress,
   resolveChannelStreamingSuppressDefaultToolProgressMessages,
   type StreamingCompatEntry,
   type ChannelProgressDraftLine,
-} from "openclaw/plugin-sdk/channel-message";
+} from "openclaw/plugin-sdk/channel-streaming";
+import {
+  createChannelProgressDraftCompositor,
+} from "openclaw/plugin-sdk/channel-outbound";
 import {
   stripReasoningTagsFromText,
   stripInlineDirectiveTagsForDelivery,
