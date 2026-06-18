@@ -188,15 +188,13 @@ describe("B. Final Delivery", () => {
   });
 
   it("B3: Fresh send when no draft", async () => {
-    const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    vi.mocked(sendDurableMessageBatch).mockClear();
+    restClient.sendMessage.mockClear();
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fresh" }, { kind: "final" });
-    // Phase 2: fresh send now goes through sendDurableMessageBatch (gets chunking)
-    expect(sendDurableMessageBatch).toHaveBeenCalled();
+    expect(restClient.sendMessage).toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 

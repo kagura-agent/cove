@@ -9,7 +9,6 @@ import { getCoveMd } from "./cove-md-cache.js";
 import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
-const loadMessageSend = () => import("openclaw/plugin-sdk/channel-message");
 export interface DispatchMessageOptions {
   message: Message; batchedMessages?: Message[]; account: CoveAccount;
   restClient: CoveRestClient; channelRuntime: any; cfg: any;
@@ -93,23 +92,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
-    /** Chunked fresh send via sendDurableMessageBatch, then clean up orphaned draft. */
+    /** Clean up orphaned draft and send fresh message (direct REST, no SDK indirection). */
     const freshSend = async (text: string) => {
-      log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-      const { sendDurableMessageBatch } = await loadMessageSend();
-      await sendDurableMessageBatch({
-        cfg, channel: "cove" as any, to: `channel:${channelId}`, accountId,
-        payloads: [{ text }], formatting: { textLimit: COVE_TEXT_CHUNK_LIMIT },
-        deps: { cove: (ctx: any) => {
-          const chunk = ctx.text ?? ctx.body;
-          if (!chunk) throw new Error("cove: sendText callback received empty chunk");
-          return restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, chunk);
-        } },
-      });
       if (draftMessageId) {
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
       }
+      log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+      await restClient.sendMessage(channelId, text);
     };
 
     const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
