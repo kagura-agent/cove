@@ -1,8 +1,9 @@
 /**
  * Behavioral contract tests for dispatch.ts
- * Tests 32 behavior contracts from SPEC-398.md Section 2.
+ * Tests behavior contracts from SPEC-398.md Section 2 + SPEC-401.md Phase 0.
  * Groups: A (Draft Streaming), B (Final Delivery), D (Context),
- *         E (Tool Progress), F (Lifecycle), G (Batched)
+ *         E (Tool Progress), F (Lifecycle), G (Batched),
+ *         H (Draft Lifecycle — SPEC-401)
  * Note: Group C skipped — not on main branch.
  */
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
@@ -12,6 +13,8 @@ let capturedSendOrEdit: ((text: string) => Promise<boolean>) | null = null;
 let capturedDeleteMessage: ((id?: string) => Promise<void>) | null = null;
 let capturedResolvedTurn: any = null;
 let dispatchBlocker: { resolve: () => void; promise: Promise<void> } | null = null;
+let capturedDraftUpdate: Mock | null = null;
+let capturedDraftSeal: Mock | null = null;
 
 function createDispatchBlocker() {
   let resolve: () => void;
@@ -43,7 +46,11 @@ vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
   createFinalizableDraftLifecycle: vi.fn((opts: any) => {
     capturedSendOrEdit = opts.sendOrEditStreamMessage;
     capturedDeleteMessage = opts.deleteMessage;
-    return { update: vi.fn(), seal: vi.fn(async () => {}) };
+    const update = vi.fn();
+    const seal = vi.fn(async () => {});
+    capturedDraftUpdate = update;
+    capturedDraftSeal = seal;
+    return { update, seal };
   }),
 }));
 
@@ -96,7 +103,7 @@ const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): Dispat
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
 });
 
-const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; };
+const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; capturedDraftUpdate = null; capturedDraftSeal = null; };
 
 describe("A. Draft Streaming Lifecycle", () => {
   beforeEach(resetState);
@@ -370,4 +377,545 @@ describe("G. Batched Messages", () => {
 
   it.skip("G5: clearAll on reconnect (covered by message-queue.test.ts G5 + F4 deferred above)", () => {});
   it.skip("G1/G2/G4: Queue behaviors — moved to message-queue.test.ts", () => {});
+});
+
+// ---------------------------------------------------------------------------
+// SPEC-401 Phase 0: Draft Streaming Lifecycle behavioral tests
+// ---------------------------------------------------------------------------
+
+describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
+  beforeEach(resetState);
+
+  describe("H1. Full lifecycle flow: create → edit → seal → final", () => {
+    it("H1a: draft create → stream edits → seal → final edit-in-place", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const callOrder: string[] = [];
+      restClient.sendMessage.mockImplementation(async () => { callOrder.push("send"); return { id: "msg-draft-1" }; });
+      restClient.editMessage.mockImplementation(async () => { callOrder.push("edit"); return { id: "msg-draft-1" }; });
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Phase 1: create draft
+      if (capturedSendOrEdit) await capturedSendOrEdit("Thinking...");
+      expect(restClient.sendMessage).toHaveBeenCalledWith("ch-1", "Thinking...");
+
+      // Phase 2: stream edits
+      if (capturedSendOrEdit) await capturedSendOrEdit("Thinking... Let me");
+      if (capturedSendOrEdit) await capturedSendOrEdit("Thinking... Let me check");
+      expect(restClient.editMessage).toHaveBeenCalledTimes(2);
+
+      // Phase 3: final delivery edits in place
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Here is the answer." }, { kind: "final" });
+      expect(capturedDraftSeal).toHaveBeenCalled();
+      // Last editMessage call is the final edit-in-place
+      expect(restClient.editMessage).toHaveBeenLastCalledWith("ch-1", "msg-draft-1", "Here is the answer.");
+
+      expect(callOrder).toEqual(["send", "edit", "edit", "edit"]);
+      blocker.resolve();
+      await p;
+    });
+
+    it("H1b: no draft created when first partial is empty", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) {
+        const r1 = await capturedSendOrEdit("");
+        const r2 = await capturedSendOrEdit("   ");
+        expect(r1).toBe(false);
+        expect(r2).toBe(false);
+      }
+      expect(restClient.sendMessage).not.toHaveBeenCalled();
+      expect(restClient.editMessage).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H2. Tool progress injection into draft", () => {
+    it("H2a: onProgressUpdate pushes combined text to draft.update", async () => {
+      // Set up a tracker mock that captures onProgressUpdate and returns combined text
+      let capturedOnProgressUpdate: (() => void) | undefined;
+      const mockTracker = {
+        getCombinedText: vi.fn(() => "Working on it...\n\n📖 Read file.ts"),
+        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
+        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
+        onPatchSummary: vi.fn(), onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
+        onAssistantMessageStart: vi.fn(),
+        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
+      };
+      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
+        capturedOnProgressUpdate = opts?.onProgressUpdate;
+        return mockTracker;
+      });
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Simulate a progress update
+      expect(capturedOnProgressUpdate).toBeDefined();
+      capturedOnProgressUpdate!();
+      expect(capturedDraftUpdate).toHaveBeenCalledWith("Working on it...\n\n📖 Read file.ts");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H2b: onProgressUpdate skips draft.update when combined text is empty", async () => {
+      let capturedOnProgressUpdate: (() => void) | undefined;
+      const mockTracker = {
+        getCombinedText: vi.fn(() => ""),
+        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
+        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
+        onPatchSummary: vi.fn(), onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
+        onAssistantMessageStart: vi.fn(),
+        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
+      };
+      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
+        capturedOnProgressUpdate = opts?.onProgressUpdate;
+        return mockTracker;
+      });
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      capturedOnProgressUpdate!();
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H2c: onPartialReply forwards to both tracker and draft.update", async () => {
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+      expect(onPartialReply).toBeDefined();
+      onPartialReply({ text: "Hello from the agent" });
+
+      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
+      expect(tracker.onPartialReply).toHaveBeenCalledWith("Hello from the agent");
+      expect(capturedDraftUpdate).toHaveBeenCalledWith("Hello from the agent");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H2d: onPartialReply with empty text is ignored", async () => {
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+      onPartialReply({ text: "" });
+      onPartialReply(null);
+      onPartialReply({});
+
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H3. Compaction-period draft behavior", () => {
+    it("H3a: onCompactionStart pushes combined text to draft", async () => {
+      let capturedOnProgressUpdate: (() => void) | undefined;
+      const mockTracker = {
+        getCombinedText: vi.fn(() => "📦 **Compacting context...**"),
+        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
+        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
+        onPatchSummary: vi.fn(),
+        onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
+        onAssistantMessageStart: vi.fn(),
+        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
+      };
+      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
+        capturedOnProgressUpdate = opts?.onProgressUpdate;
+        return mockTracker;
+      });
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const onCompactionStart = capturedDispatcherParams?.replyOptions?.onCompactionStart;
+      expect(onCompactionStart).toBeDefined();
+      onCompactionStart();
+
+      expect(mockTracker.onCompactionStart).toHaveBeenCalled();
+      expect(capturedDraftUpdate).toHaveBeenCalledWith("📦 **Compacting context...**");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H3b: onCompactionEnd forwards to tracker (clears compaction state)", async () => {
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(createBaseOpts());
+      await new Promise((r) => setTimeout(r, 50));
+
+      const onCompactionEnd = capturedDispatcherParams?.replyOptions?.onCompactionEnd;
+      expect(onCompactionEnd).toBeDefined();
+      onCompactionEnd();
+
+      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
+      expect(tracker.onCompactionEnd).toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H4. Final delivery branching", () => {
+    it("H4a: error-stopped draft → fresh send via sendDurableMessageBatch", async () => {
+      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      restClient.editMessage.mockRejectedValueOnce(new Error("Network error"));
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Create a draft, then cause a streaming error
+      if (capturedSendOrEdit) {
+        await capturedSendOrEdit("First partial");
+        await capturedSendOrEdit("This will fail");
+      }
+
+      vi.mocked(sendDurableMessageBatch).mockClear();
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Final text after error" }, { kind: "final" });
+
+      // draftState.stopped is true → should go through freshSend, not edit-in-place
+      expect(sendDurableMessageBatch).toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H4b: final edit-in-place failure → fallback fresh send + orphan cleanup", async () => {
+      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Create a draft successfully
+      if (capturedSendOrEdit) await capturedSendOrEdit("Draft content");
+
+      // Make the final edit fail
+      restClient.editMessage.mockRejectedValueOnce(new Error("Message deleted"));
+      vi.mocked(sendDurableMessageBatch).mockClear();
+
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Recovery text" }, { kind: "final" });
+
+      // Should have attempted edit, then fell back to fresh send
+      expect(sendDurableMessageBatch).toHaveBeenCalled();
+      // Orphan draft should be cleaned up
+      expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H4c: seal() is called before final delivery", async () => {
+      const opts = createBaseOpts();
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Final" }, { kind: "final" });
+
+      expect(capturedDraftSeal).toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H4d: typing cleanup happens before final delivery", async () => {
+      const cleanupCalls: string[] = [];
+      const mockCleanup = vi.fn(() => cleanupCalls.push("cleanup"));
+      vi.mocked(createTypingCallbacks).mockReturnValue({ onReplyStart: vi.fn(async () => {}), onCleanup: mockCleanup });
+
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      restClient.editMessage.mockImplementation(async () => {
+        // When editMessage is called, cleanup should have already happened
+        expect(cleanupCalls).toEqual(["cleanup"]);
+        return { id: "msg-draft-1" };
+      });
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Final" }, { kind: "final" });
+
+      expect(mockCleanup).toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H5. Abort mid-draft", () => {
+    it("H5a: stale dispatch mid-stream → sendOrEdit returns false", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Create a draft
+      if (capturedSendOrEdit) await capturedSendOrEdit("Draft started");
+      expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
+
+      // Simulate supersession: new dispatch for same channel replaces the abort controller
+      opts.pendingDispatches.set("ch-1", new AbortController());
+
+      // Further edits should be rejected
+      if (capturedSendOrEdit) {
+        const r = await capturedSendOrEdit("This should not land");
+        expect(r).toBe(false);
+      }
+      expect(restClient.editMessage).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H5b: stale dispatch → deliver() is a no-op", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+      // Supersede
+      opts.pendingDispatches.set("ch-1", new AbortController());
+
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Should not deliver" }, { kind: "final" });
+
+      // Only the initial send from the draft, no final edit
+      expect(restClient.editMessage).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H5c: guardFwd blocks event forwarding on stale dispatch", async () => {
+      const opts = createBaseOpts();
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
+
+      // Supersede
+      opts.pendingDispatches.set("ch-1", new AbortController());
+
+      // All guarded callbacks should be no-ops
+      const replyOpts = capturedDispatcherParams?.replyOptions;
+      replyOpts?.onItemEvent?.({ title: "stale" });
+      replyOpts?.onPlanUpdate?.({ phase: "update", title: "stale" });
+      replyOpts?.onApprovalEvent?.({ phase: "requested", title: "stale" });
+      replyOpts?.onCommandOutput?.({ phase: "end", name: "stale" });
+      replyOpts?.onPatchSummary?.({ phase: "end", name: "stale" });
+      replyOpts?.onCompactionStart?.();
+      replyOpts?.onCompactionEnd?.();
+      replyOpts?.onAssistantMessageStart?.();
+
+      expect(tracker.onItemEvent).not.toHaveBeenCalled();
+      expect(tracker.onPlanUpdate).not.toHaveBeenCalled();
+      expect(tracker.onApprovalEvent).not.toHaveBeenCalled();
+      expect(tracker.onCommandOutput).not.toHaveBeenCalled();
+      expect(tracker.onPatchSummary).not.toHaveBeenCalled();
+      expect(tracker.onCompactionStart).not.toHaveBeenCalled();
+      expect(tracker.onCompactionEnd).not.toHaveBeenCalled();
+      expect(tracker.onAssistantMessageStart).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H5d: onPartialReply also guarded by isCurrent", async () => {
+      const opts = createBaseOpts();
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Supersede
+      opts.pendingDispatches.set("ch-1", new AbortController());
+
+      const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+      onPartialReply({ text: "Stale partial" });
+
+      // draft.update should not have been called
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H5e: onToolStart guarded by isCurrent", async () => {
+      const opts = createBaseOpts();
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
+
+      // Supersede
+      opts.pendingDispatches.set("ch-1", new AbortController());
+
+      const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
+      onToolStart({ name: "Read" });
+
+      expect(tracker.onToolStart).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H6. Draft deletion semantics", () => {
+    it("H6a: deleteMessage callback uses channelId from dispatch context", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedDeleteMessage) await capturedDeleteMessage("msg-to-delete");
+      expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-to-delete");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H6b: deleteMessage failure is caught and warns (best-effort)", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      restClient.deleteMessage.mockRejectedValueOnce(new Error("404 Not Found"));
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Should not throw
+      if (capturedDeleteMessage) await capturedDeleteMessage("ghost-msg");
+      expect(opts.log?.warn).toHaveBeenCalledWith(expect.stringContaining("ghost-msg"));
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H6c: freshSend cleans up orphan draft after successful send", async () => {
+      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Create a draft
+      if (capturedSendOrEdit) await capturedSendOrEdit("Orphan draft");
+
+      // Force error-stopped so deliver takes freshSend path
+      if (capturedSendOrEdit) {
+        restClient.editMessage.mockRejectedValueOnce(new Error("API error"));
+        await capturedSendOrEdit("Fail edit");
+      }
+
+      vi.mocked(sendDurableMessageBatch).mockClear();
+      restClient.deleteMessage.mockClear();
+
+      const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+      if (deliver) await deliver({ text: "Fresh delivery" }, { kind: "final" });
+
+      // Should have sent via batch, then deleted the orphan draft
+      expect(sendDurableMessageBatch).toHaveBeenCalled();
+      expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+
+      blocker.resolve();
+      await p;
+    });
+  });
+
+  describe("H7. Trailing whitespace trimming in sendOrEdit", () => {
+    it("H7a: trailing whitespace/newlines trimmed before send", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) await capturedSendOrEdit("Hello   \n\n");
+      expect(restClient.sendMessage).toHaveBeenCalledWith("ch-1", "Hello");
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H7b: whitespace-only text treated as empty (not sent)", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) {
+        const r = await capturedSendOrEdit("   \n\t  ");
+        expect(r).toBe(false);
+      }
+      expect(restClient.sendMessage).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+
+    it("H7c: dedup uses trimmed text (pre- and post-trim identical → suppressed)", async () => {
+      const opts = createBaseOpts();
+      const restClient = opts.restClient as unknown as MockRestClient;
+      const blocker = createDispatchBlocker();
+      const p = dispatchMessage(opts);
+      await new Promise((r) => setTimeout(r, 50));
+
+      if (capturedSendOrEdit) {
+        await capturedSendOrEdit("Same");
+        await capturedSendOrEdit("Same   ");  // trailing whitespace → trims to "Same"
+      }
+      expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
+      expect(restClient.editMessage).not.toHaveBeenCalled();
+
+      blocker.resolve();
+      await p;
+    });
+  });
 });
