@@ -37,7 +37,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const { runInboundReplyTurn } = await loadInbound();
     const targetAgent = account.agentId;
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
-    const recordInboundSession = channelRuntime.session.recordInboundSession;
+    const recordInboundSession = channelRuntime.session.recordInboundSession.bind(channelRuntime.session);
 
     const draftState = { stopped: false, final: false };
     let draftMessageId: string | undefined;
@@ -93,19 +93,23 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
-    /** Clean up orphaned draft + chunked fresh send via sendDurableMessageBatch. */
+    /** Chunked fresh send via sendDurableMessageBatch, then clean up orphaned draft. */
     const freshSend = async (text: string) => {
-      if (draftMessageId) {
-        try { await restClient.deleteMessage(channelId, draftMessageId); }
-        catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
-      }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       const { sendDurableMessageBatch } = await loadMessageSend();
       await sendDurableMessageBatch({
         cfg, channel: "cove" as any, to: `channel:${channelId}`, accountId,
-        payloads: [{ text }], formatting: { textLimit: COVE_TEXT_CHUNK_LIMIT },
-        deps: { cove: (ctx: any) => restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, ctx.text ?? ctx.body ?? text) },
+        payloads: [{ text }], formatting: { textChunkLimit: COVE_TEXT_CHUNK_LIMIT, chunkerMode: 'markdown' },
+        deps: { sendText: (ctx: any) => {
+          const chunk = ctx.text ?? ctx.body;
+          if (!chunk) throw new Error("cove: sendText callback received empty chunk");
+          return restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, chunk);
+        } },
       });
+      if (draftMessageId) {
+        try { await restClient.deleteMessage(channelId, draftMessageId); }
+        catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
+      }
     };
 
     const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
