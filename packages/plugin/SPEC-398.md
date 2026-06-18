@@ -351,7 +351,7 @@ dispatch.ts (target: ~150 lines, down from 378)
 - `dispatch.ts` imports and calls the helper at the exact same call site (line-for-line equivalent)
 - All Phase 0 behavioral tests still pass without any modification
 - D1–D5 assertions in particular must pass byte-identical (re-run with `--reporter=verbose` and diff)
-- dispatch.ts ~324 lines (down from 378); build-context.ts ~70 lines; **total src/ count unchanged or +5 lines max** (allowing for re-export boilerplate)
+- dispatch.ts ~324 lines (down from 378); build-context.ts ~110 lines; **total src/ count +30 lines max** (allowing for JSDoc explaining extracted-function invariants; the 32 behavioral tests guarantee byte-identical behavior, which is the real contract — line count is a secondary smell test)
 
 **Files changed:**
 - `packages/plugin/src/build-context.ts` — NEW

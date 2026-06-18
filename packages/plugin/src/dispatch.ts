@@ -16,6 +16,11 @@ import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createToolProgressTracker } from "./tool-progress.js";
 import { getCoveMd } from "./cove-md-cache.js";
+import {
+  resolveCoveMdChannelId,
+  collectImageAttachmentUrls,
+  buildBodyForAgent,
+} from "./build-context.js";
 
 const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
 
@@ -262,56 +267,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     // Read channel's cove.md for bot context injection (cached)
     // For threads, read cove.md from parent channel (threads don't have their own)
-    let coveMdChannelId = channelId;
-    try {
-      const channel = await restClient.getChannel(channelId);
-      if (channel.type === 11 && channel.parent_id) {
-        coveMdChannelId = channel.parent_id;
-      }
-    } catch { /* fall back to channelId */ }
+    const coveMdChannelId = await resolveCoveMdChannelId(restClient, channelId);
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
 
-    // Build attachment context for agent
-    const imageAttachments = (message.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
-    const attachmentUrls = imageAttachments.map((a: any) => a.url);
-    const fullAttachmentUrls = attachmentUrls.map((url: string) => {
-      if (url.startsWith('/')) return account.baseUrl + url;
-      return url;
-    });
+    // Build attachment context for agent (image URLs from primary + batched, deduped, baseUrl-prefixed)
+    const fullAttachmentUrls = collectImageAttachmentUrls(message, batchedMessages, account.baseUrl);
 
-    // Collect image attachments from batched messages
-    if (batchedMessages) {
-      for (const bm of batchedMessages) {
-        const bmImages = (bm.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
-        for (const a of bmImages) {
-          const url = a.url.startsWith('/') ? account.baseUrl + a.url : a.url;
-          if (!fullAttachmentUrls.includes(url)) fullAttachmentUrls.push(url);
-        }
-      }
-    }
-
-    // Build message body with batched context
-    let bodyForAgent = message.content;
-    if (batchedMessages && batchedMessages.length > 0) {
-      const contextLines = batchedMessages.map((m) => {
-        const name = m.author?.global_name || m.author?.username || 'Unknown';
-        let line = name + ': ' + m.content;
-        // Inline image markers next to the sending author
-        const msgImages = (m.attachments || []).filter((a: any) => a.content_type?.startsWith('image/'));
-        for (const img of msgImages) {
-          const imgUrl = img.url.startsWith('/') ? account.baseUrl + img.url : img.url;
-          line += ' [image: ' + imgUrl + ']';
-        }
-        return line;
-      });
-      bodyForAgent = contextLines.join('\n') + '\n\n' + bodyForAgent;
-    }
-
-    // Append image URLs to body so agent sees them
-    if (fullAttachmentUrls.length > 0) {
-      const urlsText = fullAttachmentUrls.map((url: string) => '[image: ' + url + ']').join('\n');
-      bodyForAgent = bodyForAgent ? bodyForAgent + '\n\n' + urlsText : urlsText;
-    }
+    // Build message body with batched context + trailing image URLs
+    const bodyForAgent = buildBodyForAgent(message, batchedMessages, fullAttachmentUrls, account.baseUrl);
 
     try {
       await dispatchInboundDirectDmWithRuntime({
