@@ -195,7 +195,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             channel: "cove", accountId, agentId: targetAgent,
             routeSessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
             storePath: "", ctxPayload, recordInboundSession,
-            runDispatch: () => originalDispatcher({ ctx: ctxPayload, cfg, dispatcherOptions, replyOptions }),
+            runDispatch: async () => {
+              await typingCallbacks.onReplyStart?.();
+              return originalDispatcher({ ctx: ctxPayload, cfg, dispatcherOptions, replyOptions });
+            },
             log: (event: any) => { if (event.event === "error") log?.error?.(`cove: turn error in [${channelId}]: ${event.error}`); },
           }),
         },
