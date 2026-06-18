@@ -394,12 +394,13 @@ describe("F. Lifecycle / Abort", () => {
     expect(opts.pendingDispatches.has("ch-1")).toBe(false);
   });
 
-  it("F7: isCurrent() prevents stale updates", async () => {
+  it("F7: isProcessAborted prevents stale updates", async () => {
     const opts = createBaseOpts();
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    opts.pendingDispatches.clear();
-    // Partial reply should not call updateFromPartial when not current
+    // Simulate preemption: abort the controller (matches Discord's abort model)
+    opts.pendingDispatches.get("ch-1")?.abort();
+    // Partial reply should not call updateFromPartial when aborted
     const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
     if (onPartialReply) onPartialReply({ text: "Stale" });
     expect(mockDraftPreviewController?.updateFromPartial).not.toHaveBeenCalled();
