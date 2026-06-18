@@ -15,6 +15,9 @@ export type {
 
 import type { Channel, Message } from "@cove/shared";
 
+/** Maximum text length before chunking into multiple messages. */
+export const COVE_TEXT_CHUNK_LIMIT = 4000;
+
 /** Resolved account configuration for the Cove channel. */
 export interface CoveAccount {
   accountId: string | null;
