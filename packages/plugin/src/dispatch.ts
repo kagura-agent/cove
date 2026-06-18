@@ -99,8 +99,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       const { sendDurableMessageBatch } = await loadMessageSend();
       await sendDurableMessageBatch({
         cfg, channel: "cove" as any, to: `channel:${channelId}`, accountId,
-        payloads: [{ text }], formatting: { textChunkLimit: COVE_TEXT_CHUNK_LIMIT, chunkerMode: 'markdown' },
-        deps: { sendText: (ctx: any) => {
+        payloads: [{ text }], formatting: { textLimit: COVE_TEXT_CHUNK_LIMIT },
+        deps: { cove: (ctx: any) => {
           const chunk = ctx.text ?? ctx.body;
           if (!chunk) throw new Error("cove: sendText callback received empty chunk");
           return restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, chunk);
