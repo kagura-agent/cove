@@ -23,15 +23,18 @@ import {
 } from "./build-context.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
+const loadMessageSend = () => import("openclaw/plugin-sdk/channel-message");
 
 /**
- * Clean up an orphaned draft message and fall back to sending a fresh
- * message. Reused by both the streaming-error path and the final-edit
- * failure path.
+ * Clean up an orphaned draft message and deliver final text via
+ * sendDurableMessageBatch (gets auto-chunking for >4000 char replies).
+ * Reused by both the streaming-error path and the final-edit failure path.
  */
 async function cleanupAndSend(
+  cfg: any,
   restClient: CoveRestClient,
   channelId: string,
+  accountId: string | undefined,
   draftMessageId: string | undefined,
   text: string,
   log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void },
@@ -44,7 +47,16 @@ async function cleanupAndSend(
     }
   }
   log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-  await restClient.sendMessage(channelId, text);
+  const { sendDurableMessageBatch } = await loadMessageSend();
+  await sendDurableMessageBatch({
+    cfg,
+    channel: "cove" as any,
+    to: `channel:${channelId}`,
+    accountId,
+    payloads: [{ text }],
+    formatting: { textLimit: 4000 },
+    deps: { cove: (ctx: any) => restClient.sendMessage(ctx.to?.replace('channel:', '') ?? channelId, ctx.text ?? ctx.body ?? text) },
+  });
 }
 
 export interface DispatchMessageOptions {
@@ -182,10 +194,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             await restClient.editMessage(channelId, draftMessageId, text);
           } catch (editErr: any) {
             log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
-            await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+            await cleanupAndSend(cfg, restClient, channelId, accountId, draftMessageId, text, log);
           }
         } else {
-          await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+          await cleanupAndSend(cfg, restClient, channelId, accountId, draftMessageId, text, log);
         }
       },
     });
