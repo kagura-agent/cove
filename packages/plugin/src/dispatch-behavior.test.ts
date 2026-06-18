@@ -331,7 +331,19 @@ describe("F. Lifecycle / Abort", () => {
     blocker.resolve(); await p;
   });
 
-  it("F8: Bot's own messages skipped (channel.ts)", () => { expect(true).toBe(true); });
+  it.skip("F4: abort on reconnect (channel.ts, deferred to Phase 1)", () => {
+    // Lives in channel.ts startAccount() reconnect handler (L256-262):
+    //   for (const controller of pendingDispatches.values()) controller.abort();
+    //   pendingDispatches.clear(); messageQueue.clearAll();
+    // Testing it standalone requires either (a) instantiating full plugin context
+    // with mocked gatewayClient.on('reconnect'), or (b) extracting the handler
+    // body into a pure function. Phase 1 (runChannelInboundEvent migration) is
+    // the natural place to do (b) since reconnect lifecycle will be touched.
+  });
+  it.skip("F8: Bot's own messages skipped (channel.ts, requires plugin-context test harness)", () => {
+    // channel.ts L344: if (message.author.id === gatewayClient.botUser.id) return;
+    // Same as F4 — needs plugin-context harness to test cleanly. Deferred.
+  });
 });
 
 describe("G. Batched Messages", () => {
@@ -345,6 +357,6 @@ describe("G. Batched Messages", () => {
     expect(body).toContain("First"); expect(body).toContain("Primary");
   });
 
-  it("G5: clearAll on reconnect (channel.ts)", () => { expect(true).toBe(true); });
-  it("G1/G2/G4: Queue behaviors (message-queue.ts)", () => { expect(true).toBe(true); });
+  it.skip("G5: clearAll on reconnect (covered by message-queue.test.ts G5 + F4 deferred above)", () => {});
+  it.skip("G1/G2/G4: Queue behaviors — moved to message-queue.test.ts", () => {});
 });

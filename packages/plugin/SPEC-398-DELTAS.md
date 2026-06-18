@@ -1,3 +1,22 @@
+## Status after Phase 0.6
+
+| Group | Spec | Covered (real) | Skipped w/ reason | Total |
+|-------|------|----------------|-------------------|-------|
+| A. Draft Streaming | A1-A7 (7) | A1-A7 ✅ | none | 7/7 |
+| B. Final Delivery | B1-B5 (5) | B1-B5 ✅ | none | 5/5 |
+| D. Context Injection | D1-D5 (5) | D1-D5 ✅ | none | 5/5 |
+| E. Tool Progress | E1-E5 (5) | E1-E5 ✅ | none | 5/5 |
+| F. Lifecycle / Abort | F1-F8 (8) | F1-F3, F5-F7 (6) | **F4, F8** (channel.ts handlers — need plugin-context harness or extraction; deferred to Phase 1) | 6/8 + 2 skip |
+| G. Batched Messages | G1-G5 (5) | G1, G2, G4 (message-queue.test.ts), G3 (dispatch-behavior.test.ts), G5 (message-queue.test.ts) | none | 5/5 |
+
+**Real coverage: 32 spec contracts directly tested + 4 message-queue tests.** 2 truly deferred (F4/F8) with explicit reason. No `expect(true).toBe(true)` lies remaining.
+
+## Test files
+- `dispatch-behavior.test.ts`: 33 tests, 4 it.skip (F4 / F8 / G1+G2+G4 pointer / G5 pointer)
+- `message-queue.test.ts` (NEW Phase 0.6): 4 tests for G1/G2/G4/G5 directly against ChannelMessageQueue class
+
+---
+
 # SPEC-398 deltas (what Phase 0 covers vs spec)
 
 ## Spec contracts (38) vs implemented tests (32)
