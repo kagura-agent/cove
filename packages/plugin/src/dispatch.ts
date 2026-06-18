@@ -159,7 +159,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       const ctxPayload = {
         Body: message.content, BodyForAgent: bodyForAgent,
         CommandBody: message.content, RawBody: message.content,
-        From: senderId, To: channelId,
+        From: senderId, To: channelId, ChannelId: channelId,
         SessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
         AgentId: targetAgent, AccountId: accountId, MessageSid: messageId,
         Provider: "cove", Surface: "cove", ChatType: "channel",
