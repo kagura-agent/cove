@@ -203,15 +203,15 @@ describe("B. Final Delivery", () => {
   });
 
   it("B3: Fresh send when no draft", async () => {
-    const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+    
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    vi.mocked(sendDurableMessageBatch).mockClear();
+    restClient.sendMessage.mockClear();
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fresh" }, { kind: "final" });
-    // Phase 2: fresh send now goes through sendDurableMessageBatch (gets chunking)
-    expect(sendDurableMessageBatch).toHaveBeenCalled();
+    // Fresh send via direct restClient.sendMessage
+    expect(restClient.sendMessage).toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
@@ -588,8 +588,8 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H4. Final delivery branching", () => {
-    it("H4a: error-stopped draft → fresh send via sendDurableMessageBatch", async () => {
-      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+    it("H4a: error-stopped draft → fresh send via restClient.sendMessage", async () => {
+      
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
       restClient.editMessage.mockRejectedValueOnce(new Error("Network error"));
@@ -604,19 +604,19 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
         await capturedSendOrEdit("This will fail");
       }
 
-      vi.mocked(sendDurableMessageBatch).mockClear();
+      restClient.sendMessage.mockClear();
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Final text after error" }, { kind: "final" });
 
       // draftState.stopped is true → should go through freshSend, not edit-in-place
-      expect(sendDurableMessageBatch).toHaveBeenCalled();
+      expect(restClient.sendMessage).toHaveBeenCalled();
 
       blocker.resolve();
       await p;
     });
 
     it("H4b: final edit-in-place failure → fallback fresh send + orphan cleanup", async () => {
-      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+      
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
 
@@ -629,13 +629,13 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
 
       // Make the final edit fail
       restClient.editMessage.mockRejectedValueOnce(new Error("Message deleted"));
-      vi.mocked(sendDurableMessageBatch).mockClear();
+      restClient.sendMessage.mockClear();
 
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Recovery text" }, { kind: "final" });
 
       // Should have attempted edit, then fell back to fresh send
-      expect(sendDurableMessageBatch).toHaveBeenCalled();
+      expect(restClient.sendMessage).toHaveBeenCalled();
       // Orphan draft should be cleaned up
       expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
 
@@ -844,7 +844,7 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
     });
 
     it("H6c: freshSend cleans up orphan draft after successful send", async () => {
-      const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-message");
+      
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
 
@@ -861,14 +861,14 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
         await capturedSendOrEdit("Fail edit");
       }
 
-      vi.mocked(sendDurableMessageBatch).mockClear();
+      restClient.sendMessage.mockClear();
       restClient.deleteMessage.mockClear();
 
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Fresh delivery" }, { kind: "final" });
 
       // Should have sent via batch, then deleted the orphan draft
-      expect(sendDurableMessageBatch).toHaveBeenCalled();
+      expect(restClient.sendMessage).toHaveBeenCalled();
       expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
 
       blocker.resolve();
