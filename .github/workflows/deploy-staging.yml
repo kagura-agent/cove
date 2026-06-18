@@ -8,6 +8,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     if: github.event.action != 'closed'
@@ -63,9 +67,12 @@ jobs:
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
           # Upload client dist
-          $SSH "sudo rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
-          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
-          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
+          $SSH "sudo rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID && mkdir -p /tmp/cove-staging-client-$GITHUB_RUN_ID"
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client-$GITHUB_RUN_ID/
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client-$GITHUB_RUN_ID/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID"
+
+          # Verify client assets deployed
+          $SSH "test -d /var/www/cove-staging/assets && ls /var/www/cove-staging/assets/*.js > /dev/null 2>&1" || { echo '❌ Client assets missing after deploy'; exit 1; }
 
           # Create/restart staging service (port 3501, separate DB)
           $SSH "sudo tee /etc/systemd/system/cove-staging.service > /dev/null << 'UNIT'
@@ -204,9 +211,12 @@ jobs:
 
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
-          $SSH "sudo rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
-          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client/
-          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
+          $SSH "sudo rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID && mkdir -p /tmp/cove-staging-client-$GITHUB_RUN_ID"
+          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client-$GITHUB_RUN_ID/
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client-$GITHUB_RUN_ID/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID"
+
+          # Verify client assets deployed
+          $SSH "test -d /var/www/cove-staging/assets && ls /var/www/cove-staging/assets/*.js > /dev/null 2>&1" || { echo '❌ Client assets missing after deploy'; exit 1; }
 
           $SSH "sudo systemctl restart cove-staging"
 
