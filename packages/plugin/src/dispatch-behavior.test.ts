@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 let capturedDispatcherParams: any = null;
 let capturedSendOrEdit: ((text: string) => Promise<boolean>) | null = null;
 let capturedDeleteMessage: ((id?: string) => Promise<void>) | null = null;
+let capturedResolvedTurn: any = null;
 let dispatchBlocker: { resolve: () => void; promise: Promise<void> } | null = null;
 
 function createDispatchBlocker() {
@@ -19,10 +20,16 @@ function createDispatchBlocker() {
   return dispatchBlocker;
 }
 
-vi.mock("openclaw/plugin-sdk/channel-inbound", () => ({
-  dispatchInboundDirectDmWithRuntime: vi.fn(async (params: any) => {
-    const dispatcher = params.runtime?.channel?.reply?.dispatchReplyWithBufferedBlockDispatcher;
-    if (dispatcher) await dispatcher({ dispatcherOptions: {}, replyOptions: {} });
+vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
+  runInboundReplyTurn: vi.fn(async (params: any) => {
+    // Mimic the kernel: call ingest, then resolveTurn, then runDispatch.
+    // Capture the resolved turn so tests can inspect ctxPayload, etc.
+    const ingested = await params.adapter.ingest(params.raw);
+    const resolved = await params.adapter.resolveTurn(ingested, {} as any, {} as any);
+    capturedResolvedTurn = resolved;
+    if (resolved && (resolved as any).runDispatch) {
+      await (resolved as any).runDispatch();
+    }
     if (dispatchBlocker) await dispatchBlocker.promise;
   }),
 }));
@@ -55,7 +62,7 @@ import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lif
 import { getCoveMd } from "./cove-md-cache.js";
 import { createToolProgressTracker } from "./tool-progress.js";
 
-const loadInbound = () => import("openclaw/plugin-sdk/channel-inbound");
+const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
 interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; }
 
@@ -70,6 +77,7 @@ const createMockRestClient = (): MockRestClient => ({
 const createMockChannelRuntime = () => ({
   routing: { resolveAgentRoute: vi.fn().mockReturnValue({ agentId: "original-agent", sessionKey: "agent:original-agent:cove:group:ch-1" }) },
   reply: { dispatchReplyWithBufferedBlockDispatcher: vi.fn((params: any) => { capturedDispatcherParams = params; return Promise.resolve(); }) },
+  session: { recordInboundSession: vi.fn(async () => ({})) },
 });
 
 const createTestMessage = (overrides: Partial<any> = {}): any => ({
@@ -87,7 +95,7 @@ const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): Dispat
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
 });
 
-const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; dispatchBlocker = null; };
+const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; };
 
 describe("A. Draft Streaming Lifecycle", () => {
   beforeEach(resetState);
@@ -214,17 +222,17 @@ describe("D. Context Injection", () => {
 
   it("D1: cove.md -> GroupSystemPrompt", async () => {
     vi.mocked(getCoveMd).mockResolvedValue("Be nice.");
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
-    const mockDispatch = vi.mocked(dispatchInboundDirectDmWithRuntime);
+    const { runInboundReplyTurn } = await loadInbound();
+    const mockDispatch = vi.mocked(runInboundReplyTurn);
     await dispatchMessage(createBaseOpts());
-    expect(mockDispatch.mock.calls[0]?.[0]?.extraContext?.GroupSystemPrompt).toContain("Be nice.");
+    expect(capturedResolvedTurn?.ctxPayload?.GroupSystemPrompt).toContain("Be nice.");
   });
 
   it("D2: No cove.md -> no injection", async () => {
     vi.mocked(getCoveMd).mockResolvedValue(null);
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
+    const { runInboundReplyTurn } = await loadInbound();
     await dispatchMessage(createBaseOpts());
-    expect(vi.mocked(dispatchInboundDirectDmWithRuntime).mock.calls[0]?.[0]?.extraContext?.GroupSystemPrompt).toBeUndefined();
+    expect(capturedResolvedTurn?.ctxPayload?.GroupSystemPrompt).toBeUndefined();
   });
 
   it("D3: Thread uses parent cove.md", async () => {
@@ -235,20 +243,20 @@ describe("D. Context Injection", () => {
   });
 
   it("D4: Batched messages merged", async () => {
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
+    const { runInboundReplyTurn } = await loadInbound();
     const opts = createBaseOpts({
       batchedMessages: [createTestMessage({ content: "First", author: { username: "user1" } }), createTestMessage({ content: "Second", author: { username: "user2" } })],
     });
     await dispatchMessage(opts);
-    const body = vi.mocked(dispatchInboundDirectDmWithRuntime).mock.calls[0]?.[0]?.bodyForAgent;
+    const body = capturedResolvedTurn?.ctxPayload?.BodyForAgent;
     expect(body).toContain("user1: First"); expect(body).toContain("user2: Second");
   });
 
   it("D5: Image attachments as [image: url]", async () => {
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
+    const { runInboundReplyTurn } = await loadInbound();
     const opts = createBaseOpts({ message: createTestMessage({ attachments: [{ url: "/files/img.png", content_type: "image/png" }] }) });
     await dispatchMessage(opts);
-    expect(vi.mocked(dispatchInboundDirectDmWithRuntime).mock.calls[0]?.[0]?.bodyForAgent).toContain("[image: http://localhost:3400/files/img.png]");
+    expect(capturedResolvedTurn?.ctxPayload?.BodyForAgent).toContain("[image: http://localhost:3400/files/img.png]");
   });
 });
 
@@ -309,8 +317,8 @@ describe("F. Lifecycle / Abort", () => {
 
   it("F5: Aborted dispatch returns cleanly", async () => {
     const opts = createBaseOpts();
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
-    vi.mocked(dispatchInboundDirectDmWithRuntime).mockImplementationOnce(async () => {
+    const { runInboundReplyTurn } = await loadInbound();
+    vi.mocked(runInboundReplyTurn).mockImplementationOnce(async () => {
       opts.pendingDispatches.get("ch-1")?.abort(); throw new Error("Aborted");
     });
     await expect(dispatchMessage(opts)).resolves.toBeUndefined();
@@ -350,10 +358,10 @@ describe("G. Batched Messages", () => {
   beforeEach(resetState);
 
   it("G3: Batch = earlier as context + last as primary", async () => {
-    const { dispatchInboundDirectDmWithRuntime } = await loadInbound();
+    const { runInboundReplyTurn } = await loadInbound();
     const earlier = [createTestMessage({ content: "First" }), createTestMessage({ content: "Second" })];
     await dispatchMessage(createBaseOpts({ message: createTestMessage({ content: "Primary" }), batchedMessages: earlier }));
-    const body = vi.mocked(dispatchInboundDirectDmWithRuntime).mock.calls[0]?.[0]?.bodyForAgent;
+    const body = capturedResolvedTurn?.ctxPayload?.BodyForAgent;
     expect(body).toContain("First"); expect(body).toContain("Primary");
   });
 

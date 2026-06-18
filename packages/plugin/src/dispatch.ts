@@ -22,7 +22,7 @@ import {
   buildBodyForAgent,
 } from "./build-context.js";
 
-const loadDirectDm = () => import("openclaw/plugin-sdk/channel-inbound");
+const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
 /**
  * Clean up an orphaned draft message and fall back to sending a fresh
@@ -90,11 +90,11 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
   });
 
   try {
-    const { dispatchInboundDirectDmWithRuntime } = await loadDirectDm();
+    const { runInboundReplyTurn } = await loadInbound();
 
     const targetAgent = account.agentId;
-    const originalRouting = channelRuntime.routing;
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
+    const recordInboundSession = channelRuntime.session.recordInboundSession;
 
     const draftState = { stopped: false, final: false };
     let draftMessageId: string | undefined;
@@ -160,107 +160,91 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
-    const patchedRuntime = {
-      channel: {
-        ...channelRuntime,
-        routing: {
-          ...originalRouting,
-          resolveAgentRoute: (params: any) => {
-            const route = originalRouting.resolveAgentRoute(params);
-            return { ...route, agentId: targetAgent, sessionKey: route.sessionKey.replace(/^agent:[^:]+:/, `agent:${targetAgent}:`) };
-          },
-        },
-        reply: {
-          ...channelRuntime.reply,
-          dispatchReplyWithBufferedBlockDispatcher: (params: any) =>
-            originalDispatcher({
-              ...params,
-              dispatcherOptions: {
-                ...params.dispatcherOptions,
-                typingCallbacks,
-                deliver: async (payload: any, _info: { kind: string }) => {
-                  if (!isCurrent()) return;
-                  typingCallbacks.onCleanup?.();
-                  const text = payload.text ?? "";
-                  if (!text) return;
+    // Build dispatcher options once — captured by runDispatch below so the
+    // turn kernel doesn't need to know about cove streaming/tool-progress mechanics.
+    const buildCoveDispatcherOptions = (params: any) => ({
+      ...params.dispatcherOptions,
+      typingCallbacks,
+      deliver: async (payload: any, _info: { kind: string }) => {
+        if (!isCurrent()) return;
+        typingCallbacks.onCleanup?.();
+        const text = payload.text ?? "";
+        if (!text) return;
 
-                  draftState.final = true;
-                  await draft.seal();
+        draftState.final = true;
+        await draft.seal();
 
-                  if (!isCurrent()) return;
+        if (!isCurrent()) return;
 
-                  if (draftMessageId && !draftState.stopped) {
-                    log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
-                    try {
-                      await restClient.editMessage(channelId, draftMessageId, text);
-                    } catch (editErr: any) {
-                      log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
-                      await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
-                    }
-                  } else {
-                    await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
-                  }
-                },
-              },
-              replyOptions: {
-                ...params.replyOptions,
-                disableBlockStreaming: true,
-                suppressDefaultToolProgressMessages: true,
-                onPartialReply: (payload: any) => {
-                  if (!isCurrent()) return;
-                  if (payload?.text) {
-                    toolProgress.onPartialReply(payload.text);
-                    draft.update(payload.text);
-                  }
-                },
-                onToolStart: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onToolStart({
-                    name: payload?.name ?? payload?.toolName,
-                    args: payload?.args,
-                    phase: payload?.phase,
-                    detailMode: payload?.detailMode,
-                  });
-                },
-                onItemEvent: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onItemEvent(payload);
-                },
-                onPlanUpdate: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onPlanUpdate(payload);
-                },
-                onApprovalEvent: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onApprovalEvent(payload);
-                },
-                onCommandOutput: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onCommandOutput(payload);
-                },
-                onPatchSummary: (payload: any) => {
-                  if (!isCurrent()) return;
-                  toolProgress.onPatchSummary(payload);
-                },
-                onCompactionStart: () => {
-                  if (!isCurrent()) return;
-                  toolProgress.onCompactionStart();
-                  const combined = toolProgress.getCombinedText();
-                  if (combined) draft.update(combined);
-                },
-                onCompactionEnd: () => {
-                  if (!isCurrent()) return;
-                  toolProgress.onCompactionEnd();
-                },
-                onAssistantMessageStart: () => {
-                  if (!isCurrent()) return;
-                  toolProgress.onAssistantMessageStart();
-                },
-              },
-            }),
-        },
+        if (draftMessageId && !draftState.stopped) {
+          log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
+          try {
+            await restClient.editMessage(channelId, draftMessageId, text);
+          } catch (editErr: any) {
+            log?.warn?.(`cove: final edit failed for draft ${draftMessageId}: ${editErr.message}, falling back to sendMessage`);
+            await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+          }
+        } else {
+          await cleanupAndSend(restClient, channelId, draftMessageId, text, log);
+        }
       },
-    };
+    });
+
+    const buildCoveReplyOptions = (params: any) => ({
+      ...params.replyOptions,
+      disableBlockStreaming: true,
+      suppressDefaultToolProgressMessages: true,
+      onPartialReply: (payload: any) => {
+        if (!isCurrent()) return;
+        if (payload?.text) {
+          toolProgress.onPartialReply(payload.text);
+          draft.update(payload.text);
+        }
+      },
+      onToolStart: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onToolStart({
+          name: payload?.name ?? payload?.toolName,
+          args: payload?.args,
+          phase: payload?.phase,
+          detailMode: payload?.detailMode,
+        });
+      },
+      onItemEvent: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onItemEvent(payload);
+      },
+      onPlanUpdate: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onPlanUpdate(payload);
+      },
+      onApprovalEvent: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onApprovalEvent(payload);
+      },
+      onCommandOutput: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onCommandOutput(payload);
+      },
+      onPatchSummary: (payload: any) => {
+        if (!isCurrent()) return;
+        toolProgress.onPatchSummary(payload);
+      },
+      onCompactionStart: () => {
+        if (!isCurrent()) return;
+        toolProgress.onCompactionStart();
+        const combined = toolProgress.getCombinedText();
+        if (combined) draft.update(combined);
+      },
+      onCompactionEnd: () => {
+        if (!isCurrent()) return;
+        toolProgress.onCompactionEnd();
+      },
+      onAssistantMessageStart: () => {
+        if (!isCurrent()) return;
+        toolProgress.onAssistantMessageStart();
+      },
+    });
 
     // Yield event loop so WS typing frame flushes before heavy bootstrap work
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
@@ -277,51 +261,73 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const bodyForAgent = buildBodyForAgent(message, batchedMessages, fullAttachmentUrls, account.baseUrl);
 
     try {
-      await dispatchInboundDirectDmWithRuntime({
-          cfg,
-          runtime: patchedRuntime as any,
-          channel: "cove",
-          channelLabel: "Cove",
-          accountId,
-          peer: { kind: "group" as any, id: channelId },
-          senderId,
-          senderAddress: senderId,
-          recipientAddress: channelId,
-          conversationLabel: `#${channelId}`,
-          rawBody: message.content,
-          bodyForAgent: bodyForAgent,
-          messageId: message.id ?? `cove-${Date.now()}`,
-          timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
-          provider: "cove",
-          surface: "cove",
-          extraContext: {
-            ChatType: "channel",
-            SenderId: senderId,
-            SenderName: senderName,
-            ChannelId: channelId,
-            ...(coveMdContent ? {
-              GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent,
-            } : {}),
-            ...(message.message_reference?.message_id ? {
-              ReplyToId: message.message_reference.message_id,
-              ReplyToBody: message.referenced_message?.content,
-              ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
-            } : {}),
-            ...(fullAttachmentUrls.length > 0 ? {
-              MediaUrls: fullAttachmentUrls,
-              allowUnsafeExternalContent: true,
-            } : {}),
-          },
-          deliver: async (_payload) => {
-            // Delivery handled by the dispatcher's deliver callback above
-          },
-          onRecordError: (err) => {
-            log?.error?.(`cove: record error in [${channelId}]: ${err}`);
-          },
-          onDispatchError: (err, info) => {
-            log?.error?.(`cove: dispatch error (${info.kind}) in [${channelId}]: ${err}`);
-          },
-        });
+      const messageId = message.id ?? `cove-${Date.now()}`;
+      const ctxPayload = {
+        Body: message.content,
+        BodyForAgent: bodyForAgent,
+        CommandBody: message.content,
+        RawBody: message.content,
+        From: senderId,
+        To: channelId,
+        SessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
+        AgentId: targetAgent,
+        AccountId: accountId,
+        MessageSid: messageId,
+        Provider: "cove",
+        Surface: "cove",
+        ChatType: "channel",
+        SenderId: senderId,
+        SenderName: senderName,
+        CommandAuthorized: false,
+        ...(coveMdContent ? {
+          GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent,
+        } : {}),
+        ...(message.message_reference?.message_id ? {
+          ReplyToId: message.message_reference.message_id,
+          ReplyToBody: message.referenced_message?.content,
+          ReplyToSender: message.referenced_message?.author?.global_name || message.referenced_message?.author?.username,
+        } : {}),
+        ...(fullAttachmentUrls.length > 0 ? {
+          MediaUrls: fullAttachmentUrls,
+          allowUnsafeExternalContent: true,
+        } : {}),
+      } as any;
+
+      await runInboundReplyTurn({
+        channel: "cove",
+        accountId,
+        raw: message,
+        adapter: {
+          ingest: () => ({
+            id: messageId,
+            timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
+            rawText: message.content,
+            textForAgent: bodyForAgent,
+            textForCommands: message.content,
+            raw: message,
+          }),
+          resolveTurn: () => ({
+            channel: "cove",
+            accountId,
+            agentId: targetAgent,
+            routeSessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
+            storePath: "",
+            ctxPayload,
+            recordInboundSession,
+            runDispatch: () => originalDispatcher({
+              ctx: ctxPayload,
+              cfg,
+              dispatcherOptions: buildCoveDispatcherOptions({ dispatcherOptions: {} }),
+              replyOptions: buildCoveReplyOptions({ replyOptions: {} }),
+            }),
+            log: (event: any) => {
+              if (event.event === "error") {
+                log?.error?.(`cove: turn ${event.stage} error in [${channelId}]: ${event.error}`);
+              }
+            },
+          }),
+        },
+      });
     } catch (err: any) {
       if (abortController.signal.aborted) {
         typingCallbacks.onCleanup?.();
