@@ -161,7 +161,7 @@ jobs:
             }
 
   redeploy-main:
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && github.event.pull_request.merged == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
