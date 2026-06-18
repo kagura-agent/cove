@@ -45,13 +45,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const channelEntry = cfg?.channels?.["cove"] ?? {};
     const toolProgress = createToolProgressTracker(channelEntry, {
       seed: message.id ?? String(Date.now()),
-      onProgressUpdate: () => { const c = toolProgress.getCombinedText(); if (c) draft.update(c); },
+      onProgressUpdate: () => { const c = toolProgress.getCombinedText(); console.log(`[cove-debug] draft.update via toolProgress: textLen=${c?.length ?? 0} first50=${JSON.stringify((c ?? "").slice(0, 50))}`); if (c) draft.update(c); },
     });
 
     let editQueue = Promise.resolve();
     const isCurrent = () => pendingDispatches.get(channelId) === abortController;
 
     const sendOrEdit = async (text: string): Promise<boolean> => {
+      console.log(`[cove-debug] sendOrEdit called: textLen=${text.length} draftId=${draftMessageId} isCurrent=${isCurrent()} draftState=${JSON.stringify(draftState)}`);
       if (!isCurrent()) return false;
       return new Promise<boolean>((resolve) => {
         editQueue = editQueue.then(async () => {
@@ -67,6 +68,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
               const msg = await restClient.sendMessage(channelId, trimmed);
               draftMessageId = msg.id;
             }
+            console.log(`[cove-debug] sendOrEdit success: msgId=${draftMessageId}`);
             resolve(true);
           } catch (err: any) {
             draftState.stopped = true;
@@ -95,6 +97,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     /** Chunked fresh send via sendDurableMessageBatch, then clean up orphaned draft. */
     const freshSend = async (text: string) => {
+      console.log(`[cove-debug] freshSend entry: textLen=${text.length}`);
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       const { sendDurableMessageBatch } = await loadMessageSend();
       await sendDurableMessageBatch({
@@ -110,6 +113,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
       }
+      console.log(`[cove-debug] freshSend complete: textLen=${text.length}`);
     };
 
     const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
@@ -117,18 +121,22 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const dispatcherOptions = {
       typingCallbacks,
       deliver: async (payload: any, _info: { kind: string }) => {
+        console.log(`[cove-debug] deliver entry: textLen=${(payload.text ?? "").length} keys=${Object.keys(payload)} kind=${_info.kind} draftId=${draftMessageId} draftState=${JSON.stringify(draftState)}`);
         if (!isCurrent()) return;
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) return;
         draftState.final = true;
         await draft.seal();
+        console.log(`[cove-debug] deliver post-seal: draftId=${draftMessageId} draftState=${JSON.stringify(draftState)} isCurrent=${isCurrent()}`);
         if (!isCurrent()) return;
         if (draftMessageId && !draftState.stopped) {
+          console.log(`[cove-debug] deliver path=editExistingDraft draftId=${draftMessageId}`);
           log?.info?.(`cove: stream final → [${channelId}] (${text.length} chars)`);
           try { await restClient.editMessage(channelId, draftMessageId, text); }
           catch (e: any) { log?.warn?.(`cove: final edit failed: ${e.message}`); await freshSend(text); }
         } else {
+          console.log(`[cove-debug] deliver path=freshSend draftId=${draftMessageId} stopped=${draftState.stopped}`);
           await freshSend(text);
         }
       },
@@ -136,7 +144,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     const replyOptions = {
       disableBlockStreaming: true, suppressDefaultToolProgressMessages: true,
-      onPartialReply: (p: any) => { if (!isCurrent() || !p?.text) return; toolProgress.onPartialReply(p.text); draft.update(p.text); },
+      onPartialReply: (p: any) => { if (!isCurrent() || !p?.text) return; console.log(`[cove-debug] onPartialReply: textLen=${p.text.length} first50=${JSON.stringify(p.text.slice(0, 50))}`); toolProgress.onPartialReply(p.text); draft.update(p.text); },
       onToolStart: (p: any) => { if (!isCurrent()) return; toolProgress.onToolStart({ name: p?.name ?? p?.toolName, args: p?.args, phase: p?.phase, detailMode: p?.detailMode }); },
       onItemEvent: guardFwd((p: any) => toolProgress.onItemEvent(p)),
       onPlanUpdate: guardFwd((p: any) => toolProgress.onPlanUpdate(p)),
