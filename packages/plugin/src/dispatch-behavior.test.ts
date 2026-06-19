@@ -62,21 +62,55 @@ vi.mock("openclaw/plugin-sdk/channel-lifecycle", () => ({
   }),
 }));
 
+// Mock the compositor from channel-outbound
+let capturedCompositorParams: any = null;
+let mockCompositor: any = null;
+
+vi.mock("openclaw/plugin-sdk/channel-outbound", () => {
+  return {
+    createChannelProgressDraftCompositor: vi.fn((params: any) => {
+      capturedCompositorParams = params;
+      mockCompositor = {
+        previewToolProgressEnabled: true,
+        commentaryProgressEnabled: false,
+        suppressDefaultToolProgressMessages: true,
+        hasStarted: false,
+        markFinalReplyStarted: vi.fn(),
+        markFinalReplyDelivered: vi.fn(),
+        reset: vi.fn(),
+        suppress: vi.fn(),
+        cancel: vi.fn(),
+        start: vi.fn(async () => {}),
+        pushToolProgress: vi.fn(async () => true),
+        pushReasoningProgress: vi.fn(async () => true),
+        pushCommentaryProgress: vi.fn(async () => true),
+      };
+      return mockCompositor;
+    }),
+    formatChannelProgressDraftLineForEntry: vi.fn(
+      (_entry: any, input: { event: string; name: string }) => `📖 ${input.name}`,
+    ),
+    formatChannelProgressDraftLine: vi.fn((input: any) => {
+      if (input.event === "plan") return `🗺️ ${input.title ?? "plan"}`;
+      if (input.event === "approval") return `⚠️ ${input.title ?? "approval"}`;
+      if (input.event === "command-output") return `💻 ${input.name ?? "cmd"}`;
+      if (input.event === "patch") return `📝 ${input.name ?? "patch"}`;
+      return input.title ?? input.event;
+    }),
+    buildChannelProgressDraftLineForEntry: vi.fn(
+      (_entry: any, input: { event: string; title?: string; name?: string }) =>
+        `🔔 ${input.title ?? input.name ?? input.event}`,
+    ),
+  };
+});
+
 vi.mock("./cove-md-cache.js", () => ({ getCoveMd: vi.fn() }));
-vi.mock("./tool-progress.js", () => ({
-  createToolProgressTracker: vi.fn(() => ({
-    getCombinedText: vi.fn(() => ""), onPartialReply: vi.fn(), onToolStart: vi.fn(),
-    onItemEvent: vi.fn(), onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(),
-    onCommandOutput: vi.fn(), onPatchSummary: vi.fn(), onCompactionStart: vi.fn(),
-    onCompactionEnd: vi.fn(), onAssistantMessageStart: vi.fn(),
-  })),
-}));
 
 import { dispatchMessage, type DispatchMessageOptions } from "./dispatch.js";
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { getCoveMd } from "./cove-md-cache.js";
-import { createToolProgressTracker } from "./tool-progress.js";
+import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channel-outbound";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
@@ -111,7 +145,7 @@ const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): Dispat
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
 });
 
-const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; capturedDraftUpdate = null; capturedDraftSeal = null; };
+const resetState = () => { vi.clearAllMocks(); capturedDispatcherParams = null; capturedSendOrEdit = null; capturedDeleteMessage = null; capturedResolvedTurn = null; dispatchBlocker = null; capturedDraftUpdate = null; capturedDraftSeal = null; capturedCompositorParams = null; mockCompositor = null; };
 
 describe("A. Draft Streaming Lifecycle", () => {
   beforeEach(resetState);
@@ -278,33 +312,93 @@ describe("D. Context Injection", () => {
   });
 });
 
-describe("E. Tool Progress", () => {
+describe("E. Tool Progress (Compositor)", () => {
   beforeEach(resetState);
 
-  it("E1: Progress lines rendered", async () => {
+  it("E1: Compositor created with correct params", async () => {
     await dispatchMessage(createBaseOpts());
-    expect(createToolProgressTracker).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ onProgressUpdate: expect.any(Function) }));
+    expect(createChannelProgressDraftCompositor).toHaveBeenCalledWith(expect.objectContaining({
+      entry: expect.anything(),
+      mode: "progress",
+      active: true,
+      seed: "msg-1",
+      update: expect.any(Function),
+    }));
   });
 
-  it("E2: onPartialReply wired", async () => {
-    await dispatchMessage(createBaseOpts());
-    expect(capturedDispatcherParams?.replyOptions?.onPartialReply).toBeDefined();
+  it("E2: onPartialReply calls markFinalReplyStarted and draft.update", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts());
+    await new Promise((r) => setTimeout(r, 50));
+
+    const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
+    expect(onPartialReply).toBeDefined();
+    onPartialReply({ text: "Hello from the agent" });
+
+    expect(mockCompositor.markFinalReplyStarted).toHaveBeenCalled();
+    expect(capturedDraftUpdate).toHaveBeenCalledWith("Hello from the agent");
+
+    blocker.resolve(); await p;
   });
 
-  it("E3: onAssistantMessageStart wired", async () => {
-    await dispatchMessage(createBaseOpts());
-    expect(capturedDispatcherParams?.replyOptions?.onAssistantMessageStart).toBeDefined();
+  it("E3: onAssistantMessageStart calls compositor.reset", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts());
+    await new Promise((r) => setTimeout(r, 50));
+
+    const onAssistantMessageStart = capturedDispatcherParams?.replyOptions?.onAssistantMessageStart;
+    expect(onAssistantMessageStart).toBeDefined();
+    onAssistantMessageStart();
+    expect(mockCompositor.reset).toHaveBeenCalled();
+
+    blocker.resolve(); await p;
   });
 
-  it("E4: onCompactionStart wired", async () => {
-    await dispatchMessage(createBaseOpts());
-    expect(capturedDispatcherParams?.replyOptions?.onCompactionStart).toBeDefined();
+  it("E4: onCompactionStart pushes compaction line", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts());
+    await new Promise((r) => setTimeout(r, 50));
+
+    const onCompactionStart = capturedDispatcherParams?.replyOptions?.onCompactionStart;
+    expect(onCompactionStart).toBeDefined();
+    onCompactionStart();
+    expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith(
+      "📦 **Compacting context...**",
+      { startImmediately: true },
+    );
+
+    blocker.resolve(); await p;
   });
 
-  it("E5: Tool callbacks wired", async () => {
+  it("E5: onToolStart calls pushToolProgress with formatted line", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts());
+    await new Promise((r) => setTimeout(r, 50));
+
+    const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
+    expect(onToolStart).toBeDefined();
+    onToolStart({ name: "Read", args: { file: "/foo" } });
+    expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("📖 Read", { toolName: "Read" });
+
+    blocker.resolve(); await p;
+  });
+
+  it("E6: onItemEvent calls pushToolProgress", async () => {
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(createBaseOpts());
+    await new Promise((r) => setTimeout(r, 50));
+
+    const onItemEvent = capturedDispatcherParams?.replyOptions?.onItemEvent;
+    expect(onItemEvent).toBeDefined();
+    onItemEvent({ title: "Task created", kind: "task" });
+    expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("🔔 Task created");
+
+    blocker.resolve(); await p;
+  });
+
+  it("E7: suppressDefaultToolProgressMessages from compositor", async () => {
     await dispatchMessage(createBaseOpts());
-    expect(capturedDispatcherParams?.replyOptions?.onToolStart).toBeDefined();
-    expect(capturedDispatcherParams?.replyOptions?.onItemEvent).toBeDefined();
+    expect(capturedDispatcherParams?.replyOptions?.suppressDefaultToolProgressMessages).toBe(true);
   });
 });
 
@@ -357,19 +451,8 @@ describe("F. Lifecycle / Abort", () => {
     blocker.resolve(); await p;
   });
 
-  it.skip("F4: abort on reconnect (channel.ts, deferred to Phase 1)", () => {
-    // Lives in channel.ts startAccount() reconnect handler (L256-262):
-    //   for (const controller of pendingDispatches.values()) controller.abort();
-    //   pendingDispatches.clear(); messageQueue.clearAll();
-    // Testing it standalone requires either (a) instantiating full plugin context
-    // with mocked gatewayClient.on('reconnect'), or (b) extracting the handler
-    // body into a pure function. Phase 1 (runChannelInboundEvent migration) is
-    // the natural place to do (b) since reconnect lifecycle will be touched.
-  });
-  it.skip("F8: Bot's own messages skipped (channel.ts, requires plugin-context test harness)", () => {
-    // channel.ts L344: if (message.author.id === gatewayClient.botUser.id) return;
-    // Same as F4 — needs plugin-context harness to test cleanly. Deferred.
-  });
+  it.skip("F4: abort on reconnect (channel.ts, deferred to Phase 1)", () => {});
+  it.skip("F8: Bot's own messages skipped (channel.ts, requires plugin-context test harness)", () => {});
 });
 
 describe("G. Batched Messages", () => {
@@ -449,62 +532,33 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H2. Tool progress injection into draft", () => {
-    it("H2a: onProgressUpdate pushes combined text to draft.update", async () => {
-      // Set up a tracker mock that captures onProgressUpdate and returns combined text
-      let capturedOnProgressUpdate: (() => void) | undefined;
-      const mockTracker = {
-        getCombinedText: vi.fn(() => "Working on it...\n\n📖 Read file.ts"),
-        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
-        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
-        onPatchSummary: vi.fn(), onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
-        onAssistantMessageStart: vi.fn(),
-        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
-      };
-      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
-        capturedOnProgressUpdate = opts?.onProgressUpdate;
-        return mockTracker;
-      });
-
+    it("H2a: compositor update callback pushes text to draft.update", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      // Simulate a progress update
-      expect(capturedOnProgressUpdate).toBeDefined();
-      capturedOnProgressUpdate!();
+      // The compositor's update callback is captured in capturedCompositorParams
+      expect(capturedCompositorParams?.update).toBeDefined();
+      await capturedCompositorParams.update("Working on it...\n\n📖 Read file.ts");
       expect(capturedDraftUpdate).toHaveBeenCalledWith("Working on it...\n\n📖 Read file.ts");
 
       blocker.resolve();
       await p;
     });
 
-    it("H2b: onProgressUpdate skips draft.update when combined text is empty", async () => {
-      let capturedOnProgressUpdate: (() => void) | undefined;
-      const mockTracker = {
-        getCombinedText: vi.fn(() => ""),
-        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
-        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
-        onPatchSummary: vi.fn(), onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
-        onAssistantMessageStart: vi.fn(),
-        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
-      };
-      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
-        capturedOnProgressUpdate = opts?.onProgressUpdate;
-        return mockTracker;
-      });
-
+    it("H2b: compositor update with flush calls draft.loop.flush", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      capturedOnProgressUpdate!();
-      expect(capturedDraftUpdate).not.toHaveBeenCalled();
+      await capturedCompositorParams.update("text", { flush: true });
+      expect(capturedDraftUpdate).toHaveBeenCalledWith("text");
 
       blocker.resolve();
       await p;
     });
 
-    it("H2c: onPartialReply forwards to both tracker and draft.update", async () => {
+    it("H2c: onPartialReply forwards to draft.update and marks reply started", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
@@ -513,8 +567,7 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       expect(onPartialReply).toBeDefined();
       onPartialReply({ text: "Hello from the agent" });
 
-      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
-      expect(tracker.onPartialReply).toHaveBeenCalledWith("Hello from the agent");
+      expect(mockCompositor.markFinalReplyStarted).toHaveBeenCalled();
       expect(capturedDraftUpdate).toHaveBeenCalledWith("Hello from the agent");
 
       blocker.resolve();
@@ -539,22 +592,7 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H3. Compaction-period draft behavior", () => {
-    it("H3a: onCompactionStart pushes combined text to draft", async () => {
-      let capturedOnProgressUpdate: (() => void) | undefined;
-      const mockTracker = {
-        getCombinedText: vi.fn(() => "📦 **Compacting context...**"),
-        onPartialReply: vi.fn(), onToolStart: vi.fn(), onItemEvent: vi.fn(),
-        onPlanUpdate: vi.fn(), onApprovalEvent: vi.fn(), onCommandOutput: vi.fn(),
-        onPatchSummary: vi.fn(),
-        onCompactionStart: vi.fn(), onCompactionEnd: vi.fn(),
-        onAssistantMessageStart: vi.fn(),
-        gate: { hasStarted: false, workEvents: 0, noteWork: vi.fn(), startNow: vi.fn(), cancel: vi.fn() },
-      };
-      vi.mocked(createToolProgressTracker).mockImplementationOnce((_cfg, opts) => {
-        capturedOnProgressUpdate = opts?.onProgressUpdate;
-        return mockTracker;
-      });
-
+    it("H3a: onCompactionStart pushes compaction progress", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
@@ -563,14 +601,16 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       expect(onCompactionStart).toBeDefined();
       onCompactionStart();
 
-      expect(mockTracker.onCompactionStart).toHaveBeenCalled();
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("📦 **Compacting context...**");
+      expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith(
+        "📦 **Compacting context...**",
+        { startImmediately: true },
+      );
 
       blocker.resolve();
       await p;
     });
 
-    it("H3b: onCompactionEnd forwards to tracker (clears compaction state)", async () => {
+    it("H3b: onCompactionEnd resets compositor", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
@@ -579,8 +619,7 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       expect(onCompactionEnd).toBeDefined();
       onCompactionEnd();
 
-      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
-      expect(tracker.onCompactionEnd).toHaveBeenCalled();
+      expect(mockCompositor.reset).toHaveBeenCalled();
 
       blocker.resolve();
       await p;
@@ -742,8 +781,6 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       const p = dispatchMessage(opts);
       await new Promise((r) => setTimeout(r, 50));
 
-      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
-
       // Supersede
       opts.pendingDispatches.set("ch-1", new AbortController());
 
@@ -758,14 +795,8 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       replyOpts?.onCompactionEnd?.();
       replyOpts?.onAssistantMessageStart?.();
 
-      expect(tracker.onItemEvent).not.toHaveBeenCalled();
-      expect(tracker.onPlanUpdate).not.toHaveBeenCalled();
-      expect(tracker.onApprovalEvent).not.toHaveBeenCalled();
-      expect(tracker.onCommandOutput).not.toHaveBeenCalled();
-      expect(tracker.onPatchSummary).not.toHaveBeenCalled();
-      expect(tracker.onCompactionStart).not.toHaveBeenCalled();
-      expect(tracker.onCompactionEnd).not.toHaveBeenCalled();
-      expect(tracker.onAssistantMessageStart).not.toHaveBeenCalled();
+      expect(mockCompositor.pushToolProgress).not.toHaveBeenCalled();
+      expect(mockCompositor.reset).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
@@ -796,15 +827,13 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       const p = dispatchMessage(opts);
       await new Promise((r) => setTimeout(r, 50));
 
-      const tracker = vi.mocked(createToolProgressTracker).mock.results[0]?.value;
-
       // Supersede
       opts.pendingDispatches.set("ch-1", new AbortController());
 
       const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
       onToolStart({ name: "Read" });
 
-      expect(tracker.onToolStart).not.toHaveBeenCalled();
+      expect(mockCompositor.pushToolProgress).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
