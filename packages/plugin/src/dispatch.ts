@@ -4,7 +4,7 @@ import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
-import { createToolProgressTracker } from "./tool-progress.js";
+import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 
@@ -42,38 +42,28 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let draftMessageId: string | undefined;
     let lastSentText = "";
     const channelEntry = cfg?.channels?.["cove"] ?? {};
-    const toolProgress = createToolProgressTracker(channelEntry, {
-      seed: message.id ?? String(Date.now()),
-      onProgressUpdate: () => { const c = toolProgress.getCombinedText(); if (c) draft.update(c); },
-    });
 
-    let editQueue = Promise.resolve();
     const isCurrent = () => pendingDispatches.get(channelId) === abortController;
 
     const sendOrEdit = async (text: string): Promise<boolean> => {
       if (!isCurrent()) return false;
-      return new Promise<boolean>((resolve) => {
-        editQueue = editQueue.then(async () => {
-          if (!isCurrent()) { resolve(false); return; }
-          if (draftState.stopped && !draftState.final) { resolve(false); return; }
-          const trimmed = text.trimEnd();
-          if (!trimmed || trimmed === lastSentText) { resolve(false); return; }
-          lastSentText = trimmed;
-          try {
-            if (draftMessageId) {
-              await restClient.editMessage(channelId, draftMessageId, trimmed);
-            } else {
-              const msg = await restClient.sendMessage(channelId, trimmed);
-              draftMessageId = msg.id;
-            }
-            resolve(true);
-          } catch (err: any) {
-            draftState.stopped = true;
-            log?.warn?.(`cove: stream preview failed: ${err.message}`);
-            resolve(false);
-          }
-        });
-      });
+      if (draftState.stopped && !draftState.final) return false;
+      const trimmed = text.trimEnd();
+      if (!trimmed || trimmed === lastSentText) return false;
+      lastSentText = trimmed;
+      try {
+        if (draftMessageId) {
+          await restClient.editMessage(channelId, draftMessageId, trimmed);
+        } else {
+          const msg = await restClient.sendMessage(channelId, trimmed);
+          draftMessageId = msg.id;
+        }
+        return true;
+      } catch (err: any) {
+        draftState.stopped = true;
+        log?.warn?.(`cove: stream preview failed: ${err.message}`);
+        return false;
+      }
     };
 
     const draft = createFinalizableDraftLifecycle({
@@ -90,6 +80,18 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         }
       },
       warnPrefix: "cove",
+    });
+
+    // Create compositor — replaces createToolProgressTracker
+    const progressDraft = createChannelProgressDraftCompositor({
+      entry: channelEntry,
+      mode: "progress",
+      active: true,
+      seed: message.id ?? String(Date.now()),
+      update: async (streamText, options) => {
+        draft.update(streamText);
+        if (options?.flush) await draft.loop.flush();
+      },
     });
 
     /** Clean up orphaned draft and send fresh message (direct REST, no SDK indirection). */
@@ -135,6 +137,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         const text = payload.text ?? "";
         if (!text) return;
         if (!isCurrent()) return;
+        progressDraft.markFinalReplyDelivered();
         const canFinalize = Boolean(draftMessageId && !draftState.stopped);
         await deliverWithFinalizableLivePreviewAdapter({
           kind: "final",
@@ -147,17 +150,91 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     const replyOptions = {
-      disableBlockStreaming: true, suppressDefaultToolProgressMessages: true,
-      onPartialReply: (p: any) => { if (!isCurrent() || !p?.text) return; toolProgress.onPartialReply(p.text); draft.update(p.text); },
-      onToolStart: (p: any) => { if (!isCurrent()) return; toolProgress.onToolStart({ name: p?.name ?? p?.toolName, args: p?.args, phase: p?.phase, detailMode: p?.detailMode }); },
-      onItemEvent: guardFwd((p: any) => toolProgress.onItemEvent(p)),
-      onPlanUpdate: guardFwd((p: any) => toolProgress.onPlanUpdate(p)),
-      onApprovalEvent: guardFwd((p: any) => toolProgress.onApprovalEvent(p)),
-      onCommandOutput: guardFwd((p: any) => toolProgress.onCommandOutput(p)),
-      onPatchSummary: guardFwd((p: any) => toolProgress.onPatchSummary(p)),
-      onCompactionStart: guardFwd(() => { toolProgress.onCompactionStart(); const c = toolProgress.getCombinedText(); if (c) draft.update(c); }),
-      onCompactionEnd: guardFwd(() => toolProgress.onCompactionEnd()),
-      onAssistantMessageStart: guardFwd(() => toolProgress.onAssistantMessageStart()),
+      disableBlockStreaming: true,
+      suppressDefaultToolProgressMessages: true,
+      onToolStart: (p: any) => {
+        if (!isCurrent()) return;
+        const name = p?.name ?? p?.toolName ?? "tool";
+        const line = formatChannelProgressDraftLineForEntry(
+          channelEntry,
+          { event: "tool", name, phase: p?.phase, args: p?.args },
+          p?.detailMode ? { detailMode: p.detailMode as "explain" | "raw" } : undefined,
+        );
+        if (line) progressDraft.pushToolProgress(line, { toolName: name });
+      },
+      onItemEvent: guardFwd((p: any) => {
+        const line = buildChannelProgressDraftLineForEntry(channelEntry, {
+          event: "item",
+          itemId: p.itemId,
+          itemKind: p.kind,
+          title: p.title,
+          name: p.name,
+          phase: p.phase,
+          status: p.status,
+          summary: p.summary,
+          progressText: p.progressText,
+          meta: p.meta,
+        });
+        if (line) progressDraft.pushToolProgress(line);
+      }),
+      onPlanUpdate: guardFwd((p: any) => {
+        if (p.phase !== "update") return;
+        const line = formatChannelProgressDraftLine({
+          event: "plan",
+          phase: p.phase,
+          title: p.title,
+          explanation: p.explanation,
+          steps: p.steps,
+        });
+        if (line) progressDraft.pushToolProgress(line);
+      }),
+      onApprovalEvent: guardFwd((p: any) => {
+        if (p.phase !== "requested") return;
+        const line = formatChannelProgressDraftLine({
+          event: "approval",
+          phase: p.phase,
+          title: p.title,
+          command: p.command,
+          reason: p.reason,
+          message: p.message,
+        });
+        if (line) progressDraft.pushToolProgress(line);
+      }),
+      onCommandOutput: guardFwd((p: any) => {
+        if (p.phase !== "end") return;
+        const line = formatChannelProgressDraftLine({
+          event: "command-output",
+          phase: p.phase,
+          title: p.title,
+          name: p.name,
+          status: p.status,
+          exitCode: p.exitCode,
+        });
+        if (line) progressDraft.pushToolProgress(line);
+      }),
+      onPatchSummary: guardFwd((p: any) => {
+        if (p.phase !== "end") return;
+        const line = formatChannelProgressDraftLine({
+          event: "patch",
+          phase: p.phase,
+          title: p.title,
+          name: p.name,
+          added: p.added,
+          modified: p.modified,
+          deleted: p.deleted,
+          summary: p.summary,
+        });
+        if (line) progressDraft.pushToolProgress(line);
+      }),
+      onCompactionStart: guardFwd(() => {
+        progressDraft.pushToolProgress("📦 **Compacting context...**", { startImmediately: true });
+      }),
+      onCompactionEnd: guardFwd(() => {
+        progressDraft.reset();
+      }),
+      onAssistantMessageStart: guardFwd(() => {
+        progressDraft.reset();
+      }),
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
