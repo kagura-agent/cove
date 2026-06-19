@@ -326,17 +326,13 @@ describe("E. Tool Progress (Compositor)", () => {
     }));
   });
 
-  it("E2: onPartialReply calls markFinalReplyStarted and draft.update", async () => {
+  it("E2: onPartialReply not wired in progress mode (matches Discord)", async () => {
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(createBaseOpts());
     await new Promise((r) => setTimeout(r, 50));
 
     const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
-    expect(onPartialReply).toBeDefined();
-    onPartialReply({ text: "Hello from the agent" });
-
-    expect(mockCompositor.markFinalReplyStarted).toHaveBeenCalled();
-    expect(capturedDraftUpdate).toHaveBeenCalledWith("Hello from the agent");
+    expect(onPartialReply).toBeUndefined();
 
     blocker.resolve(); await p;
   });
@@ -558,32 +554,24 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       await p;
     });
 
-    it("H2c: onPartialReply forwards to draft.update and marks reply started", async () => {
+    it("H2c: onPartialReply not wired in progress mode (matches Discord)", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
       const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
-      expect(onPartialReply).toBeDefined();
-      onPartialReply({ text: "Hello from the agent" });
-
-      expect(mockCompositor.markFinalReplyStarted).toHaveBeenCalled();
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("Hello from the agent");
+      expect(onPartialReply).toBeUndefined();
 
       blocker.resolve();
       await p;
     });
 
-    it("H2d: onPartialReply with empty text is ignored", async () => {
+    it("H2d: onPartialReply not wired — no-op", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
-      onPartialReply({ text: "" });
-      onPartialReply(null);
-      onPartialReply({});
-
+      // onPartialReply is not wired, so nothing to call
       expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
@@ -802,20 +790,15 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       await p;
     });
 
-    it("H5d: onPartialReply also guarded by isCurrent", async () => {
+    it("H5d: onPartialReply not wired — no guard needed (matches Discord progress mode)", async () => {
       const opts = createBaseOpts();
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(opts);
       await new Promise((r) => setTimeout(r, 50));
 
-      // Supersede
-      opts.pendingDispatches.set("ch-1", new AbortController());
-
+      // onPartialReply is not wired in progress mode
       const onPartialReply = capturedDispatcherParams?.replyOptions?.onPartialReply;
-      onPartialReply({ text: "Stale partial" });
-
-      // draft.update should not have been called
-      expect(capturedDraftUpdate).not.toHaveBeenCalled();
+      expect(onPartialReply).toBeUndefined();
 
       blocker.resolve();
       await p;

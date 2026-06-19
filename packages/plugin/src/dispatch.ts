@@ -151,12 +151,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     const replyOptions = {
       disableBlockStreaming: true,
-      suppressDefaultToolProgressMessages: progressDraft.suppressDefaultToolProgressMessages,
-      onPartialReply: (p: any) => {
-        if (!isCurrent() || !p?.text) return;
-        progressDraft.markFinalReplyStarted();
-        draft.update(p.text);
-      },
+      suppressDefaultToolProgressMessages: true,
       onToolStart: (p: any) => {
         if (!isCurrent()) return;
         const name = p?.name ?? p?.toolName ?? "tool";
