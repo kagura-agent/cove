@@ -113,7 +113,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         payloads: [{ text }],
         bestEffort: true,
         durability: "best_effort",
-        session: { sessionKey: `agent:${targetAgent}:cove:group:${channelId}` },
+        session: { key: `agent:${targetAgent}:cove:group:${channelId}` },
       });
     };
 
