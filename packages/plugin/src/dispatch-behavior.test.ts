@@ -107,7 +107,7 @@ vi.mock("openclaw/plugin-sdk/channel-outbound", () => {
 vi.mock("./cove-md-cache.js", () => ({ getCoveMd: vi.fn() }));
 
 import { dispatchMessage, type DispatchMessageOptions } from "./dispatch.js";
-import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-message";
+import { createTypingCallbacks, sendDurableMessageBatch } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { getCoveMd } from "./cove-md-cache.js";
 import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channel-outbound";
@@ -237,15 +237,19 @@ describe("B. Final Delivery", () => {
   });
 
   it("B3: Fresh send when no draft", async () => {
-    
+
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
     restClient.sendMessage.mockClear();
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fresh" }, { kind: "final" });
-    // Fresh send via direct restClient.sendMessage
-    expect(restClient.sendMessage).toHaveBeenCalled();
+    // Fresh send via sendDurableMessageBatch (not direct restClient.sendMessage)
+    expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+      channel: "cove",
+      to: "ch-1",
+      payloads: [{ text: "Fresh" }],
+    }));
     blocker.resolve(); await p;
   });
 
@@ -615,8 +619,8 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H4. Final delivery branching", () => {
-    it("H4a: error-stopped draft → fresh send via restClient.sendMessage", async () => {
-      
+    it("H4a: error-stopped draft → fresh send via sendDurableMessageBatch", async () => {
+
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
       restClient.editMessage.mockRejectedValueOnce(new Error("Network error"));
@@ -635,15 +639,18 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Final text after error" }, { kind: "final" });
 
-      // draftState.stopped is true → should go through freshSend, not edit-in-place
-      expect(restClient.sendMessage).toHaveBeenCalled();
+      // draftState.stopped is true → should go through freshSend → sendDurableMessageBatch
+      expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+        channel: "cove",
+        payloads: [{ text: "Final text after error" }],
+      }));
 
       blocker.resolve();
       await p;
     });
 
     it("H4b: final edit-in-place failure → fallback fresh send + orphan cleanup", async () => {
-      
+
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
 
@@ -661,8 +668,11 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Recovery text" }, { kind: "final" });
 
-      // Should have attempted edit, then fell back to fresh send
-      expect(restClient.sendMessage).toHaveBeenCalled();
+      // Should have attempted edit, then fell back to freshSend → sendDurableMessageBatch
+      expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+        channel: "cove",
+        payloads: [{ text: "Recovery text" }],
+      }));
       // Orphan draft should be cleaned up
       expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
 
@@ -856,7 +866,7 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
     });
 
     it("H6c: freshSend cleans up orphan draft after successful send", async () => {
-      
+
       const opts = createBaseOpts();
       const restClient = opts.restClient as unknown as MockRestClient;
 
@@ -879,8 +889,11 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Fresh delivery" }, { kind: "final" });
 
-      // Should have sent via batch, then deleted the orphan draft
-      expect(restClient.sendMessage).toHaveBeenCalled();
+      // Should have sent via sendDurableMessageBatch, then deleted the orphan draft
+      expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+        channel: "cove",
+        payloads: [{ text: "Fresh delivery" }],
+      }));
       expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
 
       blocker.resolve();
@@ -937,5 +950,128 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       blocker.resolve();
       await p;
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug #391: Long messages (>4000 chars) — sendDurableMessageBatch chunking
+// ---------------------------------------------------------------------------
+
+describe("I. Long Message Chunking (Bug #391)", () => {
+  beforeEach(resetState);
+
+  const longText = "x".repeat(5000);
+
+  it("I1: freshSend uses sendDurableMessageBatch instead of restClient.sendMessage", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Force error-stopped so deliver takes freshSend path
+    if (capturedSendOrEdit) {
+      await capturedSendOrEdit("Draft");
+      restClient.editMessage.mockRejectedValueOnce(new Error("API error"));
+      await capturedSendOrEdit("Fail");
+    }
+
+    restClient.sendMessage.mockClear();
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: longText }, { kind: "final" });
+
+    expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+      channel: "cove",
+      to: "ch-1",
+      payloads: [{ text: longText }],
+      bestEffort: true,
+      durability: "best_effort",
+    }));
+    expect(restClient.sendMessage).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I2: editFinal falls back to freshSend for text exceeding COVE_TEXT_CHUNK_LIMIT", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Create a draft so deliver goes through edit-in-place path
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: longText }, { kind: "final" });
+
+    expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+      channel: "cove",
+      to: "ch-1",
+      payloads: [{ text: longText }],
+    }));
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I3: preview truncated to COVE_TEXT_CHUNK_LIMIT during streaming", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (capturedSendOrEdit) await capturedSendOrEdit(longText);
+
+    const sentText = restClient.sendMessage.mock.calls[0]?.[1] as string;
+    expect(sentText.length).toBe(4000);
+    expect(sentText.endsWith("…")).toBe(true);
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I4: text at exactly COVE_TEXT_CHUNK_LIMIT is NOT truncated", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const exactText = "y".repeat(4000);
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (capturedSendOrEdit) await capturedSendOrEdit(exactText);
+
+    const sentText = restClient.sendMessage.mock.calls[0]?.[1] as string;
+    expect(sentText).toBe(exactText);
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I5: short text in editFinal uses editMessage directly", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const shortText = "Short final reply";
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: shortText }, { kind: "final" });
+
+    expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", shortText);
+    expect(sendDurableMessageBatch).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
   });
 });
