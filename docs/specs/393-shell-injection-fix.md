@@ -65,17 +65,20 @@ After:
       unassigned) EMOJI="👤"; TEXT="Issue #${NUM} unassigned ${ASSIGNEE} by ${ACTOR}" ;;
       *)        EMOJI="📌"; TEXT="Issue #${NUM} [${ACTION}] by ${ACTOR}" ;;
     esac
-    echo "message=${EMOJI} ${TEXT}
-    ${TITLE}
-    ${URL}" >> "$GITHUB_OUTPUT"
+    MSG=$(printf '%s\n%s\n%s' "$EMOJI $TEXT" "$TITLE" "$URL")
+    DELIMITER=$(openssl rand -hex 8)
+    echo "message<<$DELIMITER" >> "$GITHUB_OUTPUT"
+    echo "$MSG" >> "$GITHUB_OUTPUT"
+    echo "$DELIMITER" >> "$GITHUB_OUTPUT"
 
 - name: Send to Cove #cove-product
   env:
     MSG: ${{ steps.msg.outputs.message }}
     WEBHOOK_URL: ${{ secrets.COVE_PRODUCT_WEBHOOK_URL }}
   run: |
+    if [ -z "$WEBHOOK_URL" ]; then echo '::warning::WEBHOOK_URL is empty, skipping'; exit 0; fi
     PAYLOAD=$(jq -nc --arg content "$MSG" '{content: $content, username: "GitHub"}')
-    curl -sf -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
+    curl -sfS -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
 ```
 
 **notify-cove.yml** — same pattern: move `${{ github.event.pull_request.title }}` to `env:`, use `jq` for JSON.
