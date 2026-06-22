@@ -62,8 +62,8 @@ jobs:
           $SSH "mkdir -p /home/azureuser/cove-staging"
           $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
 
-          # Ensure native dependencies
-          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
+          # Ensure native dependencies (rebuild ensures match with VM Node version)
+          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null && npm rebuild better-sqlite3 2>/dev/null"
 
           # Upload client dist
           test -d packages/client/dist/assets || { echo "❌ Client build missing assets/"; exit 1; }
@@ -212,7 +212,7 @@ jobs:
           $SSH "mkdir -p /home/azureuser/cove-staging"
           $SCP server-bundle.js $USER@$HOST:/home/azureuser/cove-staging/server-bundle.js
 
-          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
+          $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null && npm rebuild better-sqlite3 2>/dev/null"
 
           test -d packages/client/dist/assets || { echo "❌ Client build missing assets/"; exit 1; }
           $SSH "rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
