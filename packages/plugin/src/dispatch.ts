@@ -108,7 +108,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         draftMessageId = undefined;
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-      await outboundBridge.sendText!({ cfg, to: channelId, accountId, text });
+      await outboundBridge.sendText?.({ cfg, to: channelId, accountId, text });
     };
 
     const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({

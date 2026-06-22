@@ -6,7 +6,6 @@
  * for reliable delivery; sendMedia is a stub pending REST API support for media uploads.
  */
 import {
-  createChannelMessageAdapterFromOutbound,
   sendDurableMessageBatch,
 } from "openclaw/plugin-sdk/channel-message";
 import type {
@@ -20,6 +19,20 @@ export interface CoveOutboundAdapterContext {
   /** Agent ID used to construct session keys for durable delivery. */
   agentId: string;
   log?: { warn?: (...a: any[]) => void; info?: (...a: any[]) => void };
+}
+
+/** Shared helper — sends a text payload via sendDurableMessageBatch with Cove defaults. */
+async function sendCoveDurableBatch(opts: { cfg: unknown; to: string; accountId?: string | null; text: string; agentId: string }) {
+  await sendDurableMessageBatch({
+    cfg: opts.cfg as any,
+    channel: "cove",
+    to: opts.to,
+    accountId: opts.accountId ?? undefined,
+    payloads: [{ text: opts.text }],
+    bestEffort: true,
+    durability: "best_effort",
+    session: { key: `agent:${opts.agentId}:cove:group:${opts.to}` },
+  });
 }
 
 /**
@@ -36,22 +49,12 @@ export function createCoveOutboundBridgeAdapter(
 
   return {
     deliveryCapabilities: {
-      durableFinal: { text: true, media: true },
+      durableFinal: { text: true },
     },
 
     async sendText(sendCtx: ChannelMessageSendTextContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
-      const result = await sendDurableMessageBatch({
-        cfg: sendCtx.cfg as any,
-        channel: "cove",
-        to: sendCtx.to,
-        accountId: sendCtx.accountId ?? undefined,
-        payloads: [{ text: sendCtx.text }],
-        bestEffort: true,
-        durability: "best_effort",
-        session: { key: `agent:${agentId}:cove:group:${sendCtx.to}` },
-      });
-      const messageId = result?.status === "sent" ? result.results?.[0]?.messageId : undefined;
-      return { messageId };
+      await sendCoveDurableBatch({ cfg: sendCtx.cfg, to: sendCtx.to, accountId: sendCtx.accountId, text: sendCtx.text, agentId });
+      return {};
     },
 
     async sendMedia(sendCtx: ChannelMessageSendMediaContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
@@ -60,32 +63,11 @@ export function createCoveOutboundBridgeAdapter(
       );
       // Stub: Cove REST API only supports text content.
       // Fall back to text-only delivery when text is present.
+      // TODO(#401): implement when Cove REST API supports media uploads
       if (sendCtx.text) {
-        const result = await sendDurableMessageBatch({
-          cfg: sendCtx.cfg as any,
-          channel: "cove",
-          to: sendCtx.to,
-          accountId: sendCtx.accountId ?? undefined,
-          payloads: [{ text: sendCtx.text }],
-          bestEffort: true,
-          durability: "best_effort",
-          session: { key: `agent:${agentId}:cove:group:${sendCtx.to}` },
-        });
-        const messageId = result?.status === "sent" ? result.results?.[0]?.messageId : undefined;
-        return { messageId };
+        await sendCoveDurableBatch({ cfg: sendCtx.cfg, to: sendCtx.to, accountId: sendCtx.accountId, text: sendCtx.text, agentId });
       }
       return {};
     },
   };
-}
-
-/**
- * Creates a full ChannelMessageAdapterShape for Cove dispatch-level outbound delivery.
- * Wraps the bridge adapter via the SDK's createChannelMessageAdapterFromOutbound.
- */
-export function createCoveOutboundMessageAdapter(ctx: CoveOutboundAdapterContext) {
-  return createChannelMessageAdapterFromOutbound({
-    id: "cove-dispatch-outbound",
-    outbound: createCoveOutboundBridgeAdapter(ctx),
-  });
 }
