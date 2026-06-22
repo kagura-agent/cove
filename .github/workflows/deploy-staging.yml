@@ -66,9 +66,10 @@ jobs:
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
           # Upload client dist
-          $SSH "sudo rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID && mkdir -p /tmp/cove-staging-client-$GITHUB_RUN_ID"
-          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client-$GITHUB_RUN_ID/
-          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client-$GITHUB_RUN_ID/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID"
+          test -d packages/client/dist/assets || { echo "❌ Client build missing assets/"; exit 1; }
+          $SSH "rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
+          tar -C packages/client/dist -cf - . | $SSH "tar -C /tmp/cove-staging-client -xf -"
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
 
           # Verify client assets deployed
           $SSH "test -d /var/www/cove-staging/assets && ls /var/www/cove-staging/assets/*.js > /dev/null 2>&1" || { echo '❌ Client assets missing after deploy'; exit 1; }
@@ -213,9 +214,10 @@ jobs:
 
           $SSH "cd /home/azureuser/cove-staging && npm install --no-save better-sqlite3 ws 2>/dev/null"
 
-          $SSH "sudo rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID && mkdir -p /tmp/cove-staging-client-$GITHUB_RUN_ID"
-          $SCP -r packages/client/dist/* $USER@$HOST:/tmp/cove-staging-client-$GITHUB_RUN_ID/
-          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client-$GITHUB_RUN_ID/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client-$GITHUB_RUN_ID"
+          test -d packages/client/dist/assets || { echo "❌ Client build missing assets/"; exit 1; }
+          $SSH "rm -rf /tmp/cove-staging-client && mkdir -p /tmp/cove-staging-client"
+          tar -C packages/client/dist -cf - . | $SSH "tar -C /tmp/cove-staging-client -xf -"
+          $SSH "sudo rm -rf /var/www/cove-staging && sudo mkdir -p /var/www/cove-staging && sudo cp -r /tmp/cove-staging-client/* /var/www/cove-staging/ && rm -rf /tmp/cove-staging-client"
 
           # Verify client assets deployed
           $SSH "test -d /var/www/cove-staging/assets && ls /var/www/cove-staging/assets/*.js > /dev/null 2>&1" || { echo '❌ Client assets missing after deploy'; exit 1; }
