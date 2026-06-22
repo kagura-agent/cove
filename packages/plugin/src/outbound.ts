@@ -39,9 +39,9 @@ export function createCoveOutboundBridgeAdapter(
       durableFinal: { text: true, media: true },
     },
 
-    async sendText(sendCtx: ChannelMessageSendTextContext): Promise<ChannelMessageOutboundBridgeResult> {
+    async sendText(sendCtx: ChannelMessageSendTextContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
       const result = await sendDurableMessageBatch({
-        cfg: sendCtx.cfg,
+        cfg: sendCtx.cfg as any,
         channel: "cove",
         to: sendCtx.to,
         accountId: sendCtx.accountId ?? undefined,
@@ -54,7 +54,7 @@ export function createCoveOutboundBridgeAdapter(
       return { messageId };
     },
 
-    async sendMedia(sendCtx: ChannelMessageSendMediaContext): Promise<ChannelMessageOutboundBridgeResult> {
+    async sendMedia(sendCtx: ChannelMessageSendMediaContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
       log?.warn?.(
         `cove: sendMedia not yet supported by Cove REST API — media URL ignored: ${sendCtx.mediaUrl}`,
       );
@@ -62,7 +62,7 @@ export function createCoveOutboundBridgeAdapter(
       // Fall back to text-only delivery when text is present.
       if (sendCtx.text) {
         const result = await sendDurableMessageBatch({
-          cfg: sendCtx.cfg,
+          cfg: sendCtx.cfg as any,
           channel: "cove",
           to: sendCtx.to,
           accountId: sendCtx.accountId ?? undefined,
