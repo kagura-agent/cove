@@ -87,14 +87,25 @@ class GatewaySession {
   }
 
   /** Enter zombie state. Session stays in dispatcher for buffering. Idempotent. */
-  detachSocket(onExpiry: () => void): void {
+  detachSocket(onExpiry: () => void, tokenExpiresAt?: number): void {
     if (this.isZombie) return; // guard: already zombie (e.g. heartbeat timeout + close race)
     this._ws = null;
     this._zombieExpired = false;
+    // Cap zombie TTL to token remaining time (for non-bot sessions)
+    let ttl = GatewaySession.ZOMBIE_TTL_MS;
+    if (tokenExpiresAt) {
+      const tokenRemaining = tokenExpiresAt - Date.now();
+      if (tokenRemaining <= 0) {
+        this._zombieExpired = true;
+        onExpiry();
+        return;
+      }
+      ttl = Math.min(ttl, tokenRemaining);
+    }
     this._zombieTimer = setTimeout(() => {
       this._zombieExpired = true;
       onExpiry(); // dispatcher handles cleanup
-    }, GatewaySession.ZOMBIE_TTL_MS);
+    }, ttl);
   }
 
   /** Resume: attach new socket to this session. */
@@ -189,7 +200,7 @@ function setupConnectionHandlers(
     if (Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
       clearInterval(heartbeatCheck);
       if (!session.isZombie) { // guard: avoid double-detach
-        session.detachSocket(() => dispatcher.reapZombieSession(session));
+        session.detachSocket(() => dispatcher.reapZombieSession(session), opts.expiresAt);
       }
       ws.close(4009, "Session timed out");
     }
@@ -209,7 +220,7 @@ function setupConnectionHandlers(
     clearInterval(heartbeatCheck);
     if (expiryTimer) clearTimeout(expiryTimer);
     if (!session.isZombie) { // guard: avoid double-detach from heartbeat timeout + close race
-      session.detachSocket(() => dispatcher.reapZombieSession(session));
+      session.detachSocket(() => dispatcher.reapZombieSession(session), opts.expiresAt);
     }
   });
 
@@ -251,6 +262,12 @@ case GatewayOpcode.IDENTIFY: {
 **RESUME handler** (new):
 ```typescript
 case GatewayOpcode.RESUME: {
+  // Guard: reject double-RESUME or RESUME-after-IDENTIFY
+  if (connHandle || session.isIdentified) {
+    sendInvalidSession(ws);
+    return;
+  }
+
   const data = payload.d as { token?: string; session_id?: string; seq?: number } | null;
   if (!data?.token || !data?.session_id || data?.seq == null) {
     sendInvalidSession(ws);
@@ -278,20 +295,11 @@ case GatewayOpcode.RESUME: {
     return;
   }
 
-  // Buffer overflow check
+  // Buffer overflow check (off-by-one: oldest is the first buffered seq,
+  // client needs seq > client_seq, so client_seq < oldest - 1 means gap)
   const oldest = zombie.oldestBufferedSeq;
-  if (oldest !== null && data.seq < oldest) {
+  if (oldest !== null && data.seq < oldest - 1) {
     dispatcher.reapZombieSession(zombie);
-    sendInvalidSession(ws);
-    return;
-  }
-
-  // Clean up the preliminary session created for this ws connection
-  // (ws.on("connection") creates a new GatewaySession — discard it)
-  dispatcher.removeSession(session);
-
-  // Reject if already identified (RESUME-after-IDENTIFY)
-  if (session.isIdentified) {
     sendInvalidSession(ws);
     return;
   }
@@ -299,6 +307,7 @@ case GatewayOpcode.RESUME: {
   clearTimeout(handshakeTimeout);
 
   // Attach new socket to zombie session
+  // (preliminary session was never added to dispatcher, no removeSession needed)
   zombie.attachSocket(ws);
 
   // Replay missed events
