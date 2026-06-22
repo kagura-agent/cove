@@ -86,8 +86,9 @@ class GatewaySession {
     }
   }
 
-  /** Enter zombie state. Session stays in dispatcher for buffering. */
+  /** Enter zombie state. Session stays in dispatcher for buffering. Idempotent. */
   detachSocket(onExpiry: () => void): void {
+    if (this.isZombie) return; // guard: already zombie (e.g. heartbeat timeout + close race)
     this._ws = null;
     this._zombieExpired = false;
     this._zombieTimer = setTimeout(() => {
@@ -164,56 +165,82 @@ reapZombieSession(session: GatewaySession): void {
 
 The core complexity is managing closures. Each WebSocket connection has its own heartbeat timer, expiry timer, and close handler. On RESUME, these must be properly set up for the resumed session.
 
+**Key insight:** `lastHeartbeat` lives inside `setupConnectionHandlers` but the HEARTBEAT opcode is handled in the outer `ws.on('message')`. Solution: `setupConnectionHandlers` returns a `handleHeartbeat` callback that the message handler calls.
+
 **Extract setup into a reusable function:**
 
 ```typescript
+/** Returned handle allows outer message handler to interact with connection state. */
+interface ConnectionHandle {
+  handleHeartbeat(): void;
+  cleanup(): void;
+}
+
 function setupConnectionHandlers(
   ws: WebSocket,
   session: GatewaySession,
   dispatcher: GatewayDispatcher,
   users: UsersRepo,
   opts: { sessionToken?: string; expiresAt?: number }
-) {
+): ConnectionHandle {
   let lastHeartbeat = Date.now();
 
   const heartbeatCheck = setInterval(() => {
     if (Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT) {
       clearInterval(heartbeatCheck);
-      session.detachSocket(() => dispatcher.reapZombieSession(session));
+      if (!session.isZombie) { // guard: avoid double-detach
+        session.detachSocket(() => dispatcher.reapZombieSession(session));
+      }
       ws.close(4009, "Session timed out");
     }
   }, HEARTBEAT_INTERVAL);
 
+  // Token expiry: zombie TTL = min(ZOMBIE_TTL, token remaining)
   let expiryTimer: ReturnType<typeof setTimeout> | null = null;
   if (opts.sessionToken && opts.expiresAt) {
-    const ttl = opts.expiresAt - Date.now();
-    if (ttl > 0) {
-      expiryTimer = scheduleExpiry(ws, session, users, opts.sessionToken, ttl);
+    const tokenTtl = opts.expiresAt - Date.now();
+    if (tokenTtl > 0) {
+      expiryTimer = scheduleExpiry(ws, session, users, opts.sessionToken, tokenTtl);
     }
   }
-
-  // HEARTBEAT handler (attached to the current ws)
-  const handleHeartbeat = () => { lastHeartbeat = Date.now(); };
 
   // CLOSE handler
   ws.on("close", () => {
     clearInterval(heartbeatCheck);
     if (expiryTimer) clearTimeout(expiryTimer);
-    // Enter zombie state — session stays in dispatcher
-    session.detachSocket(() => dispatcher.reapZombieSession(session));
+    if (!session.isZombie) { // guard: avoid double-detach from heartbeat timeout + close race
+      session.detachSocket(() => dispatcher.reapZombieSession(session));
+    }
   });
 
-  return { heartbeatCheck, expiryTimer, handleHeartbeat };
+  return {
+    handleHeartbeat: () => { lastHeartbeat = Date.now(); },
+    cleanup: () => {
+      clearInterval(heartbeatCheck);
+      if (expiryTimer) clearTimeout(expiryTimer);
+    },
+  };
 }
+```
+
+**Pre-handshake watchdog** (15s timeout if client never sends IDENTIFY/RESUME):
+
+```typescript
+// Set immediately on connection, cleared once IDENTIFY/RESUME succeeds
+const handshakeTimeout = setTimeout(() => {
+  ws.close(4000, "Handshake timeout");
+}, 15_000);
 ```
 
 **IDENTIFY handler** (existing, slightly modified):
 ```typescript
 case GatewayOpcode.IDENTIFY: {
+  if (session.isIdentified) { session.close(4005, "Already identified"); return; }
+  clearTimeout(handshakeTimeout);
   // ... authenticate as before ...
   session.identify(user, dispatcher, guilds, channels, readStates, permissions);
   dispatcher.addSession(session);
-  setupConnectionHandlers(ws, session, dispatcher, users, {
+  connHandle = setupConnectionHandlers(ws, session, dispatcher, users, {
     sessionToken: identifyToken,
     expiresAt: user.expires_at,
   });
@@ -263,6 +290,14 @@ case GatewayOpcode.RESUME: {
   // (ws.on("connection") creates a new GatewaySession — discard it)
   dispatcher.removeSession(session);
 
+  // Reject if already identified (RESUME-after-IDENTIFY)
+  if (session.isIdentified) {
+    sendInvalidSession(ws);
+    return;
+  }
+
+  clearTimeout(handshakeTimeout);
+
   // Attach new socket to zombie session
   zombie.attachSocket(ws);
 
@@ -280,7 +315,7 @@ case GatewayOpcode.RESUME: {
   // Set up fresh connection handlers bound to the RESUMED session
   // This is critical — old closures pointed at the discarded `session`,
   // new closures must point at `zombie` (the real session)
-  setupConnectionHandlers(ws, zombie, dispatcher, users, {
+  connHandle = setupConnectionHandlers(ws, zombie, dispatcher, users, {
     sessionToken: data.token,
     expiresAt: row.expires_at ?? undefined,
   });
@@ -303,24 +338,40 @@ function sendInvalidSession(ws: WebSocket): void {
 wss.on("connection", (ws, request) => {
   // Create a preliminary session — may be discarded if RESUME succeeds
   const session = new GatewaySession(ws);
+  let connHandle: ConnectionHandle | null = null;
+
+  // Pre-handshake watchdog: disconnect if no IDENTIFY/RESUME within 15s
+  const handshakeTimeout = setTimeout(() => {
+    ws.close(4000, "Handshake timeout");
+  }, 15_000);
 
   // Send HELLO
   session.send({ op: GatewayOpcode.HELLO, d: { heartbeat_interval: HEARTBEAT_INTERVAL }, s: null, t: null });
 
-  // Message handler processes IDENTIFY, RESUME, HEARTBEAT
+  // Message handler
   ws.on("message", (raw) => {
     const payload = JSON.parse(raw.toString());
     switch (payload.op) {
-      case GatewayOpcode.IDENTIFY: { /* ... uses session ... */ break; }
-      case GatewayOpcode.RESUME: { /* ... may discard session, use zombie ... */ break; }
-      case GatewayOpcode.HEARTBEAT: { /* ... update lastHeartbeat ... */ break; }
+      case GatewayOpcode.IDENTIFY: { /* ... sets connHandle ... */ break; }
+      case GatewayOpcode.RESUME:  { /* ... sets connHandle ... */ break; }
+      case GatewayOpcode.HEARTBEAT: {
+        // Forward to connection handle (updates lastHeartbeat inside closure)
+        if (connHandle) {
+          connHandle.handleHeartbeat();
+        }
+        // Always ACK
+        session.send({ op: GatewayOpcode.HEARTBEAT_ACK, d: null, s: null, t: null });
+        break;
+      }
     }
   });
 
-  // Note: ws.on("close") is set up in setupConnectionHandlers,
-  // called from either IDENTIFY or RESUME handler.
-  // If client disconnects before IDENTIFY/RESUME, the preliminary
-  // session is GC'd (never added to dispatcher).
+  // If client disconnects before IDENTIFY/RESUME, clean up watchdog.
+  // ws.on("close") for post-handshake is set up in setupConnectionHandlers.
+  ws.on("close", () => {
+    clearTimeout(handshakeTimeout);
+    // If never identified, nothing to clean up (session never added to dispatcher)
+  });
 });
 ```
 
