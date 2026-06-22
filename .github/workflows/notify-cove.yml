@@ -12,7 +12,12 @@ jobs:
       - name: Wait for deploy to complete
         run: sleep 90
       - name: Send merge notification to Cove
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUM: ${{ github.event.number }}
+          WEBHOOK_URL: ${{ secrets.COVE_DEV_WEBHOOK_URL }}
         run: |
-          curl -s -X POST "${{ secrets.COVE_DEV_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ PR #${{ github.event.number }} merged: ${{ github.event.pull_request.title }}\", \"username\": \"GitHub\"}"
+          if [ -z "$WEBHOOK_URL" ]; then echo '::warning::WEBHOOK_URL is empty, skipping'; exit 0; fi
+          MSG="✅ PR #${PR_NUM} merged: ${PR_TITLE}"
+          PAYLOAD=$(jq -nc --arg content "$MSG" '{content: $content, username: "GitHub"}')
+          curl -sfS -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
