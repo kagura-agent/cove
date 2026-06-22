@@ -32,7 +32,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     onStartError: (err) => log?.warn?.(`cove: typing start error in [${channelId}]: ${err}`),
   });
 
-  try {
+  try { // typing lifecycle: finally guarantees cleanup on all exit paths
     const { runInboundReplyTurn } = await loadInbound();
     const targetAgent = account.agentId;
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
@@ -301,14 +301,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       });
     } catch (err: any) {
       if (abortController.signal.aborted) {
-        typingCallbacks.onCleanup?.();
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
       } else { throw err; }
     } finally {
       if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);
     }
   } catch (err: any) {
-    typingCallbacks.onCleanup?.();
     log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
+  } finally {
+    // Typing cleanup as safety net — covers success, error, abort, and supersede.
+    // In the success path, deliver() already calls onCleanup early (before final message)
+    // so the indicator stops promptly; this final call is idempotent insurance.
+    typingCallbacks.onCleanup?.();
   }
 }
