@@ -141,7 +141,7 @@ const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): Dispat
   account: { accountId: "test-account", token: "test-token", baseUrl: "http://localhost:3400",
              guildId: "guild-1", agentId: "test-agent", agentName: "Test Agent", allowFrom: [], dmPolicy: undefined },
   restClient: createMockRestClient() as any, channelRuntime: createMockChannelRuntime(),
-  cfg: { channels: { cove: {} } }, accountId: "test-account", pendingDispatches: new Map(),
+  cfg: { channels: { cove: {} } }, accountId: "test-account",
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
 });
 
@@ -298,16 +298,6 @@ describe("D. Context Injection", () => {
     expect(getCoveMd).toHaveBeenCalledWith(expect.anything(), "parent-ch", expect.anything());
   });
 
-  it("D4: Batched messages merged", async () => {
-    const { runInboundReplyTurn } = await loadInbound();
-    const opts = createBaseOpts({
-      batchedMessages: [createTestMessage({ content: "First", author: { username: "user1" } }), createTestMessage({ content: "Second", author: { username: "user2" } })],
-    });
-    await dispatchMessage(opts);
-    const body = capturedResolvedTurn?.ctxPayload?.BodyForAgent;
-    expect(body).toContain("user1: First"); expect(body).toContain("user2: Second");
-  });
-
   it("D5: Image attachments as [image: url]", async () => {
     const { runInboundReplyTurn } = await loadInbound();
     const opts = createBaseOpts({ message: createTestMessage({ attachments: [{ url: "/files/img.png", content_type: "image/png" }] }) });
@@ -428,25 +418,30 @@ describe("F. Lifecycle / Abort", () => {
   });
 
   it("F5: Aborted dispatch returns cleanly", async () => {
-    const opts = createBaseOpts();
+    const abortController = new AbortController();
+    const opts = createBaseOpts({ abortSignal: abortController.signal });
     const { runInboundReplyTurn } = await loadInbound();
     vi.mocked(runInboundReplyTurn).mockImplementationOnce(async () => {
-      opts.pendingDispatches.get("ch-1")?.abort(); throw new Error("Aborted");
+      abortController.abort(); throw new Error("Aborted");
     });
     await expect(dispatchMessage(opts)).resolves.toBeUndefined();
   });
 
-  it("F6: pendingDispatches cleaned after dispatch", async () => {
-    const opts = createBaseOpts();
-    await dispatchMessage(opts);
-    expect(opts.pendingDispatches.has("ch-1")).toBe(false);
-  });
-
-  it("F7: isCurrent() prevents stale updates", async () => {
-    const opts = createBaseOpts();
+  it("F6: isAborted returns false when no abortSignal (graceful degradation)", async () => {
+    const opts = createBaseOpts(); // no abortSignal
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    opts.pendingDispatches.clear();
+    // sendOrEdit should work fine without abortSignal
+    if (capturedSendOrEdit) expect(await capturedSendOrEdit("Works")).toBe(true);
+    blocker.resolve(); await p;
+  });
+
+  it("F7: isAborted() prevents stale updates", async () => {
+    const abortController = new AbortController();
+    const opts = createBaseOpts({ abortSignal: abortController.signal });
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    abortController.abort();
     if (capturedSendOrEdit) expect(await capturedSendOrEdit("Stale")).toBe(false);
     blocker.resolve(); await p;
   });
@@ -455,20 +450,7 @@ describe("F. Lifecycle / Abort", () => {
   it.skip("F8: Bot's own messages skipped (channel.ts, requires plugin-context test harness)", () => {});
 });
 
-describe("G. Batched Messages", () => {
-  beforeEach(resetState);
-
-  it("G3: Batch = earlier as context + last as primary", async () => {
-    const { runInboundReplyTurn } = await loadInbound();
-    const earlier = [createTestMessage({ content: "First" }), createTestMessage({ content: "Second" })];
-    await dispatchMessage(createBaseOpts({ message: createTestMessage({ content: "Primary" }), batchedMessages: earlier }));
-    const body = capturedResolvedTurn?.ctxPayload?.BodyForAgent;
-    expect(body).toContain("First"); expect(body).toContain("Primary");
-  });
-
-  it.skip("G5: clearAll on reconnect (covered by message-queue.test.ts G5 + F4 deferred above)", () => {});
-  it.skip("G1/G2/G4: Queue behaviors — moved to message-queue.test.ts", () => {});
-});
+// G. Batched Messages — removed: batching now happens at debouncer level in channel.ts, not in dispatch.ts
 
 // ---------------------------------------------------------------------------
 // SPEC-401 Phase 0: Draft Streaming Lifecycle behavioral tests
@@ -726,8 +708,9 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H5. Abort mid-draft", () => {
-    it("H5a: stale dispatch mid-stream → sendOrEdit returns false", async () => {
-      const opts = createBaseOpts();
+    it("H5a: aborted dispatch mid-stream → sendOrEdit returns false", async () => {
+      const abortController = new AbortController();
+      const opts = createBaseOpts({ abortSignal: abortController.signal });
       const restClient = opts.restClient as unknown as MockRestClient;
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(opts);
@@ -737,8 +720,8 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       if (capturedSendOrEdit) await capturedSendOrEdit("Draft started");
       expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
 
-      // Simulate supersession: new dispatch for same channel replaces the abort controller
-      opts.pendingDispatches.set("ch-1", new AbortController());
+      // Abort the dispatch
+      abortController.abort();
 
       // Further edits should be rejected
       if (capturedSendOrEdit) {
@@ -751,8 +734,9 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       await p;
     });
 
-    it("H5b: stale dispatch → deliver() is a no-op", async () => {
-      const opts = createBaseOpts();
+    it("H5b: aborted dispatch → deliver() is a no-op", async () => {
+      const abortController = new AbortController();
+      const opts = createBaseOpts({ abortSignal: abortController.signal });
       const restClient = opts.restClient as unknown as MockRestClient;
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(opts);
@@ -760,8 +744,8 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
 
       if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
 
-      // Supersede
-      opts.pendingDispatches.set("ch-1", new AbortController());
+      // Abort
+      abortController.abort();
 
       const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
       if (deliver) await deliver({ text: "Should not deliver" }, { kind: "final" });
@@ -773,14 +757,15 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       await p;
     });
 
-    it("H5c: guardFwd blocks event forwarding on stale dispatch", async () => {
-      const opts = createBaseOpts();
+    it("H5c: guardFwd blocks event forwarding on aborted dispatch", async () => {
+      const abortController = new AbortController();
+      const opts = createBaseOpts({ abortSignal: abortController.signal });
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(opts);
       await new Promise((r) => setTimeout(r, 50));
 
-      // Supersede
-      opts.pendingDispatches.set("ch-1", new AbortController());
+      // Abort
+      abortController.abort();
 
       // All guarded callbacks should be no-ops
       const replyOpts = capturedDispatcherParams?.replyOptions;
@@ -814,14 +799,15 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
       await p;
     });
 
-    it("H5e: onToolStart guarded by isCurrent", async () => {
-      const opts = createBaseOpts();
+    it("H5e: onToolStart guarded by isAborted", async () => {
+      const abortController = new AbortController();
+      const opts = createBaseOpts({ abortSignal: abortController.signal });
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(opts);
       await new Promise((r) => setTimeout(r, 50));
 
-      // Supersede
-      opts.pendingDispatches.set("ch-1", new AbortController());
+      // Abort
+      abortController.abort();
 
       const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
       onToolStart({ name: "Read" });

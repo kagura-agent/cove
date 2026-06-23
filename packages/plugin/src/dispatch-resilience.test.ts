@@ -1,49 +1,64 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { mergeAbortSignals } from "./utils.js";
 
-describe("reconnect cancels pending dispatches", () => {
-  it("aborting multiple controllers cancels all pending dispatches", () => {
-    const pendingDispatches = new Map<string, AbortController>();
+describe("abortSignal lifecycle patterns", () => {
+  it("aborting a signal is reflected by isAborted check", () => {
+    const controller = new AbortController();
+    const isAborted = () => Boolean(controller.signal.aborted);
 
-    // Simulate two pending dispatches
-    const c1 = new AbortController();
-    const c2 = new AbortController();
-    pendingDispatches.set("channel-1", c1);
-    pendingDispatches.set("channel-2", c2);
+    expect(isAborted()).toBe(false);
+    controller.abort();
+    expect(isAborted()).toBe(true);
+  });
 
-    // Simulate reconnect: abort all
-    for (const [, controller] of pendingDispatches) {
-      controller.abort();
-    }
-    pendingDispatches.clear();
+  it("isAborted returns false when abortSignal is undefined (graceful degradation)", () => {
+    const abortSignal = undefined as AbortSignal | undefined;
+    const isAborted = () => Boolean(abortSignal?.aborted);
 
-    expect(c1.signal.aborted).toBe(true);
-    expect(c2.signal.aborted).toBe(true);
-    expect(pendingDispatches.size).toBe(0);
+    expect(isAborted()).toBe(false);
   });
 });
 
-describe("new message to same channel cancels old dispatch", () => {
-  it("replacing a controller aborts the old dispatch", () => {
-    const pendingDispatches = new Map<string, AbortController>();
-    const channelId = "channel-1";
-    const warn = vi.fn();
+describe("mergeAbortSignals", () => {
+  it("returns undefined when all signals are undefined", () => {
+    expect(mergeAbortSignals([undefined, undefined])).toBeUndefined();
+  });
 
-    // First dispatch
+  it("returns the single signal when only one is defined", () => {
+    const controller = new AbortController();
+    const merged = mergeAbortSignals([undefined, controller.signal]);
+    expect(merged).toBe(controller.signal);
+  });
+
+  it("merged signal aborts when first source signal fires", () => {
     const c1 = new AbortController();
-    pendingDispatches.set(channelId, c1);
-
-    // New message arrives — cancel old, start new
-    const existing = pendingDispatches.get(channelId);
-    if (existing) {
-      warn(`aborting previous pending dispatch in [${channelId}]`);
-      existing.abort();
-    }
     const c2 = new AbortController();
-    pendingDispatches.set(channelId, c2);
+    const merged = mergeAbortSignals([c1.signal, c2.signal]);
+    expect(merged?.aborted).toBe(false);
 
-    expect(c1.signal.aborted).toBe(true);
-    expect(c2.signal.aborted).toBe(false);
-    expect(warn).toHaveBeenCalledOnce();
-    expect(pendingDispatches.get(channelId)).toBe(c2);
+    c1.abort();
+    expect(merged?.aborted).toBe(true);
+  });
+
+  it("merged signal aborts when second source signal fires", () => {
+    const c1 = new AbortController();
+    const c2 = new AbortController();
+    const merged = mergeAbortSignals([c1.signal, c2.signal]);
+    expect(merged?.aborted).toBe(false);
+
+    c2.abort();
+    expect(merged?.aborted).toBe(true);
+  });
+
+  it("merged signal is already aborted if a source is pre-aborted", () => {
+    const c1 = new AbortController();
+    c1.abort();
+    const c2 = new AbortController();
+    const merged = mergeAbortSignals([c1.signal, c2.signal]);
+    expect(merged?.aborted).toBe(true);
+  });
+
+  it("returns undefined for empty array", () => {
+    expect(mergeAbortSignals([])).toBeUndefined();
   });
 });

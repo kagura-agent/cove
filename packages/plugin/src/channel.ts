@@ -5,7 +5,9 @@ import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
-import { ChannelMessageQueue } from "./message-queue.js";
+import { createChannelRunQueue } from "openclaw/plugin-sdk/channel-lifecycle";
+import { createChannelInboundDebouncer, shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-inbound";
+import { mergeAbortSignals } from "./utils.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
@@ -117,22 +119,88 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
         const wsUrl = account.baseUrl.replace(/^http/, "ws") + "/gateway";
         log?.info?.(`cove: connecting to gateway at ${wsUrl}`);
         const gatewayClient = new CoveGatewayClient({ url: wsUrl, token: account.token });
-        const pendingDispatches = new Map<string, AbortController>();
         const restClient = getRestClient(account.baseUrl, account.token);
 
-        const doDispatch = (message: any, batchedMessages?: any[]) =>
-          dispatchMessage({ message, batchedMessages, account, restClient, channelRuntime, cfg, accountId: ctx.accountId, pendingDispatches, log });
-        const messageQueue = new ChannelMessageQueue({
-          dispatchFn: (message) => doDispatch(message),
-          batchDispatchFn: (messages) => doDispatch(messages[messages.length - 1], messages.slice(0, -1)),
-          log,
+        // SDK run queue — serial per channel, lifecycle-managed via abortSignal
+        const runQueue = createChannelRunQueue({
+          setStatus: (status) => ctx.setStatus({ accountId: ctx.accountId, ...status }),
+          abortSignal: ctx.abortSignal,
+          onError: (error) => log?.error?.(`cove: message run failed: ${error}`),
+        });
+
+        // Queue depth guard — SDK queue is unbounded, add safety limits
+        const QUEUE_WARN_THRESHOLD = 10;
+        const QUEUE_DROP_THRESHOLD = 20;
+        const queueDepth = new Map<string, number>();
+
+        function trackEnqueue(channelId: string): boolean {
+          const depth = (queueDepth.get(channelId) ?? 0) + 1;
+          queueDepth.set(channelId, depth);
+          if (depth > QUEUE_DROP_THRESHOLD) {
+            log?.warn?.(`cove: queue overflow for [${channelId}] (depth: ${depth}), dropping message`);
+            queueDepth.set(channelId, depth - 1);
+            return false;
+          }
+          if (depth > QUEUE_WARN_THRESHOLD) {
+            log?.warn?.(`cove: queue depth high for [${channelId}] (depth: ${depth})`);
+          }
+          return true;
+        }
+
+        function trackDequeue(channelId: string): void {
+          const depth = queueDepth.get(channelId) ?? 0;
+          if (depth > 0) queueDepth.set(channelId, depth - 1);
+        }
+
+        // Debouncer — merges rapid consecutive text messages before enqueue (Discord pattern)
+        const { debouncer } = createChannelInboundDebouncer<{ message: any }>({
+          cfg,
+          channel: "cove",
+          buildKey: (entry) => `cove:${ctx.accountId}:${entry.message.channel_id}:${entry.message.author.id}`,
+          shouldDebounce: (entry) => shouldDebounceTextInbound({
+            text: entry.message.content,
+            cfg,
+            hasMedia: (entry.message.attachments?.length ?? 0) > 0,
+          }),
+          onFlush: async (entries) => {
+            if (ctx.abortSignal?.aborted) return;
+            const last = entries.at(-1);
+            if (!last) return;
+            const channelId = last.message.channel_id;
+            if (!trackEnqueue(channelId)) return;
+
+            // Merge consecutive messages into one (Discord's syntheticMessage pattern)
+            const combinedContent = entries.map(e => e.message.content).filter(Boolean).join("\n");
+            const mergedMessage = { ...last.message, content: combinedContent, attachments: [] };
+
+            // Batch message ID tracking (Discord parity)
+            if (entries.length > 1) {
+              const messageSids = entries.map(e => e.message.id);
+              mergedMessage.batchMeta = {
+                MessageSids: messageSids,
+                MessageSidFirst: messageSids[0],
+                MessageSidLast: messageSids.at(-1),
+              };
+            }
+
+            runQueue.enqueue(channelId, async ({ lifecycleSignal }) => {
+              try {
+                const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
+                await dispatchMessage({
+                  message: mergedMessage, account, restClient, channelRuntime, cfg,
+                  accountId: ctx.accountId, abortSignal, log,
+                });
+              } finally {
+                trackDequeue(channelId);
+              }
+            });
+          },
         });
 
         gatewayClient.on("reconnect", () => {
-          log?.info?.(`cove: hard reconnect — aborting ${pendingDispatches.size} pending dispatch(es)`);
-          for (const c of pendingDispatches.values()) c.abort();
-          pendingDispatches.clear();
-          messageQueue.clearAll();
+          log?.info?.(`cove: hard reconnect`);
+          // Queue/dispatch management removed — lifecycle is SDK-managed via abortSignal.
+          // In-flight dispatches finish naturally, new messages enqueue after reconnect.
           if (account.guildId) {
             restClient.getChannels(account.guildId)
               .then((ch) => log?.info?.(`cove: reconnect recovery — fetched ${ch.length} channel(s)`))
@@ -174,7 +242,7 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
-          messageQueue.enqueue(message);
+          debouncer.enqueue({ message });
         });
 
         gatewayClient.on("error", (err) => log?.error?.(`cove: gateway error: ${err.message}`));
@@ -184,9 +252,7 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
         }
 
         ctx.abortSignal.addEventListener("abort", () => {
-          messageQueue.clearAll();
-          for (const c of pendingDispatches.values()) c.abort();
-          pendingDispatches.clear();
+          // runQueue auto-deactivates via its abortSignal listener
           gatewayClient.destroy();
         });
         gatewayClient.connect();
