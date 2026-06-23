@@ -59,8 +59,28 @@ const runQueue = createChannelRunQueue({
 // Queue depth guard — SDK queue is unbounded, add safety limits
 const QUEUE_WARN_THRESHOLD = 10;
 const QUEUE_DROP_THRESHOLD = 20;
-// Track pending count per channel and apply limits before enqueue.
-// Wrap runQueue.enqueue with depth check (see messageCreate handler in Change 2).
+const queueDepth = new Map<string, number>();
+
+function trackEnqueue(channelId: string): boolean {
+  const depth = (queueDepth.get(channelId) ?? 0) + 1;
+  queueDepth.set(channelId, depth);
+  if (depth > QUEUE_DROP_THRESHOLD) {
+    log?.warn?.(`cove: queue overflow for [${channelId}] (depth: ${depth}), dropping message`);
+    queueDepth.set(channelId, depth - 1);
+    return false; // reject enqueue
+  }
+  if (depth > QUEUE_WARN_THRESHOLD) {
+    log?.warn?.(`cove: queue depth high for [${channelId}] (depth: ${depth})`);
+  }
+  return true; // allow enqueue
+}
+
+function trackDequeue(channelId: string): void {
+  const depth = queueDepth.get(channelId) ?? 0;
+  if (depth > 0) queueDepth.set(channelId, depth - 1);
+}
+// Usage: check trackEnqueue(channelId) before runQueue.enqueue,
+// call trackDequeue(channelId) at end of dispatch task.
 ```
 
 ### 2. Update `messageCreate` handler
@@ -330,7 +350,7 @@ const messageSids = entries.map(e => e.message.id);
 const mergedMessage = {
   ...last.message,
   content: combinedContent,
-  _batchMeta: { messageSids, messageSidFirst: messageSids[0], messageSidLast: messageSids.at(-1) },
+  batchMeta: { MessageSids: messageSids, MessageSidFirst: messageSids[0], MessageSidLast: messageSids.at(-1) },
 };
 ```
 
