@@ -2,7 +2,7 @@
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
-import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter, sendDurableMessageBatch } from "openclaw/plugin-sdk/channel-message";
+import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
 import { getCoveMd } from "./cove-md-cache.js";
@@ -108,7 +108,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         draftMessageId = undefined;
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-      await outboundBridge.sendText?.({ cfg, to: channelId, accountId, text });
+      if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
+      await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
     };
 
     const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({
