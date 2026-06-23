@@ -10,12 +10,10 @@ Replace the custom queue + `pendingDispatches` with the SDK's `createChannelRunQ
 
 ## Relationship to #419
 
-PR #422 (#419) proposes orphaned draft cleanup in dispatch.ts's inner finally block. This spec removes `pendingDispatches` from that same finally block but **preserves** the orphaned draft cleanup logic from #419. Specifically:
-- **Delete**: `if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);`
-- **Keep**: orphaned draft cleanup (`if (draftMessageId && !draftState.final) { ... delete draft ... }`)
-- The draft cleanup's `isAborted()` check is intentionally omitted — superseded/aborted dispatches must still clean up their own drafts.
-
-If #419 lands first, this PR preserves its cleanup. If this PR lands first, #419 adds cleanup to the simplified finally block.
+This PR **subsumes** the orphaned draft cleanup from #419 by implementing it with Discord's `finalReplyDelivered` pattern (Change 7) instead of #419's `draftState.final` approach. After this PR:
+- #419's diagnostic logging (warn on stale bail) is still valuable and can land separately
+- #419's orphaned draft cleanup is handled here with a better pattern
+- The `isCurrent()` failure class is eliminated entirely
 
 ## Current Architecture
 
@@ -61,22 +59,29 @@ const runQueue = createChannelRunQueue({
 
 ### 2. Update `messageCreate` handler
 
+Discord merges `runtime.abortSignal` with `lifecycleSignal` via `mergeAbortSignals` so that both plugin shutdown AND queue deactivation abort the dispatch. Cove should do the same:
+
 ```typescript
 // Before
 messageQueue.enqueue(message);
 
 // After
+import { mergeAbortSignals } from "openclaw/plugin-sdk/channel-lifecycle";
+
 runQueue.enqueue(message.channel_id, async ({ lifecycleSignal }) => {
+  const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
   await dispatchMessage({
     message, account, restClient, channelRuntime, cfg,
-    accountId: ctx.accountId, lifecycleSignal, log,
+    accountId: ctx.accountId, abortSignal, log,
   });
 });
 ```
 
+Note: `mergeAbortSignals` uses `AbortSignal.any()` when available, with a manual fallback. Either signal aborting will abort the merged signal.
+
 ### 3. Update `dispatchMessage` signature in `dispatch.ts`
 
-Remove `pendingDispatches` parameter, add `lifecycleSignal`. Also remove `batchedMessages` (see Change 9).
+Remove `pendingDispatches` parameter, add `abortSignal` (merged signal from Change 2). Also remove `batchedMessages` (see Change 9).
 
 ```typescript
 // Before
@@ -90,13 +95,13 @@ export interface DispatchMessageOptions {
 export interface DispatchMessageOptions {
   message: Message;
   ...
-  lifecycleSignal?: AbortSignal;
+  abortSignal?: AbortSignal;
 }
 ```
 
 ### 3b. Update catch block in dispatch.ts
 
-The existing catch block references `abortController.signal.aborted` — update to use `lifecycleSignal`:
+The existing catch block references `abortController.signal.aborted` — update to use `abortSignal`:
 
 ```typescript
 // Before
@@ -108,7 +113,7 @@ catch (err: any) {
 
 // After
 catch (err: any) {
-  if (lifecycleSignal?.aborted) {
+  if (abortSignal?.aborted) {
     log?.info?.(`cove: dispatch aborted in [${channelId}]`);
   } else { throw err; }
 }
@@ -122,8 +127,8 @@ const abortController = new AbortController();
 pendingDispatches.set(channelId, abortController);
 const isCurrent = () => pendingDispatches.get(channelId) === abortController;
 
-// After
-const isAborted = () => Boolean(lifecycleSignal?.aborted);
+// After (matches Discord's isProcessAborted pattern)
+const isAborted = () => Boolean(abortSignal?.aborted);
 ```
 
 All `isCurrent()` checks become `isAborted()` checks. The semantic is inverted (isCurrent=true means proceed → isAborted=false means proceed), so:
@@ -147,7 +152,9 @@ editFinal: async (id, text) => {
 
 ### 6. Update reconnect/abort handlers in `channel.ts`
 
-On reconnect, deactivate the current run queue and create a new one. This matches the current hard-abort behavior (abort all in-flight + clear queue).
+Discord does NOT recreate the run queue on reconnect — it only exposes `deactivate`. The SDK queue continues to accept new enqueues after a reconnect because the `abortSignal` (from `ctx.abortSignal`) is still active. In-flight dispatches from before the reconnect will complete naturally.
+
+For Cove, the reconnect handler simplifies to:
 
 ```typescript
 // Before
@@ -158,15 +165,15 @@ gatewayClient.on("reconnect", () => {
 });
 
 // After
-let runQueue = createRunQueue(); // extract creation to a helper
 gatewayClient.on("reconnect", () => {
-  log?.info?.(`cove: hard reconnect — deactivating run queue`);
-  runQueue.deactivate();
-  runQueue = createRunQueue(); // fresh queue for new connection
+  log?.info?.(`cove: hard reconnect`);
+  // No queue management needed — in-flight dispatches finish naturally,
+  // new messages will be enqueued after reconnect.
+  // Channel refresh logic remains unchanged.
 });
 ```
 
-For plugin shutdown, `ctx.abortSignal` already deactivates the run queue (SDK listens internally):
+For plugin shutdown, `ctx.abortSignal` deactivates the run queue (SDK listens internally):
 
 ```typescript
 ctx.abortSignal.addEventListener("abort", () => {
@@ -175,17 +182,53 @@ ctx.abortSignal.addEventListener("abort", () => {
 });
 ```
 
-### 7. Simplify dispatch finally block
+### 7. Simplify dispatch finally block + add orphaned draft cleanup (Discord parity)
+
+Discord uses a `finalReplyDelivered` flag + `draftPreview.cleanup()` in its finally block:
+
+```javascript
+// Discord's pattern:
+async cleanup() {
+  if (!finalReplyDelivered) await draftStream?.discardPending();
+  if (!finalReplyDelivered && !finalizedViaPreviewMessage && draftStream?.messageId())
+    await draftStream.clear();  // delete orphaned draft
+}
+```
+
+Cove should adopt the same pattern with a `finalReplyDelivered` flag (not `draftState.final`):
 
 ```typescript
-// Before
-finally {
-  if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);
+// Add at top of dispatchMessage:
+let finalReplyDelivered = false;
+
+// Set after successful delivery in deliver callback:
+deliver: async (payload, _info) => {
+  // ... delivery logic ...
+  finalReplyDelivered = true;
 }
 
-// After — only orphaned draft cleanup remains (from #419, if landed)
-// No pendingDispatches to manage — lifecycle is SDK-managed
+// And in freshSend after successful sendText:
+const freshSend = async (text: string) => {
+  // ...
+  await outboundBridge.sendText(...);
+  finalReplyDelivered = true;
+};
+
+// Inner finally block:
+finally {
+  // No pendingDispatches to manage — lifecycle is SDK-managed
+  // Orphaned draft cleanup (Discord parity)
+  if (!finalReplyDelivered && draftMessageId) {
+    log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}]`);
+    await draft.discardPending();
+    await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
+      log?.warn?.(`cove: failed to delete orphaned draft: ${e.message}`)
+    );
+  }
+}
 ```
+
+This replaces the #419 approach of using `draftState.final` with Discord's `finalReplyDelivered` pattern, which is more explicit and doesn't depend on SDK internals.
 
 ### 8. Delete `message-queue.ts` and `message-queue.test.ts`
 
@@ -234,4 +277,4 @@ The batch dispatch feature (`batchDispatchFn`) is removed. Messages are processe
 
 ## Migration Risk
 
-Medium. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin, and the core change (queue replacement) is straightforward. However, three behavioral changes (unbounded queue, no batching, different abort semantics) are user-visible. All are low-impact individually but warrant careful testing.
+Medium. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin, and the core change (queue replacement) is straightforward. Two behavioral changes (unbounded queue, no batching) are user-visible but low-impact. The abort signal change is an improvement (merged signal matches Discord exactly).
