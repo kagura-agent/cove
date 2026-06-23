@@ -1,6 +1,6 @@
 /**
  * Pure helpers for building agent inbound context (cove.md resolution,
- * attachment URL collection, body composition with batched message context).
+ * attachment URL collection, body composition).
  *
  * Extracted from dispatch.ts (Phase 0.5 of #398). No behavior change —
  * identical logic, just moved into separately-testable units.
@@ -32,71 +32,33 @@ export async function resolveCoveMdChannelId(
 }
 
 /**
- * Extract image attachment URLs from the primary message and any batched
- * messages. URLs starting with '/' get prefixed with account.baseUrl.
- * De-dupes URLs (a single image referenced in primary + batched only counts
- * once) — matches main behavior at dispatch.ts L275-292.
+ * Extract image attachment URLs from the message.
+ * URLs starting with '/' get prefixed with account.baseUrl.
  */
 export function collectImageAttachmentUrls(
   message: Message,
-  batchedMessages: Message[] | undefined,
   baseUrl: string,
 ): string[] {
   const imageAttachments = (message.attachments || []).filter(
     (a: any) => a.content_type?.startsWith("image/"),
   );
   const attachmentUrls = imageAttachments.map((a: any) => a.url);
-  const fullAttachmentUrls = attachmentUrls.map((url: string) => {
+  return attachmentUrls.map((url: string) => {
     if (url.startsWith("/")) return baseUrl + url;
     return url;
   });
-
-  if (batchedMessages) {
-    for (const bm of batchedMessages) {
-      const bmImages = (bm.attachments || []).filter(
-        (a: any) => a.content_type?.startsWith("image/"),
-      );
-      for (const a of bmImages) {
-        const url = a.url.startsWith("/") ? baseUrl + a.url : a.url;
-        if (!fullAttachmentUrls.includes(url)) fullAttachmentUrls.push(url);
-      }
-    }
-  }
-
-  return fullAttachmentUrls;
 }
 
 /**
- * Compose body text passed to the agent. For batched messages, prepends each
- * earlier message as `name: content [image: url]` lines, then a blank line,
- * then the primary message content. Trailing image URLs (from
- * collectImageAttachmentUrls) appended after another blank line.
- *
- * Matches main behavior at dispatch.ts L294-313.
+ * Compose body text passed to the agent. Trailing image URLs (from
+ * collectImageAttachmentUrls) appended after a blank line.
  */
 export function buildBodyForAgent(
   message: Message,
-  batchedMessages: Message[] | undefined,
   fullAttachmentUrls: string[],
   baseUrl: string,
 ): string {
   let bodyForAgent = message.content;
-  if (batchedMessages && batchedMessages.length > 0) {
-    const contextLines = batchedMessages.map((m) => {
-      const name = m.author?.global_name || m.author?.username || "Unknown";
-      let line = name + ": " + m.content;
-      // Inline image markers next to the sending author
-      const msgImages = (m.attachments || []).filter(
-        (a: any) => a.content_type?.startsWith("image/"),
-      );
-      for (const img of msgImages) {
-        const imgUrl = img.url.startsWith("/") ? baseUrl + img.url : img.url;
-        line += " [image: " + imgUrl + "]";
-      }
-      return line;
-    });
-    bodyForAgent = contextLines.join("\n") + "\n\n" + bodyForAgent;
-  }
 
   // Append image URLs to body so agent sees them
   if (fullAttachmentUrls.length > 0) {

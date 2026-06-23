@@ -11,20 +11,19 @@ import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 export interface DispatchMessageOptions {
-  message: Message; batchedMessages?: Message[]; account: CoveAccount;
+  message: Message; account: CoveAccount;
   restClient: CoveRestClient; channelRuntime: any; cfg: any;
-  accountId: string; pendingDispatches: Map<string, AbortController>;
+  accountId: string; abortSignal?: AbortSignal;
   log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void; error?: (...a: any[]) => void };
 }
 
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, batchedMessages, account, restClient, channelRuntime, cfg, accountId, pendingDispatches, log } = opts;
+  const { message, account, restClient, channelRuntime, cfg, accountId, abortSignal, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
 
-  const abortController = new AbortController();
-  pendingDispatches.set(channelId, abortController);
+  const isAborted = () => Boolean(abortSignal?.aborted);
   restClient.sendTyping(channelId).catch(() => {});
 
   const typingCallbacks = createTypingCallbacks({
@@ -42,12 +41,12 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const draftState = { stopped: false, final: false };
     let draftMessageId: string | undefined;
     let lastSentText = "";
+    let finalReplyDelivered = false;
+    let finalizedViaPreviewMessage = false;
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
-    const isCurrent = () => pendingDispatches.get(channelId) === abortController;
-
     const sendOrEdit = async (text: string): Promise<boolean> => {
-      if (!isCurrent()) return false;
+      if (isAborted()) return false;
       if (draftState.stopped && !draftState.final) return false;
       const trimmed = text.trimEnd();
       if (!trimmed || trimmed === lastSentText) return false;
@@ -101,7 +100,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
 
     const freshSend = async (text: string) => {
-      if (!isCurrent()) return;
+      if (isAborted()) return;
       if (draftMessageId) {
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
@@ -110,6 +109,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
       await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
+      finalReplyDelivered = true;
     };
 
     const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({
@@ -127,11 +127,12 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       },
       buildFinalEdit: (payload) => payload.text || undefined,
       editFinal: async (id, text) => {
-        if (!isCurrent()) return;
+        if (isAborted()) throw new Error("cove: dispatch aborted");
         if (text.length > COVE_TEXT_CHUNK_LIMIT) {
           await freshSend(text);
         } else {
           await restClient.editMessage(channelId, id, text);
+          finalizedViaPreviewMessage = true;
         }
       },
       handlePreviewEditError: () => "fallback",
@@ -140,16 +141,16 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       },
     });
 
-    const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (isCurrent()) fn(...a); };
+    const guardFwd = (fn: (...a: any[]) => void) => (...a: any[]) => { if (!isAborted()) fn(...a); };
 
     const dispatcherOptions = {
       typingCallbacks,
       deliver: async (payload: any, _info: { kind: string }) => {
-        if (!isCurrent()) return;
+        if (isAborted()) return;
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) return;
-        if (!isCurrent()) return;
+        if (isAborted()) return;
         progressDraft.markFinalReplyDelivered();
         const canFinalize = Boolean(draftMessageId && !draftState.stopped);
         await deliverWithFinalizableLivePreviewAdapter({
@@ -159,6 +160,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           adapter,
           deliverNormally: (p) => freshSend(p.text),
         });
+        finalReplyDelivered = true;
       },
     };
 
@@ -166,7 +168,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       disableBlockStreaming: true,
       suppressDefaultToolProgressMessages: true,
       onToolStart: (p: any) => {
-        if (!isCurrent()) return;
+        if (isAborted()) return;
         const name = p?.name ?? p?.toolName ?? "tool";
         const line = formatChannelProgressDraftLineForEntry(
           channelEntry,
@@ -253,8 +255,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
     const coveMdChannelId = await resolveCoveMdChannelId(restClient, channelId);
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
-    const fullAttachmentUrls = collectImageAttachmentUrls(message, batchedMessages, account.baseUrl);
-    const bodyForAgent = buildBodyForAgent(message, batchedMessages, fullAttachmentUrls, account.baseUrl);
+    const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
+    const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
 
     try {
       const messageId = message.id ?? `cove-${Date.now()}`;
@@ -266,6 +268,11 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         AgentId: targetAgent, AccountId: accountId, MessageSid: messageId,
         Provider: "cove", Surface: "cove", ChatType: "channel",
         SenderId: senderId, SenderName: senderName, CommandAuthorized: false,
+        ...((message as any).batchMeta ? {
+          MessageSids: (message as any).batchMeta.MessageSids,
+          MessageSidFirst: (message as any).batchMeta.MessageSidFirst,
+          MessageSidLast: (message as any).batchMeta.MessageSidLast,
+        } : {}),
         ...(coveMdContent ? { GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent } : {}),
         ...(message.message_reference?.message_id ? {
           ReplyToId: message.message_reference.message_id,
@@ -295,11 +302,18 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         },
       });
     } catch (err: any) {
-      if (abortController.signal.aborted) {
+      if (abortSignal?.aborted) {
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
       } else { throw err; }
     } finally {
-      if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);
+      // Orphaned draft cleanup (Discord parity)
+      if (!finalReplyDelivered && !finalizedViaPreviewMessage && draftMessageId) {
+        log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}]`);
+        await draft.discardPending();
+        await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
+          log?.warn?.(`cove: failed to delete orphaned draft: ${e.message}`)
+        );
+      }
     }
   } catch (err: any) {
     log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
