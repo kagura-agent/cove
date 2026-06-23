@@ -59,17 +59,16 @@ const runQueue = createChannelRunQueue({
 
 ### 2. Update `messageCreate` handler
 
-Discord merges `runtime.abortSignal` with `lifecycleSignal` via `mergeAbortSignals` so that both plugin shutdown AND queue deactivation abort the dispatch. Cove should do the same:
+Discord merges `runtime.abortSignal` (account-level) with `lifecycleSignal` (queue-level) so that both plugin shutdown AND queue deactivation abort the dispatch. Cove should do the same using `AbortSignal.any()` (available in Node 20+):
 
 ```typescript
 // Before
 messageQueue.enqueue(message);
 
 // After
-import { mergeAbortSignals } from "openclaw/plugin-sdk/channel-lifecycle";
-
 runQueue.enqueue(message.channel_id, async ({ lifecycleSignal }) => {
-  const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
+  const signals = [ctx.abortSignal, lifecycleSignal].filter(Boolean) as AbortSignal[];
+  const abortSignal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
   await dispatchMessage({
     message, account, restClient, channelRuntime, cfg,
     accountId: ctx.accountId, abortSignal, log,
@@ -77,7 +76,7 @@ runQueue.enqueue(message.channel_id, async ({ lifecycleSignal }) => {
 });
 ```
 
-Note: `mergeAbortSignals` uses `AbortSignal.any()` when available, with a manual fallback. Either signal aborting will abort the merged signal.
+Note: Discord uses an internal `mergeAbortSignals` helper with `AbortSignal.any()` + manual fallback. Since Cove requires Node 20+, we can use `AbortSignal.any()` directly.
 
 ### 3. Update `dispatchMessage` signature in `dispatch.ts`
 
@@ -152,9 +151,9 @@ editFinal: async (id, text) => {
 
 ### 6. Update reconnect/abort handlers in `channel.ts`
 
-Discord does NOT recreate the run queue on reconnect — it only exposes `deactivate`. The SDK queue continues to accept new enqueues after a reconnect because the `abortSignal` (from `ctx.abortSignal`) is still active. In-flight dispatches from before the reconnect will complete naturally.
+Discord does NOT do any queue management on reconnect — in-flight dispatches finish naturally, and the queue continues accepting new enqueues since `ctx.abortSignal` is still active.
 
-For Cove, the reconnect handler simplifies to:
+Cove's reconnect handler simplifies to remove `pendingDispatches` and `messageQueue` cleanup:
 
 ```typescript
 // Before
@@ -173,7 +172,7 @@ gatewayClient.on("reconnect", () => {
 });
 ```
 
-For plugin shutdown, `ctx.abortSignal` deactivates the run queue (SDK listens internally):
+For plugin shutdown, `ctx.abortSignal` deactivates the run queue automatically (SDK listens internally):
 
 ```typescript
 ctx.abortSignal.addEventListener("abort", () => {
@@ -236,25 +235,55 @@ The custom queue is fully replaced by the SDK's `createChannelRunQueue`. Delete 
 
 Sequential processing and queue clearing behavior is covered by the SDK's existing tests. Cove-specific integration tests (Change 10) verify the end-to-end behavior.
 
-### 9. Remove `batchedMessages` parameter
+### 9. Replace queue-level batching with debouncer (Discord parity)
 
-The batch dispatch feature (`batchDispatchFn`) is removed. Messages are processed serially one-by-one, matching Discord behavior. The `batchedMessages` parameter in `dispatchMessage` and its downstream usage in `buildBodyForAgent` / `collectImageAttachmentUrls` should be removed.
+Discord does NOT batch at the queue level — but it DOES batch at the **debouncer** level using `createChannelInboundDebouncer` (from `openclaw/plugin-sdk/channel-inbound`). Rapid consecutive messages from the same user in the same channel are debounced and merged into a single synthetic message before being enqueued.
 
-**Rationale:** The batch feature was added to combine rapid consecutive messages into one dispatch, but:
-- Discord doesn't batch — it processes serially
-- The SDK's `KeyedAsyncQueue` is serial by design
-- Batching adds complexity for a marginal benefit
-- Agent context already includes recent messages via session history
+Cove should adopt the same pattern:
+
+```typescript
+// Before: batching in ChannelMessageQueue via batchDispatchFn
+
+// After: debouncing before enqueue (Discord pattern)
+import { createChannelInboundDebouncer, shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-inbound";
+
+const { debouncer } = createChannelInboundDebouncer({
+  cfg,
+  channel: "cove",
+  buildKey: (entry) => `cove:${ctx.accountId}:${entry.message.channel_id}:${entry.message.author.id}`,
+  shouldDebounce: (entry) => shouldDebounceTextInbound({
+    text: entry.message.content,
+    cfg,
+    hasMedia: (entry.message.attachments?.length ?? 0) > 0,
+  }),
+  onFlush: async (entries) => {
+    const last = entries.at(-1);
+    if (!last) return;
+    // Merge consecutive messages into one (same as Discord's syntheticMessage)
+    const combinedContent = entries.map(e => e.message.content).filter(Boolean).join("\n");
+    const mergedMessage = { ...last.message, content: combinedContent };
+    runQueue.enqueue(mergedMessage.channel_id, async ({ lifecycleSignal }) => {
+      const signals = [ctx.abortSignal, lifecycleSignal].filter(Boolean) as AbortSignal[];
+      const abortSignal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+      await dispatchMessage({ message: mergedMessage, account, restClient, channelRuntime, cfg, accountId: ctx.accountId, abortSignal, log });
+    });
+  },
+});
+```
+
+This replaces both `batchDispatchFn` and `batchedMessages` with the SDK's debouncer pattern. The `batchedMessages` parameter in `dispatchMessage` and its downstream usage in `buildBodyForAgent` / `collectImageAttachmentUrls` should be removed.
+
+Note: the debouncer implementation details (key format, merge strategy) may need adjustment during implementation to match Cove's message structure. The above is directionally correct.
 
 ## Known Behavioral Changes
 
 | Behavior | Before | After | Impact |
 |----------|--------|-------|--------|
 | Queue overflow | Drop oldest at MAX_QUEUE_SIZE=5 | SDK queue is unbounded | Low — serial processing means queue rarely exceeds 1-2 items. Follow-up: add queue depth warning if needed. |
-| Batch dispatch | Multiple queued messages batched into one dispatch | Serial one-by-one | Low — matches Discord behavior, agent gets context via session history |
+| Batch dispatch | Queue-level `batchDispatchFn` | Debouncer-level `createChannelInboundDebouncer` | Improved — matches Discord pattern, debounce before enqueue |
 | Supersede detection | `isCurrent()` via pendingDispatches | `isAborted()` via lifecycleSignal | Improved — eliminates false-positive stale detection |
 | editFinal on abort | Silent return | Throw error (SDK falls back) | Improved — SDK fallback triggers correctly |
-| Reconnect cleanup | Manual abort + clear pendingDispatches | deactivate + recreate runQueue | Same effective behavior |
+| Reconnect cleanup | Manual abort + clear pendingDispatches | No queue action needed | Simpler — in-flight dispatches finish naturally |
 | Status reporting | None | SDK reports `activeRuns`/`busy` via `setStatus` | New feature — free visibility |
 
 ## Files Changed
