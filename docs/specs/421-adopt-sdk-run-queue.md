@@ -334,6 +334,8 @@ This replaces both `batchDispatchFn` and `batchedMessages` with the SDK's deboun
 
 Note: the debouncer implementation details (key format, merge strategy) may need adjustment during implementation to match Cove's message structure. The above is directionally correct.
 
+**Media/attachment safety:** Messages with attachments are never debounced — `shouldDebounceTextInbound` returns `false` when `hasMedia: true`. This means the synthetic merged message (which sets `attachments: []`) can never lose attachment data. A media message arriving mid-buffer triggers an immediate flush of buffered text-only messages, then processes itself as a standalone dispatch. This is confirmed by Discord plugin source — two-layer defense: (1) `shouldDebounce` rejects media entries, (2) synthetic message forces `attachments: []` as a safety net.
+
 #### Additional Discord debouncer patterns
 
 The following patterns are present in Discord's debouncer integration. Each is noted with its applicability to Cove:
