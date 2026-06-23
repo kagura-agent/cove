@@ -2,11 +2,12 @@
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
-import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter, sendDurableMessageBatch } from "openclaw/plugin-sdk/channel-message";
+import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
+import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 export interface DispatchMessageOptions {
@@ -97,6 +98,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       },
     });
 
+    const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
+
     const freshSend = async (text: string) => {
       if (!isCurrent()) return;
       if (draftMessageId) {
@@ -105,16 +108,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         draftMessageId = undefined;
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-      await sendDurableMessageBatch({
-        cfg,
-        channel: "cove",
-        to: channelId,
-        accountId,
-        payloads: [{ text }],
-        bestEffort: true,
-        durability: "best_effort",
-        session: { key: `agent:${targetAgent}:cove:group:${channelId}` },
-      });
+      if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
+      await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
     };
 
     const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({
