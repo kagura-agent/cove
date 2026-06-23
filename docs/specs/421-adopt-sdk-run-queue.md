@@ -174,9 +174,9 @@ editFinal: async (id, text) => {
 
 ### 6. Update reconnect/abort handlers in `channel.ts`
 
-Discord does NOT do any queue management on reconnect — in-flight dispatches finish naturally, and the queue continues accepting new enqueues since `ctx.abortSignal` is still active.
+Discord has NO reconnect handler at all in its message handler. It does not register a reconnect listener — queue lifecycle is entirely managed by `abortSignal`. When the account-level abort fires, the SDK deactivates the run queue; there is no separate reconnect path.
 
-Cove's reconnect handler simplifies to remove `pendingDispatches` and `messageQueue` cleanup:
+Cove still needs a reconnect handler because our gateway client emits reconnect events and we perform channel refresh on reconnect. However, queue/dispatch management should be removed from the reconnect handler — those concerns are now handled by the SDK's abort signal lifecycle.
 
 ```typescript
 // Before
@@ -189,9 +189,9 @@ gatewayClient.on("reconnect", () => {
 // After
 gatewayClient.on("reconnect", () => {
   log?.info?.(`cove: hard reconnect`);
-  // No queue management needed — in-flight dispatches finish naturally,
-  // new messages will be enqueued after reconnect.
-  // Channel refresh logic remains unchanged.
+  // Queue/dispatch management removed — lifecycle is SDK-managed via abortSignal.
+  // In-flight dispatches finish naturally, new messages enqueue after reconnect.
+  // Channel refresh logic (below) remains unchanged.
 });
 ```
 
@@ -206,7 +206,7 @@ ctx.abortSignal.addEventListener("abort", () => {
 
 ### 7. Simplify dispatch finally block + add orphaned draft cleanup (Discord parity)
 
-Discord uses a `finalReplyDelivered` flag + `draftPreview.cleanup()` in its finally block:
+Discord uses a `finalReplyDelivered` flag + `finalizedViaPreviewMessage` flag + `draftPreview.cleanup()` in its finally block:
 
 ```javascript
 // Discord's pattern:
@@ -217,11 +217,14 @@ async cleanup() {
 }
 ```
 
-Cove should adopt the same pattern with a `finalReplyDelivered` flag (not `draftState.final`):
+The `finalizedViaPreviewMessage` guard prevents deleting a draft that was already finalized in-place via `editFinal`. Without this guard, a dispatch that completes via in-place edit (no separate final reply) would incorrectly have its message deleted by the cleanup block.
+
+Cove should adopt the same pattern with both flags:
 
 ```typescript
 // Add at top of dispatchMessage:
 let finalReplyDelivered = false;
+let finalizedViaPreviewMessage = false;
 
 // Set after successful delivery in deliver callback:
 deliver: async (payload, _info) => {
@@ -236,11 +239,18 @@ const freshSend = async (text: string) => {
   finalReplyDelivered = true;
 };
 
+// Set after successful editFinal (in-place finalization):
+editFinal: async (id, text) => {
+  if (isAborted()) throw new Error("cove: dispatch aborted");
+  // ... edit logic ...
+  finalizedViaPreviewMessage = true;
+}
+
 // Inner finally block:
 finally {
   // No pendingDispatches to manage — lifecycle is SDK-managed
   // Orphaned draft cleanup (Discord parity)
-  if (!finalReplyDelivered && draftMessageId) {
+  if (!finalReplyDelivered && !finalizedViaPreviewMessage && draftMessageId) {
     log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}]`);
     await draft.discardPending();
     await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
@@ -250,7 +260,7 @@ finally {
 }
 ```
 
-This replaces the #419 approach of using `draftState.final` with Discord's `finalReplyDelivered` pattern, which is more explicit and doesn't depend on SDK internals.
+This replaces the #419 approach of using `draftState.final` with Discord's `finalReplyDelivered` + `finalizedViaPreviewMessage` pattern, which is more explicit and doesn't depend on SDK internals.
 
 ### 8. Delete `message-queue.ts` and `message-queue.test.ts`
 
@@ -280,14 +290,14 @@ const { debouncer } = createChannelInboundDebouncer({
     hasMedia: (entry.message.attachments?.length ?? 0) > 0,
   }),
   onFlush: async (entries) => {
+    if (abortSignal?.aborted) return; // abort check before flush (Discord parity)
     const last = entries.at(-1);
     if (!last) return;
     // Merge consecutive messages into one (same as Discord's syntheticMessage)
     const combinedContent = entries.map(e => e.message.content).filter(Boolean).join("\n");
     const mergedMessage = { ...last.message, content: combinedContent };
     runQueue.enqueue(mergedMessage.channel_id, async ({ lifecycleSignal }) => {
-      const signals = [ctx.abortSignal, lifecycleSignal].filter(Boolean) as AbortSignal[];
-      const abortSignal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+      const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
       await dispatchMessage({ message: mergedMessage, account, restClient, channelRuntime, cfg, accountId: ctx.accountId, abortSignal, log });
     });
   },
@@ -297,6 +307,20 @@ const { debouncer } = createChannelInboundDebouncer({
 This replaces both `batchDispatchFn` and `batchedMessages` with the SDK's debouncer pattern. The `batchedMessages` parameter in `dispatchMessage` and its downstream usage in `buildBodyForAgent` / `collectImageAttachmentUrls` should be removed.
 
 Note: the debouncer implementation details (key format, merge strategy) may need adjustment during implementation to match Cove's message structure. The above is directionally correct.
+
+#### Additional Discord debouncer patterns
+
+The following patterns are present in Discord's debouncer integration. Each is noted with its applicability to Cove:
+
+**1. Abort check before flush:** The `onFlush` callback checks `abortSignal?.aborted` at the start and skips processing entirely if aborted. This prevents queuing work after shutdown. (Reflected in the code snippet above.)
+
+**2. Preflight filtering:** Discord runs `preflightDiscordMessage` before queueing to filter out messages that shouldn't be processed (e.g., bot self-loop, missing permissions, unsupported channel types). Currently Cove does some of this filtering inside `dispatchMessage` — for efficiency, filtering should happen before enqueue so rejected messages never enter the debouncer or queue. Implement a `preflightCoveMessage` check in `channel.ts` that runs before `debouncer.push()`.
+
+**3. Batch message ID tracking:** When multiple messages are debounced into one, Discord tracks all original message IDs on the context payload: `MessageSids` (array of all IDs), `MessageSidFirst` (first message ID), and `MessageSidLast` (last message ID). Cove should do the same so the agent knows which user messages were batched. Add these fields to the dispatch context or message metadata passed to `dispatchMessage`.
+
+**4. Reply batch gate:** Discord uses `applyImplicitReplyBatchGate` to adjust reply threading behavior for batched messages (e.g., choosing which message to reply to in a thread context). Note this as a pattern to be aware of — may not apply to Cove's current threading model, but should be revisited if Cove adds threaded reply support.
+
+**5. Replay guard / deduplication:** Discord uses `createClaimableDedupe` as a replay guard to prevent processing duplicate messages that may arrive via gateway replays. This is optional for Cove — only needed if the Cove gateway can replay messages. If gateway replays are possible, implement a similar deduplication check keyed on message ID before `debouncer.push()`.
 
 ## Known Behavioral Changes
 
@@ -311,21 +335,25 @@ Note: the debouncer implementation details (key format, merge strategy) may need
 
 ## Files Changed
 
-- `packages/plugin/src/channel.ts` — replace queue + pendingDispatches with `createChannelRunQueue`
-- `packages/plugin/src/dispatch.ts` — replace `pendingDispatches`/`isCurrent()` with `lifecycleSignal`/`isAborted()`, remove `batchedMessages`
+- `packages/plugin/src/channel.ts` — replace queue + pendingDispatches with `createChannelRunQueue` + debouncer
+- `packages/plugin/src/dispatch.ts` — replace `pendingDispatches`/`isCurrent()` with `abortSignal`/`isAborted()`, add `finalReplyDelivered` + `finalizedViaPreviewMessage`, remove `batchedMessages`
+- `packages/plugin/src/utils.ts` — **new** — `mergeAbortSignals` utility
 - `packages/plugin/src/build-context.ts` — remove `batchedMessages` parameter from helpers
 - `packages/plugin/src/message-queue.ts` — **delete**
 - `packages/plugin/src/message-queue.test.ts` — **delete**
 
 ## Testing
 
-1. All existing dispatch-behavior tests must pass (adapt `pendingDispatches` mocks to `lifecycleSignal`)
+1. All existing dispatch-behavior tests must pass (adapt `pendingDispatches` mocks to `abortSignal`)
 2. Verify serial processing — second message waits for first to complete
-3. Verify abort signal propagation — `lifecycleSignal.aborted` = true when plugin shuts down
+3. Verify abort signal propagation — merged `abortSignal` aborts when either source signal fires
 4. Verify `editFinal` throws on abort → SDK falls back to `deliverNormally`
-5. Verify reconnect deactivates + recreates run queue
-6. Verify `isAborted()` returns false when `lifecycleSignal` is undefined (graceful degradation)
-7. Tests must always provide `lifecycleSignal` in mocks
+5. Verify reconnect does NOT touch queue/dispatch — in-flight dispatches finish naturally
+6. Verify `isAborted()` returns false when `abortSignal` is undefined (graceful degradation)
+7. Verify orphaned draft cleanup: `!finalReplyDelivered && !finalizedViaPreviewMessage && draftMessageId` → draft deleted
+8. Verify in-place finalized draft is NOT deleted: `finalizedViaPreviewMessage = true` → cleanup skips
+9. Verify debouncer merges rapid consecutive messages into single dispatch
+10. Tests must always provide `abortSignal` in mocks
 
 ## Migration Risk
 
