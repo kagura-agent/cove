@@ -59,24 +59,47 @@ const runQueue = createChannelRunQueue({
 
 ### 2. Update `messageCreate` handler
 
-Discord merges `runtime.abortSignal` (account-level) with `lifecycleSignal` (queue-level) so that both plugin shutdown AND queue deactivation abort the dispatch. Cove should do the same using `AbortSignal.any()` (available in Node 20+):
+Discord merges `runtime.abortSignal` (account-level) with `lifecycleSignal` (queue-level) so that both plugin shutdown AND queue deactivation abort the dispatch. Cove should do the same using `mergeAbortSignals` — a utility copied from the OpenClaw SDK internals.
+
+`mergeAbortSignals` is NOT the same as `AbortSignal.any()`:
+- Filters out `undefined`/`null` signals (AbortSignal.any throws on undefined)
+- Returns `undefined` when no valid signals (AbortSignal.any([]) returns a never-abort signal)
+- Short-circuits for single signal (no wrapping overhead)
+
+Copy the function into a local util file:
+
+```typescript
+// utils.ts
+export function mergeAbortSignals(signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const active = signals.filter((s): s is AbortSignal => Boolean(s));
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  if (typeof AbortSignal.any === "function") return AbortSignal.any(active);
+  const controller = new AbortController();
+  for (const signal of active) if (signal.aborted) { controller.abort(); return controller.signal; }
+  const onAbort = () => { controller.abort(); for (const s of active) s.removeEventListener("abort", onAbort); };
+  for (const signal of active) signal.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
+}
+```
+
+Then use it in messageCreate:
 
 ```typescript
 // Before
 messageQueue.enqueue(message);
 
 // After
+import { mergeAbortSignals } from "./utils.js";
+
 runQueue.enqueue(message.channel_id, async ({ lifecycleSignal }) => {
-  const signals = [ctx.abortSignal, lifecycleSignal].filter(Boolean) as AbortSignal[];
-  const abortSignal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+  const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
   await dispatchMessage({
     message, account, restClient, channelRuntime, cfg,
     accountId: ctx.accountId, abortSignal, log,
   });
 });
 ```
-
-Note: Discord uses an internal `mergeAbortSignals` helper with `AbortSignal.any()` + manual fallback. Since Cove requires Node 20+, we can use `AbortSignal.any()` directly.
 
 ### 3. Update `dispatchMessage` signature in `dispatch.ts`
 
