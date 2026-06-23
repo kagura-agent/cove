@@ -171,7 +171,9 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
 
             // Merge consecutive messages into one (Discord's syntheticMessage pattern)
             const combinedContent = entries.map(e => e.message.content).filter(Boolean).join("\n");
-            const mergedMessage = { ...last.message, content: combinedContent, attachments: [] };
+            const mergedMessage = entries.length === 1
+              ? { ...last.message, content: combinedContent }
+              : { ...last.message, content: combinedContent, attachments: [] };
 
             // Batch message ID tracking (Discord parity)
             if (entries.length > 1) {
