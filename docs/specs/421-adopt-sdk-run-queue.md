@@ -8,6 +8,15 @@ The Cove plugin uses a hand-written `ChannelMessageQueue` + `pendingDispatches` 
 
 Replace the custom queue + `pendingDispatches` with the SDK's `createChannelRunQueue`, aligning Cove with Discord's dispatch architecture. This eliminates the `isCurrent()` failure class entirely.
 
+## Relationship to #419
+
+PR #422 (#419) proposes orphaned draft cleanup in dispatch.ts's inner finally block. This spec removes `pendingDispatches` from that same finally block but **preserves** the orphaned draft cleanup logic from #419. Specifically:
+- **Delete**: `if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);`
+- **Keep**: orphaned draft cleanup (`if (draftMessageId && !draftState.final) { ... delete draft ... }`)
+- The draft cleanup's `isAborted()` check is intentionally omitted — superseded/aborted dispatches must still clean up their own drafts.
+
+If #419 lands first, this PR preserves its cleanup. If this PR lands first, #419 adds cleanup to the simplified finally block.
+
 ## Current Architecture
 
 ```
@@ -26,9 +35,9 @@ messageCreate → ChannelMessageQueue.enqueue()
 messageCreate → runQueue.enqueue(channelId, task)
                   → KeyedAsyncQueue (serial per key, SDK-managed)
                     → dispatchMessage({ lifecycleSignal })
-                      → isProcessAborted(lifecycleSignal) checks
-                      → deliver/freshSend/editFinal check lifecycleSignal
-                      → no pendingDispatches needed
+                      → isAborted() = lifecycleSignal?.aborted
+                      → deliver/freshSend/editFinal check isAborted()
+                      → finally: orphaned draft cleanup only
 ```
 
 ## Changes
@@ -67,19 +76,41 @@ runQueue.enqueue(message.channel_id, async ({ lifecycleSignal }) => {
 
 ### 3. Update `dispatchMessage` signature in `dispatch.ts`
 
-Remove `pendingDispatches` parameter, add `lifecycleSignal`:
+Remove `pendingDispatches` parameter, add `lifecycleSignal`. Also remove `batchedMessages` (see Change 9).
 
 ```typescript
 // Before
 export interface DispatchMessageOptions {
+  message: Message; batchedMessages?: Message[];
   ...
   pendingDispatches: Map<string, AbortController>;
 }
 
 // After
 export interface DispatchMessageOptions {
+  message: Message;
   ...
   lifecycleSignal?: AbortSignal;
+}
+```
+
+### 3b. Update catch block in dispatch.ts
+
+The existing catch block references `abortController.signal.aborted` — update to use `lifecycleSignal`:
+
+```typescript
+// Before
+catch (err: any) {
+  if (abortController.signal.aborted) {
+    log?.info?.(`cove: dispatch aborted in [${channelId}]`);
+  } else { throw err; }
+}
+
+// After
+catch (err: any) {
+  if (lifecycleSignal?.aborted) {
+    log?.info?.(`cove: dispatch aborted in [${channelId}]`);
+  } else { throw err; }
 }
 ```
 
@@ -116,6 +147,8 @@ editFinal: async (id, text) => {
 
 ### 6. Update reconnect/abort handlers in `channel.ts`
 
+On reconnect, deactivate the current run queue and create a new one. This matches the current hard-abort behavior (abort all in-flight + clear queue).
+
 ```typescript
 // Before
 gatewayClient.on("reconnect", () => {
@@ -123,29 +156,26 @@ gatewayClient.on("reconnect", () => {
   pendingDispatches.clear();
   messageQueue.clearAll();
 });
-ctx.abortSignal.addEventListener("abort", () => {
-  messageQueue.clearAll();
-  for (const c of pendingDispatches.values()) c.abort();
-  pendingDispatches.clear();
-  gatewayClient.destroy();
-});
 
 // After
+let runQueue = createRunQueue(); // extract creation to a helper
 gatewayClient.on("reconnect", () => {
-  // runQueue handles its own lifecycle via abortSignal
-  // just need to deactivate and reconnect
+  log?.info?.(`cove: hard reconnect — deactivating run queue`);
   runQueue.deactivate();
-  // Re-create runQueue for new connection? Or just let pending tasks finish
+  runQueue = createRunQueue(); // fresh queue for new connection
 });
+```
+
+For plugin shutdown, `ctx.abortSignal` already deactivates the run queue (SDK listens internally):
+
+```typescript
 ctx.abortSignal.addEventListener("abort", () => {
-  runQueue.deactivate();
+  // runQueue auto-deactivates via its abortSignal listener
   gatewayClient.destroy();
 });
 ```
 
-Note: `createChannelRunQueue` already listens to `abortSignal` internally and deactivates on abort. The explicit `deactivate()` on reconnect is for the reconnect-specific path.
-
-### 7. Remove `pendingDispatches` cleanup in dispatch finally block
+### 7. Simplify dispatch finally block
 
 ```typescript
 // Before
@@ -153,31 +183,44 @@ finally {
   if (pendingDispatches.get(channelId) === abortController) pendingDispatches.delete(channelId);
 }
 
-// After — no pendingDispatches to clean up
-// The lifecycleSignal is managed by the SDK's run queue
+// After — only orphaned draft cleanup remains (from #419, if landed)
+// No pendingDispatches to manage — lifecycle is SDK-managed
 ```
 
-### 8. Delete `message-queue.ts`
+### 8. Delete `message-queue.ts` and `message-queue.test.ts`
 
-The entire file is replaced by the SDK's `createChannelRunQueue`.
+The custom queue is fully replaced by the SDK's `createChannelRunQueue`. Delete both files.
+
+Sequential processing and queue clearing behavior is covered by the SDK's existing tests. Cove-specific integration tests (Change 10) verify the end-to-end behavior.
+
+### 9. Remove `batchedMessages` parameter
+
+The batch dispatch feature (`batchDispatchFn`) is removed. Messages are processed serially one-by-one, matching Discord behavior. The `batchedMessages` parameter in `dispatchMessage` and its downstream usage in `buildBodyForAgent` / `collectImageAttachmentUrls` should be removed.
+
+**Rationale:** The batch feature was added to combine rapid consecutive messages into one dispatch, but:
+- Discord doesn't batch — it processes serially
+- The SDK's `KeyedAsyncQueue` is serial by design
+- Batching adds complexity for a marginal benefit
+- Agent context already includes recent messages via session history
+
+## Known Behavioral Changes
+
+| Behavior | Before | After | Impact |
+|----------|--------|-------|--------|
+| Queue overflow | Drop oldest at MAX_QUEUE_SIZE=5 | SDK queue is unbounded | Low — serial processing means queue rarely exceeds 1-2 items. Follow-up: add queue depth warning if needed. |
+| Batch dispatch | Multiple queued messages batched into one dispatch | Serial one-by-one | Low — matches Discord behavior, agent gets context via session history |
+| Supersede detection | `isCurrent()` via pendingDispatches | `isAborted()` via lifecycleSignal | Improved — eliminates false-positive stale detection |
+| editFinal on abort | Silent return | Throw error (SDK falls back) | Improved — SDK fallback triggers correctly |
+| Reconnect cleanup | Manual abort + clear pendingDispatches | deactivate + recreate runQueue | Same effective behavior |
+| Status reporting | None | SDK reports `activeRuns`/`busy` via `setStatus` | New feature — free visibility |
 
 ## Files Changed
 
 - `packages/plugin/src/channel.ts` — replace queue + pendingDispatches with `createChannelRunQueue`
-- `packages/plugin/src/dispatch.ts` — replace `pendingDispatches`/`isCurrent()` with `lifecycleSignal`/`isAborted()`
-- `packages/plugin/src/message-queue.ts` — **delete** (replaced by SDK)
-- `packages/plugin/src/message-queue.test.ts` — **delete** or rewrite as integration test
-
-## Behavioral Differences
-
-| Behavior | Before | After |
-|----------|--------|-------|
-| Queue overflow | Drop oldest at MAX_QUEUE_SIZE=5 | SDK's KeyedAsyncQueue (no built-in limit) |
-| Batch dispatch | Supported (batchDispatchFn) | Not used — serial one-by-one (matches Discord) |
-| Supersede detection | `isCurrent()` via pendingDispatches | `isAborted()` via lifecycleSignal |
-| editFinal on abort | Silent return | Throw error (SDK falls back) |
-| Reconnect cleanup | Manual abort + clear | `runQueue.deactivate()` |
-| Status reporting | None | SDK reports `activeRuns`/`busy` via `setStatus` |
+- `packages/plugin/src/dispatch.ts` — replace `pendingDispatches`/`isCurrent()` with `lifecycleSignal`/`isAborted()`, remove `batchedMessages`
+- `packages/plugin/src/build-context.ts` — remove `batchedMessages` parameter from helpers
+- `packages/plugin/src/message-queue.ts` — **delete**
+- `packages/plugin/src/message-queue.test.ts` — **delete**
 
 ## Testing
 
@@ -185,9 +228,10 @@ The entire file is replaced by the SDK's `createChannelRunQueue`.
 2. Verify serial processing — second message waits for first to complete
 3. Verify abort signal propagation — `lifecycleSignal.aborted` = true when plugin shuts down
 4. Verify `editFinal` throws on abort → SDK falls back to `deliverNormally`
-5. Verify reconnect deactivates run queue
-6. Verify message-queue.test.ts coverage is maintained (sequential processing, queue clearing)
+5. Verify reconnect deactivates + recreates run queue
+6. Verify `isAborted()` returns false when `lifecycleSignal` is undefined (graceful degradation)
+7. Tests must always provide `lifecycleSignal` in mocks
 
 ## Migration Risk
 
-Low. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin. The main risk is in test adaptation — existing mocks for `pendingDispatches` need to change to `lifecycleSignal`.
+Medium. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin, and the core change (queue replacement) is straightforward. However, three behavioral changes (unbounded queue, no batching, different abort semantics) are user-visible. All are low-impact individually but warrant careful testing.
