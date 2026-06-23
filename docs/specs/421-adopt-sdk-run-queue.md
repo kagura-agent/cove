@@ -55,6 +55,12 @@ const runQueue = createChannelRunQueue({
   abortSignal: ctx.abortSignal,
   onError: (error) => log?.error?.(`cove: message run failed: ${error}`),
 });
+
+// Queue depth guard — SDK queue is unbounded, add safety limits
+const QUEUE_WARN_THRESHOLD = 10;
+const QUEUE_DROP_THRESHOLD = 20;
+// Track pending count per channel and apply limits before enqueue.
+// Wrap runQueue.enqueue with depth check (see messageCreate handler in Change 2).
 ```
 
 ### 2. Update `messageCreate` handler
@@ -316,7 +322,17 @@ The following patterns are present in Discord's debouncer integration. Each is n
 
 **2. Preflight filtering:** Discord runs `preflightDiscordMessage` before queueing to filter out messages that shouldn't be processed (e.g., bot self-loop, missing permissions, unsupported channel types). Currently Cove does some of this filtering inside `dispatchMessage` — for efficiency, filtering should happen before enqueue so rejected messages never enter the debouncer or queue. Implement a `preflightCoveMessage` check in `channel.ts` that runs before `debouncer.push()`.
 
-**3. Batch message ID tracking:** When multiple messages are debounced into one, Discord tracks all original message IDs on the context payload: `MessageSids` (array of all IDs), `MessageSidFirst` (first message ID), and `MessageSidLast` (last message ID). Cove should do the same so the agent knows which user messages were batched. Add these fields to the dispatch context or message metadata passed to `dispatchMessage`.
+**3. Batch message ID tracking (required):** When multiple messages are debounced into one, Discord tracks all original message IDs on the context payload: `MessageSids` (array of all IDs), `MessageSidFirst` (first message ID), and `MessageSidLast` (last message ID). Cove must do the same so the agent knows which user messages were batched. Add these fields to the dispatch context or message metadata passed to `dispatchMessage`:
+
+```typescript
+// In onFlush, when entries.length > 1:
+const messageSids = entries.map(e => e.message.id);
+const mergedMessage = {
+  ...last.message,
+  content: combinedContent,
+  _batchMeta: { messageSids, messageSidFirst: messageSids[0], messageSidLast: messageSids.at(-1) },
+};
+```
 
 **4. Reply batch gate:** Discord uses `applyImplicitReplyBatchGate` to adjust reply threading behavior for batched messages (e.g., choosing which message to reply to in a thread context). Note this as a pattern to be aware of — may not apply to Cove's current threading model, but should be revisited if Cove adds threaded reply support.
 
@@ -326,7 +342,7 @@ The following patterns are present in Discord's debouncer integration. Each is n
 
 | Behavior | Before | After | Impact |
 |----------|--------|-------|--------|
-| Queue overflow | Drop oldest at MAX_QUEUE_SIZE=5 | SDK queue is unbounded | Low — serial processing means queue rarely exceeds 1-2 items. Follow-up: add queue depth warning if needed. |
+| Queue overflow | Drop oldest at MAX_QUEUE_SIZE=5 | SDK queue is unbounded + depth guard | Low — serial processing means queue rarely exceeds 1-2 items. Depth guard: warn at 10, drop oldest at 20 (see Change 1). |
 | Batch dispatch | Queue-level `batchDispatchFn` | Debouncer-level `createChannelInboundDebouncer` | Improved — matches Discord pattern, debounce before enqueue |
 | Supersede detection | `isCurrent()` via pendingDispatches | `isAborted()` via lifecycleSignal | Improved — eliminates false-positive stale detection |
 | editFinal on abort | Silent return | Throw error (SDK falls back) | Improved — SDK fallback triggers correctly |
@@ -355,6 +371,11 @@ The following patterns are present in Discord's debouncer integration. Each is n
 9. Verify debouncer merges rapid consecutive messages into single dispatch
 10. Tests must always provide `abortSignal` in mocks
 
+## Out of Scope
+
+- **WS lifecycle adapter** — Issue #421 title mentions "gateway adapter pattern" but this spec only covers the run queue + dispatch alignment. WS connect/reconnect/heartbeat lifecycle refactoring is a separate effort.
+- **Cove-specific preflight logic** — The spec notes Discord's preflight pattern but detailed implementation of `preflightCoveMessage` is left to the implementer based on existing filtering in `dispatchMessage`.
+
 ## Migration Risk
 
-Medium. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin, and the core change (queue replacement) is straightforward. Two behavioral changes (unbounded queue, no batching) are user-visible but low-impact. The abort signal change is an improvement (merged signal matches Discord exactly).
+Medium. The SDK's `createChannelRunQueue` is battle-tested in the Discord plugin, and the core change (queue replacement) is straightforward. Two behavioral changes (queue depth guard replaces hard limit, debouncer replaces queue-level batching) are user-visible but low-impact. The abort signal change is an improvement (merged signal matches Discord exactly).
