@@ -231,17 +231,92 @@ handle {
 
 No server code changes needed.
 
+## Scroll Restoration
+
+Chat apps require per-channel scroll position memory (Discord behavior: switch away, switch back → same scroll position).
+
+React Router's built-in `<ScrollRestoration />` is page-level and won't help here. We need a custom per-channel scroll cache:
+
+```typescript
+// packages/client/src/hooks/useScrollRestoration.ts
+const scrollPositions = new Map<string, number>();
+
+export function useScrollRestoration(channelId: string, scrollRef: RefObject<HTMLElement>) {
+  // Save position on unmount / channel switch
+  useEffect(() => {
+    const el = scrollRef.current;
+    return () => {
+      if (el) scrollPositions.set(channelId, el.scrollTop);
+    };
+  }, [channelId]);
+
+  // Restore position on mount
+  useEffect(() => {
+    const el = scrollRef.current;
+    const saved = scrollPositions.get(channelId);
+    if (el && saved !== undefined) {
+      el.scrollTop = saved;
+    }
+  }, [channelId]);
+}
+```
+
+- Map lives in memory (no persistence needed — refresh = back to bottom is fine)
+- Only saves when switching away; restores when switching back
+- New channels or first visit → default scroll-to-bottom behavior unchanged
+
+## Thread Back Button Behavior
+
+**Explicit decision: opening a thread is a `push` — browser Back closes the thread.**
+
+This is intentional and differs from Discord (where thread panel doesn't affect URL/history).
+
+Rationale:
+- Thread is in the URL → users can share thread deep links (a feature Discord lacks in its panel model)
+- Back = close thread is intuitive: "go back to where I was" = channel without thread
+- Consistent with URL semantics: navigating to a deeper path and pressing back returns to the parent
+
+Behaviors:
+| Action | History effect | Back button result |
+|--------|---------------|-------------------|
+| Click channel in sidebar | push | Returns to previous channel |
+| Open thread | push | Closes thread, stays on channel |
+| Close thread via X button | push (to parent path) | Returns to channel-with-thread (user can re-open) |
+| Auto-redirect (e.g. / → default) | replace | Back goes to previous site, not / |
+
+Note: If user feedback shows Back-closes-thread is disruptive, we can change thread open to `replace` in a follow-up. But start with `push` — it's the URL-correct default.
+
 ## Edge Cases
 
 | Case | Behavior |
 |------|----------|
-| Invalid guild/channel in URL | Route renders → detects invalid → `navigate("/", { replace: true })` |
+| Invalid guild/channel in URL | Route renders → wait for `channelsLoaded` → if channel not in store → `navigate("/", { replace: true })`. While loading, show loading state (not redirect). |
+| Data not loaded yet (deep link) | `channelsLoaded === false` → show loading skeleton. Only redirect on invalid after READY confirms data. |
 | User not authenticated | Show login → preserve URL → after auth, navigate to saved path |
 | Channel deleted (WS event) | If viewing that channel → navigate to next available |
 | Root `/` | `RedirectToDefault` → navigate to first guild/channel |
 | Thread not found | Stay on channel, drop `/threads/...` |
 | Multi-tab | Independent URL state per tab, entity stores sync via WS |
 | replace vs push | Channel switch = push; auto-redirects/corrections = replace |
+
+## URL Path Helpers
+
+Do not scatter template string construction. Define path builders:
+
+```typescript
+// packages/client/src/lib/routes.ts
+export const routes = {
+  channel: (guildId: string, channelId: string) => `/channels/${guildId}/${channelId}`,
+  thread: (guildId: string, channelId: string, threadId: string) => `/channels/${guildId}/${channelId}/threads/${threadId}`,
+  root: () => "/",
+} as const;
+```
+
+All navigation calls use these helpers:
+```typescript
+navigate(routes.channel(guildId, channelId));
+navigate(routes.thread(guildId, channelId, threadId));
+```
 
 ## Migration Scope
 
