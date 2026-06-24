@@ -15,17 +15,19 @@ interface ThreadPanelProps {
 }
 
 export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
-  const threads = useThreadStore((s) => s.threads);
   const [thread, setThread] = useState<Channel | null>(null);
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const threadFetchRef = useRef<string | null>(null);
 
   // Find thread in store or fetch it
   useEffect(() => {
-    // Search all parent channels for this thread
+    if (!threadId) return;
+    // Read store imperatively to avoid reactive subscription triggering re-renders
+    const threads = useThreadStore.getState().threads;
     let found: Channel | null = null;
     for (const channelThreads of Object.values(threads)) {
       const t = channelThreads.find((t) => t.id === threadId);
@@ -35,11 +37,16 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       setThread(found);
     } else {
       // Deep link: thread not in store yet, fetch it
+      if (threadFetchRef.current === threadId) return;
+      threadFetchRef.current = threadId;
       useThreadStore.getState().fetchThread(threadId).then((t) => {
-        if (t) setThread(t);
-      });
+        if (t) {
+          useThreadStore.getState().addThread(t);
+          setThread(t);
+        }
+      }).catch(() => setThread(null));
     }
-  }, [threadId, threads]);
+  }, [threadId]);
 
   // Close menu on outside click or Escape
   useEffect(() => {
