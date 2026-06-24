@@ -8,40 +8,40 @@ The browser URL never changes when navigating between guilds, channels, or threa
 
 ```
 /channels/{guildId}/{channelId}                    — channel view
-/channels/{guildId}/{channelId}/threads/{threadId} — thread view
+/channels/{guildId}/{channelId}/threads/{threadId} — thread view (side panel)
 /channels/@me/{dmChannelId}                        — DM (future)
 ```
 
 ## Current State
 
 - No router library installed
-- Navigation state lives in zustand stores (`useGuildStore.activeGuildId`, `useChannelStore.activeChannelId`, `useThreadStore.activeThread`)
-- URL is always `/` (except during OAuth callback with query params)
-- SPA fallback already configured in Caddy: `try_files {path} /index.html` — no server changes needed
+- Navigation state in zustand: `useGuildStore.activeGuildId`, `useChannelStore.activeChannelId`, `useThreadStore.activeThread`
+- URL is always `/`
+- SPA fallback already configured in Caddy (`try_files {path} /index.html`)
 
-## Design
+## Design Principles
 
-### URL Structure (Discord-aligned)
+1. **URL is the single source of truth for navigation** (React Router official recommendation)
+2. **Store holds entity data, not "what's selected"** — channels list, messages, members stay in store; which channel is active comes from URL
+3. **Discord alignment** — same URL structure, same mental model
+
+## URL Structure
 
 ```
 /channels/{guildId}/{channelId}                    — channel view
-/channels/{guildId}/{channelId}/threads/{threadId} — thread open (side panel)
-/                                                   — redirect to last active guild/channel
+/channels/{guildId}/{channelId}/threads/{threadId} — thread side panel
+/                                                   — redirect to default
 ```
 
-### Approach: react-router-dom v6
+## Technology
 
-Use `react-router-dom` (v6+) with `createBrowserRouter`. Standard library, well maintained, handles:
-- Nested routes
-- URL params extraction (`useParams`)
-- Navigation (`useNavigate`, `<Link>`)
-- Popstate / back-forward automatically
-- Loader/redirect patterns
-- Future extensibility (settings pages, invite links, DMs, etc.)
+**react-router-dom v6** with `createBrowserRouter` + `RouterProvider`.
 
-### Route Definitions
+## Route Definitions
 
 ```typescript
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -54,128 +54,172 @@ const router = createBrowserRouter([
         children: [
           {
             path: "threads/:threadId",
-            element: <ThreadSidePanel />,  // renders in a slot, NOT replacing parent
+            element: <ThreadSidePanel />,
           },
         ],
       },
     ],
   },
 ]);
+
+function App() {
+  return <RouterProvider router={router} />;
+}
 ```
 
-### Thread Routing: Side Panel (not Outlet replacement)
+## Store Cleanup: Remove Navigation State
 
-Current behavior: thread opens as a resizable side panel alongside the channel. This must be preserved.
-
-The `/threads/:threadId` nested route does **not** use a standard `<Outlet />` that replaces the channel content. Instead:
-- `ChannelView` always renders the message list
-- `ChannelView` checks for a `threadId` param (via `useParams()`) and conditionally renders `<ThreadPanel />` as a side panel
-- Closing the thread panel navigates back to `/channels/{guildId}/{channelId}` (removes `/threads/...` from URL)
+### What gets removed from stores
 
 ```typescript
-// Inside ChannelView
+// useGuildStore — DELETE these:
+activeGuildId: string | null;
+setActiveGuild: (id: string | null) => void;
+
+// useChannelStore — DELETE these:
+activeChannelId: string | null;
+setActiveChannel: (id: string | null) => void;
+
+// useThreadStore — DELETE these (if applicable):
+activeThread: Thread | null;
+setActiveThread: (thread: Thread | null) => void;
+```
+
+### What stays in stores
+
+- `useChannelStore`: channels list, `getChannels()`, `addChannel()`, `removeChannel()`, `channelsLoaded`
+- `useGuildStore`: guilds list, `setGuilds()`
+- `useThreadStore`: thread data/messages (entity data, not selection)
+- All message stores, member stores, etc. — unchanged
+
+### New hook: `useActiveChannel()`
+
+```typescript
+// packages/client/src/hooks/useActiveChannel.ts
+import { useParams } from "react-router-dom";
+
+export function useActiveIds() {
+  const { guildId, channelId, threadId } = useParams();
+  return { guildId: guildId ?? null, channelId: channelId ?? null, threadId: threadId ?? null };
+}
+```
+
+Components migrate from:
+```typescript
+// Before
+const { activeChannelId } = useChannelStore();
+// After
+const { channelId } = useActiveIds();
+```
+
+### Non-React code: router.state subscription
+
+`gateway-subscriptions.ts` and similar non-component code cannot use hooks. Solution: subscribe to the router instance directly.
+
+```typescript
+// packages/client/src/lib/router.ts
+// Export router instance so non-React code can access current location
+
+import { createBrowserRouter } from "react-router-dom";
+export const router = createBrowserRouter([/* routes */]);
+
+// Helper for non-React consumers
+export function getActiveIdsFromRouter(): { guildId: string | null; channelId: string | null } {
+  const match = router.state.location.pathname.match(
+    /^\/channels\/([^/]+)\/([^/]+)/
+  );
+  if (!match) return { guildId: null, channelId: null };
+  return { guildId: match[1], channelId: match[2] };
+}
+
+// Subscribe to route changes (for side-effect code like gateway-subscriptions)
+export function subscribeToRoute(callback: () => void) {
+  return router.subscribe(callback);
+}
+```
+
+Usage in `gateway-subscriptions.ts`:
+```typescript
+import { getActiveIdsFromRouter } from "./router";
+
+// Where it used to read useChannelStore.getState().activeChannelId:
+const { channelId: activeChannelId } = getActiveIdsFromRouter();
+```
+
+### Navigation: use `navigate()` or `router.navigate()`
+
+```typescript
+// In components (hook)
+const navigate = useNavigate();
+navigate(`/channels/${guildId}/${channelId}`);
+
+// In non-React code
+import { router } from "./router";
+router.navigate(`/channels/${guildId}/${channelId}`);
+```
+
+## Thread Routing: Side Panel
+
+Thread opens as a resizable side panel alongside the channel (current behavior preserved).
+
+`ChannelView` reads `threadId` from params and conditionally renders the panel:
+
+```typescript
 function ChannelView() {
   const { guildId, channelId, threadId } = useParams();
-  // ... render message list always ...
+  const navigate = useNavigate();
+  
+  const closeThread = () => navigate(`/channels/${guildId}/${channelId}`);
+  
   return (
-    <>
-      <MessageList channelId={channelId} />
-      {threadId && <ThreadPanel threadId={threadId} />}
-    </>
+    <div className="flex flex-1">
+      <MessageList channelId={channelId!} />
+      {threadId && (
+        <ThreadPanel threadId={threadId} onClose={closeThread} />
+      )}
+      {/* Outlet NOT used — thread is a conditional side panel */}
+    </div>
   );
 }
 ```
 
-### Store Migration Strategy
+## READY Event: Respect URL Intent
 
-**Dual-source phase (this PR):**
-- Keep `activeChannelId` and `activeGuildId` in stores but make them **derived from URL**
-- Add a `useActiveChannel()` hook that reads from `useParams()` — all components migrate to this
-- Store setters (`setActiveChannel`, `setActiveGuild`) become wrappers around `navigate()`
-- Non-component code (e.g. `gateway-subscriptions.ts`) reads from a **sync store field** that the router updates via a `<RouterSync />` component
+The READY handler in `gateway-subscriptions.ts` currently auto-selects the first channel. After migration:
 
 ```typescript
-// RouterSync component — bridges URL → store for non-component consumers
-function RouterSync() {
-  const { guildId, channelId } = useParams();
-  const setActiveGuild = useGuildStore((s) => s.setActiveGuild);
-  const setActiveChannel = useChannelStore((s) => s.setActiveChannel);
-  
-  useEffect(() => {
-    if (guildId) setActiveGuild(guildId);
-    if (channelId) setActiveChannel(channelId);
-  }, [guildId, channelId]);
-  
-  return null;
-}
-```
-
-This means:
-- **URL is source of truth** for navigation
-- **Store fields stay** (for gateway-subscriptions, unread tracking, etc.) but are kept in sync by `RouterSync`
-- Components prefer `useParams()` directly; non-React code reads store as before
-- No big-bang migration — existing store reads continue to work
-
-### READY Event vs Deep Link Race Condition
-
-Current behavior: `gateway-subscriptions.ts` READY handler auto-selects the first channel if `activeChannelId` is null.
-
-**Solution:** The READY handler must respect URL intent.
-
-```typescript
-// In gateway-subscriptions.ts READY handler
 subscribe("READY", (data) => {
-  // ... set guilds, channels ...
+  // ... set guilds, channels data in stores ...
   
-  // Only auto-select if NO channel is already active (i.e., URL didn't set one)
-  if (!channelStore.activeChannelId) {
-    // URL-based init hasn't fired yet OR user landed on "/"
-    channelStore.setActiveChannel(activeGuildChannels[0].id);
+  // Only auto-navigate if user is on "/" (no channel in URL)
+  const { channelId } = getActiveIdsFromRouter();
+  if (!channelId && activeGuildChannels.length > 0) {
+    router.navigate(`/channels/${guilds[0].id}/${activeGuildChannels[0].id}`, { replace: true });
   }
 });
 ```
 
 Load sequence:
-1. App mounts → `createBrowserRouter` parses URL
-2. `RouterSync` fires → sets `activeChannelId` in store from URL params
-3. WS connects → READY arrives → sees `activeChannelId` already set → skips auto-select
-4. If URL was just `/` → `activeChannelId` is null → READY auto-selects → `RedirectToDefault` navigates to the selected channel
+1. App mounts → router parses URL → renders matching route
+2. WS connects → READY arrives with guild/channel data
+3. READY checks URL — if already on `/channels/x/y`, does nothing (data loads into stores, view already correct)
+4. If on `/`, READY navigates to first guild/channel with `replace: true` (no back-button entry for the redirect)
 
-Edge case: READY arrives before RouterSync effect fires (unlikely but possible in fast WS reconnect). Mitigation: the READY handler checks `window.location.pathname` directly as a fallback:
-
-```typescript
-if (!channelStore.activeChannelId) {
-  const urlMatch = window.location.pathname.match(/^\/channels\/[^/]+\/([^/]+)/);
-  if (!urlMatch) {
-    // Truly no channel selected — auto-select
-    channelStore.setActiveChannel(activeGuildChannels[0].id);
-  }
-  // else: URL has a channel, RouterSync will handle it
-}
-```
-
-### OAuth Callback Flow
-
-Current: `/?code=xxx` → exchange token → `window.history.replaceState({}, "", "/")` → reload.
-
-Updated:
-1. Before redirecting to Google OAuth, save current path in `sessionStorage`
-2. After callback success, redirect to saved path (or `/` if none)
-3. `RedirectToDefault` handles `/` → navigates to first guild/channel
+## OAuth Callback Flow
 
 ```typescript
-// Before OAuth redirect
+// Before redirecting to Google OAuth
 sessionStorage.setItem("cove_return_path", window.location.pathname);
 
-// After callback success  
+// After successful callback
 const returnPath = sessionStorage.getItem("cove_return_path") || "/";
 sessionStorage.removeItem("cove_return_path");
-window.history.replaceState({}, "", returnPath);
+router.navigate(returnPath, { replace: true });
 ```
 
-### SPA Fallback (Server-side)
+## SPA Fallback
 
-**Already handled.** Caddy config for staging:
+Already handled by Caddy:
 ```
 handle {
   root * /var/www/cove-staging
@@ -184,36 +228,48 @@ handle {
 }
 ```
 
-All non-API, non-gateway paths fall through to `index.html`. No server code changes needed.
+No server code changes needed.
 
-### Edge Cases
+## Edge Cases
 
 | Case | Behavior |
 |------|----------|
-| Invalid guild/channel in URL | `ChannelView` detects invalid params → navigate to `/` |
-| User not authenticated | Show login, after auth redirect to saved path |
-| Channel deleted while URL points to it | Gateway CHANNEL_DELETE event → navigate to next channel |
-| Root `/` with no prior state | `RedirectToDefault` → first guild's first channel |
-| Thread closed/not found | Stay on channel view, drop `/threads/...` from URL |
-| Multi-tab same user | Each tab has independent URL state, stores sync via WS events |
-| `history.replaceState` vs `pushState` | Channel switches = push (back button works); store-sync corrections = replace (no history spam) |
+| Invalid guild/channel in URL | Route renders → detects invalid → `navigate("/", { replace: true })` |
+| User not authenticated | Show login → preserve URL → after auth, navigate to saved path |
+| Channel deleted (WS event) | If viewing that channel → navigate to next available |
+| Root `/` | `RedirectToDefault` → navigate to first guild/channel |
+| Thread not found | Stay on channel, drop `/threads/...` |
+| Multi-tab | Independent URL state per tab, entity stores sync via WS |
+| replace vs push | Channel switch = push; auto-redirects/corrections = replace |
+
+## Migration Scope
+
+Files that need changes:
+- `App.tsx` — wrap in RouterProvider, remove store-based activeChannelId usage
+- `useChannelStore.ts` — remove `activeChannelId`, `setActiveChannel`
+- `useGuildStore.ts` — remove `activeGuildId`, `setActiveGuild`
+- `useThreadStore.ts` — remove `activeThread` selection state (keep thread data)
+- `gateway-subscriptions.ts` — use `getActiveIdsFromRouter()` instead of store reads
+- All components reading `activeChannelId` from store → use `useParams()` / `useActiveIds()`
+- New: `src/lib/router.ts` — router instance + helpers
+- New: `src/hooks/useActiveIds.ts` — convenience hook
 
 ## Acceptance Criteria
 
-1. `react-router-dom` v6 installed and configured with `createBrowserRouter`
-2. Switching channels updates URL to `/channels/{guildId}/{channelId}`
-3. Opening a thread updates URL to `/channels/{guildId}/{channelId}/threads/{threadId}`
-4. Pasting a channel/thread URL in a new tab opens that view directly (after auth)
-5. Browser back/forward navigates between previously visited channels/threads
-6. Invalid URLs gracefully redirect to default channel
-7. READY event does not override URL-specified channel
-8. OAuth flow preserves and restores the original URL
-9. `gateway-subscriptions.ts` and other non-component code continues to work via synced store fields
-10. Thread renders as side panel (not outlet replacement)
-11. Existing Caddy SPA fallback works — no server changes needed
+1. `react-router-dom` v6 with `createBrowserRouter` + `RouterProvider`
+2. **No navigation state in zustand** — `activeChannelId`, `activeGuildId` removed
+3. Switching channels updates URL to `/channels/{guildId}/{channelId}`
+4. Opening a thread appends `/threads/{threadId}` to URL
+5. Deep link (paste URL in new tab) opens correct channel/thread after auth
+6. Browser back/forward works
+7. Invalid URLs redirect to default
+8. READY event respects URL — no override
+9. OAuth preserves and restores original URL
+10. Thread renders as side panel (not page replacement)
+11. Non-React code works via `router.state` / `getActiveIdsFromRouter()`
 
 ## Test Plan
 
-- Unit: route matching, `RouterSync` store updates, READY handler respects existing activeChannelId, `useActiveChannel` hook
-- Integration: navigate → verify URL; load URL → verify correct view renders; READY event → no override
-- Manual: back/forward, copy-paste URL in new tab, thread deep link, OAuth redirect round-trip, multi-tab independence
+- Unit: `getActiveIdsFromRouter()` parsing, `RedirectToDefault` logic, READY handler with/without URL
+- Integration: navigate → URL correct; load URL → correct view; channel delete → redirect
+- Manual: back/forward, deep link in new tab, thread URL, OAuth round-trip, multi-tab
