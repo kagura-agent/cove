@@ -6,87 +6,73 @@ The browser URL never changes when navigating between guilds, channels, or threa
 
 ## Discord Reference
 
-Discord URL structure: `/channels/{guildId}/{channelId}`
-Thread/DM variations: `/channels/@me/{dmChannelId}`
+```
+/channels/{guildId}/{channelId}                    — channel view
+/channels/{guildId}/{channelId}/threads/{threadId} — thread view
+/channels/@me/{dmChannelId}                        — DM (future)
+```
 
 ## Current State
 
 - No router library installed
 - Navigation state lives in zustand stores (`useGuildStore.activeGuildId`, `useChannelStore.activeChannelId`)
 - URL is always `/` (except during OAuth callback with query params)
-- `window.history.replaceState({}, "", "/")` is called after OAuth to clean up
 
 ## Design
 
-### URL Structure
+### URL Structure (Discord-aligned)
 
 ```
-/channels/{guildId}/{channelId}        — channel view
-/channels/{guildId}/{channelId}/{threadId} — thread open (optional, stretch)
-/                                       — redirect to last active or first guild/channel
+/channels/{guildId}/{channelId}                    — channel view
+/channels/{guildId}/{channelId}/threads/{threadId} — thread open
+/                                                   — redirect to last active guild/channel
 ```
 
-### Approach: Lightweight `history.pushState` (no router library)
+### Approach: react-router
 
-Since the app is a single-page shell with one main view (guild → channel → messages), a full router library is overkill. Instead:
+Use `react-router-dom` (v6+) with `createBrowserRouter`. Standard library, well maintained, handles:
+- Nested routes
+- URL params extraction (`useParams`)
+- Navigation (`useNavigate`, `<Link>`)
+- Popstate / back-forward automatically
+- Loader/redirect patterns
+- Future extensibility (settings pages, invite links, DMs, etc.)
 
-1. **URL → State (on load):** Parse `window.location.pathname` on app init. If it matches `/channels/{guildId}/{channelId}`, set the corresponding store state after channels load.
-
-2. **State → URL (on navigate):** When `setActiveGuild` or `setActiveChannel` is called, push a new history entry via `window.history.pushState`.
-
-3. **Popstate (back/forward):** Listen to `window.onpopstate`, parse the URL, and update store state accordingly.
-
-### Implementation Outline
-
-Create a `useUrlSync` hook (or similar) that:
+### Route Definitions
 
 ```typescript
-// packages/client/src/hooks/useUrlSync.ts
-
-export function useUrlSync() {
-  const { activeGuildId } = useGuildStore();
-  const { activeChannelId, channelsLoaded } = useChannelStore();
-
-  // On mount: parse URL → set state (if valid guild/channel)
-  useEffect(() => {
-    const match = window.location.pathname.match(
-      /^\/channels\/([^/]+)\/([^/]+)/
-    );
-    if (match) {
-      const [, guildId, channelId] = match;
-      // validate and set store state
-    }
-  }, [channelsLoaded]);
-
-  // On state change: push URL
-  useEffect(() => {
-    if (activeGuildId && activeChannelId) {
-      const path = `/channels/${activeGuildId}/${activeChannelId}`;
-      if (window.location.pathname !== path) {
-        window.history.pushState(null, "", path);
-      }
-    }
-  }, [activeGuildId, activeChannelId]);
-
-  // Listen for popstate (back/forward)
-  useEffect(() => {
-    const handler = () => {
-      const match = window.location.pathname.match(
-        /^\/channels\/([^/]+)\/([^/]+)/
-      );
-      if (match) {
-        // update stores without pushing another history entry
-      }
-    };
-    window.addEventListener("popstate", handler);
-    return () => window.removeEventListener("popstate", handler);
-  }, []);
-}
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <AppShell />,
+    children: [
+      { index: true, element: <RedirectToDefault /> },
+      {
+        path: "channels/:guildId/:channelId",
+        element: <ChannelView />,
+        children: [
+          {
+            path: "threads/:threadId",
+            element: <ThreadPanel />,
+          },
+        ],
+      },
+    ],
+  },
+]);
 ```
+
+### Migration from Zustand State
+
+Currently `activeGuildId` and `activeChannelId` in stores drive the UI. After migration:
+- **URL becomes the source of truth** for which guild/channel/thread is displayed
+- Stores still hold the data (channel list, messages, etc.) but active selection comes from route params
+- `setActiveChannel(id)` calls become `navigate(`/channels/${guildId}/${channelId}`)` 
+- Components read from `useParams()` instead of `useChannelStore().activeChannelId`
 
 ### Server-side: Catch-all Route
 
-The server must serve `index.html` for any `/channels/*` path (SPA fallback). Check if the existing server config already handles this (likely via a catch-all for the Vite/static build).
+The server must serve `index.html` for any path that doesn't match an API route or static file (SPA fallback). Verify the existing Vite/Express config handles this.
 
 ### Edge Cases
 
@@ -94,27 +80,24 @@ The server must serve `index.html` for any `/channels/*` path (SPA fallback). Ch
 |------|----------|
 | Invalid guild/channel in URL | Redirect to `/`, fall back to default |
 | User not authenticated | Show login, after auth redirect to original URL |
-| Channel deleted while URL points to it | Clear URL, select next available |
-| OAuth callback (`/?code=...`) | Existing flow unchanged, redirect to last channel after |
+| Channel deleted while URL points to it | Redirect to next available channel |
+| OAuth callback (`/?code=***`) | Existing flow, then redirect to last channel |
 | Root `/` with no prior state | Select first guild's first channel |
-
-### What This Does NOT Include
-
-- Thread ID in URL (can be follow-up)
-- Guild list routing (`/@me` for DMs)
-- Full react-router migration
-- URL for settings/modals
+| Thread closed/not found | Stay on channel, clear thread from URL |
 
 ## Acceptance Criteria
 
-1. Switching channels updates the browser URL to `/channels/{guildId}/{channelId}`
-2. Pasting a channel URL in a new tab opens that channel directly (after auth)
-3. Browser back/forward navigates between previously visited channels
-4. Invalid URLs gracefully fall back to the default channel
-5. No router library added — pure `history.pushState` + `popstate`
-6. Server serves index.html for `/channels/*` paths (SPA fallback)
+1. `react-router-dom` v6 installed and configured with `createBrowserRouter`
+2. Switching channels updates URL to `/channels/{guildId}/{channelId}`
+3. Opening a thread updates URL to `/channels/{guildId}/{channelId}/threads/{threadId}`
+4. Pasting a channel/thread URL in a new tab opens that view directly (after auth)
+5. Browser back/forward navigates between previously visited channels/threads
+6. Invalid URLs gracefully redirect to default channel
+7. Server serves index.html for all non-API paths (SPA fallback)
+8. Existing OAuth flow still works
 
 ## Test Plan
 
-- Unit: `useUrlSync` hook — mock pushState/popstate, verify state ↔ URL sync
-- Manual: switch channels → verify URL changes; copy URL → new tab → verify correct channel loads; back/forward buttons work
+- Unit: route matching, redirect logic, invalid URL handling
+- Integration: navigate → verify URL; load URL → verify correct view renders
+- Manual: back/forward, copy-paste URL in new tab, thread deep link, auth redirect
