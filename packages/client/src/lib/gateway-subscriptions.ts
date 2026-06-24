@@ -196,6 +196,8 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_DELETE", (data) => {
     const { channelId: activeChannelId } = getActiveIdsFromRouter();
+    // Resolve guild BEFORE removing the channel from the store
+    const guildId = getGuildForChannel(data.id) ?? Object.keys(useGuildStore.getState().guilds)[0];
     useChannelStore.getState().removeChannel(data.id);
     useMessageStore.getState().removeChannelMessages(data.id);
     useReadStateStore.getState().removeChannel(data.id);
@@ -203,7 +205,6 @@ export function setupGatewaySubscriptions(): void {
 
     // If viewing the deleted channel, navigate to next available
     if (data.id === activeChannelId) {
-      const guildId = getGuildForChannel(data.id) ?? Object.keys(useGuildStore.getState().guilds)[0];
       if (guildId) {
         const channels = useChannelStore.getState().getChannels(guildId);
         if (channels.length > 0) {

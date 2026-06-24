@@ -48,21 +48,29 @@ export function ChannelView() {
     }
   }, [channelsLoaded, guildId, channelId, channelsByGuildId, navigate]);
 
-  // Validate thread exists
-  const threads = useThreadStore((s) => s.threads);
+  // Validate thread exists — use targeted selector to avoid re-firing on unrelated thread updates
+  const channelThreads = useThreadStore((s) => s.threads[channelId ?? ""] ?? []);
+  const threadFetchRef = useRef<string | null>(null);
   useEffect(() => {
     if (!threadId || !channelId) return;
-    const channelThreads = threads[channelId] ?? [];
     const threadExists = channelThreads.some((t) => t.id === threadId);
     if (channelsLoaded && !threadExists) {
+      // Guard: don't re-fetch if already in progress or completed for this threadId
+      if (threadFetchRef.current === threadId) return;
+      threadFetchRef.current = threadId;
       // Thread not found — try to fetch it (deep link case)
       useThreadStore.getState().fetchThread(threadId).then((thread) => {
         if (!thread && guildId && channelId) {
           navigate(routes.channel(guildId, channelId), { replace: true });
         }
+      }).catch(() => {
+        // Network failure — navigate back to parent channel
+        if (guildId && channelId) {
+          navigate(routes.channel(guildId, channelId), { replace: true });
+        }
       });
     }
-  }, [threadId, channelId, guildId, channelsLoaded, threads, navigate]);
+  }, [threadId, channelId, guildId, channelsLoaded, channelThreads, navigate]);
 
   const closeThread = useCallback(() => {
     if (!guildId || !channelId) return;
