@@ -54,7 +54,8 @@ const router = createBrowserRouter([
         children: [
           {
             path: "threads/:threadId",
-            element: <ThreadSidePanel />,
+            // No element — route exists only for param capture.
+            // ThreadPanel is conditionally rendered by ChannelView via useParams().
           },
         ],
       },
@@ -124,17 +125,15 @@ import { createBrowserRouter } from "react-router-dom";
 export const router = createBrowserRouter([/* routes */]);
 
 // Helper for non-React consumers
-export function getActiveIdsFromRouter(): { guildId: string | null; channelId: string | null } {
-  const match = router.state.location.pathname.match(
-    /^\/channels\/([^/]+)\/([^/]+)/
-  );
-  if (!match) return { guildId: null, channelId: null };
-  return { guildId: match[1], channelId: match[2] };
-}
-
-// Subscribe to route changes (for side-effect code like gateway-subscriptions)
-export function subscribeToRoute(callback: () => void) {
-  return router.subscribe(callback);
+export function getActiveIdsFromRouter(): { guildId: string | null; channelId: string | null; threadId: string | null } {
+  // Use router.state.matches (type-safe, no regex duplication with route config)
+  const match = router.state.matches.find(m => m.params.channelId);
+  if (!match) return { guildId: null, channelId: null, threadId: null };
+  return {
+    guildId: match.params.guildId ?? null,
+    channelId: match.params.channelId ?? null,
+    threadId: match.params.threadId ?? null,
+  };
 }
 ```
 
@@ -175,6 +174,8 @@ function ChannelView() {
     <div className="flex flex-1">
       <MessageList channelId={channelId!} />
       {threadId && (
+        // ThreadPanel must handle missing data on deep-link:
+        // if thread not in store yet, fetch by threadId on mount.
         <ThreadPanel threadId={threadId} onClose={closeThread} />
       )}
       {/* Outlet NOT used — thread is a conditional side panel */}
