@@ -28,8 +28,9 @@ export function ChannelView() {
   const { sidebarOpen, setSidebarOpen } = useOutletContext<AppShellContext>();
   const { guildId, channelId, threadId } = useActiveIds();
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const channelsLoaded = useChannelStore((s) => s.channelsLoaded);
-  const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
   const [membersOpen, setMembersOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
@@ -41,18 +42,18 @@ export function ChannelView() {
   // Validate channel exists after data loads
   useEffect(() => {
     if (!channelsLoaded || !guildId || !channelId) return;
-    const channels = channelsByGuildId[guildId] ?? [];
+    const channels = useChannelStore.getState().channelsByGuildId[guildId] ?? [];
     const channelExists = channels.some((c) => c.id === channelId);
     if (!channelExists) {
-      navigate(routes.root(), { replace: true });
+      navigateRef.current(routes.root(), { replace: true });
     }
-  }, [channelsLoaded, guildId, channelId, channelsByGuildId, navigate]);
+  }, [channelsLoaded, guildId, channelId]);
 
-  // Validate thread exists — use targeted selector to avoid re-firing on unrelated thread updates
-  const channelThreads = useThreadStore((s) => s.threads[channelId ?? ""] ?? []);
+  // Validate thread exists
   const threadFetchRef = useRef<string | null>(null);
   useEffect(() => {
     if (!threadId || !channelId) return;
+    const channelThreads = useThreadStore.getState().threads[channelId] ?? [];
     const threadExists = channelThreads.some((t) => t.id === threadId);
     if (channelsLoaded && !threadExists) {
       // Guard: don't re-fetch if already in progress or completed for this threadId
@@ -61,25 +62,25 @@ export function ChannelView() {
       // Thread not found — try to fetch it (deep link case)
       useThreadStore.getState().fetchThread(threadId).then((thread) => {
         if (!thread && guildId && channelId) {
-          navigate(routes.channel(guildId, channelId), { replace: true });
+          navigateRef.current(routes.channel(guildId, channelId), { replace: true });
         }
       }).catch(() => {
         // Network failure — navigate back to parent channel
         if (guildId && channelId) {
-          navigate(routes.channel(guildId, channelId), { replace: true });
+          navigateRef.current(routes.channel(guildId, channelId), { replace: true });
         }
       });
     }
-  }, [threadId, channelId, guildId, channelsLoaded, channelThreads, navigate]);
+  }, [threadId, channelId, guildId, channelsLoaded]);
 
   const closeThread = useCallback(() => {
     if (!guildId || !channelId) return;
     if (window.history.state?.idx === 0) {
-      navigate(routes.channel(guildId, channelId), { replace: true });
+      navigateRef.current(routes.channel(guildId, channelId), { replace: true });
     } else {
-      navigate(-1);
+      navigateRef.current(-1);
     }
-  }, [guildId, channelId, navigate]);
+  }, [guildId, channelId]);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
