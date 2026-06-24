@@ -126,14 +126,22 @@ export const router = createBrowserRouter([/* routes */]);
 
 // Helper for non-React consumers
 export function getActiveIdsFromRouter(): { guildId: string | null; channelId: string | null; threadId: string | null } {
-  // Use router.state.matches (type-safe, no regex duplication with route config)
-  const match = router.state.matches.find(m => m.params.channelId);
-  if (!match) return { guildId: null, channelId: null, threadId: null };
+  // Use router.state.matches (type-safe, derived from route config — no regex duplication)
+  const matches = router.state.matches;
+  const channelMatch = matches.find(m => m.params.channelId);
+  if (!channelMatch) return { guildId: null, channelId: null, threadId: null };
   return {
-    guildId: match.params.guildId ?? null,
-    channelId: match.params.channelId ?? null,
-    threadId: match.params.threadId ?? null,
+    guildId: channelMatch.params.guildId ?? null,
+    channelId: channelMatch.params.channelId ?? null,
+    threadId: channelMatch.params.threadId ?? null,
   };
+}
+
+// For non-React code that needs guildId from a channelId (e.g. CHANNEL_DELETE handler)
+export function getGuildForChannel(channelId: string): string | null {
+  const channels = useChannelStore.getState().channels;
+  const channel = channels.find(c => c.id === channelId);
+  return channel?.guild_id ?? null;
 }
 ```
 
@@ -265,33 +273,50 @@ export function useScrollRestoration(channelId: string, scrollRef: RefObject<HTM
 - Only saves when switching away; restores when switching back
 - New channels or first visit → default scroll-to-bottom behavior unchanged
 
-## Thread Back Button Behavior
+## Thread Navigation & History Semantics
 
 **Explicit decision: opening a thread is a `push` — browser Back closes the thread.**
 
-This is intentional and differs from Discord (where thread panel doesn't affect URL/history).
-
 Rationale:
-- Thread is in the URL → users can share thread deep links (a feature Discord lacks in its panel model)
+- Thread is in the URL → users can share thread deep links
 - Back = close thread is intuitive: "go back to where I was" = channel without thread
 - Consistent with URL semantics: navigating to a deeper path and pressing back returns to the parent
+
+### Avoiding the Yo-Yo Problem
+
+If close-thread-via-X uses `push`, it creates a yo-yo: Back reopens thread → Back closes → infinite loop.
+
+**Solution: close thread via X = `navigate(-1)` with deep-link fallback.**
+
+```typescript
+function closeThread(guildId: string, channelId: string) {
+  // If this is the first history entry (deep link), can't go back — replace instead
+  if (window.history.state?.idx === 0) {
+    navigate(routes.channel(guildId, channelId), { replace: true });
+  } else {
+    navigate(-1);
+  }
+}
+```
 
 Behaviors:
 | Action | History effect | Back button result |
 |--------|---------------|-------------------|
 | Click channel in sidebar | push | Returns to previous channel |
 | Open thread | push | Closes thread, stays on channel |
-| Close thread via X button | push (to parent path) | Returns to channel-with-thread (user can re-open) |
+| Close thread via X button | go(-1) | Clean pop, no yo-yo. Forward re-opens thread if desired |
+| Close thread (deep link, no prior entry) | replace with parent | Back leaves site (expected for deep link) |
 | Auto-redirect (e.g. / → default) | replace | Back goes to previous site, not / |
-
-Note: If user feedback shows Back-closes-thread is disruptive, we can change thread open to `replace` in a follow-up. But start with `push` — it's the URL-correct default.
 
 ## Edge Cases
 
 | Case | Behavior |
 |------|----------|
-| Invalid guild/channel in URL | Route renders → wait for `channelsLoaded` → if channel not in store → `navigate("/", { replace: true })`. While loading, show loading state (not redirect). |
-| Data not loaded yet (deep link) | `channelsLoaded === false` → show loading skeleton. Only redirect on invalid after READY confirms data. |
+| Invalid guild/channel in URL | Route renders → wait for `channelsLoaded` → if channel not in store → `navigate("/", { replace: true })`. While loading, show skeleton (not redirect). |
+| Data not loaded yet (deep link) | `channelsLoaded === false` → show loading skeleton. Only redirect after READY confirms channel doesn't exist. |
+| guildId not available at call site | Some code (e.g. CHANNEL_DELETE handler) only has channelId. Use a `getGuildForChannel(channelId)` lookup from channel store, or store guildId on channel entity. |
+| Safari bfcache (OAuth) | After OAuth redirect, Back may restore stale page from bfcache. Add `window.addEventListener("pageshow", (e) => { if (e.persisted) window.location.reload(); })` in auth flow. |
+| Deployment: old cached JS + new URL structure | Old JS on `/channels/x/y` won't match routes → falls through to `/`. Client-side version check on app mount: if asset hash mismatch, hard reload. Caddy `try_files` ensures HTML always loads. |
 | User not authenticated | Show login → preserve URL → after auth, navigate to saved path |
 | Channel deleted (WS event) | If viewing that channel → navigate to next available |
 | Root `/` | `RedirectToDefault` → navigate to first guild/channel |
