@@ -3,20 +3,43 @@ import { useThreadStore } from "../stores/useThreadStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
-import { MessageItem } from "./MessageItem";
 import { ReplyBar } from "./ReplyBar";
+import { MessageItem } from "./MessageItem";
 import * as api from "../lib/api";
-import type { Message } from "../types";
+import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 
-export function ThreadPanel() {
-  const activeThread = useThreadStore((s) => s.activeThread);
-  const closeThread = useThreadStore((s) => s.closeThread);
+interface ThreadPanelProps {
+  threadId: string;
+  onClose: () => void;
+}
+
+export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
+  const threads = useThreadStore((s) => s.threads);
+  const [thread, setThread] = useState<Channel | null>(null);
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Find thread in store or fetch it
+  useEffect(() => {
+    // Search all parent channels for this thread
+    let found: Channel | null = null;
+    for (const channelThreads of Object.values(threads)) {
+      const t = channelThreads.find((t) => t.id === threadId);
+      if (t) { found = t; break; }
+    }
+    if (found) {
+      setThread(found);
+    } else {
+      // Deep link: thread not in store yet, fetch it
+      useThreadStore.getState().fetchThread(threadId).then((t) => {
+        if (t) setThread(t);
+      });
+    }
+  }, [threadId, threads]);
 
   // Close menu on outside click or Escape
   useEffect(() => {
@@ -45,13 +68,13 @@ export function ThreadPanel() {
   }, [showMenu]);
 
   useEffect(() => {
-    if (!activeThread?.message_id || !activeThread?.parent_id) {
+    if (!thread?.message_id || !thread?.parent_id) {
       setParentMessage(null);
       return;
     }
 
-    const parentId = activeThread.parent_id;
-    const messageId = activeThread.message_id;
+    const parentId = thread.parent_id;
+    const messageId = thread.message_id;
 
     // Try message store first
     const storeMessages = useMessageStore.getState().messages[parentId] ?? [];
@@ -66,19 +89,19 @@ export function ThreadPanel() {
       .fetchMessage(parentId, messageId)
       .then((msg) => setParentMessage(msg))
       .catch(() => setParentMessage(null));
-  }, [activeThread?.id, activeThread?.message_id, activeThread?.parent_id]);
+  }, [thread?.id, thread?.message_id, thread?.parent_id]);
 
-  if (!activeThread) return null;
+  if (!thread) return null;
 
   async function handleArchive() {
     try {
-      await api.updateChannel(activeThread!.id, { archived: true });
-      useThreadStore.getState().removeThread(activeThread!.id);
+      await api.updateChannel(thread!.id, { archived: true });
+      useThreadStore.getState().removeThread(thread!.id);
     } catch (err) {
       console.error("archive thread:", err);
     }
     setShowMenu(false);
-    closeThread();
+    onClose();
   }
 
   async function handleDelete() {
@@ -87,18 +110,18 @@ export function ThreadPanel() {
       return;
     }
     try {
-      await api.deleteChannel(activeThread!.id);
-      useThreadStore.getState().removeThread(activeThread!.id);
+      await api.deleteChannel(thread!.id);
+      useThreadStore.getState().removeThread(thread!.id);
     } catch (err) {
       console.error("delete thread:", err);
     }
     setShowMenu(false);
-    closeThread();
+    onClose();
   }
 
-  const displayName = activeThread.name.length > 40
-    ? activeThread.name.slice(0, 40) + "\u2026"
-    : activeThread.name;
+  const displayName = thread.name.length > 40
+    ? thread.name.slice(0, 40) + "\u2026"
+    : thread.name;
 
   return (
     <div style={{
@@ -185,7 +208,7 @@ export function ThreadPanel() {
           )}
         </div>
         <button
-          onClick={closeThread}
+          onClick={onClose}
           style={{
             background: "none",
             border: "none",
@@ -200,13 +223,13 @@ export function ThreadPanel() {
 
       {/* Message area: parent message + thread messages in one scroll flow */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" }}>
-        <MessageList channelId={activeThread.id} parentMessage={parentMessage} />
+        <MessageList channelId={thread.id} parentMessage={parentMessage} />
       </div>
 
       {/* Reuse the exact same input as main chat */}
       <div style={{ flexShrink: 0, background: "var(--bg-secondary)" }}>
-        <ReplyBar channelId={activeThread.id} />
-        <MessageInput channelId={activeThread.id} />
+        <ReplyBar channelId={thread.id} />
+        <MessageInput channelId={thread.id} />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { usePresenceStore } from "../stores/usePresenceStore";
 import { useMemberStore } from "../stores/useMemberStore";
-import { useGuildStore } from "../stores/useGuildStore";
+import { useActiveIds } from "../hooks/useActiveIds";
 import { StatusDot } from "./StatusDot";
 
 const styles = {
@@ -43,7 +43,7 @@ function MemberRow({ member, online }: { member: GuildMember; online: boolean })
 }
 
 export function MemberList() {
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const { guildId: activeGuildId } = useActiveIds();
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const fetchMembers = useMemberStore((s) => s.fetchMembers);
   const [loading, setLoading] = useState(true);

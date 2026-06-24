@@ -3,6 +3,9 @@ import * as api from "../lib/api";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useEditStore } from "../stores/useEditStore";
+import { router } from "../lib/router";
+import { getActiveIdsFromRouter } from "../lib/router";
+import { routes } from "../lib/routes";
 import type { Message } from "../types";
 
 const menuStyle: CSSProperties = {
@@ -106,8 +109,11 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
     const name = content.slice(0, 40).trim() || "Thread";
     try {
       const thread = await api.createThreadFromMessage(channelId, messageId, name);
-      useThreadStore.getState().openThread(thread);
       useThreadStore.getState().addThread(thread);
+      const { guildId } = getActiveIdsFromRouter();
+      if (guildId) {
+        router.navigate(routes.thread(guildId, channelId, thread.id));
+      }
     } catch (err) {
       console.error("create thread:", err);
     }

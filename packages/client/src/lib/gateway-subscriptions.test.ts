@@ -3,10 +3,10 @@ import { dispatcher } from "./gateway-dispatcher";
 
 // Mock all stores
 vi.mock("../stores/useMessageStore", () => ({
-  useMessageStore: { getState: vi.fn(() => ({ addMessage: vi.fn(), updateMessage: vi.fn(), removeMessage: vi.fn() })) },
+  useMessageStore: { getState: vi.fn(() => ({ addMessage: vi.fn(), updateMessage: vi.fn(), removeMessage: vi.fn(), removeChannelMessages: vi.fn(), setMessageThread: vi.fn() })) },
 }));
 vi.mock("../stores/useChannelStore", () => ({
-  useChannelStore: { getState: vi.fn(() => ({ activeChannelId: "c1", addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn(), setChannels: vi.fn(), setActiveChannel: vi.fn(), removeGuildChannels: vi.fn() })) },
+  useChannelStore: { getState: vi.fn(() => ({ addChannel: vi.fn(), updateChannel: vi.fn(), removeChannel: vi.fn(), setChannels: vi.fn(), removeGuildChannels: vi.fn(), getChannels: vi.fn(() => []), channelsByGuildId: {} })) },
 }));
 vi.mock("../stores/usePresenceStore", () => ({
   usePresenceStore: { getState: vi.fn(() => ({ setOnline: vi.fn(), setOffline: vi.fn(), initPresences: vi.fn() })) },
@@ -16,7 +16,7 @@ vi.mock("../stores/useUserStore", () => ({
 }));
 vi.mock("../stores/useTypingStore", () => ({
   useTypingStore: {
-    getState: vi.fn(() => ({ clearTyping: vi.fn() })),
+    getState: vi.fn(() => ({ clearTyping: vi.fn(), removeChannel: vi.fn() })),
     setState: vi.fn(),
   },
   typingTimeoutIds: new Set(),
@@ -25,13 +25,35 @@ vi.mock("../stores/useReadStateStore", () => ({
   useReadStateStore: { getState: vi.fn(() => ({ initReadStates: vi.fn(), setUnread: vi.fn(), markRead: vi.fn(), removeChannel: vi.fn() })) },
 }));
 vi.mock("../stores/useGuildStore", () => ({
-  useGuildStore: { getState: vi.fn(() => ({ setGuilds: vi.fn(), setActiveGuild: vi.fn(), addGuild: vi.fn(), removeGuild: vi.fn() })) },
+  useGuildStore: { getState: vi.fn(() => ({ setGuilds: vi.fn(), addGuild: vi.fn(), removeGuild: vi.fn(), guilds: {} })) },
 }));
 vi.mock("../stores/useMemberStore", () => ({
-  useMemberStore: { getState: vi.fn(() => ({ upsertMember: vi.fn(), removeMember: vi.fn() })) },
+  useMemberStore: { getState: vi.fn(() => ({ upsertMember: vi.fn(), removeMember: vi.fn(), fetchMembers: vi.fn(() => Promise.resolve()) })) },
+}));
+vi.mock("../stores/useReplyStore", () => ({
+  useReplyStore: { getState: vi.fn(() => ({ clearReplyForDeletedMessage: vi.fn() })) },
+}));
+vi.mock("../stores/useChannelFilesStore", () => ({
+  useChannelFilesStore: { getState: vi.fn(() => ({ filesOpen: false, fetchFiles: vi.fn(), fetchFile: vi.fn(), clearFileContent: vi.fn(), selectedFile: null })) },
+}));
+vi.mock("../stores/useThreadStore", () => ({
+  useThreadStore: { getState: vi.fn(() => ({ setThreads: vi.fn(), addThread: vi.fn(), updateThread: vi.fn(), removeThread: vi.fn() })) },
 }));
 vi.mock("./api", () => ({
   ackMessage: vi.fn(() => Promise.resolve()),
+  fetchGuildActiveThreads: vi.fn(() => Promise.resolve({ threads: [] })),
+}));
+vi.mock("./router", () => ({
+  getActiveIdsFromRouter: vi.fn(() => ({ guildId: null, channelId: "c1", threadId: null })),
+  getGuildForChannel: vi.fn(() => null),
+  router: { navigate: vi.fn() },
+}));
+vi.mock("./routes", () => ({
+  routes: {
+    channel: vi.fn((g: string, c: string) => `/channels/${g}/${c}`),
+    thread: vi.fn((g: string, c: string, t: string) => `/channels/${g}/${c}/threads/${t}`),
+    root: vi.fn(() => "/"),
+  },
 }));
 
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./gateway-subscriptions";

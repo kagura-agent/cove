@@ -1,6 +1,8 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { parseChatMarkdown, type Token } from "../lib/chat-markdown";
-import { useChannelStore } from "../stores/useChannelStore";
+import { router } from "../lib/router";
+import { getGuildForChannel } from "../lib/router";
+import { routes } from "../lib/routes";
 
 interface ChatMarkdownProps {
   content: string;
@@ -113,7 +115,10 @@ function renderTokens(tokens: Token[], key = "", mentionUsers?: Map<string, stri
             key={k}
             style={{ ...mentionStyle, cursor: "pointer" }}
             onClick={() => {
-              useChannelStore.getState().setActiveChannel(token.channelId);
+              const guildId = getGuildForChannel(token.channelId);
+              if (guildId) {
+                router.navigate(routes.channel(guildId, token.channelId));
+              }
             }}
           >#{channelName}</span>
         );

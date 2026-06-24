@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { useMemberStore } from "../stores/useMemberStore";
-import { useGuildStore } from "../stores/useGuildStore";
+import { useActiveIds } from "../hooks/useActiveIds";
 import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { detectMentionTrigger } from "../lib/mention-trigger";
 
@@ -47,7 +47,7 @@ export function MentionAutocomplete({ text, cursorPos, onSelect, onClose, onHasR
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const { guildId: activeGuildId } = useActiveIds();
   const getMembers = useMemberStore((s) => s.getMembers);
   const members = activeGuildId ? getMembers(activeGuildId) : [];
 

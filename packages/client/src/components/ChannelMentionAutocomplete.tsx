@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
-import { useGuildStore } from "../stores/useGuildStore";
+import { useActiveIds } from "../hooks/useActiveIds";
 import { detectMentionTrigger } from "../lib/mention-trigger";
 
 const listStyle: CSSProperties = {
@@ -46,7 +46,7 @@ export function ChannelMentionAutocomplete({ text, cursorPos, onSelect, onClose,
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
+  const { guildId: activeGuildId } = useActiveIds();
   const getChannels = useChannelStore((s) => s.getChannels);
   const channels = activeGuildId ? getChannels(activeGuildId) : [];
   // Filter out threads (type 11)

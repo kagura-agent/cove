@@ -3,7 +3,6 @@ import type { Channel } from "../types";
 
 interface ChannelState {
   channelsByGuildId: Record<string, Channel[]>;
-  activeChannelId: string | null;
   channelsLoaded: boolean;
 
   /** Get channels for a specific guild */
@@ -11,7 +10,6 @@ interface ChannelState {
 
   /** Set channels for a specific guild */
   setChannels: (guildId: string, channels: Channel[]) => void;
-  setActiveChannel: (id: string | null) => void;
   addChannel: (channel: Channel) => void;
   updateChannel: (channel: Channel) => void;
   removeChannel: (id: string) => void;
@@ -21,7 +19,6 @@ interface ChannelState {
 
 export const useChannelStore = create<ChannelState>((set, get) => ({
   channelsByGuildId: {},
-  activeChannelId: null,
   channelsLoaded: false,
 
   getChannels: (guildId) => {
@@ -34,8 +31,6 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
       channelsByGuildId: { ...s.channelsByGuildId, [guildId]: channels },
       channelsLoaded: true,
     })),
-
-  setActiveChannel: (id) => set({ activeChannelId: id }),
 
   addChannel: (channel) =>
     set((s) => {
@@ -74,10 +69,7 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
           break;
         }
       }
-      return {
-        channelsByGuildId: newByGuild,
-        activeChannelId: s.activeChannelId === id ? null : s.activeChannelId,
-      };
+      return { channelsByGuildId: newByGuild };
     }),
 
   removeGuildChannels: (guildId) =>

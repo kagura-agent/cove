@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
 import type { Webhook, PermissionOverwrite } from "@cove/shared";
 import { PermissionFlags } from "@cove/shared";
 import { Input, Button, Modal, Switch } from "antd";
 import { useChannelStore } from "../stores/useChannelStore";
-import { useGuildStore } from "../stores/useGuildStore";
+import { useActiveIds } from "../hooks/useActiveIds";
+import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { GuildMember } from "../types";
 
@@ -36,8 +38,9 @@ export function ChannelSettings({
   open: boolean;
   onClose: () => void;
 }) {
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
-  const { getChannels, updateChannel: updateChannelStore, removeChannel, setActiveChannel } = useChannelStore();
+  const { guildId: activeGuildId } = useActiveIds();
+  const navigate = useNavigate();
+  const { getChannels, updateChannel: updateChannelStore, removeChannel } = useChannelStore();
   const channels = getChannels(activeGuildId);
   const channel = channels.find((c) => c.id === channelId);
 
@@ -206,7 +209,7 @@ export function ChannelSettings({
     try {
       await api.deleteChannel(channelId);
       removeChannel(channelId);
-      setActiveChannel(null);
+      navigate(routes.root(), { replace: true });
       onClose();
     } catch (err) {
       console.error("delete channel:", err);

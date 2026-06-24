@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useThreadStore } from "../stores/useThreadStore";
+import { useNavigate } from "react-router-dom";
+import { useActiveIds } from "../hooks/useActiveIds";
+import { routes } from "../lib/routes";
 import type { Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 
@@ -8,16 +10,23 @@ interface Props {
   channelId: string;
 }
 
-export function ThreadIndicator({ thread }: Props) {
-  const openThread = useThreadStore((s) => s.openThread);
+export function ThreadIndicator({ thread, channelId }: Props) {
+  const navigate = useNavigate();
+  const { guildId } = useActiveIds();
   const [hovered, setHovered] = useState(false);
 
   const count = thread.message_count;
   const label = count === 1 ? "1 Reply" : `${count} Replies`;
 
+  function handleClick() {
+    if (guildId) {
+      navigate(routes.thread(guildId, channelId, thread.id));
+    }
+  }
+
   return (
     <div
-      onClick={() => openThread(thread)}
+      onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

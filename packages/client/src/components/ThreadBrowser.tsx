@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import type { Channel } from '../types';
-import { useThreadStore } from '../stores/useThreadStore';
+import { useActiveIds } from '../hooks/useActiveIds';
+import { routes } from '../lib/routes';
 import * as api from '../lib/api';
 import { ThreadIcon } from './ThreadIcon';
 
@@ -90,7 +92,8 @@ export function ThreadBrowser({ channelId, onClose }: Props) {
   const [activeThreads, setActiveThreads] = useState<Channel[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
-  const openThread = useThreadStore(s => s.openThread);
+  const navigate = useNavigate();
+  const { guildId } = useActiveIds();
 
   useEffect(() => {
     setLoading(true);
@@ -106,7 +109,7 @@ export function ThreadBrowser({ channelId, onClose }: Props) {
   const threads = tab === 'active' ? activeThreads : archivedThreads;
 
   function handleClick(thread: Channel) {
-    openThread(thread);
+    if (guildId) navigate(routes.thread(guildId, channelId, thread.id));
     onClose();
   }
 
