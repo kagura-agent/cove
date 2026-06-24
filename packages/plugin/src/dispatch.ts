@@ -100,7 +100,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
 
     const freshSend = async (text: string) => {
-      if (isAborted()) return;
+      if (isAborted()) {
+        log?.warn?.(`cove: freshSend skipped — aborted [${channelId}] (message: ${message.id})`);
+        return;
+      }
       if (draftMessageId) {
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
@@ -146,11 +149,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const dispatcherOptions = {
       typingCallbacks,
       deliver: async (payload: any, _info: { kind: string }) => {
-        if (isAborted()) return;
+        if (isAborted()) {
+          log?.warn?.(`cove: deliver skipped — aborted before delivery [${channelId}] (message: ${message.id})`);
+          return;
+        }
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) return;
-        if (isAborted()) return;
+        if (isAborted()) {
+          log?.warn?.(`cove: deliver skipped — aborted after typing cleanup [${channelId}] (message: ${message.id})`);
+          return;
+        }
         progressDraft.markFinalReplyDelivered();
         const canFinalize = Boolean(draftMessageId && !draftState.stopped);
         await deliverWithFinalizableLivePreviewAdapter({
@@ -313,6 +322,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
           log?.warn?.(`cove: failed to delete orphaned draft: ${e.message}`)
         );
+      }
+      if (!finalReplyDelivered && !finalizedViaPreviewMessage && !draftMessageId && !abortSignal?.aborted) {
+        log?.warn?.(`cove: turn completed without delivery and no draft — possible upstream deliver skip [${channelId}] (message: ${message.id})`);
       }
     }
   } catch (err: any) {
