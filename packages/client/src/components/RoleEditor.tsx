@@ -127,7 +127,7 @@ export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissio
       });
       useRoleStore.getState().updateRole(guildId, updated);
     } catch (err) {
-      console.error("update role:", err);
+      alert("Failed to save role");
     } finally {
       setSaving(false);
     }
@@ -138,7 +138,7 @@ export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissio
       await api.deleteRole(guildId, roleId);
       useRoleStore.getState().removeRole(guildId, roleId);
     } catch (err) {
-      console.error("delete role:", err);
+      alert("Failed to delete role");
     } finally {
       setDeleteConfirmOpen(false);
     }

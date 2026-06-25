@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRoleStore } from "../stores/useRoleStore";
+import { useUserPermissions } from "../lib/useUserPermissions";
 import * as api from "../lib/api";
 import { RoleList } from "./RoleList";
 import { RoleEditor } from "./RoleEditor";
@@ -25,15 +26,12 @@ const NAV_ITEMS: NavItem[] = [
 
 function RolesSection({ guildId }: { guildId: string }) {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const { userHighestPosition, userPermissions } = useUserPermissions(guildId);
 
   // Fetch roles on mount
   useEffect(() => {
     api.fetchRoles(guildId).then((r) => useRoleStore.getState().setRoles(guildId, r)).catch(console.error);
   }, [guildId]);
-
-  // TODO: derive from actual member roles; hardcode high value for now (owner sees all)
-  const userHighestPosition = 999;
-  const userPermissions = ~0n; // all bits set for owner
 
   return (
     <div>
@@ -63,7 +61,7 @@ function RolesSection({ guildId }: { guildId: string }) {
 }
 
 function MembersSection({ guildId }: { guildId: string }) {
-  const userHighestPosition = 999; // owner sees all
+  const { userHighestPosition } = useUserPermissions(guildId);
   return <MembersRoleSection guildId={guildId} userHighestPosition={userHighestPosition} />;
 }
 

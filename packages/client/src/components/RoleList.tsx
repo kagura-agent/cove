@@ -25,7 +25,7 @@ export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPos
       useRoleStore.getState().addRole(guildId, role);
       onSelectRole(role.id);
     } catch (err) {
-      console.error("create role:", err);
+      alert("Failed to create role");
     } finally {
       setCreating(false);
     }
@@ -44,7 +44,7 @@ export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPos
       const store = useRoleStore.getState();
       for (const r of updated) store.updateRole(guildId, r);
     } catch (err) {
-      console.error("move role up:", err);
+      alert("Failed to reorder roles");
     }
   }
 
@@ -63,7 +63,7 @@ export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPos
       const store = useRoleStore.getState();
       for (const r of updated) store.updateRole(guildId, r);
     } catch (err) {
-      console.error("move role down:", err);
+      alert("Failed to reorder roles");
     }
   }
 
