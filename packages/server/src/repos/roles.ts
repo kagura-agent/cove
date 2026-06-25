@@ -40,9 +40,11 @@ export class RolesRepo {
     return rows.map(toRole);
   }
 
-  getById(roleId: string): Role | null {
+  getById(roleId: string, guildId?: string): Role | null {
     const row = this.db.prepare("SELECT * FROM roles WHERE id = ?").get(roleId) as RoleRow | undefined;
-    return row ? toRole(row) : null;
+    if (!row) return null;
+    if (guildId && row.guild_id !== guildId) return null;
+    return toRole(row);
   }
 
   create(

@@ -55,7 +55,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     if (!repos.guilds.exists(guildId)) return unknownGuild(c);
     if (!repos.members.exists(guildId, user.id)) return unknownGuild(c);
 
-    const role = repos.roles.getById(roleId);
+    const role = repos.roles.getById(roleId, guildId);
     if (!role) return unknownRole(c);
 
     return c.json(role);
@@ -134,7 +134,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return missingPermissions(c);
     }
 
-    const targetRole = repos.roles.getById(roleId);
+    const targetRole = repos.roles.getById(roleId, guildId);
     if (!targetRole) return unknownRole(c);
 
     // Cannot modify managed roles
@@ -210,7 +210,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return validationError(c, "Cannot delete the @everyone role");
     }
 
-    const targetRole = repos.roles.getById(roleId);
+    const targetRole = repos.roles.getById(roleId, guildId);
     if (!targetRole) return unknownRole(c);
 
     // Cannot delete managed roles
@@ -269,6 +269,11 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       if (entry.id === guildId) {
         return validationError(c, "Cannot change position of @everyone role");
       }
+      // Check CURRENT position: cannot move a role currently at or above caller's highest
+      const targetRole = roles.find((r) => r.id === entry.id);
+      if (targetRole && targetRole.position >= callerHighest) {
+        return missingPermissions(c);
+      }
       // Cannot move a role to or above caller's highest position
       if (entry.position >= callerHighest) {
         return missingPermissions(c);
@@ -305,7 +310,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return missingPermissions(c);
     }
 
-    const targetRole = repos.roles.getById(roleId);
+    const targetRole = repos.roles.getById(roleId, guildId);
     if (!targetRole) return unknownRole(c);
 
     // Cannot assign managed roles
@@ -368,7 +373,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return missingPermissions(c);
     }
 
-    const targetRole = repos.roles.getById(roleId);
+    const targetRole = repos.roles.getById(roleId, guildId);
     if (!targetRole) return unknownRole(c);
 
     // Cannot remove managed roles

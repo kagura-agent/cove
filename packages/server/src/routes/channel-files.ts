@@ -42,7 +42,7 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
   app.put("/channels/:channelId/files/:filename", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES);
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {
@@ -80,7 +80,7 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
   app.delete("/channels/:channelId/files/:filename", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES);
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {

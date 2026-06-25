@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireChannelPermission } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
 import { PermissionBits } from "@cove/shared";
 
 function stripToken<T extends { token?: unknown }>(webhook: T): Omit<T, "token"> {
@@ -42,12 +42,10 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(repos.webhooks.listByChannel(channelId));
   });
 
-  app.get("/guilds/:guildId/webhooks", (c) => {
+  app.get("/guilds/:guildId/webhooks", async (c) => {
     const user = c.get("botUser");
     const guildId = c.req.param("guildId");
-    if (!repos.guilds.exists(guildId) || !repos.members.exists(guildId, user.id)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
-    }
+    await requireGuildPermission(repos, guildId, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     return c.json(repos.webhooks.listByGuild(guildId));
   });

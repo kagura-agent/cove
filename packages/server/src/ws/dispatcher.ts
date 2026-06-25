@@ -204,21 +204,21 @@ export class GatewayDispatcher {
     const guild = this.guildsRepo?.getById(guildId);
     const roles = this.rolesRepo?.listByGuild(guildId);
     const permChannel = this.channelsRepo.getById(permChannelId);
-    const overwrites = this.permissionsRepo?.listByChannel(permChannelId);
+    const channelOverwrites = this.permissionsRepo?.listByChannel(permChannelId) ?? [];
 
     for (const session of this.sessions) {
       if (!session.guildIds.has(guildId)) continue;
 
       // Permission filter: ALL sessions (bot and human) are filtered
-      if (guild && roles && permChannel && overwrites && this.membersRepo && session.user) {
-        const member = this.membersRepo.get(guildId, session.user.id);
-        if (member) {
-          const perms = computePermissions(member, permChannel, guild, roles, overwrites);
-          if (!(perms & VIEW_CHANNEL_BIT)) continue;
-        } else {
-          continue; // Not a member
-        }
-      }
+      // Fail-closed: if we can't compute permissions, deny by default
+      if (!session.user) continue;
+      if (!guild || !roles || !permChannel || !this.membersRepo) continue;
+
+      const member = this.membersRepo.get(guildId, session.user.id);
+      if (!member) continue;
+
+      const perms = computePermissions(member, permChannel, guild, roles, channelOverwrites);
+      if (!(perms & VIEW_CHANNEL_BIT)) continue;
 
       session.dispatch(event, data);
     }
