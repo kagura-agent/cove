@@ -52,7 +52,8 @@ function setBit(value: bigint, bit: bigint, set: boolean): bigint {
 
 export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOverwritesChange }: Props) {
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
-  const members = useMemberStore((s) => Object.values(s.membersByGuildId[guildId] ?? {}));
+  const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] ?? {});
+  const members = React.useMemo(() => Object.values(memberMap), [memberMap]);
 
   const [selectedTarget, setSelectedTarget] = useState<{ id: string; type: number } | null>(null);
   const [editAllow, setEditAllow] = useState(0n);

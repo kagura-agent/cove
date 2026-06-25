@@ -68,8 +68,6 @@ const PRESET_COLORS = [0x5865f2, 0x57f287, 0xfee75c, 0xeb459e, 0xed4245, 0xf47b6
 
 export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissions }: RoleEditorProps) {
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
-  const updateRoleStore = useRoleStore((s) => s.updateRole);
-  const removeRoleStore = useRoleStore((s) => s.removeRole);
   const role = roles.find((r) => r.id === roleId);
 
   const [tab, setTab] = useState<TabKey>("display");
@@ -125,7 +123,7 @@ export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissio
         color: colorNum,
         permissions: permissions.toString(),
       });
-      updateRoleStore(guildId, updated);
+      useRoleStore.getState().updateRole(guildId, updated);
     } catch (err) {
       console.error("update role:", err);
     } finally {
@@ -136,7 +134,7 @@ export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissio
   async function handleDelete() {
     try {
       await api.deleteRole(guildId, roleId);
-      removeRoleStore(guildId, roleId);
+      useRoleStore.getState().removeRole(guildId, roleId);
     } catch (err) {
       console.error("delete role:", err);
     } finally {

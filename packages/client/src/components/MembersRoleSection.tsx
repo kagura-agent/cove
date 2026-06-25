@@ -10,7 +10,8 @@ interface Props {
 }
 
 export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
-  const members = useMemberStore((s) => Object.values(s.membersByGuildId[guildId] ?? {}));
+  const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] ?? {});
+  const members = React.useMemo(() => Object.values(memberMap), [memberMap]);
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
   const [dropdownUserId, setDropdownUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);

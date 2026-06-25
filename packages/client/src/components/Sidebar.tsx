@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
@@ -85,6 +86,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const navigate = useNavigate();
   const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
+  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
   const guilds = useGuildStore((s) => s.guilds);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
@@ -194,7 +196,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
       {guildId && serverSettingsOpen && (
         <ServerSettings
           guildId={guildId}
-          onClose={() => setServerSettingsOpen(false)}
+          onClose={closeServerSettings}
         />
       )}
     </div>

@@ -13,7 +13,6 @@ interface RoleListProps {
 
 export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPosition }: RoleListProps) {
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
-  const addRole = useRoleStore((s) => s.addRole);
   const [creating, setCreating] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -21,7 +20,7 @@ export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPos
     setCreating(true);
     try {
       const role = await api.createRole(guildId);
-      addRole(guildId, role);
+      useRoleStore.getState().addRole(guildId, role);
       onSelectRole(role.id);
     } catch (err) {
       console.error("create role:", err);
