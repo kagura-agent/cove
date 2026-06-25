@@ -250,6 +250,7 @@ Constraints:
 - Cannot modify managed roles (return 403)
 - Permission value must be subset of caller's permissions (§5.6)
 - Cannot set ADMINISTRATOR unless caller is guild owner
+- Permission value must be subset of caller's permissions (§5.6), ADMINISTRATOR excluded unless caller is guild owner
 
 #### DELETE /guilds/:guildId/roles/:roleId
 Delete a role. Returns 204 on success.
@@ -302,10 +303,12 @@ Constraints:
 - Cannot remove managed roles (return 403)
 - Idempotent: if the member doesn't have the role, return 204 without emitting GUILD_MEMBER_UPDATE
 
-### 4.3 Permission Overwrites (Already Exists — No Changes)
+### 4.3 Permission Overwrites (Existing Routes — Enforcement Added)
 
-- `PUT /channels/:channelId/permissions/:targetId` — already implemented
-- `DELETE /channels/:channelId/permissions/:targetId` — already implemented
+- `PUT /channels/:channelId/permissions/:targetId` — already implemented, **now requires MANAGE_ROLES** (see §5.3) + **overwrite value constraint** (see §5.6 rule 4)
+- `DELETE /channels/:channelId/permissions/:targetId` — already implemented, **now requires MANAGE_ROLES** (see §5.3)
+
+> **Note:** These routes currently allow any human guild member to modify overwrites without authorization. Phase A enforcement fixes this security gap — this is intentionally NOT backward-compatible.
 
 ---
 
@@ -319,49 +322,77 @@ Create a `requirePermission(permission: bigint)` middleware that:
 3. Runs `computePermissions()`
 4. If the required permission bit is not set, returns 403 `{ message: "Missing Permissions", code: 50013 }`
 
-### 5.2 Middleware Variants
+### 5.2 Helper Functions
 
-Two middleware functions for different route scopes:
+Inline helper functions (not Hono middleware) to match existing code architecture. Current codebase uses `requireGuildMember()` which returns the `Channel` object — new helpers follow the same pattern.
 
 ```typescript
-// For channel-scoped routes — resolves channelId → guild → member → roles → overwrites
-function requireChannelPermission(permission: bigint): MiddlewareHandler {
-  // 1. c.req.param("channelId") → load channel → get guild_id
-  // 2. Load member by (guild_id, user.id)
+// For channel-scoped routes — resolves channel → guild → member → roles → overwrites
+async function requireChannelPermission(
+  repos: Repos,
+  channelId: string,
+  userId: string,
+  permission: bigint
+): Promise<Channel> {
+  // 1. Load channel → get guild_id
+  // 2. Load member by (guild_id, userId)
   // 3. Load all roles for guild
   // 4. Load all overwrites for channel
   // 5. computePermissions() → check bit
+  // 6. Return channel (for handler to use)
+  // Throws 403 { message: "Missing Permissions", code: 50013 } if denied
 }
 
 // For guild-scoped routes — no channel context, checks base permissions only
-function requireGuildPermission(permission: bigint): MiddlewareHandler {
-  // 1. c.req.param("guildId") → load guild
-  // 2. Load member by (guild_id, user.id)
+async function requireGuildPermission(
+  repos: Repos,
+  guildId: string,
+  userId: string,
+  permission: bigint
+): Promise<Guild> {
+  // 1. Load guild
+  // 2. Load member by (guildId, userId)
   // 3. Load all roles for guild
   // 4. computeBasePermissions() → check bit
+  // 5. Return guild (for handler to use)
+  // Throws 403 { message: "Missing Permissions", code: 50013 } if denied
 }
 ```
 
 For thread channels (type 11): `requireChannelPermission` resolves the thread's `parent_id` and uses the **parent channel's** overwrites. Threads do not have independent permission overwrites — this matches Discord's behavior.
 
+Multi-permission checks use AND semantics: `requireChannelPermission(repos, id, userId, SEND_MESSAGES | VIEW_CHANNEL)` requires **both** bits to be set.
+
+**Module location:** `computePermissions` and related functions go in `src/permissions/compute.ts` (new module), imported by both route handlers and WebSocket dispatcher.
+
 ### 5.3 Which Routes Get Enforcement
 
-| Route | Middleware | Required Permission |
-|---|---|---|
-| GET channels/:id/messages | requireChannelPermission | VIEW_CHANNEL |
-| POST channels/:id/messages | requireChannelPermission | SEND_MESSAGES (+ VIEW_CHANNEL) |
-| DELETE messages (other's) | requireChannelPermission | MANAGE_MESSAGES |
-| PATCH channels/:id | requireChannelPermission | MANAGE_CHANNELS |
-| DELETE channels/:id | requireChannelPermission | MANAGE_CHANNELS |
-| POST guilds/:id/channels | requireGuildPermission | MANAGE_CHANNELS |
-| PUT channel permissions | requireChannelPermission | MANAGE_ROLES |
-| DELETE channel permissions | requireChannelPermission | MANAGE_ROLES |
-| PATCH guild | requireGuildPermission | MANAGE_GUILD |
-| POST threads | requireChannelPermission | CREATE_PUBLIC_THREADS or CREATE_PRIVATE_THREADS |
-| POST thread messages | requireChannelPermission | SEND_MESSAGES_IN_THREADS |
-| GET guild members | requireGuildPermission | (any guild member) |
-| Manage roles | requireGuildPermission | MANAGE_ROLES |
-| Kick/Ban | requireGuildPermission | KICK_MEMBERS / BAN_MEMBERS |
+| Route | Helper | Required Permission | Notes |
+|---|---|---|---|
+| GET channels/:id/messages | requireChannelPermission | VIEW_CHANNEL | |
+| POST channels/:id/messages | requireChannelPermission | SEND_MESSAGES \| VIEW_CHANNEL | |
+| PATCH channels/:id/messages/:msgId | requireChannelPermission | VIEW_CHANNEL | Author-only check in handler |
+| DELETE channels/:id/messages/:msgId | requireChannelPermission | VIEW_CHANNEL | Self-delete: VIEW_CHANNEL only; other's message: MANAGE_MESSAGES. Handler checks `message.author_id === user.id` |
+| POST channels/:id/messages/bulk-delete | requireChannelPermission | MANAGE_MESSAGES | |
+| PUT channels/:id/messages/:msgId/ack | requireChannelPermission | VIEW_CHANNEL | |
+| POST channels/:id/typing | requireChannelPermission | SEND_MESSAGES | |
+| PATCH channels/:id | requireChannelPermission | MANAGE_CHANNELS | |
+| DELETE channels/:id | requireChannelPermission | MANAGE_CHANNELS | |
+| POST guilds/:id/channels | requireGuildPermission | MANAGE_CHANNELS | |
+| GET guilds/:guildId/channels | — | — | In-handler per-item VIEW_CHANNEL filter (computePermissions per channel) |
+| GET guilds/:guildId/threads/active | — | — | In-handler per-item VIEW_CHANNEL filter |
+| PUT channel permissions | requireChannelPermission | MANAGE_ROLES | + overwrite value constraint (§5.6) |
+| DELETE channel permissions | requireChannelPermission | MANAGE_ROLES | |
+| PATCH guild | requireGuildPermission | MANAGE_GUILD | |
+| POST threads | requireChannelPermission | CREATE_PUBLIC_THREADS or CREATE_PRIVATE_THREADS | |
+| POST thread messages | requireChannelPermission | SEND_MESSAGES_IN_THREADS | |
+| GET guild members | requireGuildPermission | (any guild member) | |
+| GET guilds/:guildId/roles | requireGuildPermission | (any guild member) | |
+| POST/PATCH/DELETE roles | requireGuildPermission | MANAGE_ROLES | + hierarchy constraints (§5.6) |
+| PUT/DELETE member roles | requireGuildPermission | MANAGE_ROLES | + hierarchy constraints (§5.6) |
+| Kick/Ban | requireGuildPermission | KICK_MEMBERS / BAN_MEMBERS | |
+| POST channels/:id/messages/:msgId/reactions | requireChannelPermission | ADD_REACTIONS \| VIEW_CHANNEL | |
+| DELETE reactions (other's) | requireChannelPermission | MANAGE_MESSAGES | |
 
 ### 5.4 Guild Owner Bypass
 
@@ -396,8 +427,13 @@ These are Discord's core security constraints for MANAGE_ROLES operations:
 
 2. **Permission value constraint:** When creating or modifying a role, the `permissions` value must be a **subset** of the caller's own computed permissions. Specifically:
    - `newRolePermissions & ~callerPermissions` must equal `0n`
-   - Exception: users with ADMINISTRATOR can set any permissions
-   - ADMINISTRATOR bit can only be granted by the guild owner
+   - Exception: users with ADMINISTRATOR can set any permissions **except ADMINISTRATOR itself**
+   - The ADMINISTRATOR bit can only be granted by the guild owner
+
+4. **Channel overwrite value constraint:** When creating or modifying a channel permission overwrite (`PUT /channels/:channelId/permissions/:targetId`), the `allow` and `deny` values are subject to:
+   - `allow` and `deny` bits must be a subset of the caller's own computed permissions
+   - Guild-level bits cannot appear in channel overwrites: ADMINISTRATOR, KICK_MEMBERS, BAN_MEMBERS, MANAGE_GUILD, MANAGE_ROLES, MANAGE_NICKNAMES (return 400 if present)
+   - This prevents a user with MANAGE_ROLES from granting themselves channel-level permissions they don't have via member overwrites
 
 3. **Assignment constraint:** Can only assign/remove roles below the caller's highest role position.
 
@@ -548,7 +584,10 @@ Phases 1-4 ship together as one migration + code deployment. No intermediate sta
 - `requireChannelPermission()` + `requireGuildPermission()` middleware
 - Replace all `requireBotChannelPermission()` and `requireGuildMember()` callsites
 - Remove `PermissionsRepo.hasPermission()` (dead code)
-- Update GatewayDispatcher channel filter to use `computePermissions()`
+- Update GatewayDispatcher channel filter to use `computePermissions()`:
+  - Remove the `if (session.user?.bot)` guard — ALL sessions (human and bot) are now filtered
+  - Pre-load guild roles + channel overwrites once per broadcast, then per-session query only the member
+  - Without this change, human users denied VIEW_CHANNEL would still receive messages via WebSocket → data leak
 - Gateway events for role lifecycle
 
 **Rationale for atomic deploy:** Single-process SQLite server with <10 active users. The phased approach creates dangerous intermediate states (API without enforcement = privilege escalation). Migration runs at startup before accepting requests, so there is no window where new code runs without role data.
