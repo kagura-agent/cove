@@ -1,0 +1,21 @@
+name: Notify Cove on Luna approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  notify:
+    if: github.event.review.state == 'approved' && github.event.review.user.login == 'daniyuu'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send approval notification to Cove
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          WEBHOOK_URL: ${{ secrets.COVE_DEV_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then echo '::warning::WEBHOOK_URL is empty, skipping'; exit 0; fi
+          MSG="🟢 Luna approved PR #${PR_NUM} — ${PR_TITLE}"
+          PAYLOAD=$(jq -nc --arg content "$MSG" '{content: $content, username: "GitHub"}')
+          curl -sfS -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
