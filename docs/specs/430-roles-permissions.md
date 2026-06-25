@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS roles (
   position     INTEGER NOT NULL DEFAULT 0,
   permissions  TEXT NOT NULL DEFAULT '0',
   managed      INTEGER NOT NULL DEFAULT 0,
-  mentionable  INTEGER NOT NULL DEFAULT 0
+  mentionable  INTEGER NOT NULL DEFAULT 0,
+  flags        INTEGER NOT NULL DEFAULT 0,
+  bot_id       TEXT    DEFAULT NULL
 );
 CREATE INDEX idx_roles_guild ON roles(guild_id);
 ```
@@ -225,7 +227,7 @@ Body (all optional):
 }
 ```
 
-Default: name = "new role", position = max(existing positions) + 1, permissions = "0".
+Default: name = "new role", position = max(existing positions) + 1, permissions = guild's @everyone role permissions (matching Discord — new roles inherit @everyone's permission set).
 
 **Permission value validation:** The `permissions` value must be a subset of the caller's own computed permissions (see §5.6). Returns 403 `{ message: "Missing Permissions", code: 50013 }` if violated.
 
@@ -249,8 +251,7 @@ Constraints:
 - Cannot modify a role at or above your highest role (unless guild owner)
 - Cannot modify managed roles (return 403)
 - Permission value must be subset of caller's permissions (§5.6)
-- Cannot set ADMINISTRATOR unless caller is guild owner
-- Permission value must be subset of caller's permissions (§5.6), ADMINISTRATOR excluded unless caller is guild owner
+- Permission value must be subset of caller's permissions (§5.6) — ADMINISTRATOR users can set any permissions including ADMINISTRATOR on lower-position roles
 
 #### DELETE /guilds/:guildId/roles/:roleId
 Delete a role. Returns 204 on success.
@@ -262,10 +263,16 @@ Constraints:
 - Cannot delete a role at or above your highest role
 - Cannot delete managed roles (return 403)
 
-**Cleanup on deletion:** Remove the deleted role ID from all `guild_members.roles` arrays in the same transaction. Emit `GUILD_MEMBER_UPDATE` for each affected member.
+**Cleanup on deletion (in same transaction):**
+- Remove the deleted role ID from all `guild_members.roles` arrays
+- Delete all `channel_permission_overwrites` rows where `target_id = roleId AND target_type = 0`
+- Emit `GUILD_ROLE_DELETE` only (no GUILD_MEMBER_UPDATE — Discord behavior: clients clean up locally)
+
+#### GET /guilds/:guildId/roles/:roleId
+Get a single role. Returns the role object. Requires guild membership.
 
 #### PATCH /guilds/:guildId/roles
-Bulk-update role positions. Body is an array of `{ id, position }` objects.
+Bulk-update role positions. Body is an array of `{ id, position }` objects. Returns 200 with an array of **all** guild role objects (matching Discord).
 
 Requires: MANAGE_ROLES permission.
 
@@ -427,12 +434,13 @@ These are Discord's core security constraints for MANAGE_ROLES operations:
 
 2. **Permission value constraint:** When creating or modifying a role, the `permissions` value must be a **subset** of the caller's own computed permissions. Specifically:
    - `newRolePermissions & ~callerPermissions` must equal `0n`
-   - Exception: users with ADMINISTRATOR can set any permissions **except ADMINISTRATOR itself**
-   - The ADMINISTRATOR bit can only be granted by the guild owner
+   - Exception: users with ADMINISTRATOR can set any permissions including ADMINISTRATOR (they have ALL_PERMISSIONS, so the subset check passes)
+   - This matches Discord: ADMINISTRATOR users can grant ADMINISTRATOR to lower-position roles
 
 4. **Channel overwrite value constraint:** When creating or modifying a channel permission overwrite (`PUT /channels/:channelId/permissions/:targetId`), the `allow` and `deny` values are subject to:
    - `allow` and `deny` bits must be a subset of the caller's own computed permissions
-   - Guild-level bits cannot appear in channel overwrites: ADMINISTRATOR, KICK_MEMBERS, BAN_MEMBERS, MANAGE_GUILD, MANAGE_ROLES, MANAGE_NICKNAMES (return 400 if present)
+   - Guild-level bits cannot appear in channel overwrites: ADMINISTRATOR, KICK_MEMBERS, BAN_MEMBERS, MANAGE_GUILD, VIEW_AUDIT_LOG, MANAGE_NICKNAMES (return 400 if present)
+   - MANAGE_ROLES IS allowed in channel overwrites — in channel context it means "Manage Permissions" for that specific channel (Discord T, V, S scope)
    - This prevents a user with MANAGE_ROLES from granting themselves channel-level permissions they don't have via member overwrites
 
 3. **Assignment constraint:** Can only assign/remove roles below the caller's highest role position.
