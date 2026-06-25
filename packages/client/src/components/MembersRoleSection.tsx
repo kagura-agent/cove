@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useRoleStore } from "../stores/useRoleStore";
+
+const EMPTY_ROLES: import("@cove/shared").Role[] = [];
+const EMPTY_MEMBERS: Record<string, never> = {};
 import { addMemberRole, removeMemberRole } from "../lib/api";
 import type { GuildMember } from "../types";
 
@@ -10,9 +13,9 @@ interface Props {
 }
 
 export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
-  const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] ?? {});
+  const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] || EMPTY_MEMBERS);
   const members = React.useMemo(() => Object.values(memberMap), [memberMap]);
-  const roles = useRoleStore((s) => s.roles[guildId] ?? []);
+  const roles = useRoleStore((s) => s.roles[guildId] || EMPTY_ROLES);
   const [dropdownUserId, setDropdownUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

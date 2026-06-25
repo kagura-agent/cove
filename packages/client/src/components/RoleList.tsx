@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Button } from "antd";
 import { useRoleStore } from "../stores/useRoleStore";
+
+const EMPTY_ROLES: import("@cove/shared").Role[] = [];
 import * as api from "../lib/api";
 
 interface RoleListProps {
@@ -12,7 +14,7 @@ interface RoleListProps {
 }
 
 export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPosition }: RoleListProps) {
-  const roles = useRoleStore((s) => s.roles[guildId] ?? []);
+  const roles = useRoleStore((s) => s.roles[guildId] || EMPTY_ROLES);
   const [creating, setCreating] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
