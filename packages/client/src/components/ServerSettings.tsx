@@ -30,7 +30,7 @@ function RolesSection({ guildId }: { guildId: string }) {
 
   // Fetch roles on mount
   useEffect(() => {
-    api.fetchRoles(guildId).then((r) => useRoleStore.getState().setRoles(guildId, r)).catch(console.error);
+    api.fetchRoles(guildId).then((r) => useRoleStore.getState().setRoles(guildId, r)).catch(() => alert("Failed to load roles"));
   }, [guildId]);
 
   return (

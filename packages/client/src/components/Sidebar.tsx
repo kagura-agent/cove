@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
+import { useUserPermissions } from "../lib/useUserPermissions";
+import { PermissionBits } from "@cove/shared";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useThreadStore } from "../stores/useThreadStore";
@@ -87,6 +89,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
   const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
+  const { userPermissions, isOwner } = useUserPermissions(guildId ?? "");
+  const canSeeSettings = isOwner || !!(userPermissions & PermissionBits.MANAGE_GUILD) || !!(userPermissions & PermissionBits.MANAGE_ROLES);
   const guilds = useGuildStore((s) => s.guilds);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
@@ -129,7 +133,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
       <div style={styles.header}>
         <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
         <h1 style={styles.title}>Cove</h1>
-        {guildId && (
+        {guildId && canSeeSettings && (
           <Button
             type="text"
             size="small"
