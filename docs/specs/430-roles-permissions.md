@@ -207,10 +207,12 @@ function computePermissions(
 All match Discord's endpoints exactly.
 
 #### GET /guilds/:guildId/roles
-Returns all roles for the guild (array, sorted by position).
+Returns all roles for the guild (array, sorted by position ascending, ties broken by role ID).
 
 #### POST /guilds/:guildId/roles
 Create a new role. Returns the created role.
+
+Requires: MANAGE_ROLES permission + hierarchy constraints (§5.6).
 
 Body (all optional):
 ```json
@@ -223,10 +225,14 @@ Body (all optional):
 }
 ```
 
-Default: name = "new role", position = next available, permissions = "0".
+Default: name = "new role", position = max(existing positions) + 1, permissions = "0".
+
+**Permission value validation:** The `permissions` value must be a subset of the caller's own computed permissions (see §5.6). Returns 403 `{ message: "Missing Permissions", code: 50013 }` if violated.
 
 #### PATCH /guilds/:guildId/roles/:roleId
 Update a role. Returns the modified role.
+
+Requires: MANAGE_ROLES permission + hierarchy constraints (§5.6).
 
 Body (partial update):
 ```json
@@ -239,27 +245,62 @@ Body (partial update):
 }
 ```
 
-Constraint: cannot modify a role at or above your highest role (unless guild owner).
+Constraints:
+- Cannot modify a role at or above your highest role (unless guild owner)
+- Cannot modify managed roles (return 403)
+- Permission value must be subset of caller's permissions (§5.6)
+- Cannot set ADMINISTRATOR unless caller is guild owner
 
 #### DELETE /guilds/:guildId/roles/:roleId
 Delete a role. Returns 204 on success.
 
-Constraint: cannot delete the @everyone role. Cannot delete a role at or above your highest role.
+Requires: MANAGE_ROLES permission.
+
+Constraints:
+- Cannot delete the @everyone role
+- Cannot delete a role at or above your highest role
+- Cannot delete managed roles (return 403)
+
+**Cleanup on deletion:** Remove the deleted role ID from all `guild_members.roles` arrays in the same transaction. Emit `GUILD_MEMBER_UPDATE` for each affected member.
 
 #### PATCH /guilds/:guildId/roles
 Bulk-update role positions. Body is an array of `{ id, position }` objects.
+
+Requires: MANAGE_ROLES permission.
+
+**Position semantics (matching Discord):**
+- Position 0 is reserved exclusively for @everyone (immovable)
+- Only the roles included in the request body are updated; others retain current position
+- Position values need not be contiguous (gaps are allowed)
+- Sorting is by position ascending, ties broken by role ID (snowflake order)
+- Request must not include @everyone (return 400 if position 0 is targeted)
+- Cannot move a role to or above your highest role position
+- Non-existent role IDs in the array are silently ignored
+- Duplicate positions across roles are allowed (sorted by ID as tiebreaker)
+
+Wrapped in a single transaction for atomicity.
 
 ### 4.2 Role Assignment
 
 #### PUT /guilds/:guildId/members/:userId/roles/:roleId
 Add a role to a member. Returns 204.
 
-Constraint: can only assign roles below your highest role.
+Requires: MANAGE_ROLES permission.
+
+Constraints:
+- Can only assign roles below your highest role
+- Cannot assign managed roles (return 403)
+- Idempotent: if the member already has the role, return 204 without emitting GUILD_MEMBER_UPDATE
 
 #### DELETE /guilds/:guildId/members/:userId/roles/:roleId
 Remove a role from a member. Returns 204.
 
-Constraint: can only remove roles below your highest role.
+Requires: MANAGE_ROLES permission.
+
+Constraints:
+- Can only remove roles below your highest role
+- Cannot remove managed roles (return 403)
+- Idempotent: if the member doesn't have the role, return 204 without emitting GUILD_MEMBER_UPDATE
 
 ### 4.3 Permission Overwrites (Already Exists — No Changes)
 
@@ -278,35 +319,100 @@ Create a `requirePermission(permission: bigint)` middleware that:
 3. Runs `computePermissions()`
 4. If the required permission bit is not set, returns 403 `{ message: "Missing Permissions", code: 50013 }`
 
-### 5.2 Which Routes Get Enforcement
+### 5.2 Middleware Variants
 
-| Route | Required Permission |
-|---|---|
-| GET channels/:id/messages | VIEW_CHANNEL |
-| POST channels/:id/messages | SEND_MESSAGES (+ VIEW_CHANNEL) |
-| DELETE messages (other's) | MANAGE_MESSAGES |
-| PATCH channels/:id | MANAGE_CHANNELS |
-| DELETE channels/:id | MANAGE_CHANNELS |
-| POST guilds/:id/channels | MANAGE_CHANNELS |
-| PUT channel permissions | MANAGE_ROLES |
-| DELETE channel permissions | MANAGE_ROLES |
-| PATCH guild | MANAGE_GUILD |
-| POST threads | CREATE_PUBLIC_THREADS or CREATE_PRIVATE_THREADS |
-| POST thread messages | SEND_MESSAGES_IN_THREADS |
-| GET guild members | (any guild member) |
-| Manage roles | MANAGE_ROLES |
-| Kick/Ban | KICK_MEMBERS / BAN_MEMBERS |
+Two middleware functions for different route scopes:
 
-### 5.3 Guild Owner Bypass
+```typescript
+// For channel-scoped routes — resolves channelId → guild → member → roles → overwrites
+function requireChannelPermission(permission: bigint): MiddlewareHandler {
+  // 1. c.req.param("channelId") → load channel → get guild_id
+  // 2. Load member by (guild_id, user.id)
+  // 3. Load all roles for guild
+  // 4. Load all overwrites for channel
+  // 5. computePermissions() → check bit
+}
+
+// For guild-scoped routes — no channel context, checks base permissions only
+function requireGuildPermission(permission: bigint): MiddlewareHandler {
+  // 1. c.req.param("guildId") → load guild
+  // 2. Load member by (guild_id, user.id)
+  // 3. Load all roles for guild
+  // 4. computeBasePermissions() → check bit
+}
+```
+
+For thread channels (type 11): `requireChannelPermission` resolves the thread's `parent_id` and uses the **parent channel's** overwrites. Threads do not have independent permission overwrites — this matches Discord's behavior.
+
+### 5.3 Which Routes Get Enforcement
+
+| Route | Middleware | Required Permission |
+|---|---|---|
+| GET channels/:id/messages | requireChannelPermission | VIEW_CHANNEL |
+| POST channels/:id/messages | requireChannelPermission | SEND_MESSAGES (+ VIEW_CHANNEL) |
+| DELETE messages (other's) | requireChannelPermission | MANAGE_MESSAGES |
+| PATCH channels/:id | requireChannelPermission | MANAGE_CHANNELS |
+| DELETE channels/:id | requireChannelPermission | MANAGE_CHANNELS |
+| POST guilds/:id/channels | requireGuildPermission | MANAGE_CHANNELS |
+| PUT channel permissions | requireChannelPermission | MANAGE_ROLES |
+| DELETE channel permissions | requireChannelPermission | MANAGE_ROLES |
+| PATCH guild | requireGuildPermission | MANAGE_GUILD |
+| POST threads | requireChannelPermission | CREATE_PUBLIC_THREADS or CREATE_PRIVATE_THREADS |
+| POST thread messages | requireChannelPermission | SEND_MESSAGES_IN_THREADS |
+| GET guild members | requireGuildPermission | (any guild member) |
+| Manage roles | requireGuildPermission | MANAGE_ROLES |
+| Kick/Ban | requireGuildPermission | KICK_MEMBERS / BAN_MEMBERS |
+
+### 5.4 Guild Owner Bypass
 
 Guild owner always passes all permission checks (returns `ALL_PERMISSIONS` from `computeBasePermissions`).
 
-### 5.4 Bot Behavior
+### 5.5 Bot Behavior — Managed Roles
 
-Bots use the same permission system as human users. When a bot joins:
-1. A managed role is auto-created with the bot's name
-2. The managed role gets a default permission set (configurable at join time)
-3. The role is assigned to the bot's member entry
+Bots use the same permission system as human users.
+
+**Trigger:** When `PUT /guilds/:guildId/members/:userId` detects `user.bot === true` and the bot doesn't already have a managed role:
+
+1. Auto-create a managed role:
+   - `name`: bot's display name
+   - `managed`: true
+   - `permissions`: from request body `permissions` field, or default to `VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | EMBED_LINKS | ATTACH_FILES | ADD_REACTIONS`
+   - `position`: max(existing positions) + 1
+2. Assign the managed role to the bot's `guild_members.roles`
+
+**Managed role constraints (match Discord):**
+- Cannot be modified via standard `PATCH /guilds/:guildId/roles/:roleId` endpoint → return 403
+- Cannot be assigned/removed via `PUT/DELETE /guilds/:guildId/members/:userId/roles/:roleId` → return 403
+- Only the system (bot join/leave lifecycle) can modify managed roles
+- When a bot is removed from the guild, its managed role is deleted
+
+**Migration for existing bots:** Phase 5 creates managed roles for all existing bot members with permissions equivalent to `VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY` (conservative default). Existing per-channel member overwrites (type=1) remain functional and take precedence over the managed role per the algorithm.
+
+### 5.6 Role Hierarchy Security Invariants
+
+These are Discord's core security constraints for MANAGE_ROLES operations:
+
+1. **Position constraint:** Can only create/modify/delete roles with position strictly below the caller's highest role position. Guild owner is exempt.
+
+2. **Permission value constraint:** When creating or modifying a role, the `permissions` value must be a **subset** of the caller's own computed permissions. Specifically:
+   - `newRolePermissions & ~callerPermissions` must equal `0n`
+   - Exception: users with ADMINISTRATOR can set any permissions
+   - ADMINISTRATOR bit can only be granted by the guild owner
+
+3. **Assignment constraint:** Can only assign/remove roles below the caller's highest role position.
+
+These invariants prevent privilege escalation through role creation.
+
+### 5.7 Performance: Permission Computation
+
+At current scale (single-process SQLite, <100 concurrent users), permission computation runs synchronous queries per-request (guild + member + roles + overwrites = 3-4 queries). **No caching is needed at current scale.**
+
+Optimization path if latency becomes an issue:
+- Guild roles change rarely → first candidate for in-memory `Map<guildId, Role[]>` cache
+- Invalidate on GUILD_ROLE_CREATE/UPDATE/DELETE events
+- Channel overwrites are already loaded per-request for the specific channel (lightweight)
+
+For routes requiring multiple permission bits (e.g., SEND_MESSAGES + VIEW_CHANNEL), compute once and check both bits against the result.
 
 ---
 
@@ -325,17 +431,73 @@ When roles or permissions change, emit events to connected clients:
 
 ## 7. Migration
 
-### 7.1 Schema Migration
+### 7.1 Schema Migration (v19-roles)
 
-1. Create `roles` table
-2. For each existing guild, create an `@everyone` role with `id = guild_id` and default permissions
-3. Existing `channel_permission_overwrites` continue to work unchanged (they already reference role/member IDs)
+Migration file: `v19-roles.ts`. Runs at startup before the server accepts requests.
 
-### 7.2 Backward Compatibility
+```sql
+-- Step 1: Create roles table
+CREATE TABLE IF NOT EXISTS roles (
+  id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color INTEGER NOT NULL DEFAULT 0,
+  hoist INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  permissions TEXT NOT NULL DEFAULT '0',
+  managed INTEGER NOT NULL DEFAULT 0,
+  mentionable INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_roles_guild ON roles(guild_id);
 
-- Existing per-channel overwrites for bot members (type=1) continue working
-- The new algorithm will check both role-level and member-level overwrites
-- No breaking changes to existing API consumers
+-- Step 2: For each existing guild, create @everyone role
+INSERT OR IGNORE INTO roles (id, guild_id, name, position, permissions)
+  SELECT id, id, '@everyone', 0, '<DEFAULT_PERMISSIONS>'
+  FROM guilds;
+
+-- Step 3: Clean orphaned role IDs from guild_members.roles
+-- (Role IDs that don't correspond to any role in the new table)
+-- Implementation: iterate members, JSON.parse(roles), filter to existing role IDs, update
+```
+
+**Default permissions for existing guilds' @everyone role:** Same as new guild defaults (§2). This preserves current human behavior because humans currently have unrestricted access, and the default permissions cover all standard operations (VIEW_CHANNEL, SEND_MESSAGES, etc.).
+
+**Idempotency:** `CREATE TABLE IF NOT EXISTS` + `INSERT OR IGNORE` ensures the migration can run multiple times safely.
+
+### 7.2 Transition from Current Enforcement
+
+**Current state:**
+- `requireGuildMember()` — only checks guild membership for human users
+- `requireBotChannelPermission()` — checks channel_permission_overwrites for bot users; humans pass unconditionally (`if (!isBotUser) return true`)
+- `PermissionsRepo.hasPermission()` — single (channel_id, target_id) row lookup for bots
+- ~30+ callsites across messages.ts, channels.ts, threads.ts, channel-files.ts, webhooks.ts, reactions.ts
+- GatewayDispatcher's `broadcastToGuildWithChannelFilter()` — per-message bot filtering
+
+**After migration:**
+- `requireChannelPermission(bit)` / `requireGuildPermission(bit)` replace both old helpers
+- ALL users (human and bot) go through the same permission computation
+
+**Breaking behavioral change:** Human users gain channel-level restrictions they never had before. This is intentional — it fixes a security gap where any guild member could do anything. The @everyone default permissions (§2) cover all standard operations, so no legitimate workflows break.
+
+**Cutover strategy: Atomic replacement**
+
+Since Phases 1-4 ship as a single deployment (see §9):
+1. Old helpers (`requireGuildMember` + `requireBotChannelPermission`) are removed entirely
+2. Every route handler is updated to use `requireChannelPermission` or `requireGuildPermission`
+3. `PermissionsRepo.hasPermission()` is removed (dead code)
+4. GatewayDispatcher's channel filter is updated to use `computePermissions()`
+
+No dual-system period. No feature flag needed. The migration runs first (creating @everyone with default permissions), then the new enforcement code starts.
+
+**Note:** The current `permissions.ts` route allows any human member to modify channel permission overwrites without authorization. Phase 4 enforcement fixes this security gap — this is intentionally NOT backward-compatible for that specific operation (now requires MANAGE_ROLES).
+
+### 7.3 Backward Compatibility
+
+- Existing per-channel overwrites for bot members (type=1) continue working — the algorithm handles them in Step 3 (member-specific overwrite)
+- The new algorithm checks both role-level and member-level overwrites
+- Bot member overwrites take precedence over managed role (per algorithm order)
+- No breaking changes to existing API consumers for standard read/write operations
+- **One intentional breaking change:** human users modifying channel permissions now requires MANAGE_ROLES (previously unrestricted)
 
 ---
 
@@ -361,29 +523,41 @@ When roles or permissions change, emit events to connected clients:
 
 ## 9. Implementation Phases
 
-### Phase 1: Data Layer
-- Create `roles` table migration
+### Phase A: Core Permission System (single PR, atomic deploy)
+
+Phases 1-4 ship together as one migration + code deployment. No intermediate states.
+
+**Data Layer:**
+- v19-roles migration (creates table, seeds @everyone, cleans orphaned role IDs)
 - `RolesRepo` with CRUD operations
 - Auto-create `@everyone` role on guild creation
-- Migration: create `@everyone` for existing guilds
+- Update `PermissionFlags` in shared/types.ts to include all defined bits (remain string-encoded for JSON transport, add `PermissionBits` export with actual bigint values for server-side computation)
 
-### Phase 2: Permission Computation
+**Permission Computation:**
 - `computeBasePermissions()` + `computeOverwrites()` + `computePermissions()`
 - Unit tests covering all algorithm edge cases
-- Update `PermissionFlags` to include all defined bits
+- Thread parent lookup for type-11 channels
 
-### Phase 3: API Endpoints
-- Role CRUD routes (GET/POST/PATCH/DELETE)
-- Role assignment routes (PUT/DELETE member roles)
-- Role position bulk update
+**API Endpoints:**
+- Role CRUD routes with hierarchy security invariants (§5.6)
+- Role assignment routes with MANAGE_ROLES enforcement
+- Role position bulk update with transaction
+- Permission value validation on create/modify
 
-### Phase 4: Enforcement
-- `requirePermission()` middleware
-- Apply to all existing routes
+**Enforcement:**
+- `requireChannelPermission()` + `requireGuildPermission()` middleware
+- Replace all `requireBotChannelPermission()` and `requireGuildMember()` callsites
+- Remove `PermissionsRepo.hasPermission()` (dead code)
+- Update GatewayDispatcher channel filter to use `computePermissions()`
 - Gateway events for role lifecycle
 
-### Phase 5: Bot Integration
-- Auto-create managed role on bot join
+**Rationale for atomic deploy:** Single-process SQLite server with <10 active users. The phased approach creates dangerous intermediate states (API without enforcement = privilege escalation). Migration runs at startup before accepting requests, so there is no window where new code runs without role data.
+
+### Phase B: Bot Integration (separate PR)
+
+- Auto-create managed role on bot join (§5.5)
+- Managed role constraints (immutable via standard API)
+- Migration: create managed roles for existing bot members
 - Update OpenClaw plugin to handle role-based access (no more per-channel overwrites needed)
 
 ---
