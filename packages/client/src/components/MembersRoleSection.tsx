@@ -52,7 +52,7 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "#fff" }}>Members</h2>
+      <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "var(--text-on-accent)" }}>Members</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {members.map((member: GuildMember) => {
           const memberRoles = (member.roles || [])
@@ -68,7 +68,7 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                 gap: 12,
                 padding: "8px 12px",
                 borderRadius: 4,
-                backgroundColor: "#2b2d31",
+                backgroundColor: "var(--bg-floating)",
               }}
             >
               {/* Avatar */}
@@ -77,11 +77,11 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                   width: 32,
                   height: 32,
                   borderRadius: "50%",
-                  backgroundColor: "#5865f2",
+                  backgroundColor: "var(--accent)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#fff",
+                  color: "var(--text-on-accent)",
                   fontSize: 14,
                   fontWeight: 600,
                   flexShrink: 0,
@@ -91,9 +91,9 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
               </div>
 
               {/* Username */}
-              <span style={{ color: "#fff", fontSize: 14, minWidth: 100 }}>
+              <span style={{ color: "var(--text-on-accent)", fontSize: 14, minWidth: 100 }}>
                 {member.user.username}
-                {member.user.bot && <span style={{ color: "#5865f2", marginLeft: 4, fontSize: 11 }}>BOT</span>}
+                {member.user.bot && <span style={{ color: "var(--accent)", marginLeft: 4, fontSize: 11 }}>BOT</span>}
               </span>
 
               {/* Role badges */}
@@ -108,9 +108,9 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                       padding: "2px 6px",
                       borderRadius: 3,
                       fontSize: 12,
-                      backgroundColor: role.color ? `#${role.color.toString(16).padStart(6, "0")}33` : "#3f4147",
-                      color: role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#b5bac1",
-                      border: `1px solid ${role.color ? `#${role.color.toString(16).padStart(6, "0")}66` : "#3f4147"}`,
+                      backgroundColor: role.color ? `#${role.color.toString(16).padStart(6, "0")}33` : "var(--bg-modifier-active)",
+                      color: role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "var(--text-muted)",
+                      border: `1px solid ${role.color ? `#${role.color.toString(16).padStart(6, "0")}66` : "var(--bg-modifier-active)"}`,
                     }}
                   >
                     {role.name}
@@ -139,9 +139,9 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                     onClick={() => setDropdownUserId(dropdownUserId === member.user.id ? null : member.user.id)}
                     style={{
                       background: "none",
-                      border: "1px dashed #4e5058",
+                      border: "1px dashed var(--bg-modifier-active)",
                       borderRadius: 3,
-                      color: "#b5bac1",
+                      color: "var(--text-muted)",
                       cursor: "pointer",
                       padding: "2px 6px",
                       fontSize: 12,
@@ -157,8 +157,8 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                         top: "100%",
                         left: 0,
                         zIndex: 10,
-                        backgroundColor: "#1e1f22",
-                        border: "1px solid #3f4147",
+                        backgroundColor: "var(--bg-tertiary)",
+                        border: "1px solid var(--bg-modifier-active)",
                         borderRadius: 4,
                         padding: 4,
                         minWidth: 150,
@@ -177,16 +177,16 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
                               cursor: "pointer",
                               borderRadius: 3,
                               fontSize: 13,
-                              color: role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#b5bac1",
+                              color: role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "var(--text-muted)",
                             }}
-                            onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = "#2b2d31"; }}
+                            onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = "var(--bg-floating)"; }}
                             onMouseLeave={(e) => { (e.target as HTMLElement).style.backgroundColor = "transparent"; }}
                           >
                             {role.name}
                           </div>
                         ))}
                       {assignableRoles.filter((r) => !member.roles.includes(r.id)).length === 0 && (
-                        <div style={{ padding: "6px 8px", color: "#72767d", fontSize: 13 }}>No roles available</div>
+                        <div style={{ padding: "6px 8px", color: "var(--text-muted)", fontSize: 13 }}>No roles available</div>
                       )}
                     </div>
                   )}

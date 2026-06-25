@@ -140,7 +140,7 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
   return (
     <div style={{ display: "flex", gap: 16, minHeight: 400 }}>
       {/* Left: target list */}
-      <div style={{ width: 200, borderRight: "1px solid #3f4147", paddingRight: 12 }}>
+      <div style={{ width: 200, borderRight: "1px solid var(--bg-modifier-active)", paddingRight: 12 }}>
         <div style={{ marginBottom: 12 }}>
           <select
             onChange={(e) => {
@@ -151,7 +151,7 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
               }
             }}
             value=""
-            style={{ width: "100%", padding: "6px 8px", backgroundColor: "#1e1f22", color: "#b5bac1", border: "1px solid #3f4147", borderRadius: 4, fontSize: 13 }}
+            style={{ width: "100%", padding: "6px 8px", backgroundColor: "var(--bg-tertiary)", color: "var(--text-muted)", border: "1px solid var(--bg-modifier-active)", borderRadius: 4, fontSize: 13 }}
           >
             <option value="">+ Add role/member</option>
             <optgroup label="Roles">
@@ -175,8 +175,8 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
               padding: "8px 10px",
               borderRadius: 4,
               cursor: "pointer",
-              backgroundColor: selectedTarget?.id === target.id ? "#3f4147" : "transparent",
-              color: target.color ? `#${target.color.toString(16).padStart(6, "0")}` : "#b5bac1",
+              backgroundColor: selectedTarget?.id === target.id ? "var(--bg-modifier-active)" : "transparent",
+              color: target.color ? `#${target.color.toString(16).padStart(6, "0")}` : "var(--text-muted)",
               fontSize: 13,
               marginBottom: 2,
             }}
@@ -192,7 +192,7 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
           <>
             {CHANNEL_PERMISSIONS.map((group) => (
               <div key={group.header} style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#72767d", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 8 }}>
                   {group.header}
                 </div>
                 {group.perms.map((perm) => {
@@ -212,20 +212,20 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
 
             {/* Save bar */}
             {dirty && (
-              <div style={{ position: "sticky", bottom: 0, backgroundColor: "#1e1f22", padding: "12px 0", borderTop: "1px solid #3f4147", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ color: "#b5bac1", fontSize: 14, flex: 1 }}>You have unsaved changes</span>
-                <button onClick={() => { const ow = overwrites.find((o) => o.id === selectedTarget.id); setEditAllow(ow ? BigInt(ow.allow) : 0n); setEditDeny(ow ? BigInt(ow.deny) : 0n); setDirty(false); }} style={{ padding: "6px 16px", border: "none", borderRadius: 3, backgroundColor: "transparent", color: "#b5bac1", cursor: "pointer", fontSize: 14 }}>Reset</button>
-                <button onClick={handleSave} disabled={saving} style={{ padding: "6px 16px", border: "none", borderRadius: 3, backgroundColor: "#5865f2", color: "#fff", cursor: "pointer", fontSize: 14 }}>{saving ? "Saving…" : "Save Changes"}</button>
+              <div style={{ position: "sticky", bottom: 0, backgroundColor: "var(--bg-tertiary)", padding: "12px 0", borderTop: "1px solid var(--bg-modifier-active)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ color: "var(--text-muted)", fontSize: 14, flex: 1 }}>You have unsaved changes</span>
+                <button onClick={() => { const ow = overwrites.find((o) => o.id === selectedTarget.id); setEditAllow(ow ? BigInt(ow.allow) : 0n); setEditDeny(ow ? BigInt(ow.deny) : 0n); setDirty(false); }} style={{ padding: "6px 16px", border: "none", borderRadius: 3, backgroundColor: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 14 }}>Reset</button>
+                <button onClick={handleSave} disabled={saving} style={{ padding: "6px 16px", border: "none", borderRadius: 3, backgroundColor: "var(--accent)", color: "var(--text-on-accent)", cursor: "pointer", fontSize: 14 }}>{saving ? "Saving…" : "Save Changes"}</button>
               </div>
             )}
 
             {/* Remove overwrite */}
-            <button onClick={handleRemove} style={{ marginTop: 16, padding: "8px 16px", border: "none", borderRadius: 3, backgroundColor: "#da373c", color: "#fff", cursor: "pointer", fontSize: 14 }}>
+            <button onClick={handleRemove} style={{ marginTop: 16, padding: "8px 16px", border: "none", borderRadius: 3, backgroundColor: "var(--danger)", color: "var(--text-on-accent)", cursor: "pointer", fontSize: 14 }}>
               Remove Overwrite
             </button>
           </>
         ) : (
-          <div style={{ color: "#72767d", padding: 16 }}>Select a role or member to edit channel permissions.</div>
+          <div style={{ color: "var(--text-muted)", padding: 16 }}>Select a role or member to edit channel permissions.</div>
         )}
       </div>
     </div>

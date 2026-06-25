@@ -13,15 +13,15 @@ export function ThreeStateToggle({ value, onChange, disabled, label }: Props) {
   const states: ToggleState[] = ["allow", "neutral", "deny"];
   const labels = { allow: "✓", neutral: "—", deny: "✕" };
   const colors = {
-    allow: { bg: "#248046", text: "#fff" },
-    neutral: { bg: "#4e5058", text: "#b5bac1" },
-    deny: { bg: "#da373c", text: "#fff" },
+    allow: { bg: "var(--success)", text: "var(--text-on-accent)" },
+    neutral: { bg: "var(--bg-modifier-active)", text: "var(--text-muted)" },
+    deny: { bg: "var(--danger)", text: "var(--text-on-accent)" },
   };
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
-      <span style={{ color: disabled ? "#72767d" : "#b5bac1", fontSize: 14 }}>{label}</span>
-      <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid #3f4147" }}>
+      <span style={{ color: disabled ? "var(--text-muted)" : "var(--text-muted)", fontSize: 14 }}>{label}</span>
+      <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid var(--bg-modifier-active)" }}>
         {states.map((state) => {
           const active = value === state;
           const { bg, text } = colors[state];
@@ -33,8 +33,8 @@ export function ThreeStateToggle({ value, onChange, disabled, label }: Props) {
               style={{
                 padding: "4px 10px",
                 border: "none",
-                backgroundColor: active ? bg : "#2b2d31",
-                color: active ? text : "#72767d",
+                backgroundColor: active ? bg : "var(--bg-floating)",
+                color: active ? text : "var(--text-muted)",
                 cursor: disabled ? "not-allowed" : "pointer",
                 fontSize: 13,
                 fontWeight: active ? 600 : 400,
