@@ -250,9 +250,11 @@ export function setupGatewaySubscriptions(): void {
   subscribe("GUILD_MEMBER_UPDATE", (data) => {
     // Merge with existing member data to preserve username/avatar
     const existing = useMemberStore.getState().membersByGuildId[data.guild_id]?.[data.user.id];
-    const user = existing?.user ?? { id: data.user.id, username: data.user.username ?? data.user.id, avatar: data.user.avatar ?? null, bot: data.user.bot ?? false, discriminator: "0", global_name: data.user.global_name ?? null };
+    const existingUser = existing?.user ?? { id: data.user.id, username: data.user.id, avatar: null, bot: false, discriminator: "0", global_name: null };
+    // Spread data.user over existing to pick up any fields the server sends
+    const mergedUser = { ...existingUser, ...data.user } as typeof existingUser;
     useMemberStore.getState().upsertMember(data.guild_id, {
-      user: { ...user, ...data.user },
+      user: mergedUser,
       nick: data.nick ?? existing?.nick ?? null,
       roles: data.roles ?? existing?.roles ?? [],
       joined_at: existing?.joined_at ?? "",
