@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { Webhook } from "@cove/shared";
+import type { Role, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -235,4 +235,34 @@ export function fetchThreadMessages(threadId: string, opts?: { before?: string; 
 
 export function sendThreadMessage(threadId: string, content: string, nonce?: string) {
   return sendMessage(threadId, content, nonce);
+}
+
+// ─── Roles ───────────────────────────────────────────────────────────
+
+export function fetchRoles(guildId: string) {
+  return api<Role[]>(`${API_PREFIX}/guilds/${guildId}/roles`);
+}
+export function createRole(guildId: string, data?: Partial<Pick<Role, "name" | "color" | "hoist" | "mentionable" | "permissions">>) {
+  return api<Role>(`${API_PREFIX}/guilds/${guildId}/roles`, {
+    method: "POST", body: JSON.stringify(data ?? {}),
+  });
+}
+export function updateRole(guildId: string, roleId: string, data: Partial<Pick<Role, "name" | "color" | "hoist" | "mentionable" | "permissions">>) {
+  return api<Role>(`${API_PREFIX}/guilds/${guildId}/roles/${roleId}`, {
+    method: "PATCH", body: JSON.stringify(data),
+  });
+}
+export function deleteRole(guildId: string, roleId: string) {
+  return api<void>(`${API_PREFIX}/guilds/${guildId}/roles/${roleId}`, { method: "DELETE" });
+}
+export function updateRolePositions(guildId: string, positions: Array<{ id: string; position: number }>) {
+  return api<Role[]>(`${API_PREFIX}/guilds/${guildId}/roles`, {
+    method: "PATCH", body: JSON.stringify(positions),
+  });
+}
+export function addMemberRole(guildId: string, userId: string, roleId: string) {
+  return api<void>(`${API_PREFIX}/guilds/${guildId}/members/${userId}/roles/${roleId}`, { method: "PUT" });
+}
+export function removeMemberRole(guildId: string, userId: string, roleId: string) {
+  return api<void>(`${API_PREFIX}/guilds/${guildId}/members/${userId}/roles/${roleId}`, { method: "DELETE" });
 }

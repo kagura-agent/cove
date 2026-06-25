@@ -8,6 +8,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useTypingStore, typingTimeoutIds } from "../stores/useTypingStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useMemberStore } from "../stores/useMemberStore";
+import { useRoleStore } from "../stores/useRoleStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useThreadStore } from "../stores/useThreadStore";
@@ -134,15 +135,19 @@ export function setupGatewaySubscriptions(): void {
     // Seed GuildStore and guild-scoped channels
     if (data.guilds?.length) {
       const channelStore = useChannelStore.getState();
+      const roleStore = useRoleStore.getState();
 
-      // Extract guild objects (without channels) for GuildStore
-      const guilds = data.guilds.map(({ channels: _channels, ...guild }) => guild);
+      // Extract guild objects (without channels/roles) for GuildStore
+      const guilds = data.guilds.map(({ channels: _channels, roles: _roles, ...guild }) => guild);
       useGuildStore.getState().setGuilds(guilds);
 
-      // Seed channels per guild
+      // Seed channels and roles per guild
       for (const guild of data.guilds) {
         if (guild.channels) {
           channelStore.setChannels(guild.id, guild.channels);
+        }
+        if (guild.roles) {
+          roleStore.setRoles(guild.id, guild.roles);
         }
 
         // Fetch active threads for entire guild in one call
@@ -240,6 +245,28 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("GUILD_MEMBER_REMOVE", (data) => {
     useMemberStore.getState().removeMember(data.guild_id, data.user.id);
+  });
+
+  subscribe("GUILD_MEMBER_UPDATE", (data) => {
+    useMemberStore.getState().upsertMember(data.guild_id, {
+      user: { id: data.user.id, username: data.user.id, avatar: null, bot: false, discriminator: "0", global_name: null },
+      nick: data.nick,
+      roles: data.roles,
+      joined_at: "",
+    });
+  });
+
+  // Role lifecycle events
+  subscribe("GUILD_ROLE_CREATE", (data) => {
+    useRoleStore.getState().addRole(data.guild_id, data.role);
+  });
+
+  subscribe("GUILD_ROLE_UPDATE", (data) => {
+    useRoleStore.getState().updateRole(data.guild_id, data.role);
+  });
+
+  subscribe("GUILD_ROLE_DELETE", (data) => {
+    useRoleStore.getState().removeRole(data.guild_id, data.role_id);
   });
 
   subscribe("MESSAGE_REACTION_ADD", (data) => {
