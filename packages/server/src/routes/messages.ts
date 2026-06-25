@@ -3,8 +3,8 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
-import { generateSnowflake, type Attachment, API_PREFIX } from "@cove/shared";
+import { requireChannelPermission, unknownMessage } from "./helpers.js";
+import { generateSnowflake, type Attachment, API_PREFIX, PermissionBits } from "@cove/shared";
 import { storeAttachment, getAttachmentPath } from "../attachment-storage.js";
 import { unlink } from "fs/promises";
 
@@ -29,16 +29,10 @@ async function cleanupAttachmentFiles(attachments: Attachment[]): Promise<void> 
 export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
-  app.get("/channels/:id/messages", (c) => {
+  app.get("/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
     const user = c.get("botUser");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const rawLimit = parseInt(c.req.query("limit") ?? "50", 10);
     const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? 50 : Math.min(rawLimit, 100);
@@ -63,17 +57,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(messages);
   });
 
-  app.get("/channels/:id/messages/:msgId", (c) => {
+  app.get("/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const message = repos.messages.getById(channelId, msgId, user.id);
     if (!message) {
@@ -92,13 +80,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   app.post("/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
     const user = c.get("botUser");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
     // Reject messages in archived or locked threads
     if (channel.type === 11 && channel.thread_metadata) {
@@ -254,13 +236,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const existing = repos.messages.getById(channelId, msgId);
     if (!existing) {
@@ -298,25 +274,21 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.json(updated);
   });
 
-  app.delete("/channels/:id/messages/:msgId", (c) => {
+  app.delete("/channels/:id/messages/:msgId", async (c) => {
     const channelId = c.req.param("id");
     const msgId = c.req.param("msgId");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const ch = await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const existing = repos.messages.getById(channelId, msgId);
     if (!existing) {
       return unknownMessage(c);
     }
 
-    // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
-    // For now, any guild member can delete any message in channels they have access to
+    // Deleting another user's message requires MANAGE_MESSAGES
+    if (existing.author.id !== user.id) {
+      await requireChannelPermission(repos, channelId, user.id, PermissionBits.MANAGE_MESSAGES);
+    }
 
     // Before delete: get attachments for cleanup
     const msgAttachments = repos.attachments.getByMessageId(msgId);
@@ -343,17 +315,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
-  // TODO: check MANAGE_MESSAGES permission once permission system is implemented (#113)
   app.post("/channels/:id/messages/bulk-delete", async (c) => {
     const channelId = c.req.param("id");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const ch = await requireChannelPermission(repos, channelId, user.id, PermissionBits.MANAGE_MESSAGES);
 
     const body = await parseJsonBody<{ messages: string[] }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -395,16 +360,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   });
 
   // Cove-specific: clear all messages in a channel
-  app.delete("/channels/:id/messages", (c) => {
+  app.delete("/channels/:id/messages", async (c) => {
     const channelId = c.req.param("id");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const ch = await requireChannelPermission(repos, channelId, user.id, PermissionBits.MANAGE_MESSAGES);
 
     // Before delete: get attachments for cleanup
     const channelAttachments = repos.attachments.getByChannelId(channelId);
@@ -424,17 +383,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
-  app.put("/channels/:id/messages/:msgId/ack", (c) => {
+  app.put("/channels/:id/messages/:msgId/ack", async (c) => {
     const channelId = c.req.param("id");
     const messageId = c.req.param("msgId");
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     if (!repos.messages.getById(channelId, messageId)) {
       return unknownMessage(c);
@@ -446,16 +399,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     return c.body(null, 204);
   });
 
-  app.post("/channels/:id/typing", (c) => {
+  app.post("/channels/:id/typing", async (c) => {
     const channelId = c.req.param("id");
     const author = c.get("botUser");
-    const ch = requireGuildMember(repos, channelId, author.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, channelId, author.id, author.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const ch = await requireChannelPermission(repos, channelId, author.id, PermissionBits.SEND_MESSAGES);
 
     dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id);
 

@@ -2,13 +2,14 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
-import { requireGuildMember, requireBotChannelPermission, unknownChannel, unknownMessage } from "./helpers.js";
+import { requireChannelPermission, unknownMessage } from "./helpers.js";
+import { PermissionBits } from "@cove/shared";
 
 export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   // PUT /channels/:channelId/messages/:messageId/reactions/:emoji/@me
-  app.put("/channels/:channelId/messages/:messageId/reactions/:emoji/@me", (c) => {
+  app.put("/channels/:channelId/messages/:messageId/reactions/:emoji/@me", async (c) => {
     const channelId = c.req.param("channelId");
     const messageId = c.req.param("messageId");
     const emoji = c.req.param("emoji");
@@ -18,11 +19,10 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
     const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const channel = await requireChannelPermission(
+      repos, channelId, user.id,
+      PermissionBits.ADD_REACTIONS | PermissionBits.VIEW_CHANNEL,
+    );
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);
@@ -37,7 +37,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   });
 
   // DELETE /channels/:channelId/messages/:messageId/reactions/:emoji/@me
-  app.delete("/channels/:channelId/messages/:messageId/reactions/:emoji/@me", (c) => {
+  app.delete("/channels/:channelId/messages/:messageId/reactions/:emoji/@me", async (c) => {
     const channelId = c.req.param("channelId");
     const messageId = c.req.param("messageId");
     const emoji = c.req.param("emoji");
@@ -47,11 +47,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
     const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);
@@ -66,7 +62,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   });
 
   // GET /channels/:channelId/messages/:messageId/reactions/:emoji
-  app.get("/channels/:channelId/messages/:messageId/reactions/:emoji", (c) => {
+  app.get("/channels/:channelId/messages/:messageId/reactions/:emoji", async (c) => {
     const channelId = c.req.param("channelId");
     const messageId = c.req.param("messageId");
     const emoji = c.req.param("emoji");
@@ -76,11 +72,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     }
     const user = c.get("botUser");
 
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const message = repos.messages.getById(channelId, messageId);
     if (!message) return unknownMessage(c);

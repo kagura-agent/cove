@@ -11,8 +11,9 @@ import { PermissionsRepo } from "./permissions.js";
 import { ChannelFilesRepo } from "./channel-files.js";
 import { ThreadsRepo } from "./threads.js";
 import { AttachmentRepo } from "./attachments.js";
+import { RolesRepo } from "./roles.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo, RolesRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -28,6 +29,7 @@ export interface Repos {
   channelFiles: ChannelFilesRepo;
   threads: ThreadsRepo;
   attachments: AttachmentRepo;
+  roles: RolesRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -49,5 +51,6 @@ export function createRepos(db: Database.Database): Repos {
     channelFiles: new ChannelFilesRepo(db),
     threads: new ThreadsRepo(db, channels),
     attachments: new AttachmentRepo(db),
+    roles: new RolesRepo(db),
   };
 }

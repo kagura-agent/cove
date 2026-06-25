@@ -40,6 +40,8 @@ const baseUrl = process.env["BASE_URL"] ?? `http://localhost:${PORT}`;
 
 const dispatcher = new GatewayDispatcher(repos.channels, repos.guilds);
 dispatcher.setPermissionsRepo(repos.permissions);
+dispatcher.setMembersRepo(repos.members);
+dispatcher.setRolesRepo(repos.roles);
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,

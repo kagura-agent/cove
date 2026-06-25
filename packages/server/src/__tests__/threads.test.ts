@@ -72,10 +72,7 @@ describe("Cove API — Threads", () => {
       .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
-  });
-
-  afterEach(() => {
-    delete process.env.RATE_LIMIT_ENABLED;
+    db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("admin", defaultGuildId);
   });
 
   const authHeaders = () => ({
@@ -391,9 +388,11 @@ describe("Cove API — Threads", () => {
       }
     });
 
-    it("returns 404 for non-thread channel", async () => {
+    it("returns empty array for non-thread channel", async () => {
       const res = await authGet(`${API_PREFIX}/channels/${generalId}/thread-members`);
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(200);
+      const members = await res.json();
+      expect(members).toEqual([]);
     });
   });
 

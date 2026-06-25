@@ -3,51 +3,45 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, requireBotChannelPermission, unknownGuild, unknownChannel } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission, unknownGuild, unknownChannel } from "./helpers.js";
+import { PermissionBits } from "@cove/shared";
+import { computePermissions } from "../permissions/compute.js";
 
 export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.get("/guilds/:guildId/channels", (c) => {
     const guildId = c.req.param("guildId")!;
-    if (!repos.guilds.exists(guildId)) {
+    const guild = repos.guilds.getById(guildId);
+    if (!guild) {
       return unknownGuild(c);
     }
     const user = c.get("botUser");
-    if (!repos.members.exists(guildId, user.id)) {
+    const member = repos.members.get(guildId, user.id);
+    if (!member) {
       return unknownGuild(c);
     }
-    let channels = repos.channels.list(guildId);
-    if (user.bot) {
-      channels = channels.filter((ch) =>
-        requireBotChannelPermission(repos, ch.id, user.id, true),
-      );
-    }
+    const roles = repos.roles.listByGuild(guildId);
+    const channels = repos.channels.list(guildId).filter((ch) => {
+      const overwriteChannelId = ch.type === 11 && ch.parent_id ? ch.parent_id : ch.id;
+      const overwrites = repos.permissions.listByChannel(overwriteChannelId);
+      const perms = computePermissions(member, ch, guild, roles, overwrites);
+      return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
+    });
     return c.json(channels);
   });
 
-  app.get("/channels/:id", (c) => {
+  app.get("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const user = c.get("botUser");
-    const channel = requireGuildMember(repos, id, user.id);
-    if (!channel) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
-      return c.json({ message: "Missing Access", code: 50001 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, id, user.id, PermissionBits.VIEW_CHANNEL);
     return c.json(channel);
   });
 
   app.post("/guilds/:guildId/channels", async (c) => {
     const guildId = c.req.param("guildId")!;
-    if (!repos.guilds.exists(guildId)) {
-      return unknownGuild(c);
-    }
     const userId = c.get("botUser").id;
-    if (!repos.members.exists(guildId, userId)) {
-      return unknownGuild(c);
-    }
+    await requireGuildPermission(repos, guildId, userId, PermissionBits.MANAGE_CHANNELS);
 
     const body = await parseJsonBody<{ name: string; topic?: string; type?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -77,13 +71,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   app.patch("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const user = c.get("botUser");
-    const channel = requireGuildMember(repos, id, user.id);
-    if (!channel) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
-      return c.json({ message: "Missing Access", code: 50001 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
 
     const body = await parseJsonBody<{
       name?: string;
@@ -152,16 +140,10 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     return c.json(updated);
   });
 
-  app.delete("/channels/:id", (c) => {
+  app.delete("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const user = c.get("botUser");
-    const ch = requireGuildMember(repos, id, user.id);
-    if (!ch) {
-      return unknownChannel(c);
-    }
-    if (!requireBotChannelPermission(repos, id, user.id, user.bot)) {
-      return c.json({ message: "Missing Access", code: 50001 }, 403);
-    }
+    const ch = await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
     if (!repos.channels.delete(id)) {
       return unknownChannel(c);
     }

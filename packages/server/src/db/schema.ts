@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { generateSnowflake } from "@cove/shared";
+import { generateSnowflake, DEFAULT_EVERYONE_PERMISSIONS } from "@cove/shared";
 import { runMigrations } from "./migrations/index.js";
 
 export function createAllTables(db: Database.Database): void {
@@ -158,6 +158,11 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     db.prepare(
       "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(id, "Cove", null, null, now, now);
+
+    // Create @everyone role for the new guild
+    db.prepare(
+      "INSERT OR IGNORE INTO roles (id, guild_id, name, position, permissions) VALUES (?, ?, '@everyone', 0, ?)"
+    ).run(id, id, DEFAULT_EVERYONE_PERMISSIONS.toString());
   }
 
   return db;
