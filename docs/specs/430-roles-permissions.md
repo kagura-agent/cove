@@ -26,6 +26,8 @@ interface Role {
   permissions: string;     // Permission bitfield as string (bigint)
   managed: boolean;        // Bot-managed role (auto-created for bots)
   mentionable: boolean;    // Can be mentioned by anyone
+  flags: number;           // Role flags (0 = none)
+  bot_id: string | null;   // Bot user ID if managed role, null otherwise
 }
 ```
 
@@ -250,7 +252,6 @@ Body (partial update):
 Constraints:
 - Cannot modify a role at or above your highest role (unless guild owner)
 - Cannot modify managed roles (return 403)
-- Permission value must be subset of caller's permissions (§5.6)
 - Permission value must be subset of caller's permissions (§5.6) — ADMINISTRATOR users can set any permissions including ADMINISTRATOR on lower-position roles
 
 #### DELETE /guilds/:guildId/roles/:roleId
@@ -269,7 +270,7 @@ Constraints:
 - Emit `GUILD_ROLE_DELETE` only (no GUILD_MEMBER_UPDATE — Discord behavior: clients clean up locally)
 
 #### GET /guilds/:guildId/roles/:roleId
-Get a single role. Returns the role object. Requires guild membership.
+Get a single role. Returns the role object. Requires guild membership. Returns 404 if the role does not exist.
 
 #### PATCH /guilds/:guildId/roles
 Bulk-update role positions. Body is an array of `{ id, position }` objects. Returns 200 with an array of **all** guild role objects (matching Discord).
@@ -437,6 +438,8 @@ These are Discord's core security constraints for MANAGE_ROLES operations:
    - Exception: users with ADMINISTRATOR can set any permissions including ADMINISTRATOR (they have ALL_PERMISSIONS, so the subset check passes)
    - This matches Discord: ADMINISTRATOR users can grant ADMINISTRATOR to lower-position roles
 
+3. **Assignment constraint:** Can only assign/remove roles below the caller's highest role position.
+
 4. **Channel overwrite value constraint:** When creating or modifying a channel permission overwrite (`PUT /channels/:channelId/permissions/:targetId`), the `allow` and `deny` values are subject to:
    - `allow` and `deny` bits must be a subset of the caller's own computed permissions
    - Guild-level bits cannot appear in channel overwrites: ADMINISTRATOR, KICK_MEMBERS, BAN_MEMBERS, MANAGE_GUILD, VIEW_AUDIT_LOG, MANAGE_NICKNAMES (return 400 if present)
@@ -490,7 +493,9 @@ CREATE TABLE IF NOT EXISTS roles (
   position INTEGER NOT NULL DEFAULT 0,
   permissions TEXT NOT NULL DEFAULT '0',
   managed INTEGER NOT NULL DEFAULT 0,
-  mentionable INTEGER NOT NULL DEFAULT 0
+  mentionable INTEGER NOT NULL DEFAULT 0,
+  flags INTEGER NOT NULL DEFAULT 0,
+  bot_id TEXT DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_roles_guild ON roles(guild_id);
 
