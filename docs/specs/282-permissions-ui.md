@@ -4,7 +4,7 @@
 
 ## Problem
 
-The permissions backend (#430) is live but there's no UI to manage it. Currently:
+The permissions backend (#430 — spec merged as PR #432, implementation is a hard dependency) has no UI to manage it. Currently:
 - No way to create/edit/delete roles
 - No way to assign roles to members
 - Channel Settings → Permissions only shows bot VIEW_CHANNEL toggles
@@ -26,7 +26,12 @@ Discord pattern: click server name in sidebar header → dropdown menu → "Serv
 
 Add a gear icon (⚙️) next to the server name in the sidebar header. Clicking it opens the Server Settings panel as a full-screen overlay (same pattern as the existing User Settings panel / `SettingsPanel.tsx`).
 
-Only visible to users with MANAGE_GUILD permission (or guild owner). For our current setup, Luna is the owner so this is always visible.
+Visibility: shown if the user has ANY of `MANAGE_GUILD` or `MANAGE_ROLES` (or is guild owner). Per-section gates:
+- **Roles section**: requires `MANAGE_ROLES`
+- **Members section** (role assignment): requires `MANAGE_ROLES`
+- **Overview section** (future): requires `MANAGE_GUILD`
+
+Sections the user lacks permission for are hidden from the nav.
 
 ### 1.2 Navigation
 
@@ -50,10 +55,21 @@ Overview and other sections are out of scope for this PR — just show disabled 
 Discord layout: left side shows the role list, right side shows the selected role's settings.
 
 - List all roles sorted by position (highest first, @everyone at bottom)
-- Each role shows: color dot + name
-- Click to select → right panel shows that role's settings
-- "Create Role" button at the top
-- @everyone is always listed, cannot be deleted, but can be edited (permissions only)
+- Each role shows: color dot + name + bot icon if managed
+- **Hierarchy enforcement:** roles at or above the user's highest role are visible but grayed out (not selectable for editing)
+- **Managed roles:** shown with a bot icon and "Managed by [bot name]" subtitle. Not editable or deletable.
+- Click a role below user's highest → right panel shows that role's settings
+- "Create Role" button at the top (creates at position below user's highest)
+- @everyone is always listed, cannot be deleted, but can be edited (permissions only — Display tab hidden for @everyone)
+
+#### Role Position Reorder
+
+Up/down arrow buttons in the role list (visible on hover), to the right of each role name.
+
+- Each press immediately swaps the role with its adjacent neighbor via `PATCH /guilds/:guildId/roles` (bulk position update with the two swapped roles)
+- @everyone: no buttons (position 0, immovable)
+- Hierarchy limit: cannot move a role to or above user's highest role position
+- Roles above user's highest: no buttons shown
 
 #### Role Editor (right sub-panel)
 
@@ -61,10 +77,10 @@ Tabs matching Discord:
 - **Display** — name, color
 - **Permissions** — permission toggles
 
-**Display Tab:**
+**Display Tab** (hidden for @everyone)**:**
 - Role name input
 - Color picker (preset swatches + custom hex input, matching Discord's palette)
-- Save / Reset buttons
+- Disabled entirely for managed roles (all fields read-only)
 
 **Permissions Tab:**
 - Grouped permission toggles matching Discord's categories:
@@ -104,9 +120,21 @@ ADVANCED
 
 Each toggle is a three-state for channel overwrites (allow / neutral / deny) but two-state for role base permissions (on / off).
 
-ADMINISTRATOR toggle shows a warning: "Members with this permission can do everything — including delete the server. Grant carefully."
+ADMINISTRATOR toggle: on click, shows a **confirmation modal** before toggling: "Are you sure? Members with Administrator can do everything, including deleting the server and all channels." [Cancel] [Confirm]
 
-Changes are tracked locally. Show a save bar at the bottom when there are unsaved changes: "You have unsaved changes" + [Reset] [Save Changes].
+**Managed roles:** all toggles are disabled (read-only display of the managed role's permissions).
+
+#### Save Bar Behavior
+
+Shown at the bottom when there are unsaved changes: "You have unsaved changes" + [Reset] [Save Changes].
+
+- **Dirty detection:** diff current form state vs. last-fetched server state (per role)
+- **Navigate away with changes:** if user clicks a different role or closes settings with unsaved changes → confirmation dialog: "You have unsaved changes. Discard?" [Cancel] [Discard]
+- **Concurrent update:** if a `GUILD_ROLE_UPDATE` gateway event arrives for the role being edited:
+  - If the changed fields don't overlap with dirty fields → silently update baseline
+  - If they overlap → show a banner: "This role was updated by someone else. Your changes may conflict." + [Reload] [Keep mine]
+- **Reset button:** reverts form to the current server state (baseline)
+- **Save:** calls `PATCH /guilds/:guildId/roles/:roleId`, on success updates baseline + clears dirty state
 
 #### Create Role
 
@@ -114,9 +142,18 @@ Click "Create Role" → immediately creates a role via `POST /guilds/:guildId/ro
 
 #### Delete Role
 
-In the role editor, a "Delete Role" button at the bottom (red, with confirmation dialog). Calls `DELETE /guilds/:guildId/roles/:roleId`.
+In the role editor, a "Delete Role" button at the bottom (red). Clicking opens a confirmation dialog:
 
-Cannot delete @everyone (button hidden).
+> Delete **[role name]**?
+> **X members** have this role. Channel permission overwrites for this role will be removed.
+> [Cancel] [Delete]
+
+Member count is fetched from the member list (count of members whose `roles` array includes this role ID).
+
+Button is **hidden** for:
+- @everyone
+- Managed roles
+- Roles at or above user's highest role
 
 ### 1.4 Members Section
 
@@ -128,9 +165,16 @@ Each member row shows:
 - "+" button to assign a role → dropdown of available roles
 - Click "×" on a role badge to remove it
 
+**Hierarchy enforcement for role assignment:**
+- Dropdown only shows roles **below** user's highest role
+- Excludes @everyone (implicit) and managed roles
+- "×" button only appears on roles below user's highest
+
 API calls:
 - `PUT /guilds/:guildId/members/:userId/roles/:roleId` to assign
 - `DELETE /guilds/:guildId/members/:userId/roles/:roleId` to remove
+
+**Error handling:** 403 → toast "Missing Permissions", 404 → toast "Role no longer exists", network error → generic toast. No silent `console.error`.
 
 ---
 
@@ -162,29 +206,43 @@ For channel overwrites, each permission is **three-state** (matching Discord):
 
 Only channel-relevant permissions shown (not guild-only bits like KICK_MEMBERS, BAN_MEMBERS, MANAGE_GUILD, VIEW_AUDIT_LOG, MANAGE_NICKNAMES, ADMINISTRATOR).
 
+#### Three-State Toggle Component
+
+Not in antd — custom component. Design:
+
+- Three-segment button group per row: **[✓ Allow]  [— Neutral]  [✕ Deny]**
+- Allow segment: green background when active
+- Neutral segment: gray background when active (= inherit from role base permissions)
+- Deny segment: red background when active
+- Click a segment to select it. Only one active per row.
+- For role base permissions (§1.3 Permissions Tab), use antd `Switch` (two-state: on/off). Three-state only applies to channel overwrites.
+
 Channel-level permissions to show:
 
 ```
 GENERAL CHANNEL PERMISSIONS
-  View Channel — Allow / Neutral / Deny
-  Manage Channel — Allow / Neutral / Deny
-  Manage Permissions — Allow / Neutral / Deny  (= MANAGE_ROLES in channel scope)
+  Create Invite — Allow / Neutral / Deny      (CREATE_INSTANT_INVITE)
+  View Channel — Allow / Neutral / Deny       (VIEW_CHANNEL)
+  Manage Channel — Allow / Neutral / Deny     (MANAGE_CHANNELS)
+  Manage Permissions — Allow / Neutral / Deny  (MANAGE_ROLES)
 
 TEXT CHANNEL PERMISSIONS
-  Send Messages
-  Send Messages in Threads
-  Create Public Threads
-  Create Private Threads
-  Embed Links
-  Attach Files
-  Add Reactions
-  Use External Emojis
-  Mention Everyone
-  Manage Messages
-  Manage Threads
-  Read Message History
-  Manage Webhooks
+  Send Messages                                (SEND_MESSAGES)
+  Send Messages in Threads                     (SEND_MESSAGES_IN_THREADS)
+  Create Public Threads                        (CREATE_PUBLIC_THREADS)
+  Create Private Threads                       (CREATE_PRIVATE_THREADS)
+  Embed Links                                  (EMBED_LINKS)
+  Attach Files                                 (ATTACH_FILES)
+  Add Reactions                                (ADD_REACTIONS)
+  Use External Emojis                          (USE_EXTERNAL_EMOJIS)
+  Mention Everyone                             (MENTION_EVERYONE)
+  Manage Messages                              (MANAGE_MESSAGES)
+  Manage Threads                               (MANAGE_THREADS)
+  Read Message History                         (READ_MESSAGE_HISTORY)
+  Manage Webhooks                              (MANAGE_WEBHOOKS)
 ```
+
+The parenthetical values are the `PermissionFlags` / `PermissionBits` key names from `@cove/shared`.
 
 Save bar at bottom when changes are pending.
 
@@ -224,7 +282,7 @@ Permission overwrite APIs already exist (`putPermissionOverwrite`, `deletePermis
 
 ```typescript
 interface RoleStore {
-  roles: Map<string, Role[]>;  // guildId → roles (sorted by position desc)
+  roles: Record<string, Role[]>;  // guildId → roles (sorted by position desc)
   setRoles: (guildId: string, roles: Role[]) => void;
   addRole: (guildId: string, role: Role) => void;
   updateRole: (guildId: string, role: Role) => void;
@@ -291,9 +349,12 @@ Channel Settings already has its own modal pattern — just upgrading the Permis
 - Role drag-and-drop reordering (use up/down buttons for now)
 - Role icons / unicode emoji
 - Animated role color preview
-- Permission calculator / "effective permissions" viewer
+- Permission calculator / "effective permissions" viewer (suggestion for future)
 - Audit log viewer
 - Category-level permission inheritance
+
+### Dependencies
+- #430 implementation must land first (spec merged as PR #432). Shared types (`Role`, expanded `PermissionFlags`, `PermissionBits`, gateway event types) come from #430's implementation.
 
 ---
 
