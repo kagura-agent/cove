@@ -89,6 +89,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const navigate = useNavigate();
   const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
+  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
   const guilds = useGuildStore((s) => s.guilds);
 
   // Use first guild if no active guild in URL — must be declared before useUserPermissions

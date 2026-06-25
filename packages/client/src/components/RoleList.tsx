@@ -14,7 +14,11 @@ interface RoleListProps {
 }
 
 export function RoleList({ guildId, selectedRoleId, onSelectRole, userHighestPosition }: RoleListProps) {
+<<<<<<< HEAD
   const roles = useRoleStore((s) => s.roles[guildId] || EMPTY_ROLES);
+=======
+  const roles = useRoleStore((s) => s.roles[guildId] ?? []);
+>>>>>>> ea54fc4 (fix(client): fix all unstable zustand selectors causing React #185)
   const [creating, setCreating] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
