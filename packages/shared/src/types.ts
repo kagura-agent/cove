@@ -29,13 +29,101 @@ export interface PermissionOverwrite {
   deny: string;        // permission bitfield as string (bigint)
 }
 
+/** All Discord-compatible permission bits as string-encoded bigints (safe for JSON transport). */
 export const PermissionFlags = {
+  CREATE_INSTANT_INVITE: (1n << 0n).toString(),
+  KICK_MEMBERS: (1n << 1n).toString(),
+  BAN_MEMBERS: (1n << 2n).toString(),
+  ADMINISTRATOR: (1n << 3n).toString(),
+  MANAGE_CHANNELS: (1n << 4n).toString(),
+  MANAGE_GUILD: (1n << 5n).toString(),
+  ADD_REACTIONS: (1n << 6n).toString(),
+  VIEW_AUDIT_LOG: (1n << 7n).toString(),
   VIEW_CHANNEL: (1n << 10n).toString(),
   SEND_MESSAGES: (1n << 11n).toString(),
+  SEND_TTS_MESSAGES: (1n << 12n).toString(),
   MANAGE_MESSAGES: (1n << 13n).toString(),
-  MANAGE_CHANNELS: (1n << 4n).toString(),
+  EMBED_LINKS: (1n << 14n).toString(),
+  ATTACH_FILES: (1n << 15n).toString(),
+  READ_MESSAGE_HISTORY: (1n << 16n).toString(),
+  MENTION_EVERYONE: (1n << 17n).toString(),
+  USE_EXTERNAL_EMOJIS: (1n << 18n).toString(),
+  CONNECT: (1n << 20n).toString(),
+  SPEAK: (1n << 21n).toString(),
+  MUTE_MEMBERS: (1n << 22n).toString(),
+  DEAFEN_MEMBERS: (1n << 23n).toString(),
+  MOVE_MEMBERS: (1n << 24n).toString(),
+  MANAGE_NICKNAMES: (1n << 27n).toString(),
+  MANAGE_ROLES: (1n << 28n).toString(),
   MANAGE_WEBHOOKS: (1n << 29n).toString(),
+  MANAGE_THREADS: (1n << 34n).toString(),
+  CREATE_PUBLIC_THREADS: (1n << 35n).toString(),
+  CREATE_PRIVATE_THREADS: (1n << 36n).toString(),
+  SEND_MESSAGES_IN_THREADS: (1n << 38n).toString(),
 } as const;
+
+/** All Discord-compatible permission bits as actual bigint values (for server-side computation). */
+export const PermissionBits = {
+  CREATE_INSTANT_INVITE: 1n << 0n,
+  KICK_MEMBERS: 1n << 1n,
+  BAN_MEMBERS: 1n << 2n,
+  ADMINISTRATOR: 1n << 3n,
+  MANAGE_CHANNELS: 1n << 4n,
+  MANAGE_GUILD: 1n << 5n,
+  ADD_REACTIONS: 1n << 6n,
+  VIEW_AUDIT_LOG: 1n << 7n,
+  VIEW_CHANNEL: 1n << 10n,
+  SEND_MESSAGES: 1n << 11n,
+  SEND_TTS_MESSAGES: 1n << 12n,
+  MANAGE_MESSAGES: 1n << 13n,
+  EMBED_LINKS: 1n << 14n,
+  ATTACH_FILES: 1n << 15n,
+  READ_MESSAGE_HISTORY: 1n << 16n,
+  MENTION_EVERYONE: 1n << 17n,
+  USE_EXTERNAL_EMOJIS: 1n << 18n,
+  CONNECT: 1n << 20n,
+  SPEAK: 1n << 21n,
+  MUTE_MEMBERS: 1n << 22n,
+  DEAFEN_MEMBERS: 1n << 23n,
+  MOVE_MEMBERS: 1n << 24n,
+  MANAGE_NICKNAMES: 1n << 27n,
+  MANAGE_ROLES: 1n << 28n,
+  MANAGE_WEBHOOKS: 1n << 29n,
+  MANAGE_THREADS: 1n << 34n,
+  CREATE_PUBLIC_THREADS: 1n << 35n,
+  CREATE_PRIVATE_THREADS: 1n << 36n,
+  SEND_MESSAGES_IN_THREADS: 1n << 38n,
+} as const;
+
+/** OR of every permission bit — represents "all permissions granted". */
+export const ALL_PERMISSIONS = Object.values(PermissionBits).reduce((acc, bit) => acc | bit, 0n);
+
+/** Default permissions for the @everyone role in a new guild. */
+export const DEFAULT_EVERYONE_PERMISSIONS =
+  PermissionBits.VIEW_CHANNEL |
+  PermissionBits.SEND_MESSAGES |
+  PermissionBits.READ_MESSAGE_HISTORY |
+  PermissionBits.ADD_REACTIONS |
+  PermissionBits.EMBED_LINKS |
+  PermissionBits.ATTACH_FILES |
+  PermissionBits.USE_EXTERNAL_EMOJIS |
+  PermissionBits.CREATE_PUBLIC_THREADS |
+  PermissionBits.SEND_MESSAGES_IN_THREADS |
+  PermissionBits.CREATE_INSTANT_INVITE;
+
+/** Role object (Discord-compatible). */
+export interface Role {
+  id: string;
+  name: string;
+  color: number;
+  hoist: boolean;
+  position: number;
+  permissions: string;
+  managed: boolean;
+  mentionable: boolean;
+  flags: number;
+  bot_id: string | null;
+}
 
 /** Thread metadata — stored as JSON in the channel row. */
 export interface ThreadMetadata {

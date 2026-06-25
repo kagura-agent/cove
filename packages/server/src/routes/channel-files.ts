@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { AppEnv } from "../auth.js";
 import { parseJsonBody, validationError } from "../validation.js";
-import { requireGuildMember, requireBotChannelPermission, unknownChannel } from "./helpers.js";
+import { requireChannelPermission } from "./helpers.js";
+import { PermissionBits } from "@cove/shared";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const FILENAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}$/;
@@ -12,28 +13,20 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
   const app = new Hono<AppEnv>();
 
   // List files (metadata only)
-  app.get("/channels/:channelId/files", (c) => {
+  app.get("/channels/:channelId/files", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const files = repos.channelFiles.list(channelId);
     return c.json(files);
   });
 
   // Get file content
-  app.get("/channels/:channelId/files/:filename", (c) => {
+  app.get("/channels/:channelId/files/:filename", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {
@@ -49,11 +42,7 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
   app.put("/channels/:channelId/files/:filename", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES);
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {
@@ -88,14 +77,10 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
   });
 
   // Delete file
-  app.delete("/channels/:channelId/files/:filename", (c) => {
+  app.delete("/channels/:channelId/files/:filename", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const channel = requireGuildMember(repos, channelId, user.id);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, user.id, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES);
 
     const filename = c.req.param("filename");
     if (!FILENAME_RE.test(filename)) {

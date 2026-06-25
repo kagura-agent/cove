@@ -21,6 +21,8 @@ describe("Permissions", () => {
     constructor(repos: ReturnType<typeof createRepos>) {
       super(repos.channels, repos.guilds);
       this.setPermissionsRepo(repos.permissions);
+      this.setMembersRepo(repos.members);
+      this.setRolesRepo(repos.roles);
     }
     override messageCreate(message: Message): void {
       broadcastEvents.push({ t: "MESSAGE_CREATE", d: message });
@@ -45,6 +47,7 @@ describe("Permissions", () => {
       .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
+    db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("admin", defaultGuildId);
   });
 
   afterEach(() => {
@@ -233,7 +236,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot read messages from channel (403)", async () => {
     const botToken = createBotUser("read-bot", "ReadBot");
-    // No VIEW_CHANNEL permission granted
+    // Explicitly deny VIEW_CHANNEL
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "read-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
     const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "GET",
       headers: {
@@ -247,7 +252,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot send messages to channel (403)", async () => {
     const botToken = createBotUser("send-bot", "SendBot");
-    // No VIEW_CHANNEL permission granted
+    // Explicitly deny VIEW_CHANNEL and SEND_MESSAGES
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "send-bot", 1, "0", (BigInt(PermissionFlags.VIEW_CHANNEL) | BigInt(PermissionFlags.SEND_MESSAGES)).toString());
     const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "POST",
       headers: {
@@ -263,6 +270,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot PATCH a message (403)", async () => {
     const botToken = createBotUser("patch-bot", "PatchBot");
+    // Explicitly deny VIEW_CHANNEL
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "patch-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
     // Create a message as admin first
     const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "POST",
@@ -286,6 +296,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot DELETE a message (403)", async () => {
     const botToken = createBotUser("delete-bot", "DeleteBot");
+    // Explicitly deny VIEW_CHANNEL
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "delete-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
     // Create a message as admin first
     const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "POST",
@@ -307,6 +320,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot add a reaction (403)", async () => {
     const botToken = createBotUser("react-bot", "ReactBot");
+    // Explicitly deny VIEW_CHANNEL
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "react-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
     // Create a message as admin first
     const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "POST",
@@ -328,6 +344,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot remove a reaction (403)", async () => {
     const botToken = createBotUser("unreact-bot", "UnreactBot");
+    // Explicitly deny VIEW_CHANNEL
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "unreact-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
     // Create a message as admin first
     const createRes = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
       method: "POST",
@@ -349,6 +368,9 @@ describe("Permissions", () => {
 
   it("denied bot cannot use typing indicator (403)", async () => {
     const botToken = createBotUser("typing-bot", "TypingBot");
+    // Deny SEND_MESSAGES (typing requires SEND_MESSAGES)
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "typing-bot", 1, "0", (BigInt(PermissionFlags.VIEW_CHANNEL) | BigInt(PermissionFlags.SEND_MESSAGES)).toString());
     const res = await app.request(`${API_PREFIX}/channels/${generalId}/typing`, {
       method: "POST",
       headers: {
@@ -413,6 +435,9 @@ describe("Permissions", () => {
 
   it("bot WITHOUT VIEW_CHANNEL does NOT receive dispatched events", async () => {
     createBotUser("no-perm-bot", "NoPermBot");
+    // Deny VIEW_CHANNEL via channel overwrite (new permission system applies to all users)
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "no-perm-bot", 1, "0", PermissionFlags.VIEW_CHANNEL);
 
     const dispatched: { event: string; data: unknown }[] = [];
     const mockWs = {
@@ -520,6 +545,7 @@ describe("Channel route VIEW_CHANNEL enforcement", () => {
       .run("admin", "Admin", null, 1, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
+    db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("admin", defaultGuildId);
 
     // Bot WITHOUT VIEW_CHANNEL
     botToken = "denied-bot-tok";
@@ -527,6 +553,9 @@ describe("Channel route VIEW_CHANNEL enforcement", () => {
       .run("denied-bot", "DeniedBot", null, 1, null, botToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "denied-bot", null, "[]", now);
+    // Explicitly deny VIEW_CHANNEL for the bot
+    db.prepare("INSERT INTO channel_permission_overwrites (channel_id, target_id, target_type, allow, deny) VALUES (?, ?, ?, ?, ?)")
+      .run(generalId, "denied-bot", 1, "0", (1n << 10n).toString());
   });
 
   afterEach(() => { delete process.env.RATE_LIMIT_ENABLED; });

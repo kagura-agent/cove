@@ -1,21 +1,35 @@
-import type { Message, Channel } from "@cove/shared";
+import type { Message, Channel, Role } from "@cove/shared";
+import { PermissionBits } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 import type { PermissionsRepo } from "../repos/permissions.js";
+import type { MembersRepo } from "../repos/members.js";
+import type { RolesRepo } from "../repos/roles.js";
+import { computePermissions } from "../permissions/compute.js";
 
-const VIEW_CHANNEL_BIT = 1n << 10n;
+const VIEW_CHANNEL_BIT = PermissionBits.VIEW_CHANNEL;
 
 export class GatewayDispatcher {
   private sessions = new Set<GatewaySession>();
   private sessionsById = new Map<string, GatewaySession>();
   private userSessions = new Map<string, Set<string>>();
   private permissionsRepo: PermissionsRepo | null = null;
+  private membersRepo: MembersRepo | null = null;
+  private rolesRepo: RolesRepo | null = null;
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
 
   setPermissionsRepo(repo: PermissionsRepo): void {
     this.permissionsRepo = repo;
+  }
+
+  setMembersRepo(repo: MembersRepo): void {
+    this.membersRepo = repo;
+  }
+
+  setRolesRepo(repo: RolesRepo): void {
+    this.rolesRepo = repo;
   }
 
   addSession(session: GatewaySession): void {
@@ -186,13 +200,26 @@ export class GatewayDispatcher {
       permChannelId = channel.parent_id;
     }
 
+    // Pre-load guild data once for all sessions
+    const guild = this.guildsRepo?.getById(guildId);
+    const roles = this.rolesRepo?.listByGuild(guildId);
+    const permChannel = this.channelsRepo.getById(permChannelId);
+    const channelOverwrites = this.permissionsRepo?.listByChannel(permChannelId) ?? [];
+
     for (const session of this.sessions) {
       if (!session.guildIds.has(guildId)) continue;
-      if (session.user?.bot && this.permissionsRepo) {
-        if (!this.permissionsRepo.hasPermission(permChannelId, session.user.id, VIEW_CHANNEL_BIT)) {
-          continue;
-        }
-      }
+
+      // Permission filter: ALL sessions (bot and human) are filtered
+      // Fail-closed: if we can't compute permissions, deny by default
+      if (!session.user) continue;
+      if (!guild || !roles || !permChannel || !this.membersRepo) continue;
+
+      const member = this.membersRepo.get(guildId, session.user.id);
+      if (!member) continue;
+
+      const perms = computePermissions(member, permChannel, guild, roles, channelOverwrites);
+      if (!(perms & VIEW_CHANNEL_BIT)) continue;
+
       session.dispatch(event, data);
     }
   }
@@ -305,6 +332,22 @@ export class GatewayDispatcher {
       emoji: { id: null, name: emoji },
       count,
     });
+  }
+
+  guildMemberUpdate(guildId: string, member: { user: { id: string }; nick: string | null; roles: string[]; joined_at: string }): void {
+    this.broadcastToGuild(guildId, "GUILD_MEMBER_UPDATE", { ...member, guild_id: guildId });
+  }
+
+  guildRoleCreate(guildId: string, role: Role): void {
+    this.broadcastToGuild(guildId, "GUILD_ROLE_CREATE", { guild_id: guildId, role });
+  }
+
+  guildRoleUpdate(guildId: string, role: Role): void {
+    this.broadcastToGuild(guildId, "GUILD_ROLE_UPDATE", { guild_id: guildId, role });
+  }
+
+  guildRoleDelete(guildId: string, roleId: string): void {
+    this.broadcastToGuild(guildId, "GUILD_ROLE_DELETE", { guild_id: guildId, role_id: roleId });
   }
 
   removeUser(userId: string): void {

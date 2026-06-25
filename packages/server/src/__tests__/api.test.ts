@@ -64,6 +64,8 @@ describe("Cove API — Discord-compatible", () => {
       .run("admin", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "admin", null, "[]", now);
+    // Make admin the guild owner so they have full permissions
+    db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("admin", defaultGuildId);
   });
 
   afterEach(() => {

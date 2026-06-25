@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { GatewaySession } from "../ws/session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
-import type { Channel } from "@cove/shared";
+import type { GuildsRepo } from "../repos/guilds.js";
+import type { MembersRepo } from "../repos/members.js";
+import type { RolesRepo } from "../repos/roles.js";
+import type { PermissionsRepo } from "../repos/permissions.js";
+import type { Channel, Guild, Role, CoveGuildMember } from "@cove/shared";
+import { DEFAULT_EVERYONE_PERMISSIONS } from "@cove/shared";
 
 function mockSession(id: string, userId: string, guilds: string[]): GatewaySession {
   const dispatched: { event: string; data: unknown }[] = [];
@@ -28,6 +33,37 @@ function mockChannelsRepo(mapping: Record<string, string | null>): ChannelsRepo 
   } as ChannelsRepo;
 }
 
+function mockGuildsRepo(guildIds: string[]): GuildsRepo {
+  return {
+    getById(id: string): Guild | null {
+      if (!guildIds.includes(id)) return null;
+      return { id, name: "test", icon: null, owner_id: null, features: [] };
+    },
+  } as GuildsRepo;
+}
+
+function mockMembersRepo(memberMap: Record<string, string[]>): MembersRepo {
+  return {
+    get(guildId: string, userId: string): CoveGuildMember | null {
+      if (!memberMap[guildId]?.includes(userId)) return null;
+      return { user: { id: userId, username: `user-${userId}`, bot: false, avatar: null, discriminator: "0", global_name: null }, nick: null, roles: [], joined_at: new Date().toISOString() };
+    },
+  } as MembersRepo;
+}
+
+function mockRolesRepo(guildIds: string[]): RolesRepo {
+  return {
+    listByGuild(guildId: string): Role[] {
+      if (!guildIds.includes(guildId)) return [];
+      return [{ id: guildId, name: "@everyone", color: 0, hoist: false, position: 0, permissions: DEFAULT_EVERYONE_PERMISSIONS.toString(), managed: false, mentionable: false, flags: 0, bot_id: null }];
+    },
+  } as RolesRepo;
+}
+
+function mockPermissionsRepo(): PermissionsRepo {
+  return { listByChannel: () => [] } as unknown as PermissionsRepo;
+}
+
 describe("GatewayDispatcher guild-scoped broadcasting", () => {
   let dispatcher: GatewayDispatcher;
   let sessionA: ReturnType<typeof mockSession>;
@@ -39,7 +75,10 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
       "chan-2": "guild-b",
       "dm-chan": null,
     });
-    dispatcher = new GatewayDispatcher(channels);
+    dispatcher = new GatewayDispatcher(channels, mockGuildsRepo(["guild-a", "guild-b"]));
+    dispatcher.setPermissionsRepo(mockPermissionsRepo());
+    dispatcher.setMembersRepo(mockMembersRepo({ "guild-a": ["user-1", "user-2"], "guild-b": ["user-2"] }));
+    dispatcher.setRolesRepo(mockRolesRepo(["guild-a", "guild-b"]));
 
     sessionA = mockSession("s1", "user-1", ["guild-a"]);
     sessionB = mockSession("s2", "user-2", ["guild-b"]);

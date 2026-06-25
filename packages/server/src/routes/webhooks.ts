@@ -3,7 +3,8 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireGuildMember, requireBotChannelPermission, unknownChannel } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
+import { PermissionBits } from "@cove/shared";
 
 function stripToken<T extends { token?: unknown }>(webhook: T): Omit<T, "token"> {
   const { token: _, ...rest } = webhook;
@@ -16,12 +17,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
   app.post("/channels/:channelId/webhooks", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const userId = user.id;
-    const channel = requireGuildMember(repos, channelId, userId);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, userId, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     const body = await parseJsonBody<{ name: string; avatar?: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -38,40 +34,29 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(webhook, 201);
   });
 
-  app.get("/channels/:channelId/webhooks", (c) => {
+  app.get("/channels/:channelId/webhooks", async (c) => {
     const user = c.get("botUser");
     const channelId = c.req.param("channelId");
-    const userId = user.id;
-    const channel = requireGuildMember(repos, channelId, userId);
-    if (!channel) return unknownChannel(c);
-    if (!requireBotChannelPermission(repos, channelId, userId, user.bot)) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    }
+    await requireChannelPermission(repos, channelId, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     return c.json(repos.webhooks.listByChannel(channelId));
   });
 
-  app.get("/guilds/:guildId/webhooks", (c) => {
+  app.get("/guilds/:guildId/webhooks", async (c) => {
     const user = c.get("botUser");
     const guildId = c.req.param("guildId");
-    const userId = user.id;
-    if (!repos.guilds.exists(guildId) || !repos.members.exists(guildId, userId)) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
-    }
+    await requireGuildPermission(repos, guildId, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     return c.json(repos.webhooks.listByGuild(guildId));
   });
 
-  app.get("/webhooks/:webhookId", (c) => {
+  app.get("/webhooks/:webhookId", async (c) => {
     const user = c.get("botUser");
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
-    const userId = user.id;
-    if (!repos.members.exists(webhook.guild_id, userId)) {
-      return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
-    }
+    await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     return c.json(stripToken(webhook));
   });
@@ -82,10 +67,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
-    const userId = user.id;
-    if (!repos.members.exists(webhook.guild_id, userId)) {
-      return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
-    }
+    await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     const body = await parseJsonBody<{ name?: string; avatar?: string | null }>(c);
     if (!body) return validationError(c, "Invalid JSON");
@@ -109,16 +91,13 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     return c.json(stripToken(updated));
   });
 
-  app.delete("/webhooks/:webhookId", (c) => {
+  app.delete("/webhooks/:webhookId", async (c) => {
     const user = c.get("botUser");
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
-    const userId = user.id;
-    if (!repos.members.exists(webhook.guild_id, userId)) {
-      return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
-    }
+    await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     repos.webhooks.delete(webhookId);
     return c.body(null, 204);

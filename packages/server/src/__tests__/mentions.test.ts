@@ -60,6 +60,7 @@ describe("Mentions & Context Menu", () => {
       .run("9000000000000000001", "Admin", null, 0, null, adminToken, now, now);
     db.prepare("INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(defaultGuildId, "9000000000000000001", null, "[]", now);
+    db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("9000000000000000001", defaultGuildId);
 
     // Bot user
     const res = await app.request(`${API_PREFIX}/users`, {
