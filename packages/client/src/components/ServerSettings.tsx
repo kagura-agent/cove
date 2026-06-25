@@ -25,12 +25,11 @@ const NAV_ITEMS: NavItem[] = [
 
 function RolesSection({ guildId }: { guildId: string }) {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
-  const setRoles = useRoleStore((s) => s.setRoles);
 
   // Fetch roles on mount
   useEffect(() => {
-    api.fetchRoles(guildId).then((r) => setRoles(guildId, r)).catch(console.error);
-  }, [guildId, setRoles]);
+    api.fetchRoles(guildId).then((r) => useRoleStore.getState().setRoles(guildId, r)).catch(console.error);
+  }, [guildId]);
 
   // TODO: derive from actual member roles; hardcode high value for now (owner sees all)
   const userHighestPosition = 999;
