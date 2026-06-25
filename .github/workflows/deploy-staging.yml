@@ -109,6 +109,7 @@ jobs:
 
       - name: Notify #cove-dev
         if: success()
+        continue-on-error: true
         env:
           WEBHOOK_URL: ${{ secrets.COVE_DEV_WEBHOOK_URL }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
@@ -119,7 +120,8 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             MSG="✅ Deployed: #${PR_NUMBER} \"${PR_TITLE}\" (${SHORT_SHA})"
           else
-            MSG="✅ Deployed: ${PR_TITLE%$'\n'*} (${SHORT_SHA})"
+            FIRST_LINE=$(echo "$PR_TITLE" | head -1)
+            MSG="✅ Deployed: ${FIRST_LINE} (${SHORT_SHA})"
           fi
           curl -sf -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
