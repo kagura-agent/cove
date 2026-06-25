@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useRoleStore } from "../stores/useRoleStore";
 import { addMemberRole, removeMemberRole } from "../lib/api";
+import type { GuildMember } from "../types";
 
 interface Props {
   guildId: string;
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
-  const members = useMemberStore((s) => s.members[guildId] ?? []);
+  const members = useMemberStore((s) => Object.values(s.membersByGuildId[guildId] ?? {}));
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
   const [dropdownUserId, setDropdownUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,7 +50,7 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
     <div style={{ padding: 16 }}>
       <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "#fff" }}>Members</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {members.map((member) => {
+        {members.map((member: GuildMember) => {
           const memberRoles = (member.roles || [])
             .map((rid: string) => roles.find((r) => r.id === rid))
             .filter(Boolean);

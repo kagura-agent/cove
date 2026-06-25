@@ -4,6 +4,7 @@ import { useRoleStore } from "../stores/useRoleStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { ThreeStateToggle } from "./ThreeStateToggle";
 import * as api from "../lib/api";
+import type { GuildMember } from "../types";
 
 type ToggleState = "allow" | "neutral" | "deny";
 
@@ -51,7 +52,7 @@ function setBit(value: bigint, bit: bigint, set: boolean): bigint {
 
 export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOverwritesChange }: Props) {
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
-  const members = useMemberStore((s) => s.members[guildId] ?? []);
+  const members = useMemberStore((s) => Object.values(s.membersByGuildId[guildId] ?? {}));
 
   const [selectedTarget, setSelectedTarget] = useState<{ id: string; type: number } | null>(null);
   const [editAllow, setEditAllow] = useState(0n);
@@ -127,7 +128,7 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
       const role = roles.find((r) => r.id === ow.id);
       return { id: ow.id, type: 0, name: role?.name ?? "Unknown Role", color: role?.color ?? 0 };
     } else {
-      const member = members.find((m) => m.user.id === ow.id);
+      const member = members.find((m: GuildMember) => m.user.id === ow.id);
       return { id: ow.id, type: 1, name: member?.user.username ?? "Unknown Member", color: 0 };
     }
   });
@@ -155,7 +156,7 @@ export function ChannelPermissionsEditor({ channelId, guildId, overwrites, onOve
               ))}
             </optgroup>
             <optgroup label="Members">
-              {members.filter((m) => !overwrites.some((o) => o.id === m.user.id)).map((m) => (
+              {members.filter((m: GuildMember) => !overwrites.some((o) => o.id === m.user.id)).map((m: GuildMember) => (
                 <option key={m.user.id} value={`1:${m.user.id}`}>{m.user.username}</option>
               ))}
             </optgroup>
