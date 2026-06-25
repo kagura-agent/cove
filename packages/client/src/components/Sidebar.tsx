@@ -11,6 +11,7 @@ import * as api from "../lib/api";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { ChannelSettings } from "./ChannelSettings";
+import { ServerSettings } from "./ServerSettings";
 import { ThreadIcon } from "./ThreadIcon";
 
 const styles = {
@@ -92,6 +93,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
 
   // Use first guild if no active guild in URL
   const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
@@ -125,6 +127,16 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
       <div style={styles.header}>
         <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
         <h1 style={styles.title}>Cove</h1>
+        {guildId && (
+          <Button
+            type="text"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => setServerSettingsOpen(true)}
+            aria-label="Server settings"
+            style={{ marginLeft: "auto", color: "var(--interactive-normal)", opacity: 0.6 }}
+          />
+        )}
       </div>
 
       <div style={styles.list} className="scroll-container">
@@ -177,6 +189,12 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           channelId={settingsChannelId}
           open={!!settingsChannelId}
           onClose={() => setSettingsChannelId(null)}
+        />
+      )}
+      {guildId && serverSettingsOpen && (
+        <ServerSettings
+          guildId={guildId}
+          onClose={() => setServerSettingsOpen(false)}
         />
       )}
     </div>
