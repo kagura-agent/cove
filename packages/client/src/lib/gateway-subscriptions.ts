@@ -11,6 +11,9 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useThreadStore } from "../stores/useThreadStore";
+import { getActiveIdsFromRouter, getGuildForChannel } from "./router";
+import { router } from "./router";
+import { routes } from "./routes";
 import type { Channel } from "../types";
 import * as api from "./api";
 import { pruneSetIfNeeded } from "./prune-set.js";
@@ -47,7 +50,7 @@ export function setupGatewaySubscriptions(): void {
 
     // Mark channel unread if the message is from someone else and not the active channel
     const selfId = useUserStore.getState().id;
-    const activeChannelId = useChannelStore.getState().activeChannelId;
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
     if (msg.author.id !== selfId && msg.channel_id !== activeChannelId) {
       useReadStateStore.getState().setUnread(msg.channel_id);
       // Mark mentioned if current user is in mentions
@@ -67,9 +70,8 @@ export function setupGatewaySubscriptions(): void {
   subscribe("MESSAGE_UPDATE", (msg) => {
     useMessageStore.getState().updateMessage(msg.channel_id, msg.id, msg.content, msg.edited_timestamp, msg.mentions);
     // Check if an edit added a mention of the current user (draft streaming)
-    // Only increment if this message hasn't already been counted as a mention
     const selfId = useUserStore.getState().id;
-    const activeChannelId = useChannelStore.getState().activeChannelId;
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
     if (selfId && msg.channel_id !== activeChannelId && msg.mentions?.some((u: { id: string }) => u.id === selfId)) {
       if (!mentionedMessageIds.has(msg.id)) {
         mentionedMessageIds.add(msg.id);
@@ -131,13 +133,11 @@ export function setupGatewaySubscriptions(): void {
 
     // Seed GuildStore and guild-scoped channels
     if (data.guilds?.length) {
-      const guildStore = useGuildStore.getState();
       const channelStore = useChannelStore.getState();
 
       // Extract guild objects (without channels) for GuildStore
       const guilds = data.guilds.map(({ channels: _channels, ...guild }) => guild);
-      guildStore.setGuilds(guilds);
-      guildStore.setActiveGuild(guilds[0].id);
+      useGuildStore.getState().setGuilds(guilds);
 
       // Seed channels per guild
       for (const guild of data.guilds) {
@@ -159,10 +159,11 @@ export function setupGatewaySubscriptions(): void {
         }).catch(() => {});
       }
 
-      // Auto-select first channel of active guild
+      // Only auto-navigate if user is on "/" (no channel in URL)
+      const { channelId } = getActiveIdsFromRouter();
       const activeGuildChannels = data.guilds[0].channels ?? [];
-      if (activeGuildChannels.length > 0 && !channelStore.activeChannelId) {
-        channelStore.setActiveChannel(activeGuildChannels[0].id);
+      if (!channelId && activeGuildChannels.length > 0) {
+        router.navigate(routes.channel(guilds[0].id, activeGuildChannels[0].id), { replace: true });
       }
 
       // Pre-fetch members for all guilds (needed for @mention autocomplete)
@@ -194,10 +195,27 @@ export function setupGatewaySubscriptions(): void {
   });
 
   subscribe("CHANNEL_DELETE", (data) => {
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
+    // Resolve guild BEFORE removing the channel from the store
+    const guildId = getGuildForChannel(data.id) ?? Object.keys(useGuildStore.getState().guilds)[0];
     useChannelStore.getState().removeChannel(data.id);
     useMessageStore.getState().removeChannelMessages(data.id);
     useReadStateStore.getState().removeChannel(data.id);
     useTypingStore.getState().removeChannel(data.id);
+
+    // If viewing the deleted channel, navigate to next available
+    if (data.id === activeChannelId) {
+      if (guildId) {
+        const channels = useChannelStore.getState().getChannels(guildId);
+        if (channels.length > 0) {
+          router.navigate(routes.channel(guildId, channels[0].id), { replace: true });
+        } else {
+          router.navigate(routes.root(), { replace: true });
+        }
+      } else {
+        router.navigate(routes.root(), { replace: true });
+      }
+    }
   });
 
   // GUILD_CREATE/DELETE: guild lifecycle events
@@ -238,7 +256,7 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_FILE_CREATE", (data) => {
     const store = useChannelFilesStore.getState();
-    const activeChannelId = useChannelStore.getState().activeChannelId;
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
     if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
     }
@@ -246,7 +264,7 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_FILE_UPDATE", (data) => {
     const store = useChannelFilesStore.getState();
-    const activeChannelId = useChannelStore.getState().activeChannelId;
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
     if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
       if (store.selectedFile === data.filename) {
@@ -257,7 +275,7 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("CHANNEL_FILE_DELETE", (data) => {
     const store = useChannelFilesStore.getState();
-    const activeChannelId = useChannelStore.getState().activeChannelId;
+    const { channelId: activeChannelId } = getActiveIdsFromRouter();
     if (store.filesOpen && data.channel_id === activeChannelId) {
       store.fetchFiles(data.channel_id);
       if (store.selectedFile === data.filename) {
@@ -287,6 +305,11 @@ export function setupGatewaySubscriptions(): void {
 
   subscribe("THREAD_DELETE", (data) => {
     useThreadStore.getState().removeThread(data.id);
+    // If viewing the deleted thread, navigate back to parent channel
+    const { threadId, guildId, channelId } = getActiveIdsFromRouter();
+    if (threadId === data.id && guildId && channelId) {
+      router.navigate(routes.channel(guildId, channelId), { replace: true });
+    }
   });
 }
 

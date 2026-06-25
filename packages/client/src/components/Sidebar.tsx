@@ -1,7 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useThreadStore } from "../stores/useThreadStore";
+import { useActiveIds } from "../hooks/useActiveIds";
+import { routes } from "../lib/routes";
 import { Button, Input, Spin } from "antd";
 import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -78,20 +81,30 @@ function ThreadItem({ name, isActive, onSelect }: {
 }
 
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
-  const { activeChannelId, setActiveChannel, addChannel, getChannels } = useChannelStore();
+  const navigate = useNavigate();
+  const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
+  const { addChannel, getChannels } = useChannelStore();
+  const guilds = useGuildStore((s) => s.guilds);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
   const threadsByParent = useThreadStore((s) => s.threads);
-  const openThread = useThreadStore((s) => s.openThread);
-  const activeThread = useThreadStore((s) => s.activeThread);
   const { unreadChannels, mentionCounts } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
 
+  // Use first guild if no active guild in URL
+  const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
+
   function handleSelectChannel(id: string) {
-    setActiveChannel(id);
+    if (!guildId) return;
+    navigate(routes.channel(guildId, id));
+    onClose?.();
+  }
+
+  function handleSelectThread(thread: { id: string; parent_id?: string | null }) {
+    if (!guildId || !thread.parent_id) return;
+    navigate(routes.thread(guildId, thread.parent_id, thread.id));
     onClose?.();
   }
 
@@ -99,8 +112,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
     e.preventDefault();
     if (!newName.trim()) return;
     try {
-      if (!activeGuildId) return;
-      const ch = await api.createChannel(activeGuildId, newName.trim());
+      if (!guildId) return;
+      const ch = await api.createChannel(guildId, newName.trim());
       addChannel(ch);
       setNewName("");
       setAdding(false);
@@ -140,8 +153,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
                     <ThreadItem
                       key={t.id}
                       name={t.name}
-                      isActive={activeThread?.id === t.id}
-                      onSelect={() => openThread(t)}
+                      isActive={activeThreadId === t.id}
+                      onSelect={() => handleSelectThread(t)}
                     />
                   ))}
                 </div>

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Bot, BotCreateResponse } from "../types";
 import * as api from "../lib/api";
 import { useMemberStore } from "./useMemberStore";
-import { useGuildStore } from "./useGuildStore";
+import { getActiveIdsFromRouter } from "../lib/router";
 
 interface BotState {
   bots: Bot[];
@@ -14,7 +14,7 @@ interface BotState {
 export const useBotStore = create<BotState>((set) => ({
   bots: [],
   fetchBots: async () => {
-    const guildId = useGuildStore.getState().activeGuildId;
+    const { guildId } = getActiveIdsFromRouter();
     if (!guildId) return;
     // Fetch members into MemberStore, then derive bots
     await useMemberStore.getState().fetchMembers(guildId);

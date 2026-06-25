@@ -3,12 +3,9 @@ import type { Channel } from "../types";
 import * as api from "../lib/api";
 
 interface ThreadState {
-  activeThread: Channel | null;
   threads: Record<string, Channel[]>; // parentChannelId -> threads
 
-  openThread: (thread: Channel) => void;
-  closeThread: () => void;
-  fetchAndOpenThread: (threadId: string) => Promise<void>;
+  fetchThread: (threadId: string) => Promise<Channel | null>;
   setThreads: (channelId: string, threads: Channel[]) => void;
   addThread: (thread: Channel) => void;
   updateThread: (thread: Channel) => void;
@@ -16,18 +13,15 @@ interface ThreadState {
 }
 
 export const useThreadStore = create<ThreadState>((set, get) => ({
-  activeThread: null,
   threads: {},
 
-  openThread: (thread) => set({ activeThread: thread }),
-  closeThread: () => set({ activeThread: null }),
-
-  fetchAndOpenThread: async (threadId) => {
+  fetchThread: async (threadId) => {
     try {
       const channel = await api.fetchChannel(threadId);
-      set({ activeThread: channel });
+      return channel;
     } catch (err) {
       console.error("fetch thread:", err);
+      return null;
     }
   },
 
@@ -50,7 +44,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       const existing = s.threads[thread.parent_id!] ?? [];
       return {
         threads: { ...s.threads, [thread.parent_id!]: existing.map((t) => t.id === thread.id ? thread : t) },
-        activeThread: s.activeThread?.id === thread.id ? thread : s.activeThread,
       };
     });
   },
@@ -61,10 +54,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       for (const channelId of Object.keys(newThreads)) {
         newThreads[channelId] = newThreads[channelId].filter((t) => t.id !== threadId);
       }
-      return {
-        threads: newThreads,
-        activeThread: s.activeThread?.id === threadId ? null : s.activeThread,
-      };
+      return { threads: newThreads };
     });
   },
 }));

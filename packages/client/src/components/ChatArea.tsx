@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useChannelStore } from "../stores/useChannelStore";
-import { useGuildStore } from "../stores/useGuildStore";
 import { useMessageStore } from "../stores/useMessageStore";
+import { useActiveIds } from "../hooks/useActiveIds";
 import { Typography, Button, Popconfirm } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
@@ -22,11 +22,11 @@ const styles = {
 };
 
 export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClick, filesOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean; onFilesClick?: () => void; filesOpen?: boolean }) {
-  const activeGuildId = useGuildStore((s) => s.activeGuildId);
-  const { activeChannelId, getChannels } = useChannelStore();
-  const channels = getChannels(activeGuildId);
+  const { guildId, channelId } = useActiveIds();
+  const getChannels = useChannelStore((s) => s.getChannels);
+  const channels = getChannels(guildId);
   const setMessages = useMessageStore((s) => s.setMessages);
-  const channel = channels.find((c) => c.id === activeChannelId);
+  const channel = channels.find((c) => c.id === channelId);
   const [threadBrowserOpen, setThreadBrowserOpen] = useState(false);
 
   async function handleClear() {

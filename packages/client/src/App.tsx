@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { RouterProvider } from "react-router-dom";
 import { ConfigProvider, theme, Button, Input } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
@@ -6,20 +7,10 @@ import { useChannelStore } from "./stores/useChannelStore";
 import { useGuildStore } from "./stores/useGuildStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
-import { Sidebar } from "./components/Sidebar";
-import { ChatArea } from "./components/ChatArea";
-import { UserBar } from "./components/UserBar";
-import { MessageInput } from "./components/MessageInput";
-import { ReplyBar } from "./components/ReplyBar";
-import { MemberList } from "./components/MemberList";
-import { FilesSidebar } from "./components/FilesSidebar";
-import { ThreadPanel } from "./components/ThreadPanel";
-import { useChannelFilesStore } from "./stores/useChannelFilesStore";
-import { useThreadStore } from "./stores/useThreadStore";
-import { ConnectionBanner } from "./components/ConnectionBanner";
-import { SettingsPanel } from "./components/SettingsPanel";
-import * as api from "./lib/api";
+import { router, getActiveIdsFromRouter } from "./lib/router";
+import { routes } from "./lib/routes";
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
+import * as api from "./lib/api";
 import { API_PREFIX } from "@cove/shared";
 import type { CSSProperties } from "react";
 
@@ -43,7 +34,6 @@ function useVisualViewport() {
 
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
-  // Read --accent-brand from CSS so Antd stays in sync with our token system
   const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim() || "#f4a261";
   return {
     algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
@@ -53,15 +43,6 @@ function useAntdThemeConfig() {
 
 const styles = {
   fullHeight: { height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-primary)" } as CSSProperties,
-  overlay: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
-  overlayVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
-  layout: { display: "flex", flex: 1, minHeight: 0, overflow: "hidden" } as CSSProperties,
-  sidebarColumn: { width: "var(--sidebar-width)", flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-secondary)" } as CSSProperties,
-  sidebarBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" } as CSSProperties,
-  sidebarFooter: { flexShrink: 0, minHeight: "var(--footer-height)" } as CSSProperties,
-  chatColumn: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } as CSSProperties,
-  chatBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
-  chatFooter: { flexShrink: 0, minHeight: "var(--footer-height)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
   loginPage: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "var(--space-xxl)" } as CSSProperties,
   loginTitle: { fontSize: "var(--font-size-xxl)", fontWeight: 700, color: "var(--accent-brand)" } as CSSProperties,
 };
@@ -81,14 +62,12 @@ function InviteCodePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode: code.trim().toUpperCase() }),
-        credentials: "include", // BFF: send/receive cookies
+        credentials: "include",
       });
       if (!res.ok) {
         setError(res.status === 400 ? "Invalid or already used invite code" : "Something went wrong, please try again");
         return;
       }
-      // Server sets session cookie — just reload
-      window.history.replaceState({}, "", "/");
       window.location.reload();
     } catch {
       setError("Network error, please try again");
@@ -126,7 +105,10 @@ function LoginPage() {
         type="primary"
         size="large"
         icon={<GoogleOutlined />}
-        onClick={() => { window.location.href = `${API_BASE}/api/auth/google`; }}
+        onClick={() => {
+          sessionStorage.setItem("cove_return_path", window.location.pathname);
+          window.location.href = `${API_BASE}/api/auth/google`;
+        }}
       >
         Sign in with Google
       </Button>
@@ -138,62 +120,19 @@ export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
   const { needsSetup, setUser } = useUserStore();
-  const { activeChannelId, channelsLoaded } = useChannelStore();
   const connect = useWebSocketStore((s) => s.connect);
-  const wsStatus = useWebSocketStore((s) => s.status);
-  const serverName = useGuildStore((s) => {
-    const id = s.activeGuildId;
-    return id ? s.guilds[id]?.name ?? "" : "";
-  });
-  const serverIcon = useGuildStore((s) => {
-    const id = s.activeGuildId;
-    return id ? s.guilds[id]?.icon ?? null : null;
-  });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [membersOpen, setMembersOpen] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
-  const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
-  const activeThread = useThreadStore((s) => s.activeThread);
-  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
-  const [resizeDragging, setResizeDragging] = useState(false);
-  const dragStartX = useRef(0);
-  const dragStartWidth = useRef(400);
-
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragStartX.current = e.clientX;
-    dragStartWidth.current = threadPanelWidth;
-    setResizeDragging(true);
-
-    const onMouseMove = (ev: MouseEvent) => {
-      const delta = dragStartX.current - ev.clientX;
-      setThreadPanelWidth(Math.min(600, Math.max(280, dragStartWidth.current + delta)));
-    };
-    const onMouseUp = () => {
-      setResizeDragging(false);
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  }, [threadPanelWidth]);
 
   useEffect(() => {
-    // BFF: tokens are in HttpOnly cookies, not URL or localStorage
-    // Clean up legacy localStorage tokens (still valid in DB, XSS risk)
     localStorage.removeItem("cove-token");
     localStorage.removeItem("cove-user");
 
-    // Clean up any URL params that might appear from old bookmarks
     const params = new URLSearchParams(window.location.search);
     if (params.has("token") || params.has("pending")) {
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", window.location.pathname);
     }
 
-    // Check if user has a pending registration (cookie-based)
     api.fetchPendingStatus()
       .then((status) => {
         if (status.pending) {
@@ -201,49 +140,54 @@ export default function App() {
           setAuthLoading(false);
           return;
         }
-        // Not pending — try to fetch authenticated user
         return api.fetchMe()
           .then((user) => {
             setUser(user);
           })
           .catch(() => {
-            // No valid session cookie
             useUserStore.setState({ needsSetup: true });
           });
       })
       .catch(() => {
-        // Server unreachable or error — show login
         useUserStore.setState({ needsSetup: true });
       })
       .finally(() => setAuthLoading(false));
   }, [setUser]);
 
+  // After auth, restore saved path from OAuth flow
+  useEffect(() => {
+    if (authLoading || needsSetup || isPending) return;
+    const returnPath = sessionStorage.getItem("cove_return_path");
+    if (returnPath && returnPath !== "/") {
+      sessionStorage.removeItem("cove_return_path");
+      router.navigate(returnPath, { replace: true });
+    }
+  }, [authLoading, needsSetup, isPending]);
+
   useEffect(() => {
     if (needsSetup || authLoading) return;
-    // Channels and user data are seeded from the READY gateway event
-    // (see gateway-subscriptions.ts) — no startup REST calls needed.
     setupGatewaySubscriptions();
     connect();
 
-    // Fallback: if READY isn't received within 8s (WS down), load channels via REST
+    // Fallback: if READY isn't received within 8s, load channels via REST
     const fallbackTimer = setTimeout(() => {
-      const guildId = useGuildStore.getState().activeGuildId;
-      if (!guildId) return;
+      const guildStore = useGuildStore.getState();
+      const guildIds = Object.keys(guildStore.guilds);
+      if (guildIds.length === 0) return;
+      const guildId = guildIds[0];
       const currentChannels = useChannelStore.getState().getChannels(guildId);
       if (currentChannels.length === 0) {
         api.fetchChannels(guildId)
           .then((chs) => {
-            // Only apply if still empty (READY may have arrived late)
             if (useChannelStore.getState().getChannels(guildId).length === 0) {
               useChannelStore.getState().setChannels(guildId, chs);
-              if (!useChannelStore.getState().activeChannelId && chs.length > 0) {
-                useChannelStore.getState().setActiveChannel(chs[0].id);
+              const { channelId } = getActiveIdsFromRouter();
+              if (!channelId && chs.length > 0) {
+                router.navigate(routes.channel(guildId, chs[0].id), { replace: true });
               }
             }
           })
-          .catch(() => {
-            // REST also failed — user sees "Disconnected" banner from wsStatus
-          });
+          .catch(() => {});
       }
     }, 8000);
 
@@ -285,70 +229,7 @@ export default function App() {
 
   return (
     <ConfigProvider theme={themeConfig}>
-      <div style={styles.fullHeight}>
-        <ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
-        <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
-        <div onClick={() => setMembersOpen(false)} style={{...styles.overlay, ...(membersOpen ? styles.overlayVisible : {})}} className="mobile-members-backdrop" />
-        <div onClick={() => { setFilesOpen(false); setFilesStoreOpen(false); }} style={{...styles.overlay, ...(filesOpen ? styles.overlayVisible : {})}} className="mobile-files-backdrop" />
-
-        <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""} ${membersOpen ? "members-open" : ""} ${filesOpen ? "files-open" : ""}`}>
-          <div style={styles.sidebarColumn} className="sidebar-column">
-            <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
-            <div style={styles.sidebarFooter} className="sidebar-footer-cell">
-              <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
-            </div>
-          </div>
-
-          <div style={styles.chatColumn} className="chat-column">
-            <div style={styles.chatBody} className="chat-body-cell">
-              <ChatArea
-                onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-                onMembersClick={() => {
-                  const next = !membersOpen;
-                  setMembersOpen(next);
-                  if (next) { setFilesOpen(false); setFilesStoreOpen(false); }
-                }}
-                membersOpen={membersOpen}
-                onFilesClick={() => {
-                  const next = !filesOpen;
-                  setFilesOpen(next);
-                  setFilesStoreOpen(next);
-                  if (next) setMembersOpen(false);
-                }}
-                filesOpen={filesOpen}
-              />
-            </div>
-            <div style={styles.chatFooter} className="chat-footer-cell">
-              {activeChannelId && <ReplyBar channelId={activeChannelId} />}
-              {activeChannelId && <MessageInput channelId={activeChannelId} />}
-            </div>
-          </div>
-
-          {!activeThread && membersOpen && <MemberList />}
-          {!activeThread && filesOpen && activeChannelId && <FilesSidebar channelId={activeChannelId} />}
-          {activeThread && (
-            <>
-              <div
-                style={{
-                  width: 4,
-                  flexShrink: 0,
-                  cursor: "col-resize",
-                  background: resizeDragging ? "var(--accent)" : undefined,
-                  transition: "background 0.15s",
-                }}
-                onMouseDown={handleResizeMouseDown}
-                onMouseEnter={(e) => { if (!resizeDragging) (e.currentTarget.style.background = "var(--border-subtle)"); }}
-                onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
-              />
-              <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
-                <ThreadPanel />
-              </div>
-            </>
-          )}
-        </div>
-
-        <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
-      </div>
+      <RouterProvider router={router} />
     </ConfigProvider>
   );
 }
