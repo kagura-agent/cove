@@ -165,25 +165,6 @@ export function initDb(dbPath: string = ":memory:"): Database.Database {
     ).run(id, id, DEFAULT_EVERYONE_PERMISSIONS.toString());
   }
 
-  // Fix ownerless guilds on every startup — covers the case where a user
-  // registers AFTER the v20 migration has already run.
-  const ownerlessGuilds = db
-    .prepare("SELECT id FROM guilds WHERE owner_id IS NULL")
-    .all() as { id: string }[];
-  for (const guild of ownerlessGuilds) {
-    const firstHuman = db
-      .prepare(
-        "SELECT gm.user_id FROM guild_members gm JOIN users u ON u.id = gm.user_id WHERE gm.guild_id = ? AND u.bot = 0 ORDER BY gm.joined_at ASC LIMIT 1",
-      )
-      .get(guild.id) as { user_id: string } | undefined;
-    if (firstHuman) {
-      db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run(
-        firstHuman.user_id,
-        guild.id,
-      );
-    }
-  }
-
   return db;
 }
 

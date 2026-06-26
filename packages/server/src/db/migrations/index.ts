@@ -19,8 +19,9 @@ import { migrateV17 } from "./v17-attachments.js";
 import { migrateV18 } from "./v18-attachments-table.js";
 import { migrateV19 } from "./v19-roles.js";
 import { migrateV20 } from "./v20-bootstrap-owner.js";
+import { migrateV21 } from "./v21-fix-owner.js";
 
-const LATEST_VERSION = 20;
+const LATEST_VERSION = 21;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -45,6 +46,7 @@ const migrations: Record<number, MigrationFn> = {
   18: migrateV18,
   19: migrateV19,
   20: migrateV20,
+  21: migrateV21,
 };
 
 export function runMigrations(db: Database.Database): void {
