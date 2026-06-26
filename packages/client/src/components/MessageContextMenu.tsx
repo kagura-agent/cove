@@ -3,8 +3,7 @@ import * as api from "../lib/api";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useEditStore } from "../stores/useEditStore";
-import { router } from "../lib/router";
-import { getActiveIdsFromRouter } from "../lib/router";
+import { getRouter, getActiveIdsFromRouter } from "../lib/router-helpers";
 import { routes } from "../lib/routes";
 import type { Message } from "../types";
 
@@ -112,7 +111,7 @@ export function MessageContextMenu({ x, y, messageId, channelId, content, isOwnM
       useThreadStore.getState().addThread(thread);
       const { guildId } = getActiveIdsFromRouter();
       if (guildId) {
-        router.navigate(routes.thread(guildId, channelId, thread.id));
+        getRouter().navigate(routes.thread(guildId, channelId, thread.id));
       }
     } catch (err) {
       console.error("create thread:", err);

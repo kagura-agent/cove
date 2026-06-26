@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Bot, BotCreateResponse } from "../types";
 import * as api from "../lib/api";
 import { useMemberStore } from "./useMemberStore";
-import { getActiveIdsFromRouter } from "../lib/router";
+import { getActiveIdsFromRouter } from "../lib/router-helpers";
 
 interface BotState {
   bots: Bot[];

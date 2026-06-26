@@ -1,8 +1,9 @@
 import type { Message, Channel, Guild } from "../types";
-import type { ThreadMember } from "@cove/shared";
+import type { Role, ThreadMember } from "@cove/shared";
 
 export interface ReadyGuild extends Guild {
   channels: Channel[];
+  roles?: Role[];
 }
 
 export interface GatewayEventMap {
@@ -21,8 +22,12 @@ export interface GatewayEventMap {
   MESSAGE_REACTION_REMOVE: { user_id: string; channel_id: string; message_id: string; guild_id: string; emoji: { id: string | null; name: string }; count: number };
   GUILD_MEMBER_ADD: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string };
   GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
+  GUILD_MEMBER_UPDATE: { guild_id: string; user: { id: string }; nick: string | null; roles: string[] };
   GUILD_CREATE: { id: string; name: string };
   GUILD_DELETE: { id: string };
+  GUILD_ROLE_CREATE: { guild_id: string; role: Role };
+  GUILD_ROLE_UPDATE: { guild_id: string; role: Role };
+  GUILD_ROLE_DELETE: { guild_id: string; role_id: string };
   CHANNEL_FILE_CREATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
   CHANNEL_FILE_UPDATE: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number };
   CHANNEL_FILE_DELETE: { channel_id: string; guild_id: string; filename: string };

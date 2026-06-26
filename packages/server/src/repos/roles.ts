@@ -52,10 +52,13 @@ export class RolesRepo {
     data: { name?: string; permissions?: string; color?: number; hoist?: boolean; mentionable?: boolean },
   ): Role {
     const id = generateSnowflake();
-    const maxPos = this.db
-      .prepare("SELECT MAX(position) as max_pos FROM roles WHERE guild_id = ?")
-      .get(guildId) as { max_pos: number | null };
-    const position = (maxPos.max_pos ?? 0) + 1;
+
+    // Discord behavior: new roles are created at position 1 (just above @everyone).
+    // Shift all existing non-everyone roles up by 1 to make room.
+    this.db.prepare(
+      "UPDATE roles SET position = position + 1 WHERE guild_id = ? AND position > 0"
+    ).run(guildId);
+    const position = 1;
 
     // Default permissions: copy from @everyone role (Discord behavior)
     let permissions = data.permissions;

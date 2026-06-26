@@ -5,6 +5,7 @@ import type { GuildsRepo } from "../repos/guilds.js";
 import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 import type { PermissionsRepo } from "../repos/permissions.js";
+import type { RolesRepo } from "../repos/roles.js";
 
 const VIEW_CHANNEL_BIT = 1n << 10n;
 
@@ -39,7 +40,7 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, channelsRepo: ChannelsRepo, readStatesRepo: ReadStatesRepo, permissionsRepo?: PermissionsRepo): void {
+  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, channelsRepo: ChannelsRepo, readStatesRepo: ReadStatesRepo, permissionsRepo?: PermissionsRepo, rolesRepo?: RolesRepo): void {
     this.user = user;
     this.identified = true;
 
@@ -53,7 +54,8 @@ export class GatewaySession {
       const channels = user.bot && permissionsRepo
         ? allChannels.filter(ch => permissionsRepo.hasPermission(ch.id, user.id, VIEW_CHANNEL_BIT))
         : allChannels;
-      return { ...g, channels };
+      const roles = rolesRepo ? rolesRepo.listByGuild(g.id) : [];
+      return { ...g, channels, roles };
     });
 
     const presences = dispatcher.getSharedGuildPresences(this.guildIds);

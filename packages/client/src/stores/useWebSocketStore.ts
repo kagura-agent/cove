@@ -53,12 +53,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
         if (payload.op === GatewayOpcode.HEARTBEAT_ACK) {
           return;
         }
-        if (payload.t && gatewayEvents.has(payload.t)) {
+        if (payload.t && payload.op === GatewayOpcode.DISPATCH) {
           dispatcher.emit(payload.t as keyof GatewayEventMap, payload.d as GatewayEventMap[keyof GatewayEventMap]);
-        } else if (payload.t && payload.op === GatewayOpcode.DISPATCH) {
-          if (import.meta.env.DEV) {
-            console.warn("[Gateway] Unknown event:", payload.t);
-          }
         }
       } catch { /* ignore non-JSON */ }
     };
@@ -88,22 +84,3 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   },
 }));
 
-const gatewayEvents = new Set([
-  "MESSAGE_CREATE",
-  "MESSAGE_UPDATE",
-  "MESSAGE_DELETE",
-  "MESSAGE_DELETE_BULK",
-  "TYPING_START",
-  "PRESENCE_UPDATE",
-  "READY",
-  "CHANNEL_CREATE",
-  "CHANNEL_UPDATE",
-  "CHANNEL_DELETE",
-  "MESSAGE_ACK",
-  "MESSAGE_REACTION_ADD",
-  "MESSAGE_REACTION_REMOVE",
-  "GUILD_CREATE",
-  "GUILD_DELETE",
-  "GUILD_MEMBER_ADD",
-  "GUILD_MEMBER_REMOVE",
-]);

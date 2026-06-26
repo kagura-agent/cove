@@ -364,12 +364,14 @@ textarea:focus-visible {
   background: var(--bg-primary);
   padding: 32px 40px;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
 .settings-content::-webkit-scrollbar { width: 8px; }
 .settings-content::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.settings-content:hover { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
+.settings-content:hover { scrollbar-color: var(--scrollbar-thin-thumb) transparent; }
 .settings-content:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); }
 
 .settings-nav-item {

@@ -1,5 +1,8 @@
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
+import { useUserPermissions } from "../lib/useUserPermissions";
+import { PermissionBits } from "@cove/shared";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
 import { useThreadStore } from "../stores/useThreadStore";
@@ -11,6 +14,7 @@ import * as api from "../lib/api";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { ChannelSettings } from "./ChannelSettings";
+import { ServerSettings } from "./ServerSettings";
 import { ThreadIcon } from "./ThreadIcon";
 
 const styles = {
@@ -85,6 +89,12 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
   const guilds = useGuildStore((s) => s.guilds);
+
+  // Use first guild if no active guild in URL — must be declared before useUserPermissions
+  const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
+
+  const { userPermissions, isOwner } = useUserPermissions(guildId ?? "");
+  const canSeeSettings = isOwner || !!(userPermissions & PermissionBits.MANAGE_GUILD) || !!(userPermissions & PermissionBits.MANAGE_ROLES);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
   const threadsByParent = useThreadStore((s) => s.threads);
@@ -92,9 +102,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
-
-  // Use first guild if no active guild in URL
-  const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
 
   function handleSelectChannel(id: string) {
     if (!guildId) return;
@@ -125,6 +134,16 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
       <div style={styles.header}>
         <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
         <h1 style={styles.title}>Cove</h1>
+        {guildId && canSeeSettings && (
+          <Button
+            type="text"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => setServerSettingsOpen(true)}
+            aria-label="Server settings"
+            style={{ marginLeft: "auto", color: "var(--interactive-normal)", opacity: 0.6 }}
+          />
+        )}
       </div>
 
       <div style={styles.list} className="scroll-container">
@@ -177,6 +196,12 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           channelId={settingsChannelId}
           open={!!settingsChannelId}
           onClose={() => setSettingsChannelId(null)}
+        />
+      )}
+      {guildId && serverSettingsOpen && (
+        <ServerSettings
+          guildId={guildId}
+          onClose={closeServerSettings}
         />
       )}
     </div>
