@@ -25,6 +25,10 @@ export const useRoleStore = create<RoleState>((set, get) => ({
   addRole: (guildId, role) =>
     set((state) => {
       const existing = state.roles[guildId] ?? [];
+      // Idempotent: if role already exists, update it instead of duplicating
+      if (existing.some((r) => r.id === role.id)) {
+        return { roles: { ...state.roles, [guildId]: sortRoles(existing.map((r) => r.id === role.id ? role : r)) } };
+      }
       return { roles: { ...state.roles, [guildId]: sortRoles([...existing, role]) } };
     }),
 
