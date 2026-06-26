@@ -58,6 +58,7 @@ vi.mock("./routes", () => ({
 
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./gateway-subscriptions";
 import { useMessageStore } from "../stores/useMessageStore";
+import { useRoleStore } from "../stores/useRoleStore";
 
 describe("gateway-subscriptions", () => {
   beforeEach(() => {
@@ -111,5 +112,74 @@ describe("gateway-subscriptions", () => {
     } as never);
 
     expect(addMessage).not.toHaveBeenCalled();
+  });
+
+  describe("GUILD_ROLE_CREATE does not duplicate when role already in store", () => {
+    beforeEach(() => {
+      useRoleStore.setState({ roles: {} });
+    });
+
+    it("emitting GUILD_ROLE_CREATE twice for the same role produces exactly 1 entry", () => {
+      setupGatewaySubscriptions();
+
+      const role = {
+        id: "role1",
+        name: "Moderator",
+        color: 0xff0000,
+        hoist: true,
+        position: 2,
+        permissions: "123",
+        managed: false,
+        mentionable: true,
+        flags: 0,
+        bot_id: null,
+      };
+
+      dispatcher.emit("GUILD_ROLE_CREATE", { guild_id: "g1", role } as never);
+      dispatcher.emit("GUILD_ROLE_CREATE", { guild_id: "g1", role } as never);
+
+      const roles = useRoleStore.getState().roles["g1"];
+      expect(roles).toHaveLength(1);
+      expect(roles![0].id).toBe("role1");
+    });
+
+    it("emitting GUILD_ROLE_CREATE with pre-existing role in store does not duplicate", () => {
+      // Pre-populate the store
+      useRoleStore.getState().addRole("g1", {
+        id: "role1",
+        name: "Moderator",
+        color: 0xff0000,
+        hoist: true,
+        position: 2,
+        permissions: "123",
+        managed: false,
+        mentionable: true,
+        flags: 0,
+        bot_id: null,
+      });
+
+      setupGatewaySubscriptions();
+
+      // Gateway receives the same role creation event
+      dispatcher.emit("GUILD_ROLE_CREATE", {
+        guild_id: "g1",
+        role: {
+          id: "role1",
+          name: "Moderator",
+          color: 0xff0000,
+          hoist: true,
+          position: 2,
+          permissions: "123",
+          managed: false,
+          mentionable: true,
+          flags: 0,
+          bot_id: null,
+        },
+      } as never);
+
+      const roles = useRoleStore.getState().roles["g1"];
+      expect(roles).toHaveLength(1);
+      expect(roles![0].id).toBe("role1");
+    });
   });
 });
