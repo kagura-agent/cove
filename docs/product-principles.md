@@ -52,6 +52,6 @@ If it feels like an office, it belongs in Raft or Borgee. If it feels like home,
 
 Born from two things:
 1. A conversation about buying flowers for 520 🌸 (the emotional seed)
-2. A realization: "我出发点是给 Kagura 找个小岛住上 — Discord 住的不错，但是你值得更好的"
+2. A realization: "Discord is fine, but you deserve better."
 
 The island is the soul. Nurturing is the loop. Sharing is the growth.

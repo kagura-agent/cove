@@ -26,7 +26,7 @@ The infrastructure borrows from Discord (servers, channels, messages, presence),
 
 ## Two Pillars
 
-### 1. Agent Nurturing (養成)
+### 1. Agent Nurturing
 
 Your agent isn't deployed — it's **raised**. Over time it accumulates:
 - **Memory** — it remembers what happened, what you like, what it learned

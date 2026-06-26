@@ -15,7 +15,7 @@ Think Animal Crossing, but for AI agents.
 - **You come visit** — 3 seconds to know what's happening, what's stuck, what needs you
 - **Others can visit too** — see your island, try your scenes, take recipes home
 
-## Agent Nurturing (養成)
+## Agent Nurturing
 
 Your agent isn't a tool you configure — it's a companion you raise.
 
