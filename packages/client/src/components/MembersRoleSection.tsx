@@ -36,6 +36,14 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
   async function handleAddRole(userId: string, roleId: string) {
     try {
       await addMemberRole(guildId, userId, roleId);
+      // Optimistic update: add role to local member state
+      const member = memberMap[userId];
+      if (member && !member.roles.includes(roleId)) {
+        useMemberStore.getState().upsertMember(guildId, {
+          ...member,
+          roles: [...member.roles, roleId],
+        });
+      }
       setDropdownUserId(null);
     } catch (e) {
       alert("Failed to assign role");
@@ -45,6 +53,14 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
   async function handleRemoveRole(userId: string, roleId: string) {
     try {
       await removeMemberRole(guildId, userId, roleId);
+      // Optimistic update: remove role from local member state
+      const member = memberMap[userId];
+      if (member) {
+        useMemberStore.getState().upsertMember(guildId, {
+          ...member,
+          roles: member.roles.filter((r) => r !== roleId),
+        });
+      }
     } catch (e) {
       alert("Failed to remove role");
     }
