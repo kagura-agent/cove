@@ -1,14 +1,14 @@
 ---
 name: "cove-ops"
-description: "Cove platform operations: channel files, cove.md, webhooks, channels, messages, members, reactions."
+description: "Cove platform operations: channel files, cove.md, webhooks, channels, messages, members, reactions, roles, and permissions."
 status: proposal
 version: "v1"
-date: "2026-06-14T15:22:20.209Z"
+date: "2026-06-26T05:05:31.327Z"
 ---
 
 # Cove Ops
 
-Operate the Cove platform — channel files, cove.md, webhooks, channels, messages, members, and reactions.
+Operate the Cove platform — channel files, cove.md, webhooks, channels, messages, members, reactions, roles, and permissions.
 
 ## Platform Concepts
 
@@ -20,6 +20,7 @@ Core concepts:
 - **Channel files** — Each channel has its own file storage (text-based, max 100KB/file). `cove.md` is the convention file, but you can store other files too.
 - **Cross-channel communication** — Channels communicate via webhooks. It's one-way push only — no auto-return, to prevent echo loops. Each channel processes what it receives independently.
 - **Channel as Service** — Each channel has its own role (dev, product, review, etc.). The platform orchestrates everything. Different channels, different responsibilities.
+- **Roles & Permissions** — Discord-compatible RBAC. Guild has roles with permission bits. Members are assigned roles. Role hierarchy (position) determines what you can manage.
 
 > **Tip:** Record these platform concepts in your persistent config (e.g., `TOOLS.md`) so you naturally recall them on every startup.
 
@@ -48,6 +49,104 @@ All API calls need:
 ```
 
 API prefix: `$COVE_BASE/api/v10/`
+
+## Roles
+
+### Role Hierarchy
+
+Roles have a `position` field that determines hierarchy:
+- `position: 0` = @everyone (immutable, cannot be deleted)
+- Higher position = more power
+- **You can only manage roles BELOW your highest role position**
+- Only the guild **owner** is exempt from position checks
+- ADMINISTRATOR permission does NOT bypass position hierarchy
+
+New roles are created at position 1 (just above @everyone); existing roles shift up.
+
+### Permission Bits
+
+Common permission bits (BigInt string):
+| Permission | Bit | Value |
+|---|---|---|
+| ADMINISTRATOR | 1 << 3 | 8 |
+| MANAGE_GUILD | 1 << 5 | 32 |
+| MANAGE_ROLES | 1 << 28 | 268435456 |
+| MANAGE_CHANNELS | 1 << 4 | 16 |
+| VIEW_CHANNEL | 1 << 10 | 1024 |
+| SEND_MESSAGES | 1 << 11 | 2048 |
+| MANAGE_MESSAGES | 1 << 13 | 8192 |
+
+ADMINISTRATOR grants all permissions. Permissions are OR'd across all member roles.
+
+### List Roles
+
+```bash
+curl -s "$COVE_BASE/api/v10/guilds/$COVE_GUILD/roles" \
+  -H "Authorization: Bot $COVE_TOKEN"
+```
+
+Returns: `[{id, name, position, permissions, color, hoist, managed, mentionable}, ...]`
+
+### Create Role
+
+```bash
+curl -s -X POST "$COVE_BASE/api/v10/guilds/$COVE_GUILD/roles" \
+  -H "Authorization: Bot $COVE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Moderator", "permissions": "268435456", "color": 3447003}'
+```
+
+Requires: MANAGE_ROLES. New role permissions must be a subset of caller's permissions.
+New role is created at position 1 (bottom, above @everyone).
+
+### Update Role
+
+```bash
+curl -s -X PATCH "$COVE_BASE/api/v10/guilds/$COVE_GUILD/roles/ROLE_ID" \
+  -H "Authorization: Bot $COVE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "New Name", "permissions": "268435456", "color": 15158332}'
+```
+
+Requires: MANAGE_ROLES + target role must be below caller's highest position.
+
+### Update Role Positions
+
+```bash
+curl -s -X PATCH "$COVE_BASE/api/v10/guilds/$COVE_GUILD/roles" \
+  -H "Authorization: Bot $COVE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{"id": "ROLE_ID", "position": 2}, {"id": "OTHER_ROLE_ID", "position": 1}]'
+```
+
+Requires: MANAGE_ROLES. Cannot move roles at or above caller's highest position.
+
+### Delete Role
+
+```bash
+curl -s -X DELETE "$COVE_BASE/api/v10/guilds/$COVE_GUILD/roles/ROLE_ID" \
+  -H "Authorization: Bot $COVE_TOKEN"
+```
+
+Requires: MANAGE_ROLES + target role below caller's position. Cannot delete @everyone or managed roles.
+
+### Assign Role to Member
+
+```bash
+curl -s -X PUT "$COVE_BASE/api/v10/guilds/$COVE_GUILD/members/USER_ID/roles/ROLE_ID" \
+  -H "Authorization: Bot $COVE_TOKEN"
+```
+
+Requires: MANAGE_ROLES + target role below caller's position.
+
+### Remove Role from Member
+
+```bash
+curl -s -X DELETE "$COVE_BASE/api/v10/guilds/$COVE_GUILD/members/USER_ID/roles/ROLE_ID" \
+  -H "Authorization: Bot $COVE_TOKEN"
+```
+
+Requires: MANAGE_ROLES + target role below caller's position. Cannot remove managed roles.
 
 ## Channel Files
 
@@ -281,6 +380,8 @@ curl -s "$COVE_BASE/api/v10/guilds/$COVE_GUILD/members" \
   -H "Authorization: Bot $COVE_TOKEN"
 ```
 
+Returns: `[{user: {id, username, avatar, bot}, nick, roles: [roleId...], joined_at}, ...]`
+
 ### Bot Channel Permissions
 
 Control which channels a bot can access via permission overwrites:
@@ -358,3 +459,6 @@ Staging CI only updates the Azure Cove server, not the local OpenClaw plugin.
 - **Bot permissions** — bots need VIEW_CHANNEL permission overwrite to access channel files/messages
 - **WS events** — file changes broadcast CHANNEL_FILE_CREATE/UPDATE/DELETE via WebSocket
 - **Plugin caches cove.md** — 60s TTL, invalidated on WS file events; changes may take up to 60s to take effect
+- **Role hierarchy is king** — even with ADMINISTRATOR, you cannot manage roles above your position. Only guild owner is exempt.
+- **New role permissions must be subset** — cannot create a role with permissions you don't have yourself
+- **Managed roles** — bot-linked roles cannot be manually assigned/removed/deleted
