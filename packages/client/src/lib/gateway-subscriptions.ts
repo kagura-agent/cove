@@ -12,7 +12,7 @@ import { useRoleStore } from "../stores/useRoleStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useThreadStore } from "../stores/useThreadStore";
-import { getActiveIdsFromRouter, getGuildForChannel } from "./router";
+import { getActiveIdsFromRouter, getGuildForChannel } from "./router-helpers";
 import { router } from "./router";
 import { routes } from "./routes";
 import type { Channel } from "../types";

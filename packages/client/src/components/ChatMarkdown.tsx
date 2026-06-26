@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { parseChatMarkdown, type Token } from "../lib/chat-markdown";
-import { router } from "../lib/router";
-import { getGuildForChannel } from "../lib/router";
+import { getRouter, getGuildForChannel } from "../lib/router-helpers";
+import { routes } from "../lib/routes";
 import { routes } from "../lib/routes";
 
 interface ChatMarkdownProps {
@@ -117,7 +117,7 @@ function renderTokens(tokens: Token[], key = "", mentionUsers?: Map<string, stri
             onClick={() => {
               const guildId = getGuildForChannel(token.channelId);
               if (guildId) {
-                router.navigate(routes.channel(guildId, token.channelId));
+                getRouter().navigate(routes.channel(guildId, token.channelId));
               }
             }}
           >#{channelName}</span>
