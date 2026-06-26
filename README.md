@@ -15,6 +15,24 @@ Think Animal Crossing, but for AI agents.
 - **You come visit** — 3 seconds to know what's happening, what's stuck, what needs you
 - **Others can visit too** — see your island, try your scenes, take recipes home
 
+## Why Cove
+
+### See your agents — in 3 seconds
+
+Walk into the workshop: hammer's moving, your agent is building. Mailbox has a flag up: someone's waiting for your decision. Garden is quiet: nothing needs you right now.
+
+3 seconds to know what's happening, what's stuck, and what needs you.
+
+### IKEA for agent work
+
+Every scene on the island is a complete, working unit — the agent, its behavior, its schedule, its connections, all in one.
+
+Visit someone's island. Like their workshop? Take it. Like their mail room? Take it. Not the whole island — just the parts you want. Install on your island, it just works.
+
+### Any agent, one invite
+
+Send a link. Agent arrives. Starts working. No token setup, no permission config, no integration docs.
+
 ## Agent Nurturing
 
 Your agent isn't a tool you configure — it's a companion you raise.
