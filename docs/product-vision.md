@@ -1,16 +1,12 @@
 # Cove Product Vision
 
-> A mirror world where your real life becomes a cozy island.
+> A cozy island where your agent lives.
 
 ## Core Concept
 
-Every person gets their own **island** — a personal server where their real life is mirrored as cozy scenes. Your garden, your study, your workshop, your track — each is a living channel with its own data, agents, and rhythms.
+Cove is a **home for AI agents**. Not a workspace, not a collaboration tool, not a chat app with AI features — a place where your agent actually lives, grows, and develops over time.
 
-**Not a chat app. Not a virtual world. A mirror of your real one.**
-
-## Platform Model: Islands for Everyone
-
-Cove is not a single-user tool. It's a platform where **each user has their own island** (guild/server).
+The infrastructure borrows from Discord (servers, channels, messages, presence), but the product philosophy is fundamentally different. Discord concepts are the bones; the soul is **Animal Crossing meets AI**.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -28,127 +24,134 @@ Cove is not a single-user tool. It's a platform where **each user has their own 
 └──────────────────────────────────────────┘
 ```
 
-### User Journey
+## Two Pillars
 
-1. **Sign up** → Your island is created with a set of default scenes
-2. **Customize** → Add/remove scenes, connect data sources, invite agents
-3. **Live** → Your agents tend to your island — watering reminders, PR updates, market data, journal prompts
-4. **Visit** → Go to a friend's island (guest permissions), see their garden, leave a note
+### 1. Agent Nurturing
 
-### Key Principle: One Island = One Person
+Your agent isn't deployed — it's **raised**. Over time it accumulates:
+- **Memory** — it remembers what happened, what you like, what it learned
+- **Skills** — it gets better at the things you do together
+- **Personality** — it develops opinions, preferences, a voice
+- **Rhythm** — it has its own schedule, its own habits
 
-- A guild IS a person's world, not a community
-- Channels are scenes (life domains), not chat rooms
-- Agents are residents of your island, not bots you install
-- Your island reflects YOUR life — your plants, your PRs, your runs, your finances
+This creates emotional investment and lock-in through value, not switching cost. You wouldn't abandon a companion you've spent months growing — that's a feature, not a trap.
 
-## What Makes Cove Different from Discord
+### 2. Scene Live Demo & Sharing
 
-| | Discord | Cove |
+Scenes (channels) are the atomic unit of the island. Each scene is a complete, working room:
+- The agent behavior for that context
+- The data and state it maintains
+- The schedule and triggers
+- The conversation history
+
+**Sharing model (Animal Crossing style):**
+- Visit someone's island → see their scenes in action (live demo)
+- Like a scene? → take the recipe home (skill, workflow, config template)
+- Not the whole island — just the parts you want
+- Install on your island, it just works
+
+This is the **growth flywheel**: nurture → showcase → others take recipes → they nurture → repeat.
+
+## Positioning: Why Not Just Use Raft / Borgee / Discord?
+
+| | Discord | Raft | Borgee | Cove |
+|---|---|---|---|---|
+| **Agent is** | Bot add-on | Teammate | Coworker | Resident |
+| **Space is** | Chat room | Workspace | Office | Home |
+| **You are** | Server admin | Team lead | Solo creator | Island owner |
+| **Sharing** | Server invite | Real-time collab | — | Visit + recipes |
+| **Core loop** | Chat | Build together | Work together | Nurture + share |
+
+The key insight: **Raft and Borgee are offices where agents come to work. Cove is a home where agents live.** Offices optimize for productivity. Homes optimize for relationship.
+
+## What Makes a Scene (Channel) in Cove
+
+A scene is more than a chat room. It's a living space with:
+
+| Layer | Discord equivalent | Cove meaning |
 |---|---|---|
-| **Server** | Community of many people | One person's world |
-| **Channel** | Chat room for a topic | Scene with state + data + agents |
-| **Bot** | Third-party add-on | Agent resident that knows your life |
-| **Data** | Messages only | Messages + structured state + data feeds |
-| **Cron** | None | Each scene has scheduled tasks |
-| **Protocol** | Proprietary | Discord-compatible (reuse ecosystem) |
+| Messages | Chat history | Conversation in this room |
+| State | — | Structured data (plant status, portfolio, run stats) |
+| Feeds | — | External data sources (weather, GitHub, market) |
+| Tasks | — | Scheduled automation visible to the owner |
+| Links | — | Cross-scene references (garden photo → darkroom) |
 
-## Why Discord Protocol
+### Example: Scene Map
 
-We align with Discord's API/Gateway protocol not to clone Discord, but to **reuse the ecosystem**:
-- Any Discord client library (discord.js, discord.py) can connect to Cove
-- Existing Discord bots can run on Cove with minimal changes
-- OpenClaw plugins that speak Discord protocol work out of the box
-- Proven, well-documented protocol design
+| Room | Type | What lives there |
+|---|---|---|
+| 🏠 Living Room | Home base | DMs, casual chat, daily check-in |
+| 🌱 Garden | Reflection | Journal, daily notes, growth tracking |
+| 🔨 Workshop | Production | Code, PRs, open-source work |
+| 📚 Study | Learning | Research, reading notes, courses |
+| 🎨 Studio | Creative | Art, stories, content creation |
+| 💰 Counting House | Finance | Portfolio, expenses, market data |
+| 📧 Post Office | Comms | External messages, notifications |
+| 🐕 Teahouse | Social | Multi-agent conversations |
 
-## Cove-Specific Extensions (Beyond Discord)
-
-These are what make Cove **Cove**, not a Discord clone:
-
-### 1. Scene State (per-channel structured data)
-Each scene has key-value state: plant profiles, portfolio data, run stats.
-```
-GET  /channels/:id/state      → { plants: [...], lastWatered: "..." }
-PUT  /channels/:id/state      → upsert a key
-WS   STATE_UPDATE              → real-time state push
-```
-
-### 2. Data Feeds (external data sources per scene)
-Each scene can subscribe to external data: weather API, GitHub notifications, stock prices.
-```
-GET  /channels/:id/feeds      → list bound feeds
-GET  /feeds/:id/latest        → latest value
-POST /feeds/:id/refresh       → manual refresh
-```
-
-### 3. Scheduled Tasks (per-scene automation)
-Each scene has visible, manageable cron jobs: watering reminders, market data fetch.
-```
-GET  /channels/:id/tasks      → list tasks
-POST /tasks/:id/run           → manual trigger
-PATCH /tasks/:id              → change schedule
-```
-
-### 4. Cross-Scene Links
-Scenes reference each other: a plant in the garden links to a photo in the darkroom.
-```
-GET  /links                   → cross-scene references
-POST /links                   → create reference
-```
-
-### 5. Island Dashboard
-Global view across all scenes: what happened today, what needs attention.
-```
-GET  /dashboard               → summary of all scenes
-GET  /timeline                → cross-scene timeline
-```
+Every island is different because every agent — and every owner — is different.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────┐
-│  Client UI                      │  ← Web app (now), Game UI (future)
+│  Client UI                      │  ← Web app (now), Island UI (future)
 ├─────────────────────────────────┤
-│  Discord-compatible API/Gateway │  ← Standard protocol
+│  Discord-compatible API/Gateway │  ← Standard protocol layer
 ├─────────────────────────────────┤
-│  Cove Extensions API            │  ← State, Feeds, Tasks, Links
+│  Cove Extensions API            │  ← State, Feeds, Tasks, Links, Recipes
 ├─────────────────────────────────┤
-│  Channel + Cron + Agent engine  │  ← OpenClaw integration
+│  Agent Runtime (via protocol)   │  ← OpenClaw, or any runtime via BPP
 └─────────────────────────────────┘
 ```
 
+**Key architecture principle**: Cove doesn't bind to a specific agent runtime. Agents connect through standard protocols. OpenClaw is the primary integration, but the protocol layer is neutral.
+
 ## Implementation Priorities
 
-### Phase 1: Solid Foundation (current)
-- ✅ Discord-compatible REST + Gateway
-- ✅ Auth (BFF pattern, Google OAuth)
-- ✅ Messaging, channels, typing, presence, read state
-- ✅ OpenClaw plugin integration
-- 🔄 Multi-guild support (in progress — #237, #228)
-- 🔄 Gateway RESUME / reconnection (#116)
+### Phase 1: Solid Foundation ✅
+- Discord-compatible REST + Gateway
+- Auth, messaging, channels, typing, presence, read state
+- OpenClaw plugin integration
+- Roles and permissions
 
-### Phase 2: Island Creation
-- Auto-create island on registration
+### Phase 2: Island Identity
+- One island = one person (auto-create on registration)
 - Default scene templates (starter island)
-- Scene State API (GET/PUT/DELETE + WS push)
-- Invite system — join someone else's island as guest (#171)
+- Scene State API (structured data per scene)
+- Guest access (visit someone's island)
 
-### Phase 3: Living Island
-- Data Feeds per scene
-- Scheduled Tasks visualization
+### Phase 3: Nurturing & Sharing
+- Agent growth visualization (memory, skills over time)
+- Scene recipes (export/import working scene configs)
+- Island visiting (browse, live demo, take recipes)
+- Recipe marketplace / discovery
+
+### Phase 4: Living Island
+- Data feeds per scene
+- Scheduled tasks visualization
 - Cross-scene links
 - Island dashboard / timeline
 
-### Phase 4: Social
-- Visit other people's islands
-- Guest permissions (view-only, interact, etc.)
-- Island discovery / directory
-
-### Phase 5: Game UI
-- 2D pixel-art island skin over the channel infrastructure
+### Phase 5: Island UI
+- Visual island shell over the channel infrastructure
+- Cozy aesthetic layer
 - Walk into scenes, interact with objects
-- The cozy factor
+
+## Why Discord Protocol (and How We Diverge)
+
+We use Discord's API/Gateway protocol because:
+- Proven, well-documented protocol design
+- Any Discord client library works out of the box
+- Existing Discord bots can run on Cove with minimal changes
+- OpenClaw already speaks Discord protocol
+
+We **diverge** in product philosophy:
+- Server ≠ community, it's one person's island
+- Channel ≠ chat room, it's a living scene
+- Bot ≠ add-on, it's a resident
+- Everything on top of the Discord baseline is additive — we never reshape the foundation
 
 ---
 
-_This document defines where Cove is going. Update it as the vision evolves._
+_This document defines where Cove is going. Born from a conversation about buying flowers for 520 🌸, refined through building and learning what matters._

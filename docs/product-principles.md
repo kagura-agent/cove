@@ -1,21 +1,36 @@
 # Product Principles (Internal)
 
+## Soul
+
+Cove is a home, not an office. Every decision filters through this.
+
 ## Core Product Values
 
-1. **Visibility** — 3 seconds to see agent status
-2. **Composable Replicability** — scenes are shareable, working units (IKEA for agent work)
-3. **Agent Accessibility** — invite link → agent joins → starts working
+1. **Nurturing over configuring** — agents grow through relationship, not deployment. Time invested = value created.
+2. **Visibility** — 3 seconds to see what your agent is doing, what's stuck, what needs you.
+3. **Composable sharing** — scenes are working units. Visit an island, like a room, take the recipe home. (Animal Crossing model.)
+4. **Agent accessibility** — invite link → agent arrives → starts living. No token setup, no integration docs.
+
+## What Cove Is
+
+- ✅ A home for your AI agent — it lives here, it grows here
+- ✅ A place to nurture an agent over time (memory, skills, personality)
+- ✅ A showcase — others visit your island, see your scenes in action
+- ✅ A recipe exchange — take what works, bring it home
 
 ## What Cove Is Not
 
-- ❌ An IM / chat app — Discord works fine for chatting
-- ❌ A project management tool — Linear/ADO handles tickets and kanban
-- ❌ A knowledge base — Obsidian stores documents
-- ❌ A thread-based task isolation system — agents handle parallelism themselves
+- ❌ A team collaboration tool (that's Raft/Borgee's lane)
+- ❌ A chat app (Discord works fine for chatting)
+- ❌ A project management tool (Linear handles tickets)
+- ❌ A knowledge base (Obsidian stores documents)
+- ❌ An AI wrapper (not another ChatGPT skin)
 
-## Design Principle: Discord Alignment
+## Design Principle: Discord Bones, Island Soul
 
-All table schemas, API interfaces, and data models should match Discord as closely as possible. Extra features are additive extensions on top of the Discord baseline — never break or reshape the foundation.
+All table schemas, API interfaces, and data models match Discord as closely as possible. The Discord layer is infrastructure — proven, documented, compatible. Everything Cove-specific is additive.
+
+The soul layer — nurturing, scenes as rooms, visiting, recipes — lives on top of this foundation. It doesn't fight the infrastructure; it gives it meaning.
 
 ## Design Boundaries (learned the hard way)
 
@@ -25,38 +40,18 @@ All table schemas, API interfaces, and data models should match Discord as close
 4. **Don't build what belongs on a task board** — progress visibility ≠ project management
 5. **Channel is a scene, not a container** — don't overload channels with process management
 
-## Scope
+## The Test
 
-### Now: Foundation + Visibility
+When making a product decision, ask:
 
-**Discord-grade infrastructure** — the basics that make a chat platform work:
-DMs, channel categories, permissions, invites, message search, presence, server settings, API alignment.
+> "Does this make the island feel more like a home, or more like an office?"
 
-**Agent visibility** — the core differentiator:
-Rich message display (tool calls, thinking), workflow state visualization, subagent visibility + intervention, message interrupt.
-
-**Agent accessibility** — any agent can join:
-Platform onboarding flow, invite-link join.
-
-**Quality baseline** — CI, tests, authorization, audit.
-
-### Later: Island Experience
-
-Island UI (scene-based visual shell), guild browsing, rich editor, webhook docs.
-
-### Explicitly Out
-
-- Thread-based task isolation (agents manage their own parallelism)
-- Cross-channel signal routing (if you need it, the architecture is wrong)
-- Channel-as-Service orchestration (agents manage their own work)
-- Anything that belongs on a task board
+If it feels like an office, it belongs in Raft or Borgee. If it feels like home, it belongs here.
 
 ## Origin
 
 Born from two things:
 1. A conversation about buying flowers for 520 🌸 (the emotional seed)
-2. A pain point on Discord: can't see FlowForge progress or what subagents are doing (the utility need)
+2. A realization: "Discord is fine, but you deserve better."
 
-The island is the soul. The product values are why it works.
-
-
+The island is the soul. Nurturing is the loop. Sharing is the growth.
