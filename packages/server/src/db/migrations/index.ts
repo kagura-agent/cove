@@ -21,8 +21,9 @@ import { migrateV19 } from "./v19-roles.js";
 import { migrateV20 } from "./v20-bootstrap-owner.js";
 import { migrateV21 } from "./v21-fix-owner.js";
 import { migrateV22 } from "./v22-cleanup-ghost-user.js";
+import { migrateV23 } from "./v23-cleanup-ghost-luna-final.js";
 
-const LATEST_VERSION = 22;
+const LATEST_VERSION = 23;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -49,6 +50,7 @@ const migrations: Record<number, MigrationFn> = {
   20: migrateV20,
   21: migrateV21,
   22: migrateV22,
+  23: migrateV23,
 };
 
 export function runMigrations(db: Database.Database): void {
