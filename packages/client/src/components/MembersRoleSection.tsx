@@ -52,7 +52,7 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "var(--text-on-accent)" }}>Members</h2>
+      <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "var(--header-primary)" }}>Members</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {members.map((member: GuildMember) => {
           const memberRoles = (member.roles || [])
@@ -91,7 +91,7 @@ export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
               </div>
 
               {/* Username */}
-              <span style={{ color: "var(--text-on-accent)", fontSize: 14, minWidth: 100 }}>
+              <span style={{ color: "var(--text-normal)", fontSize: 14, minWidth: 100 }}>
                 {member.user.username}
                 {member.user.bot && <span style={{ color: "var(--accent)", marginLeft: 4, fontSize: 11 }}>BOT</span>}
               </span>
