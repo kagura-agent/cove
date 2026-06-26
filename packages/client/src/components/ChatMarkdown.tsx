@@ -2,7 +2,6 @@ import { memo, type CSSProperties, type ReactNode } from "react";
 import { parseChatMarkdown, type Token } from "../lib/chat-markdown";
 import { getRouter, getGuildForChannel } from "../lib/router-helpers";
 import { routes } from "../lib/routes";
-import { routes } from "../lib/routes";
 
 interface ChatMarkdownProps {
   content: string;

@@ -88,10 +88,13 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const navigate = useNavigate();
   const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
-  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
+  const guilds = useGuildStore((s) => s.guilds);
+
+  // Use first guild if no active guild in URL — must be declared before useUserPermissions
+  const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
+
   const { userPermissions, isOwner } = useUserPermissions(guildId ?? "");
   const canSeeSettings = isOwner || !!(userPermissions & PermissionBits.MANAGE_GUILD) || !!(userPermissions & PermissionBits.MANAGE_ROLES);
-  const guilds = useGuildStore((s) => s.guilds);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
   const threadsByParent = useThreadStore((s) => s.threads);
@@ -100,9 +103,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
-
-  // Use first guild if no active guild in URL
-  const guildId = activeGuildId ?? Object.keys(guilds)[0] ?? null;
+  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
 
   function handleSelectChannel(id: string) {
     if (!guildId) return;
