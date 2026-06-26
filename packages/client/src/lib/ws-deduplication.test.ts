@@ -23,6 +23,8 @@ function makeRole(overrides: Partial<Role> = {}): Role {
     hoist: false,
     managed: false,
     mentionable: false,
+    flags: 0,
+    bot_id: null,
     ...overrides,
   };
 }
