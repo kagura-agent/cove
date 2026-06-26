@@ -220,12 +220,11 @@ export function seedUsers(db: Database.Database, guildId: string): void {
     return id;
   };
 
-  const lunaId = ensureUser("Luna", false, null);
+  // Only seed bot users — human users register via OAuth
   const ruantangId = ensureUser("ruantang", true, token);
 
   const addMember = db.prepare(
     "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
   );
-  addMember.run(guildId, lunaId, null, '[]', now);
   addMember.run(guildId, ruantangId, null, '[]', now);
 }
