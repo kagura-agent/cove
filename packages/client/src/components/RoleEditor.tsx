@@ -181,7 +181,7 @@ export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissio
         </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "var(--space-lg) 0" }}>
+      <div style={{ flex: 1, overflowY: "auto", scrollbarGutter: "stable", padding: "var(--space-lg) 0" }}>
         {/* Display Tab */}
         {tab === "display" && !isEveryone && (
           <div>
