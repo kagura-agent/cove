@@ -114,7 +114,9 @@ export function OnboardingPreview() {
 
           {stage === "arrived" && (
             <div className="ob-fade-in ob-arrived">
-              <div className="ob-confetti" />
+              <div className="ob-confetti">
+              {Array.from({length: 16}, (_, i) => <div key={i} className="ob-confetti-piece" />)}
+            </div>
               <div className="ob-agent-avatar ob-bounce">
                 <span className="ob-avatar-emoji">🤖</span>
               </div>
@@ -277,7 +279,7 @@ const styles = `
 }
 
 .ob-island--center {
-  bottom: 25%;
+  bottom: 15%;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -390,6 +392,12 @@ const styles = `
   z-index: 10;
   text-align: center;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 12vh;
+  min-height: 100vh;
 }
 
 .ob-fade-in {
@@ -629,35 +637,43 @@ const styles = `
 
 /* Confetti (pseudo-element burst) */
 .ob-confetti {
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
+  z-index: 100;
 }
 
-.ob-confetti::before,
-.ob-confetti::after {
-  content: '🎊';
+.ob-confetti-piece {
   position: absolute;
-  font-size: 2rem;
-  animation: ob-confettiFall 2s ease-out forwards;
+  width: 10px;
+  height: 10px;
+  top: -20px;
+  animation: ob-confettiFall 2.5s ease-out forwards;
 }
 
-.ob-confetti::before {
-  left: 30%;
-  top: -20px;
-}
-
-.ob-confetti::after {
-  content: '🎉';
-  right: 30%;
-  top: -20px;
-  animation-delay: 0.3s;
-}
+.ob-confetti-piece:nth-child(1) { left: 10%; background: #e9c46a; animation-delay: 0s; animation-duration: 2.2s; }
+.ob-confetti-piece:nth-child(2) { left: 20%; background: #f4a261; animation-delay: 0.1s; border-radius: 50%; }
+.ob-confetti-piece:nth-child(3) { left: 30%; background: #2a9d8f; animation-delay: 0.2s; animation-duration: 2.8s; }
+.ob-confetti-piece:nth-child(4) { left: 40%; background: #e76f51; animation-delay: 0.05s; border-radius: 50%; }
+.ob-confetti-piece:nth-child(5) { left: 50%; background: #e9c46a; animation-delay: 0.15s; animation-duration: 2.4s; }
+.ob-confetti-piece:nth-child(6) { left: 60%; background: #2a9d8f; animation-delay: 0.25s; border-radius: 50%; }
+.ob-confetti-piece:nth-child(7) { left: 70%; background: #f4a261; animation-delay: 0.1s; animation-duration: 2.6s; }
+.ob-confetti-piece:nth-child(8) { left: 80%; background: #e76f51; animation-delay: 0.3s; }
+.ob-confetti-piece:nth-child(9) { left: 15%; background: #e9c46a; animation-delay: 0.2s; border-radius: 50%; animation-duration: 2.3s; }
+.ob-confetti-piece:nth-child(10) { left: 45%; background: #2a9d8f; animation-delay: 0.35s; animation-duration: 2.7s; }
+.ob-confetti-piece:nth-child(11) { left: 55%; background: #f4a261; animation-delay: 0.12s; border-radius: 50%; }
+.ob-confetti-piece:nth-child(12) { left: 75%; background: #e9c46a; animation-delay: 0.22s; animation-duration: 2.5s; }
+.ob-confetti-piece:nth-child(13) { left: 85%; background: #e76f51; animation-delay: 0.08s; border-radius: 50%; }
+.ob-confetti-piece:nth-child(14) { left: 25%; background: #2a9d8f; animation-delay: 0.18s; }
+.ob-confetti-piece:nth-child(15) { left: 65%; background: #e9c46a; animation-delay: 0.28s; border-radius: 50%; animation-duration: 2.1s; }
+.ob-confetti-piece:nth-child(16) { left: 35%; background: #f4a261; animation-delay: 0.32s; animation-duration: 2.9s; }
 
 @keyframes ob-confettiFall {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(200px) rotate(720deg); opacity: 0; }
+  0% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  25% { transform: translateY(25vh) rotate(180deg) scale(1.2); opacity: 1; }
+  50% { transform: translateY(50vh) rotate(360deg) scale(0.8); opacity: 0.8; }
+  100% { transform: translateY(100vh) rotate(720deg) scale(0.5); opacity: 0; }
 }
 
 /* Done state */
