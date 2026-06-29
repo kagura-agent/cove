@@ -1,13 +1,13 @@
 import { WebSocket } from "ws";
-import { generateSnowflake, GatewayOpcode, type GatewayPayload } from "@cove/shared";
+import { generateSnowflake, GatewayOpcode, PermissionBits, type GatewayPayload } from "@cove/shared";
 import type { GatewayDispatcher } from "./dispatcher.js";
 import type { GuildsRepo } from "../repos/guilds.js";
 import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 import type { PermissionsRepo } from "../repos/permissions.js";
 import type { RolesRepo } from "../repos/roles.js";
-
-const VIEW_CHANNEL_BIT = 1n << 10n;
+import type { MembersRepo } from "../repos/members.js";
+import { computePermissions } from "../permissions/compute.js";
 
 export class GatewaySession {
   readonly id: string;
@@ -40,7 +40,7 @@ export class GatewaySession {
     this.ws.send(JSON.stringify(payload));
   }
 
-  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, channelsRepo: ChannelsRepo, readStatesRepo: ReadStatesRepo, permissionsRepo?: PermissionsRepo, rolesRepo?: RolesRepo): void {
+  identify(user: { id: string; username: string; bot: boolean; avatar: string | null; discriminator: string; global_name: string | null }, dispatcher: GatewayDispatcher, guildsRepo: GuildsRepo, channelsRepo: ChannelsRepo, readStatesRepo: ReadStatesRepo, permissionsRepo?: PermissionsRepo, rolesRepo?: RolesRepo, membersRepo?: MembersRepo): void {
     this.user = user;
     this.identified = true;
 
@@ -51,10 +51,24 @@ export class GatewaySession {
 
     const guildsWithChannels = guilds.map((g) => {
       const allChannels = channelsRepo.list(g.id);
-      const channels = user.bot && permissionsRepo
-        ? allChannels.filter(ch => permissionsRepo.hasPermission(ch.id, user.id, VIEW_CHANNEL_BIT))
-        : allChannels;
       const roles = rolesRepo ? rolesRepo.listByGuild(g.id) : [];
+      let channels = allChannels;
+
+      // For bot users, filter channels by computed permissions (not just raw overwrites)
+      if (user.bot && membersRepo && permissionsRepo) {
+        const member = membersRepo.get(g.id, user.id);
+        if (member) {
+          channels = allChannels.filter(ch => {
+            const overwriteChannelId = ch.type === 11 && ch.parent_id ? ch.parent_id : ch.id;
+            const overwrites = permissionsRepo.listByChannel(overwriteChannelId);
+            const perms = computePermissions(member, ch, g, roles, overwrites);
+            return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
+          });
+        } else {
+          channels = [];
+        }
+      }
+
       return { ...g, channels, roles };
     });
 

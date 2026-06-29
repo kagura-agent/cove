@@ -135,7 +135,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
     <div style={{ ...styles.root, ...style }} className="sidebar-panel">
       <div style={styles.header}>
         <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
-        <h1 style={styles.title}>Cove</h1>
+        <h1 style={styles.title}>{guilds[guildId ?? ""]?.name ?? "Cove"}</h1>
         {guildId && canSeeSettings && (
           <Button
             type="text"
