@@ -13,15 +13,9 @@ interface Props {
 }
 
 export function MembersRoleSection({ guildId, userHighestPosition }: Props) {
-<<<<<<< HEAD
-  const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] || EMPTY_MEMBERS);
-  const members = React.useMemo(() => Object.values(memberMap), [memberMap]);
-  const roles = useRoleStore((s) => s.roles[guildId] || EMPTY_ROLES);
-=======
   const memberMap = useMemberStore((s) => s.membersByGuildId[guildId] ?? {});
   const members = React.useMemo(() => Object.values(memberMap), [memberMap]);
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
->>>>>>> ea54fc4 (fix(client): fix all unstable zustand selectors causing React #185)
   const [dropdownUserId, setDropdownUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

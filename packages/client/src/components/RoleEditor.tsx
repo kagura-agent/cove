@@ -69,11 +69,7 @@ const PERMISSION_GROUPS: { label: string; perms: { key: keyof typeof PermissionB
 const PRESET_COLORS = [0x5865f2, 0x57f287, 0xfee75c, 0xeb459e, 0xed4245, 0xf47b67, 0xe67e22, 0x1abc9c, 0x3498db, 0x9b59b6];
 
 export function RoleEditor({ guildId, roleId, userHighestPosition, userPermissions }: RoleEditorProps) {
-<<<<<<< HEAD
-  const roles = useRoleStore((s) => s.roles[guildId] || EMPTY_ROLES);
-=======
   const roles = useRoleStore((s) => s.roles[guildId] ?? []);
->>>>>>> ea54fc4 (fix(client): fix all unstable zustand selectors causing React #185)
   const role = roles.find((r) => r.id === roleId);
 
   const [tab, setTab] = useState<TabKey>("display");

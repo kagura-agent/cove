@@ -105,7 +105,6 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
-  const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
 
   function handleSelectChannel(id: string) {
     if (!guildId) return;
