@@ -14,6 +14,10 @@ export const router = createBrowserRouter([
         lazy: () => import("../components/RedirectToDefault").then((m) => ({ Component: m.RedirectToDefault })),
       },
       {
+        path: "channels/:guildId",
+        lazy: () => import("../components/ServerOverview").then((m) => ({ Component: m.ServerOverview })),
+      },
+      {
         path: "channels/:guildId/:channelId",
         lazy: () => import("../components/ChannelView").then((m) => ({ Component: m.ChannelView })),
         children: [

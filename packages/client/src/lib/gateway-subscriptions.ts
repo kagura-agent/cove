@@ -17,6 +17,7 @@ import { router } from "./router";
 import { routes } from "./routes";
 import type { Channel } from "../types";
 import * as api from "./api";
+import { useSceneStore } from "../stores/useSceneStore";
 import { pruneSetIfNeeded } from "./prune-set.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,6 +49,13 @@ export function setupGatewaySubscriptions(): void {
 
     store.addMessage(msg.channel_id, msg);
     useTypingStore.getState().clearTyping(msg.channel_id, msg.author.id);
+
+    // Dispatch custom event for scene activity tracking
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("cove-message-create", {
+        detail: { channelId: msg.channel_id, content: msg.content ?? "" },
+      }));
+    }
 
     // Mark channel unread if the message is from someone else and not the active channel
     const selfId = useUserStore.getState().id;
@@ -207,6 +215,8 @@ export function setupGatewaySubscriptions(): void {
     useMessageStore.getState().removeChannelMessages(data.id);
     useReadStateStore.getState().removeChannel(data.id);
     useTypingStore.getState().removeChannel(data.id);
+    // Remove channel from all scenes (no re-fetch needed)
+    useSceneStore.getState().removeChannelFromScenes(data.id);
 
     // If viewing the deleted channel, navigate to next available
     if (data.id === activeChannelId) {
@@ -221,6 +231,23 @@ export function setupGatewaySubscriptions(): void {
         router.navigate(routes.root(), { replace: true });
       }
     }
+  });
+
+  // Scene events — thin payloads, re-fetch on create/update
+  subscribe("SCENE_CREATE", (data) => {
+    api.fetchScenes(data.guild_id)
+      .then((scenes) => useSceneStore.getState().setScenes(data.guild_id, scenes))
+      .catch(() => {});
+  });
+
+  subscribe("SCENE_UPDATE", (data) => {
+    api.fetchScenes(data.guild_id)
+      .then((scenes) => useSceneStore.getState().setScenes(data.guild_id, scenes))
+      .catch(() => {});
+  });
+
+  subscribe("SCENE_DELETE", (data) => {
+    useSceneStore.getState().removeScene(data.guild_id, data.id);
   });
 
   // GUILD_CREATE/UPDATE/DELETE: guild lifecycle events

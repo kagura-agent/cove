@@ -10,6 +10,7 @@ import { ReplyBar } from "./ReplyBar";
 import { MemberList } from "./MemberList";
 import { FilesSidebar } from "./FilesSidebar";
 import { ThreadPanel } from "./ThreadPanel";
+import { SceneMiniMap } from "./SceneMiniMap";
 import { routes } from "../lib/routes";
 import type { CSSProperties } from "react";
 
@@ -104,7 +105,8 @@ export function ChannelView() {
   return (
     <>
       <div style={styles.chatColumn} className="chat-column">
-        <div style={styles.chatBody} className="chat-body-cell">
+        <div style={{ ...styles.chatBody, position: "relative" }} className="chat-body-cell">
+          {guildId && channelId && <SceneMiniMap channelId={channelId} guildId={guildId} />}
           <ChatArea
             onMenuClick={() => setSidebarOpen(!sidebarOpen)}
             onMembersClick={() => {
