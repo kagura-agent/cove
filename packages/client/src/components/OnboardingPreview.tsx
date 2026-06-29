@@ -100,7 +100,7 @@ export function OnboardingPreview() {
                 />
                 <button className="ob-code-btn" onClick={handleInviteCode}>→</button>
               </div>
-              <button className="ob-skip-btn" onClick={() => setScene("intro")}>I don't have one — create my own island</button>
+
             </div>
           </div>
         )}
