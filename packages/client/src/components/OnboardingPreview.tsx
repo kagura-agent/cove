@@ -52,9 +52,9 @@ export function OnboardingPreview() {
         <div className="ob-ocean" />
         <div className="ob-stars" />
 
-        {/* Island SVG */}
+        {/* Pixel art island background */}
         <div className={`ob-island ${stage === "welcome" ? "ob-island--center" : "ob-island--bottom"}`}>
-          <IslandSVG />
+          <img src="/assets/onboarding-island.png" alt="" className="ob-island-img" />
         </div>
 
         {/* Waves */}
@@ -222,7 +222,7 @@ const styles = `
 .ob-root {
   position: fixed;
   inset: 0;
-  background: var(--onboarding-bg);
+  background: #0d1117;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--onboarding-text);
