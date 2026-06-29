@@ -217,6 +217,15 @@ export default function App() {
     );
   }
 
+  // Allow /onboarding-preview without auth
+  if (window.location.pathname === "/onboarding-preview") {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <RouterProvider router={router} />
+      </ConfigProvider>
+    );
+  }
+
   if (needsSetup) {
     return (
       <ConfigProvider theme={themeConfig}>
