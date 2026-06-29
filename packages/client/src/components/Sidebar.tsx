@@ -8,6 +8,7 @@ import { useReadStateStore } from "../stores/useReadStateStore";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
+import { saveLastChannel } from "./GuildSidebar";
 import { Button, Input, Spin } from "antd";
 import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
@@ -107,6 +108,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
 
   function handleSelectChannel(id: string) {
     if (!guildId) return;
+    saveLastChannel(guildId, id);
     navigate(routes.channel(guildId, id));
     onClose?.();
   }

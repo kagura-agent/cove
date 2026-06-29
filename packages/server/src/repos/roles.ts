@@ -159,4 +159,23 @@ export class RolesRepo {
     const row = this.db.prepare("SELECT * FROM roles WHERE id = ?").get(guildId) as RoleRow | undefined;
     return row ? toRole(row) : null;
   }
+
+  createEveryoneRole(guildId: string, permissions: string): Role {
+    this.db.prepare(
+      `INSERT INTO roles (id, guild_id, name, color, hoist, position, permissions, managed, mentionable, flags, bot_id)
+       VALUES (?, ?, ?, 0, 0, 0, ?, 0, 0, 0, NULL)`
+    ).run(guildId, guildId, "@everyone", permissions);
+    return {
+      id: guildId,
+      name: "@everyone",
+      color: 0,
+      hoist: false,
+      position: 0,
+      permissions,
+      managed: false,
+      mentionable: false,
+      flags: 0,
+      bot_id: null,
+    };
+  }
 }

@@ -172,6 +172,17 @@ export class GatewayDispatcher {
     this.broadcastToGuild(guildId, "GUILD_MEMBER_ADD", { ...member, guild_id: guildId });
   }
 
+  guildUpdate(guildId: string, guild: unknown): void {
+    this.broadcastToGuild(guildId, "GUILD_UPDATE", guild);
+  }
+
+  guildDelete(guildId: string, memberUserIds: string[]): void {
+    // Notify all affected members, then remove guild from their sessions
+    for (const userId of memberUserIds) {
+      this.removeGuildFromUser(userId, guildId);
+    }
+  }
+
   guildMemberRemove(guildId: string, userId: string): void {
     this.broadcastToGuild(guildId, "GUILD_MEMBER_REMOVE", { guild_id: guildId, user: { id: userId } });
   }

@@ -223,14 +223,41 @@ export function setupGatewaySubscriptions(): void {
     }
   });
 
-  // GUILD_CREATE/DELETE: guild lifecycle events
+  // GUILD_CREATE/UPDATE/DELETE: guild lifecycle events
   subscribe("GUILD_CREATE", (data) => {
-    useGuildStore.getState().addGuild({ id: data.id, name: data.name, icon: null, owner_id: null, features: [] });
+    useGuildStore.getState().addGuild({ id: data.id, name: data.name, icon: data.icon ?? null, owner_id: data.owner_id ?? null, features: [] });
+    // If the event includes channels/roles, seed them
+    if (data.channels) {
+      useChannelStore.getState().setChannels(data.id, data.channels);
+    }
+    if (data.roles) {
+      useRoleStore.getState().setRoles(data.id, data.roles);
+    }
+  });
+
+  subscribe("GUILD_UPDATE", (data) => {
+    useGuildStore.getState().updateGuild(data.id, data);
   });
 
   subscribe("GUILD_DELETE", (data) => {
+    const { guildId: activeGuildId } = getActiveIdsFromRouter();
     useGuildStore.getState().removeGuild(data.id);
     useChannelStore.getState().removeGuildChannels(data.id);
+    // If the deleted guild was active, navigate away
+    if (data.id === activeGuildId) {
+      const guilds = Object.keys(useGuildStore.getState().guilds);
+      if (guilds.length > 0) {
+        const fallbackGuildId = guilds[0];
+        const channels = useChannelStore.getState().getChannels(fallbackGuildId);
+        if (channels.length > 0) {
+          router.navigate(routes.channel(fallbackGuildId, channels[0].id), { replace: true });
+        } else {
+          router.navigate(routes.root(), { replace: true });
+        }
+      } else {
+        router.navigate(routes.root(), { replace: true });
+      }
+    }
   });
 
   // GUILD_MEMBER_ADD/REMOVE: membership events
