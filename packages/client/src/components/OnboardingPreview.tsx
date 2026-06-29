@@ -136,6 +136,10 @@ export function OnboardingPreview() {
               </div>
               <p className="ob-hint">After copying, send this to your agent in whatever chat you use with them.</p>
               <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
+              <button className="ob-skip-link" onClick={() => {
+                setScene("channel");
+                setChatMessages([{ from: "system", text: "Welcome to your island! You can invite your agent or friends anytime from settings." }]);
+              }}>Skip for now →</button>
             </div>
           </div>
         )}
@@ -453,6 +457,19 @@ const styles = `
   color: #555;
   font-size: 0.7rem;
   margin-top: 0.5rem;
+}
+
+.ob-skip-link {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.ob-skip-link:hover {
+  color: #999;
 }
 
 .ob-hint {
