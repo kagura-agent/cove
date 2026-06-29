@@ -64,19 +64,9 @@ export function OnboardingPreview() {
           <div className="ob-wave ob-wave--3" />
         </div>
 
-        {/* Clouds */}
-        <div className="ob-clouds">
-          <div className="ob-cloud ob-cloud--1">☁️</div>
-          <div className="ob-cloud ob-cloud--2">☁️</div>
-          <div className="ob-cloud ob-cloud--3">⛅</div>
-        </div>
+        {/* Clouds placeholder — will be replaced with AI-generated SVG */}
 
-        {/* Boat (visible during invite/arriving) */}
-        {(stage === "invite" || stage === "arriving") && (
-          <div className={`ob-boat ${stage === "arriving" ? "ob-boat--arriving" : ""}`}>
-            <BoatSVG />
-          </div>
-        )}
+        {/* Boat placeholder — will be replaced with AI-generated SVG */}
 
         {/* Content overlay */}
         <div className="ob-content">
@@ -157,58 +147,9 @@ export function OnboardingPreview() {
   );
 }
 
-/* ---------- SVG Components ---------- */
-
-function IslandSVG() {
-  return (
-    <svg viewBox="0 0 400 200" className="ob-island-svg" xmlns="http://www.w3.org/2000/svg">
-      {/* Sand base */}
-      <ellipse cx="200" cy="160" rx="150" ry="35" fill="var(--onboarding-island)" />
-      {/* Palm tree trunk */}
-      <path d="M140 160 Q145 100 155 60" stroke="#8B5E3C" strokeWidth="6" fill="none" strokeLinecap="round" />
-      {/* Palm leaves */}
-      <path d="M155 60 Q180 40 200 55" stroke="#2d6a4f" strokeWidth="3" fill="none" />
-      <path d="M155 60 Q130 35 110 50" stroke="#2d6a4f" strokeWidth="3" fill="none" />
-      <path d="M155 60 Q165 30 185 35" stroke="#40916c" strokeWidth="3" fill="none" />
-      <path d="M155 60 Q140 30 120 35" stroke="#40916c" strokeWidth="3" fill="none" />
-      <path d="M155 60 Q160 45 175 48" stroke="#52b788" strokeWidth="2" fill="none" />
-      {/* Coconuts */}
-      <circle cx="153" cy="62" r="4" fill="#6B4226" />
-      <circle cx="158" cy="65" r="3.5" fill="#6B4226" />
-      {/* Small hut */}
-      <rect x="220" y="130" width="40" height="30" fill="#A0522D" rx="2" />
-      <polygon points="215,130 265,130 240,110" fill="#D2691E" />
-      {/* Door */}
-      <rect x="234" y="142" width="12" height="18" fill="#4A2C17" rx="1" />
-      {/* Window */}
-      <rect x="248" y="135" width="8" height="8" fill="#FFE4B5" rx="1" />
-      {/* Dock / pier */}
-      <rect x="290" y="155" width="60" height="5" fill="#8B7355" rx="1" />
-      <rect x="295" y="155" width="4" height="20" fill="#8B7355" />
-      <rect x="320" y="155" width="4" height="20" fill="#8B7355" />
-      <rect x="345" y="155" width="4" height="15" fill="#8B7355" />
-      {/* Small bush */}
-      <circle cx="180" cy="148" r="10" fill="#2d6a4f" />
-      <circle cx="190" cy="145" r="8" fill="#40916c" />
-      <circle cx="172" cy="150" r="7" fill="#52b788" />
-    </svg>
-  );
-}
-
-function BoatSVG() {
-  return (
-    <svg viewBox="0 0 80 50" className="ob-boat-svg" xmlns="http://www.w3.org/2000/svg">
-      {/* Hull */}
-      <path d="M10 35 Q15 45 40 45 Q65 45 70 35 Z" fill="#8B5E3C" />
-      {/* Mast */}
-      <line x1="40" y1="35" x2="40" y2="10" stroke="#6B4226" strokeWidth="2" />
-      {/* Sail */}
-      <path d="M42 12 L42 33 L60 30 Z" fill="#e8e8e8" opacity="0.9" />
-      {/* Flag */}
-      <rect x="37" y="8" width="8" height="5" fill="var(--onboarding-accent)" rx="1" />
-    </svg>
-  );
-}
+/* ---------- SVG placeholders ---------- */
+// Island, boat, clouds will use AI-generated SVG assets.
+// See /assets/onboarding-island.png for current pixel art reference.
 
 /* ---------- Styles ---------- */
 
@@ -344,47 +285,7 @@ const styles = `
   100% { transform: translateX(33.33%); }
 }
 
-/* Clouds */
-.ob-clouds {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 40%;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.ob-cloud {
-  position: absolute;
-  font-size: 3rem;
-  opacity: 0.4;
-  animation: ob-drift linear infinite;
-}
-
-.ob-cloud--1 {
-  top: 10%;
-  animation-duration: 25s;
-  font-size: 2.5rem;
-}
-
-.ob-cloud--2 {
-  top: 20%;
-  animation-duration: 35s;
-  animation-delay: -10s;
-  font-size: 3.5rem;
-}
-
-.ob-cloud--3 {
-  top: 5%;
-  animation-duration: 30s;
-  animation-delay: -20s;
-}
-
-@keyframes ob-drift {
-  0% { transform: translateX(-100vw); }
-  100% { transform: translateX(100vw); }
-}
+/* Clouds — placeholder, will use AI-generated SVG */
 
 /* Content */
 .ob-content {
@@ -523,40 +424,7 @@ const styles = `
   80%, 100% { opacity: 0.6; }
 }
 
-/* Boat */
-.ob-boat {
-  position: absolute;
-  bottom: 20%;
-  right: -100px;
-  width: 80px;
-  z-index: 3;
-  animation: ob-boatFloat 2s ease-in-out infinite, ob-boatApproach 8s ease-out forwards;
-}
-
-.ob-boat--arriving {
-  animation: ob-boatFloat 1.5s ease-in-out infinite, ob-boatArrive 2s ease-in forwards;
-}
-
-.ob-boat-svg {
-  width: 100%;
-  height: auto;
-}
-
-@keyframes ob-boatFloat {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50% { transform: translateY(-5px) rotate(1deg); }
-}
-
-@keyframes ob-boatApproach {
-  0% { right: -100px; opacity: 0; }
-  20% { opacity: 1; }
-  100% { right: calc(50% + 60px); }
-}
-
-@keyframes ob-boatArrive {
-  0% { right: calc(50% + 60px); }
-  100% { right: calc(50% + 20px); opacity: 0.5; }
-}
+/* Boat — placeholder, will use AI-generated SVG */
 
 /* Arriving */
 .ob-arriving-text {
