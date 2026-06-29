@@ -135,6 +135,7 @@ export function OnboardingPreview() {
                 <button className="ob-copy-btn" onClick={handleCopyLink}>Copy & Continue</button>
               </div>
               <p className="ob-hint">After copying, send this to your agent in whatever chat you use with them.</p>
+              <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
             </div>
           </div>
         )}
@@ -446,6 +447,12 @@ const styles = `
   border-radius: 8px;
   font-size: 0.95rem;
   cursor: pointer;
+}
+
+.ob-platform-note {
+  color: #555;
+  font-size: 0.7rem;
+  margin-top: 0.5rem;
 }
 
 .ob-hint {
