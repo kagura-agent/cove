@@ -56,10 +56,28 @@ Users can create new servers and switch between them, matching Discord's model.
 5. Dispatch `GUILD_CREATE` gateway event to the creating user's sessions
 6. Return full guild object (with channels and roles, matching READY format)
 
+```typescript
+// POST /guilds response (matches READY guild object)
+interface GuildCreateResponse {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner_id: string;
+  roles: Role[];        // [@everyone]
+  channels: Channel[];  // [#general]
+}
+```
+
+#### `PATCH /guilds/:guildId` Behavior
+
+> **Seed guild:** If `owner_id` is NULL (legacy seed guild), PATCH requires MANAGE_GUILD permission (owner check is skipped when `owner_id` is NULL).
+
 #### `DELETE /guilds/:guildId` Behavior
 1. Only the guild owner can delete
 2. Cascade-delete all channels, members, messages, roles, webhooks
 3. Dispatch `GUILD_DELETE` to all sessions subscribed to this guild
+
+> **Seed guild:** If `owner_id` is NULL (legacy seed guild), DELETE returns 403 Forbidden.
 
 > **Note:** V1 uses synchronous cascade delete (acceptable for current data scale). Async background deletion is planned as a follow-up optimization.
 
@@ -72,7 +90,7 @@ Users can create new servers and switch between them, matching Discord's model.
 #### Guild List Sidebar
 - New component: `GuildSidebar` — narrow left column before the channel sidebar
 - Shows all guilds from `useGuildStore` as circular icons
-- Clicking a guild navigates to `/channels/:guildId/:lastChannelId`
+- Clicking a guild navigates to `/channels/:guildId/:lastChannelId` — `lastChannelId` is stored in localStorage per guild; fallback chain: localStorage → first text channel by position → guild's #general
 - Active guild has a left-edge pill indicator
 - Unread dot indicator per guild (aggregate of channel unreads)
 - "Create Server" button (`+` icon) at the bottom
@@ -100,6 +118,8 @@ Already partially implemented. Verify/extend:
 | `GUILD_UPDATE` | Guild name/icon changed | Partial guild object |
 | `GUILD_DELETE` | Guild deleted or user removed from one | `{ id }` |
 
+Subscription is implicit and member-based — a user receives events for all guilds they are a member of. No explicit subscribe/unsubscribe needed.
+
 The client already handles `GUILD_CREATE` and `GUILD_DELETE` in `gateway-subscriptions.ts`. Need to:
 - Add `GUILD_UPDATE` handler (update guild in store)
 - Enhance `GUILD_CREATE` handler to also load channels/roles from the event payload
@@ -121,7 +141,7 @@ No schema migration needed — `guilds` table already supports multiple rows. Th
 
 Current code has a `getDefaultId()` helper that assumes a single guild and returns its ID. With multi-guild support, all callsites must be refactored to obtain `guildId` from the route parameter (`/channels/:guildId/...`) or request context.
 
-This is implementation prerequisite work — complete the `getDefaultId()` removal before building new endpoints, so that all guild-scoped operations consistently source their guild ID from the request.
+Estimated scope: ~8–12 callsites across route handlers, middleware, and gateway logic. This is implementation prerequisite work — complete the `getDefaultId()` removal before building new endpoints, so that all guild-scoped operations consistently source their guild ID from the request.
 
 ## Test Plan
 
