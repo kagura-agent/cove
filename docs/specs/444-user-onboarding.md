@@ -165,3 +165,53 @@ Consumed by the agent to join the guild. Creates bot account, returns credential
 - #364 — Agent onboarding via invite link
 - #362 — Agent platform onboarding
 - #171 — Discord-compatible invite system
+
+## Visual Design
+
+### Style Direction
+- **Game-like warm minimal** — Animal Crossing meets Linear
+- Warm palette (sand, ocean blue, sunset orange accents)
+- Round shapes, soft shadows
+- Animations on every transition — not static pages
+
+### Animations
+
+**Welcome Screen:**
+- Island illustration with gentle wave animation (CSS keyframes)
+- Clouds drifting slowly in background
+- CTA button has a soft glow pulse
+
+**Waiting for Agent:**
+- A small boat/paper crane/pixel character approaching the island
+- Dotted path animation showing progress
+- When connected: boat "arrives", particle burst
+
+**Agent Arrives:**
+- Confetti/sparkle burst (lightweight, CSS-based or lottie)
+- Agent avatar drops in with a bounce animation
+- Text fades in: "They're here! 💫"
+
+**Transition to DM:**
+- Screen slides/fades to the DM view
+- First message appears with a typing indicator, then reveals
+
+### Layout
+- Full viewport, vertically centered
+- Single focus point per screen (no sidebar during onboarding)
+- Mobile-first: works on phone screens without scrolling
+
+### Color Tokens (extending Cove theme)
+```css
+--onboarding-bg: #1a1f2e;           /* deep ocean night */
+--onboarding-island: #f4a261;       /* warm sand */
+--onboarding-ocean: #2a9d8f;        /* tropical water */
+--onboarding-accent: #e9c46a;       /* sunset gold */
+--onboarding-text: #e8e8e8;         /* soft white */
+--onboarding-text-muted: #8b95a5;   /* wave mist */
+```
+
+### Illustration Style
+- Simple SVG/CSS-drawn island (not a heavy image)
+- Can be animated with CSS transforms
+- Elements: palm tree, small house, dock, water
+- Agent represented as a small boat or floating creature approaching
