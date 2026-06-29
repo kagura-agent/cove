@@ -5,7 +5,7 @@ import { useState, useCallback } from "react";
  * No real auth/chat, just UI flow demonstration.
  */
 
-type Scene = "login" | "intro" | "invite" | "waiting" | "channel";
+type Scene = "login" | "invite-code" | "intro" | "invite" | "waiting" | "channel";
 
 export function OnboardingPreview() {
   const [scene, setScene] = useState<Scene>("login");
@@ -16,6 +16,11 @@ export function OnboardingPreview() {
   const [guideVisible, setGuideVisible] = useState(true);
 
   const handleLogin = useCallback(() => {
+    // After Google sign-in, check if user needs invite code
+    setScene("invite-code");
+  }, []);
+
+  const handleInviteCode = useCallback(() => {
     if (!inviteCode.trim()) return;
     setScene("intro");
   }, [inviteCode]);
@@ -71,23 +76,31 @@ export function OnboardingPreview() {
               <h1 className="ob-logo">🏝️ Cove</h1>
               <p className="ob-tagline">A private island for you and your AI agent.<br/>Chat, build, and live together.</p>
 
-              <button className="ob-google-btn">
+              <button className="ob-google-btn" onClick={handleLogin}>
                 <span className="ob-google-icon">G</span>
                 Sign in with Google
               </button>
+            </div>
+          </div>
+        )}
 
-              <div className="ob-divider"><span>or enter invite code</span></div>
-
+        {/* Scene 1b: Invite code (after login, if user has no existing invite) */}
+        {scene === "invite-code" && (
+          <div className="ob-page">
+            <div className="ob-login-card">
+              <h2 className="ob-code-title">Got an invite code?</h2>
+              <p className="ob-code-desc">If someone invited you to their island, enter the code here.</p>
               <div className="ob-code-row">
                 <input
                   className="ob-code-input"
-                  placeholder="Invite code"
+                  placeholder="Enter code"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                  onKeyDown={(e) => e.key === "Enter" && handleInviteCode()}
                 />
-                <button className="ob-code-btn" onClick={handleLogin}>→</button>
+                <button className="ob-code-btn" onClick={handleInviteCode}>→</button>
               </div>
+              <button className="ob-skip-btn" onClick={() => setScene("intro")}>I don't have one — create my own island</button>
             </div>
           </div>
         )}
@@ -307,6 +320,31 @@ const styles = `
 
 .ob-divider span {
   padding: 0 1rem;
+}
+
+.ob-code-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.ob-code-desc {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+}
+
+.ob-skip-btn {
+  margin-top: 1rem;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ob-skip-btn:hover {
+  color: #999;
 }
 
 .ob-code-row {
