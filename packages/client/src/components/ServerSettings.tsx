@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { useRoleStore } from "../stores/useRoleStore";
 import { useGuildStore } from "../stores/useGuildStore";
-import { useChannelStore } from "../stores/useChannelStore";
 import { useUserPermissions } from "../lib/useUserPermissions";
-import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import { RoleList } from "./RoleList";
 import { RoleEditor } from "./RoleEditor";
@@ -126,7 +123,6 @@ function OverviewSection({ guildId }: { guildId: string }) {
 
 function DangerSection({ guildId, onClose }: { guildId: string; onClose: () => void }) {
   const guild = useGuildStore((s) => s.guilds[guildId]);
-  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -138,21 +134,9 @@ function DangerSection({ guildId, onClose }: { guildId: string; onClose: () => v
     try {
       await api.deleteGuild(guildId);
       message.success("Server deleted");
-      useGuildStore.getState().removeGuild(guildId);
-      useChannelStore.getState().removeGuildChannels(guildId);
+      // Close settings panel — the GUILD_DELETE gateway event
+      // handles store cleanup and navigation redirect.
       onClose();
-      // Navigate to first remaining guild
-      const remaining = Object.keys(useGuildStore.getState().guilds);
-      if (remaining.length > 0) {
-        const channels = useChannelStore.getState().getChannels(remaining[0]);
-        if (channels.length > 0) {
-          navigate(routes.channel(remaining[0], channels[0].id), { replace: true });
-        } else {
-          navigate(routes.root(), { replace: true });
-        }
-      } else {
-        navigate(routes.root(), { replace: true });
-      }
     } catch {
       message.error("Failed to delete server");
     } finally {

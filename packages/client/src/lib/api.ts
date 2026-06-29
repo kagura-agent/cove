@@ -284,7 +284,7 @@ export function createGuild(name: string) {
   });
 }
 
-export function updateGuild(guildId: string, data: { name?: string; icon?: string }) {
+export function updateGuild(guildId: string, data: { name?: string }) {
   return api<{ id: string; name: string; icon: string | null; owner_id: string | null }>(`${API_PREFIX}/guilds/${guildId}`, {
     method: "PATCH", body: JSON.stringify(data),
   });

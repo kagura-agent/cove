@@ -16,7 +16,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   app.post("/guilds", async (c) => {
     const userId = c.get("botUser").id;
 
-    const body = await parseJsonBody<{ name: string; icon?: string }>(c);
+    const body = await parseJsonBody<{ name: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.name, "name", { required: true, maxLength: 100 });
@@ -37,7 +37,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     // Wrap all DB writes in a transaction to avoid partial state on failure
     const { guild, everyoneRole, generalChannel } = repos.db.transaction(() => {
-      const guild = repos.guilds.create({ id: guildId, name, icon: body.icon, owner_id: userId });
+      const guild = repos.guilds.create({ id: guildId, name, owner_id: userId });
       const everyoneRole = repos.roles.createEveryoneRole(guildId, DEFAULT_EVERYONE_PERMISSIONS.toString());
       const generalChannel = repos.channels.create(guildId, "general", undefined, 0);
       repos.members.add(guildId, userId);
@@ -84,7 +84,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       }
     }
 
-    const body = await parseJsonBody<{ name?: string; icon?: string }>(c);
+    const body = await parseJsonBody<{ name?: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     if (body.name !== undefined) {
@@ -97,7 +97,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       body.name = trimmed;
     }
 
-    const updated = repos.guilds.update(guildId, body);
+    const updated = repos.guilds.update(guildId, { name: body.name });
     if (!updated) return unknownGuild(c);
 
     // Dispatch GUILD_UPDATE to all guild members
