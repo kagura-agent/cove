@@ -85,8 +85,8 @@ export function OnboardingPreview() {
         {scene === "invite-code" && (
           <div className="ob-page">
             <div className="ob-login-card">
-              <h2 className="ob-code-title">Got an invite code?</h2>
-              <p className="ob-code-desc">If someone invited you to their island, enter the code here.</p>
+              <h2 className="ob-code-title">Enter invite code</h2>
+              <p className="ob-code-desc">Cove is in early access. Enter your invite code to continue.</p>
               <div className="ob-code-row">
                 <input
                   className="ob-code-input"
