@@ -6,6 +6,7 @@ import type { ChannelsRepo } from "../repos/channels.js";
 import type { ReadStatesRepo } from "../repos/readStates.js";
 import type { PermissionsRepo } from "../repos/permissions.js";
 import type { RolesRepo } from "../repos/roles.js";
+import type { MembersRepo } from "../repos/members.js";
 import { GatewayOpcode, type GatewayPayload } from "@cove/shared";
 import { GatewaySession } from "./session.js";
 import { GatewayDispatcher } from "./dispatcher.js";
@@ -31,7 +32,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, channels: ChannelsRepo, dispatcher: GatewayDispatcher, readStates: ReadStatesRepo, permissions?: PermissionsRepo, roles?: RolesRepo): void {
+export function setupGateway(server: HttpServer, users: UsersRepo, guilds: GuildsRepo, channels: ChannelsRepo, dispatcher: GatewayDispatcher, readStates: ReadStatesRepo, permissions?: PermissionsRepo, roles?: RolesRepo, members?: MembersRepo): void {
   const wss = new WebSocketServer({
     server,
     path: "/gateway",
@@ -122,7 +123,7 @@ export function setupGateway(server: HttpServer, users: UsersRepo, guilds: Guild
               return;
             }
 
-            session.identify(user, dispatcher, guilds, channels, readStates, permissions, roles);
+            session.identify(user, dispatcher, guilds, channels, readStates, permissions, roles, members);
             dispatcher.addSession(session);
 
             // Schedule session expiry disconnect for non-bot users

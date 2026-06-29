@@ -23,7 +23,8 @@ export interface GatewayEventMap {
   GUILD_MEMBER_ADD: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string };
   GUILD_MEMBER_REMOVE: { guild_id: string; user: { id: string } };
   GUILD_MEMBER_UPDATE: { guild_id: string; user: { id: string }; nick: string | null; roles: string[] };
-  GUILD_CREATE: { id: string; name: string };
+  GUILD_CREATE: { id: string; name: string; icon?: string | null; owner_id?: string | null; channels?: Channel[]; roles?: Role[] };
+  GUILD_UPDATE: { id: string; name?: string; icon?: string | null; owner_id?: string | null };
   GUILD_DELETE: { id: string };
   GUILD_ROLE_CREATE: { guild_id: string; role: Role };
   GUILD_ROLE_UPDATE: { guild_id: string; role: Role };

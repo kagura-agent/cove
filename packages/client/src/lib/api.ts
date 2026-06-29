@@ -266,3 +266,30 @@ export function addMemberRole(guildId: string, userId: string, roleId: string) {
 export function removeMemberRole(guildId: string, userId: string, roleId: string) {
   return api<void>(`${API_PREFIX}/guilds/${guildId}/members/${userId}/roles/${roleId}`, { method: "DELETE" });
 }
+
+// ─── Guild CRUD ─────────────────────────────────────────────────────
+
+export interface GuildCreateResponse {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner_id: string;
+  roles: Role[];
+  channels: Channel[];
+}
+
+export function createGuild(name: string) {
+  return api<GuildCreateResponse>(`${API_PREFIX}/guilds`, {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+}
+
+export function updateGuild(guildId: string, data: { name?: string }) {
+  return api<{ id: string; name: string; icon: string | null; owner_id: string | null }>(`${API_PREFIX}/guilds/${guildId}`, {
+    method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
+export function deleteGuild(guildId: string) {
+  return api<void>(`${API_PREFIX}/guilds/${guildId}`, { method: "DELETE" });
+}

@@ -4,6 +4,7 @@ import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useGuildStore } from "./stores/useGuildStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { Sidebar } from "./components/Sidebar";
+import { GuildSidebar } from "./components/GuildSidebar";
 import { UserBar } from "./components/UserBar";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -40,6 +41,8 @@ export function AppShell() {
       <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
 
       <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""}`}>
+        <GuildSidebar />
+
         <div style={styles.sidebarColumn} className="sidebar-column">
           <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
           <div style={styles.sidebarFooter} className="sidebar-footer-cell">

@@ -156,6 +156,21 @@ export class GatewayDispatcher {
     }
   }
 
+  /**
+   * Add guild to user sessions and dispatch GUILD_CREATE with full payload
+   * (including channels and roles) so multi-tab and invite flows work.
+   */
+  guildCreateFull(userId: string, guildId: string, payload: unknown): void {
+    const sessionIds = this.userSessions.get(userId);
+    if (sessionIds) {
+      for (const sid of sessionIds) {
+        const session = this.sessionsById.get(sid);
+        if (session) session.guildIds.add(guildId);
+      }
+    }
+    this.sendToUser(userId, "GUILD_CREATE", payload);
+  }
+
   removeGuildFromUser(userId: string, guildId: string): void {
     // Notify the user's sessions BEFORE removing the guild from their set
     this.sendToUser(userId, "GUILD_DELETE", { id: guildId });
@@ -170,6 +185,17 @@ export class GatewayDispatcher {
 
   guildMemberAdd(guildId: string, member: { user: { id: string }; nick: string | null; roles: string[]; joined_at: string }): void {
     this.broadcastToGuild(guildId, "GUILD_MEMBER_ADD", { ...member, guild_id: guildId });
+  }
+
+  guildUpdate(guildId: string, guild: unknown): void {
+    this.broadcastToGuild(guildId, "GUILD_UPDATE", guild);
+  }
+
+  guildDelete(guildId: string, memberUserIds: string[]): void {
+    // Notify all affected members, then remove guild from their sessions
+    for (const userId of memberUserIds) {
+      this.removeGuildFromUser(userId, guildId);
+    }
   }
 
   guildMemberRemove(guildId: string, userId: string): void {

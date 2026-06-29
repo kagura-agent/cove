@@ -1,25 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRoleStore } from "../stores/useRoleStore";
+import { useGuildStore } from "../stores/useGuildStore";
 import { useUserPermissions } from "../lib/useUserPermissions";
 import * as api from "../lib/api";
 import { RoleList } from "./RoleList";
 import { RoleEditor } from "./RoleEditor";
 import { MembersRoleSection } from "./MembersRoleSection";
+import { Modal, Input, Button, message } from "antd";
 
 /* ── Nav sections ───────────────────────────────────────────── */
 
-type SectionKey = "roles" | "members";
+type SectionKey = "overview" | "roles" | "members" | "danger";
 
 interface NavItem {
   key: SectionKey;
   label: string;
   header: string;
+  ownerOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { key: "overview", label: "Overview", header: "SERVER SETTINGS" },
   { key: "roles", label: "Roles", header: "SERVER SETTINGS" },
   { key: "members", label: "Members", header: "USER MANAGEMENT" },
+  { key: "danger", label: "Delete Server", header: "DANGER ZONE", ownerOnly: true },
 ];
 
 /* ── Section content components ─────────────────────────────── */
@@ -65,6 +70,129 @@ function MembersSection({ guildId }: { guildId: string }) {
   return <MembersRoleSection guildId={guildId} userHighestPosition={userHighestPosition} />;
 }
 
+function OverviewSection({ guildId }: { guildId: string }) {
+  const guild = useGuildStore((s) => s.guilds[guildId]);
+  const [name, setName] = useState(guild?.name ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(guild?.name ?? "");
+  }, [guild?.name]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (trimmed.length < 2 || trimmed.length > 100) {
+      message.error("Server name must be 2–100 characters");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await api.updateGuild(guildId, { name: trimmed });
+      useGuildStore.getState().updateGuild(guildId, updated);
+      message.success("Server updated");
+    } catch {
+      message.error("Failed to update server");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={sectionTitleStyle}>Server Overview</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
+        <div>
+          <label style={{ display: "block", marginBottom: 4, fontWeight: 500, color: "var(--text-muted)", fontSize: "var(--font-size-sm)", textTransform: "uppercase" }}>
+            Server Name
+          </label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+        </div>
+        <Button
+          type="primary"
+          onClick={handleSave}
+          loading={saving}
+          disabled={name.trim() === guild?.name || name.trim().length < 2}
+          style={{ alignSelf: "flex-start" }}
+        >
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DangerSection({ guildId, onClose }: { guildId: string; onClose: () => void }) {
+  const guild = useGuildStore((s) => s.guilds[guildId]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const isSeed = guild?.owner_id === null;
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteGuild(guildId);
+      message.success("Server deleted");
+      // Close settings panel — the GUILD_DELETE gateway event
+      // handles store cleanup and navigation redirect.
+      onClose();
+    } catch {
+      message.error("Failed to delete server");
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={sectionTitleStyle}>Delete Server</h2>
+      {isSeed ? (
+        <p style={{ color: "var(--text-muted)" }}>The seed server cannot be deleted.</p>
+      ) : (
+        <>
+          <p style={{ color: "var(--text-muted)", marginBottom: 16 }}>
+            Deleting a server is permanent. All channels, messages, and data will be lost.
+          </p>
+          <Button danger onClick={() => setConfirmOpen(true)}>
+            Delete Server
+          </Button>
+          <Modal
+            title="Delete Server"
+            open={confirmOpen}
+            onCancel={() => { setConfirmOpen(false); setConfirmText(""); }}
+            footer={null}
+            destroyOnClose
+          >
+            <p style={{ marginBottom: 12 }}>
+              Type <strong>{guild?.name}</strong> to confirm deletion:
+            </p>
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={guild?.name}
+              autoFocus
+            />
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <Button onClick={() => { setConfirmOpen(false); setConfirmText(""); }}>Cancel</Button>
+              <Button
+                danger
+                type="primary"
+                onClick={handleDelete}
+                loading={deleting}
+                disabled={confirmText !== guild?.name}
+              >
+                Delete
+              </Button>
+            </div>
+          </Modal>
+        </>
+      )}
+    </div>
+  );
+}
+
 const sectionTitleStyle: CSSProperties = {
   fontSize: "var(--font-size-xl)",
   fontWeight: 600,
@@ -73,15 +201,20 @@ const sectionTitleStyle: CSSProperties = {
   marginTop: 0,
 };
 
-const SECTION_COMPONENTS: Record<SectionKey, (guildId: string) => ReactNode> = {
+const SECTION_COMPONENTS: Record<SectionKey, (guildId: string, onClose: () => void) => ReactNode> = {
+  overview: (guildId) => <OverviewSection guildId={guildId} />,
   roles: (guildId) => <RolesSection guildId={guildId} />,
   members: (guildId) => <MembersSection guildId={guildId} />,
+  danger: (guildId, onClose) => <DangerSection guildId={guildId} onClose={onClose} />,
 };
 
 /* ── Main Server Settings Panel ─────────────────────────────── */
 
 export function ServerSettings({ guildId, onClose }: { guildId: string; onClose: () => void }) {
-  const [activeSection, setActiveSection] = useState<SectionKey>("roles");
+  const [activeSection, setActiveSection] = useState<SectionKey>("overview");
+  const { isOwner } = useUserPermissions(guildId);
+
+  const visibleItems = NAV_ITEMS.filter((item) => !item.ownerOnly || isOwner);
 
   const close = useCallback(() => onClose(), [onClose]);
 
@@ -106,8 +239,8 @@ export function ServerSettings({ guildId, onClose }: { guildId: string; onClose:
 
         {/* Sidebar */}
         <div className="settings-sidebar">
-          {NAV_ITEMS.map((item, idx) => {
-            const prevHeader = idx > 0 ? NAV_ITEMS[idx - 1].header : null;
+          {visibleItems.map((item, idx) => {
+            const prevHeader = idx > 0 ? visibleItems[idx - 1].header : null;
             const showHeader = item.header !== prevHeader;
             return (
               <div key={item.key}>
@@ -123,7 +256,7 @@ export function ServerSettings({ guildId, onClose }: { guildId: string; onClose:
                   onClick={() => setActiveSection(item.key)}
                   className={`settings-nav-item${activeSection === item.key ? " active" : ""}`}
                   style={{
-                    color: activeSection === item.key ? "var(--text-normal)" : "var(--text-muted)",
+                    color: activeSection === item.key ? "var(--text-normal)" : item.key === "danger" ? "var(--status-danger, #ed4245)" : "var(--text-muted)",
                   }}
                 >
                   {item.label}
@@ -136,7 +269,7 @@ export function ServerSettings({ guildId, onClose }: { guildId: string; onClose:
         {/* Content */}
         <div className="settings-content">
           <div style={contentInnerStyle}>
-            {SECTION_COMPONENTS[activeSection](guildId)}
+            {SECTION_COMPONENTS[activeSection](guildId, close)}
           </div>
         </div>
       </div>
