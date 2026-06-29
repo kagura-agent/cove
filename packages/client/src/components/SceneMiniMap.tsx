@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSceneStore } from "../stores/useSceneStore";
 import { useTypingStore } from "../stores/useTypingStore";
@@ -91,7 +91,11 @@ function MiniNode({ channelId, name, isCurrent }: { channelId: string; name: str
 }
 
 export function SceneMiniMap({ channelId, guildId }: { channelId: string; guildId: string }) {
-  const scenes = useSceneStore((s) => s.getScenesForChannel(channelId));
+  const allScenes = useSceneStore((s) => s.scenesByGuildId);
+  const scenes = useMemo(
+    () => Object.values(allScenes).flat().filter((sc) => sc.channels.some((ch) => ch.id === channelId)),
+    [allScenes, channelId]
+  );
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === "true"; } catch { return false; }

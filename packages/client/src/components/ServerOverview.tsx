@@ -317,10 +317,12 @@ function SceneDialog({ open, onClose, guildId, editing }: {
 
 // ── Server Overview Page ──────────────────────────────────────
 
+const EMPTY_SCENES: Scene[] = [];
+
 export function ServerOverview() {
   const { guildId } = useActiveIds();
   const guild = useGuildStore((s) => guildId ? s.guilds[guildId] : null);
-  const scenes = useSceneStore((s) => s.getScenes(guildId));
+  const scenes = useSceneStore((s) => s.scenesByGuildId[guildId ?? ''] ?? EMPTY_SCENES);
   const { userPermissions, isOwner } = useUserPermissions(guildId ?? "");
   const canManage = isOwner || !!(userPermissions & PermissionBits.MANAGE_GUILD);
   const [dialogOpen, setDialogOpen] = useState(false);
