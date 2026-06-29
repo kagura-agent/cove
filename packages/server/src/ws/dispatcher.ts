@@ -156,6 +156,21 @@ export class GatewayDispatcher {
     }
   }
 
+  /**
+   * Add guild to user sessions and dispatch GUILD_CREATE with full payload
+   * (including channels and roles) so multi-tab and invite flows work.
+   */
+  guildCreateFull(userId: string, guildId: string, payload: unknown): void {
+    const sessionIds = this.userSessions.get(userId);
+    if (sessionIds) {
+      for (const sid of sessionIds) {
+        const session = this.sessionsById.get(sid);
+        if (session) session.guildIds.add(guildId);
+      }
+    }
+    this.sendToUser(userId, "GUILD_CREATE", payload);
+  }
+
   removeGuildFromUser(userId: string, guildId: string): void {
     // Notify the user's sessions BEFORE removing the guild from their set
     this.sendToUser(userId, "GUILD_DELETE", { id: guildId });

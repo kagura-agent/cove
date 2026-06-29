@@ -4,7 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { unknownGuild } from "./helpers.js";
-import { generateSnowflake, PermissionBits, DEFAULT_EVERYONE_PERMISSIONS } from "@cove/shared";
+import { generateSnowflake, PermissionBits, DEFAULT_EVERYONE_PERMISSIONS, type Role, type Channel } from "@cove/shared";
 import { computeBasePermissions } from "../permissions/compute.js";
 
 const MAX_GUILDS_PER_USER = 10;
@@ -35,20 +35,22 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     const guildId = generateSnowflake();
 
-    // Create guild
-    const guild = repos.guilds.create({ id: guildId, name, icon: body.icon, owner_id: userId });
+    // Wrap all DB writes in a transaction to avoid partial state on failure
+    const { guild, everyoneRole, generalChannel } = repos.db.transaction(() => {
+      const guild = repos.guilds.create({ id: guildId, name, icon: body.icon, owner_id: userId });
+      const everyoneRole = repos.roles.createEveryoneRole(guildId, DEFAULT_EVERYONE_PERMISSIONS.toString());
+      const generalChannel = repos.channels.create(guildId, "general", undefined, 0);
+      repos.members.add(guildId, userId);
+      return { guild, everyoneRole, generalChannel };
+    })() as { guild: ReturnType<typeof repos.guilds.create>; everyoneRole: Role; generalChannel: Channel };
 
-    // Create @everyone role (id = guild id, position 0)
-    const everyoneRole = repos.roles.createEveryoneRole(guildId, DEFAULT_EVERYONE_PERMISSIONS.toString());
-
-    // Create #general text channel (position 0)
-    const generalChannel = repos.channels.create(guildId, "general", undefined, 0);
-
-    // Add creator as first guild member
-    repos.members.add(guildId, userId);
-
-    // Dispatch GUILD_CREATE to the creating user
-    dispatcher?.addGuildToUser(userId, guildId);
+    // Dispatch GUILD_CREATE with full payload (channels + roles) to the creating user
+    dispatcher?.guildCreateFull(userId, guildId, {
+      ...guild,
+      features: [],
+      channels: [generalChannel],
+      roles: [everyoneRole],
+    });
 
     return c.json({
       id: guild.id,
