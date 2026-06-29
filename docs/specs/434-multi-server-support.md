@@ -36,6 +36,11 @@ Users can create new servers and switch between them, matching Discord's model.
 
 ### Server (API)
 
+#### Constraints
+- Guild creation rate limit: max 10 guilds per user
+- Guild name: 2–100 characters, trimmed, no empty
+- Guild name uniqueness: not required (matches Discord)
+
 #### New Endpoints
 | Method | Path | Description |
 |--------|------|-------------|
@@ -56,10 +61,11 @@ Users can create new servers and switch between them, matching Discord's model.
 2. Cascade-delete all channels, members, messages, roles, webhooks
 3. Dispatch `GUILD_DELETE` to all sessions subscribed to this guild
 
+> **Note:** V1 uses synchronous cascade delete (acceptable for current data scale). Async background deletion is planned as a follow-up optimization.
+
 #### Existing Behavior Changes
 - Remove auto-seed guild from `initDb()` — **deferred**. Keep the seed for now so existing single-server deployments still work. The seed only runs when no guilds exist.
-- Registration flow: new users are NOT auto-joined to any guild. They see an empty guild list and can create their own or join via invite.
-  - **Exception:** Keep current behavior for now where seeded users (via env vars) are auto-added to the seeded guild. Revisit when invite system (#171) lands.
+- Registration flow: V1 keeps current behavior — new registered users are auto-joined to the seed guild. The empty-state problem (no guild, no DM home) will be solved by #111 (DM implementation). Do NOT change auto-join for V1.
 
 ### Client (UI)
 
@@ -110,6 +116,12 @@ The client already handles `GUILD_CREATE` and `GUILD_DELETE` in `gateway-subscri
 ## Migration
 
 No schema migration needed — `guilds` table already supports multiple rows. The only code change is adding the `POST /guilds` endpoint and removing the assumption that there's exactly one guild.
+
+## Migration: getDefaultId() Removal
+
+Current code has a `getDefaultId()` helper that assumes a single guild and returns its ID. With multi-guild support, all callsites must be refactored to obtain `guildId` from the route parameter (`/channels/:guildId/...`) or request context.
+
+This is implementation prerequisite work — complete the `getDefaultId()` removal before building new endpoints, so that all guild-scoped operations consistently source their guild ID from the request.
 
 ## Test Plan
 
