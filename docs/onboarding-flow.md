@@ -22,20 +22,20 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ---
 
-### Scene 2 — Introduction (New Users Only)
+### Scene 2 — Create Your Island (New Users Only)
 
 **Trigger:** User logs in and has no servers under their account.
 
-**Purpose:** Explain what Cove is in a game-opening-cinematic style.
+**Purpose:** Introduce Cove while creating the user's island in one step.
 
-**Format:** Carousel (a few pages, swipe/click to advance).
+**Format:** Single screen with intro text + island naming.
 
-**Content direction:**
-- What is Cove? (your private space with your AI agent)
-- What can you do here? (chat, build tools, set up routines)
-- What's an "island"? (your server — a shared home for you and your agent)
+**Content:**
+- Brief explanation: "Cove is a private space for you and your AI agent"
+- Name your island (input, default: "[Username]'s Cove")
+- Create button → proceeds to agent invite
 
-**Art:** AI-generated illustrations (TBD).
+**Notes:** Introduction is woven into the creation step, not a separate carousel.
 
 ---
 
@@ -46,7 +46,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
 **Layout:** Single screen.
 
 **Content:**
-- "Invite your agent to the island"
+- "Now, invite your agent" — shows island name they just created
 - Generated invite link (copy button)
 - Simple instructions: "Send this link to your agent. They'll use it to find your island."
 

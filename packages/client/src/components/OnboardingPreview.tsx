@@ -5,11 +5,11 @@ import { useState, useCallback } from "react";
  * No real auth/chat, just UI flow demonstration.
  */
 
-type Scene = "login" | "invite-code" | "intro" | "invite" | "waiting" | "channel";
+type Scene = "login" | "invite-code" | "create-island" | "invite" | "waiting" | "channel";
 
 export function OnboardingPreview() {
   const [scene, setScene] = useState<Scene>("login");
-  const [introPage, setIntroPage] = useState(0);
+  const [islandName, setIslandName] = useState("");
   const [guideStep, setGuideStep] = useState(0);
   const [inviteCode, setInviteCode] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ from: string; text: string }>>([]);
@@ -22,16 +22,13 @@ export function OnboardingPreview() {
 
   const handleInviteCode = useCallback(() => {
     if (!inviteCode.trim()) return;
-    setScene("intro");
+    setScene("create-island");
   }, [inviteCode]);
 
-  const handleIntroNext = useCallback(() => {
-    if (introPage < 2) {
-      setIntroPage((p) => p + 1);
-    } else {
-      setScene("invite");
-    }
-  }, [introPage]);
+  const handleCreateIsland = useCallback(() => {
+    if (!islandName.trim()) return;
+    setScene("invite");
+  }, [islandName]);
 
   const handleCopyLink = useCallback(() => {
     navigator.clipboard?.writeText("https://cove.chat/invite/abc123");
@@ -105,39 +102,24 @@ export function OnboardingPreview() {
           </div>
         )}
 
-        {/* Scene 2: Intro carousel */}
-        {scene === "intro" && (
+        {/* Scene 2: Create island */}
+        {scene === "create-island" && (
           <div className="ob-page">
-            <div className="ob-intro-card">
-              {introPage === 0 && (
-                <>
-                  <div className="ob-intro-icon">🏝️</div>
-                  <h2>What is Cove?</h2>
-                  <p>Your private space with your AI agent — an island that belongs to just the two of you.</p>
-                </>
-              )}
-              {introPage === 1 && (
-                <>
-                  <div className="ob-intro-icon">💬</div>
-                  <h2>What can you do here?</h2>
-                  <p>Chat with your agent, set up routines, build tools, and organize your world into channels.</p>
-                </>
-              )}
-              {introPage === 2 && (
-                <>
-                  <div className="ob-intro-icon">🌊</div>
-                  <h2>Your island awaits</h2>
-                  <p>First, let's invite your agent to join you. They'll need a link to find the island.</p>
-                </>
-              )}
-              <div className="ob-intro-dots">
-                {[0, 1, 2].map((i) => (
-                  <span key={i} className={`ob-dot ${i === introPage ? "ob-dot--active" : ""}`} />
-                ))}
+            <div className="ob-create-card">
+              <div className="ob-intro-icon">🏝️</div>
+              <h2>Let's build your island</h2>
+              <p>Cove is a private space for you and your AI agent — your own little island to chat, build, and live together.</p>
+              <p className="ob-create-label">Name your island</p>
+              <div className="ob-code-row">
+                <input
+                  className="ob-code-input"
+                  placeholder="Luna's Cove"
+                  value={islandName}
+                  onChange={(e) => setIslandName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateIsland()}
+                />
               </div>
-              <button className="ob-intro-btn" onClick={handleIntroNext}>
-                {introPage < 2 ? "Next" : "Let's go →"}
-              </button>
+              <button className="ob-intro-btn" onClick={handleCreateIsland}>Create island →</button>
             </div>
           </div>
         )}
@@ -146,8 +128,8 @@ export function OnboardingPreview() {
         {scene === "invite" && (
           <div className="ob-page">
             <div className="ob-invite-card">
-              <h2>Invite your agent 🚀</h2>
-              <p>Send this link to your agent. They'll use it to find your island.</p>
+              <h2>Now, invite your agent 🚀</h2>
+              <p>Your island <strong>{islandName || "My Cove"}</strong> is ready. Send this link to your agent so they can find it.</p>
               <div className="ob-link-box">
                 <code>https://cove.chat/invite/abc123</code>
                 <button className="ob-copy-btn" onClick={handleCopyLink}>Copy & Continue</button>
@@ -377,10 +359,10 @@ const styles = `
   cursor: pointer;
 }
 
-/* Scene 2: Intro */
-.ob-intro-card {
+/* Scene 2: Create island */
+.ob-create-card {
   text-align: center;
-  max-width: 400px;
+  max-width: 420px;
 }
 
 .ob-intro-icon {
@@ -388,34 +370,28 @@ const styles = `
   margin-bottom: 1rem;
 }
 
-.ob-intro-card h2 {
+.ob-create-card h2 {
   margin: 0 0 0.75rem;
   font-size: 1.8rem;
 }
 
-.ob-intro-card p {
+.ob-create-card p {
   color: #aaa;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   line-height: 1.6;
-  margin: 0 0 2rem;
+  margin: 0 0 1.5rem;
 }
 
-.ob-intro-dots {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
+.ob-create-label {
+  color: #ccc;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0 0 0.5rem;
+  text-align: left;
+}
+
+.ob-create-card .ob-code-row {
   margin-bottom: 1.5rem;
-}
-
-.ob-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #333;
-}
-
-.ob-dot--active {
-  background: #5865f2;
 }
 
 .ob-intro-btn {
