@@ -47,18 +47,18 @@ export function OnboardingPreview() {
       // System sends a request via webhook, agent responds and creates channel
       setChatMessages((prev) => [
         ...prev,
-        { from: "system", text: "#From System: I need a server-health channel to monitor the agent's machine health." },
+        { from: "system", text: "#From System: I need a server-health channel to monitor the machine my agent runs on." },
         { from: "agent", text: "On it. Creating #server-health..." },
         { from: "system", text: "Channel #server-health created." },
-        { from: "agent", text: "Done! Set up #server-health with cove.md — I'll check disk, memory, and services periodically." },
+        { from: "agent", text: "Done! Set up #server-health with cove.md — I'll check disk, memory, and services on my host periodically." },
       ]);
       setGuideStep(1);
     } else if (guideStep === 1) {
       // Demo cross-channel wake
       setChatMessages((prev) => [
         ...prev,
-        { from: "system", text: "#From System: @agent how's the island doing?" },
-        { from: "agent", text: "Checked #server-health — disk 62%, memory fine, all services green ✅" },
+        { from: "system", text: "#From System: @agent how's the machine doing?" },
+        { from: "agent", text: "Checked via #server-health — disk 62%, memory fine, all services green ✅" },
       ]);
       setGuideStep(2);
     }
