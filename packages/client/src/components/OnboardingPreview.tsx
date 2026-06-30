@@ -562,9 +562,10 @@ const styles = `
 }
 
 .ob-invitation-letter {
-  max-width: 380px;
+  max-width: 420px;
   width: 100%;
   margin-bottom: 1rem;
+  text-align: left;
 }
 
 .ob-letter-paper {
@@ -671,22 +672,25 @@ const styles = `
   border: 1px solid #2a2d35;
   border-radius: 8px;
   padding: 1rem;
+  text-align: left;
 }
 
 .ob-commands-label {
   font-size: 0.8rem;
   color: #888;
   margin: 0 0 0.75rem;
+  text-align: left;
 }
 
 .ob-commands-block {
   font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   line-height: 1.6;
   color: #a0a8b8;
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: pre;
+  overflow-x: auto;
+  text-align: left;
 }
 
 .ob-skip-link {
