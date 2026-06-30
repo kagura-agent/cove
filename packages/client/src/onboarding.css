@@ -1,0 +1,109 @@
+/* Onboarding flow styles — login, invite code, create island */
+
+.ob-page {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #0f1115;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #e8e8e8;
+}
+
+.ob-login-card {
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+}
+
+.ob-logo {
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+}
+
+.ob-tagline {
+  color: #999;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0 0 2rem;
+}
+
+.ob-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ob-google-btn:hover {
+  background: #f0f0f0;
+}
+
+.ob-google-icon {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #4285f4;
+}
+
+.ob-code-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  color: #e8e8e8;
+}
+
+.ob-code-desc {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+}
+
+.ob-code-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ob-code-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: #1a1d23;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e8e8e8;
+  font-size: 1rem;
+  outline: none;
+}
+
+.ob-code-input:focus {
+  border-color: #5865f2;
+}
+
+.ob-code-btn {
+  padding: 0.75rem 1.25rem;
+  background: #5865f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.ob-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ob-error {
+  color: #f87171;
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+}

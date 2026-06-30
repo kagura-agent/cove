@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { RouterProvider } from "react-router-dom";
-import { ConfigProvider, theme, Button, Input } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { ConfigProvider, theme } from "antd";
+import "./onboarding.css";
+
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useGuildStore } from "./stores/useGuildStore";
@@ -55,6 +56,7 @@ function InviteCodePage() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = useCallback(async () => {
+    if (!code.trim()) return;
     setError("");
     setLoading(true);
     try {
@@ -77,21 +79,21 @@ function InviteCodePage() {
   }, [code]);
 
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 300 }}>
-        <Input
-          placeholder="Enter invite code (COVE-XXXX-XXXX)"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onPressEnter={handleSubmit}
-          size="large"
-          style={{ textAlign: "center", letterSpacing: 1 }}
-        />
-        <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
-          Submit
-        </Button>
-        {error && <div style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h2 className="ob-code-title">Enter invite code</h2>
+        <p className="ob-code-desc">Cove is in early access. Enter your invite code to continue.</p>
+        <div className="ob-code-row">
+          <input
+            className="ob-code-input"
+            placeholder="COVE-XXXX-XXXX"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          <button className="ob-code-btn" onClick={handleSubmit} disabled={loading}>→</button>
+        </div>
+        {error && <p className="ob-error">{error}</p>}
       </div>
     </div>
   );
@@ -99,19 +101,21 @@ function InviteCodePage() {
 
 function LoginPage() {
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <Button
-        type="primary"
-        size="large"
-        icon={<GoogleOutlined />}
-        onClick={() => {
-          sessionStorage.setItem("cove_return_path", window.location.pathname);
-          window.location.href = `${API_BASE}/api/auth/google`;
-        }}
-      >
-        Sign in with Google
-      </Button>
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h1 className="ob-logo">🏝️ Cove</h1>
+        <p className="ob-tagline">A private island for you and your AI agent.<br/>Chat, build, and live together.</p>
+        <button
+          className="ob-google-btn"
+          onClick={() => {
+            sessionStorage.setItem("cove_return_path", window.location.pathname);
+            window.location.href = `${API_BASE}/api/auth/google`;
+          }}
+        >
+          <span className="ob-google-icon">G</span>
+          Sign in with Google
+        </button>
+      </div>
     </div>
   );
 }
