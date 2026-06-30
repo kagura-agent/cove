@@ -100,28 +100,95 @@ function InviteCodePage() {
 }
 
 function CreateIslandPage() {
+  const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
   const [name, setName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const user = useUserStore((s) => s.user);
   const defaultName = user?.username ? `${user.username}'s Cove` : "My Cove";
 
   const handleCreate = useCallback(async () => {
     setLoading(true);
+    setError("");
     const islandName = name.trim() || defaultName;
     try {
       await api.createGuild(islandName);
       window.location.reload();
     } catch {
+      setError("Failed to create island");
       setLoading(false);
     }
   }, [name, defaultName]);
+
+  const handleJoin = useCallback(async () => {
+    if (!joinCode.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      await api.joinGuild(joinCode.trim());
+      window.location.reload();
+    } catch {
+      setError("Invalid invite or island not found");
+      setLoading(false);
+    }
+  }, [joinCode]);
+
+  if (mode === "choose") {
+    return (
+      <div className="ob-page">
+        <div className="ob-login-card">
+          <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🏝️</div>
+          <h2 className="ob-code-title">Welcome to Cove</h2>
+          <p className="ob-code-desc">What would you like to do?</p>
+          <button
+            className="ob-google-btn"
+            style={{ marginBottom: "0.75rem", background: "#5865f2", color: "white" }}
+            onClick={() => setMode("create")}
+          >
+            Create my island
+          </button>
+          <button
+            className="ob-google-btn"
+            style={{ background: "#1a1d23", color: "#e8e8e8", border: "1px solid #333" }}
+            onClick={() => setMode("join")}
+          >
+            Join an island
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "join") {
+    return (
+      <div className="ob-page">
+        <div className="ob-login-card">
+          <h2 className="ob-code-title">Join an island</h2>
+          <p className="ob-code-desc">Enter the invite link or code you received.</p>
+          <div className="ob-code-row">
+            <input
+              className="ob-code-input"
+              placeholder="Invite link or code"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+            />
+            <button className="ob-code-btn" onClick={handleJoin} disabled={loading}>→</button>
+          </div>
+          {error && <p className="ob-error">{error}</p>}
+          <button className="ob-back-btn" onClick={() => { setMode("choose"); setError(""); }}>← Back</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ob-page">
       <div className="ob-login-card">
         <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🏝️</div>
-        <h2 className="ob-code-title">Let's build your island</h2>
-        <p className="ob-code-desc">Cove is a private space for you and your AI agent — your own little island to chat, build, and live together.</p>
+        <h2 className="ob-code-title">Create your island</h2>
+        <p className="ob-code-desc">A private space for you and your AI agent — your own little island to chat, build, and live together.</p>
         <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your island</p>
         <div className="ob-code-row">
           <input
@@ -132,6 +199,7 @@ function CreateIslandPage() {
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
         </div>
+        {error && <p className="ob-error">{error}</p>}
         <button
           className="ob-google-btn"
           style={{ marginTop: "1.5rem", background: "#5865f2", color: "white" }}
@@ -140,6 +208,7 @@ function CreateIslandPage() {
         >
           Create island →
         </button>
+        <button className="ob-back-btn" onClick={() => { setMode("choose"); setError(""); }}>← Back</button>
       </div>
     </div>
   );

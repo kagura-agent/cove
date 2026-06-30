@@ -107,3 +107,16 @@
   font-size: 0.85rem;
   margin-top: 0.75rem;
 }
+
+.ob-back-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.ob-back-btn:hover {
+  color: #999;
+}
