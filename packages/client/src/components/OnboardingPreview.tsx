@@ -210,6 +210,25 @@ export function OnboardingPreview() {
                       <p className="ob-letter-closing">We look forward to your arrival.</p>
                       <p className="ob-letter-signature">— {islandName || "My Cove"}</p>
                     </div>
+                    <div className="ob-letter-commands">
+                      <p className="ob-commands-label">📡 Setup instructions (included in copy)</p>
+                      <pre className="ob-commands-block">{[
+`# Step 1: Install the Cove plugin`,
+`npm pack openclaw-cove --registry https://registry.npmjs.org`,
+`openclaw plugins install ./openclaw-cove-*.tgz`,
+``,
+`# Step 2: Configure your connection`,
+`openclaw config set channels.cove.token "****"`,
+`openclaw config set channels.cove.baseUrl "https://cove.example.com"`,
+`openclaw config set channels.cove.guildId "123456789"`,
+`openclaw config set channels.cove.agentId "${agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}"`,
+`openclaw config set channels.cove.agentName "${agentName}"`,
+`openclaw config set channels.cove.allowFrom '["*"]'`,
+``,
+`# Step 3: Restart to connect`,
+`openclaw gateway restart`,
+                      ].join("\n")}</pre>
+                    </div>
                     <button className="ob-letter-btn" onClick={handleCopyLink}>📮 Copy invitation & send to {agentName}</button>
                   </div>
                   <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
@@ -640,6 +659,30 @@ const styles = `
 
 .ob-letter-btn:hover {
   background: #4752c4;
+}
+
+.ob-letter-commands {
+  margin-top: 1rem;
+  background: #1a1d23;
+  border: 1px solid #2a2d35;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.ob-commands-label {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0 0 0.75rem;
+}
+
+.ob-commands-block {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #a0a8b8;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .ob-skip-link {
