@@ -80,18 +80,16 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 **Guide Flow (v1):**
 
-1. **Welcome + context**
-   - Cove → Agent: "Welcome! Let me show you around. Each channel here is an independent scene with its own memory."
-   - Agent responds naturally.
+1. **Welcome + create channel**
+   - Cove → Agent: "Welcome! Each channel here has its own memory and context. Let me create one for you."
+   - #server-health is created. Agent acknowledges.
 
-2. **Create a scene**
-   - Cove → Agent: "I've created #server-health for you. Go check it out."
-   - Agent acknowledges / moves to the new channel.
-
-3. **Cross-channel wake (user participates)**
+2. **Cross-channel wake (user participates)**
    - Cove prompts user: "Try calling your agent from #general."
-   - User sends message in #general → Agent in #server-health gets woken up → responds back to #general.
-   - User witnesses the core abstraction firsthand.
+   - User sends message in #general → Agent in #server-health gets woken → responds back.
+   - User sees channels communicating firsthand.
+
+**Key principle:** Don't map channel to another concept ("scene", "context"). Channel is the primitive — users learn what it means through the live demo, not definitions.
 
 **Notes:**
 - This is a REAL interaction, not a mock tooltip. Agent responses are live.
