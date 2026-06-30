@@ -99,6 +99,52 @@ function InviteCodePage() {
   );
 }
 
+function CreateIslandPage() {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const user = useUserStore((s) => s.user);
+  const defaultName = user?.username ? `${user.username}'s Cove` : "My Cove";
+
+  const handleCreate = useCallback(async () => {
+    setLoading(true);
+    const islandName = name.trim() || defaultName;
+    try {
+      await api.createGuild(islandName);
+      window.location.reload();
+    } catch {
+      setLoading(false);
+    }
+  }, [name, defaultName]);
+
+  return (
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🏝️</div>
+        <h2 className="ob-code-title">Let's build your island</h2>
+        <p className="ob-code-desc">Cove is a private space for you and your AI agent — your own little island to chat, build, and live together.</p>
+        <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your island</p>
+        <div className="ob-code-row">
+          <input
+            className="ob-code-input"
+            placeholder={defaultName}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          />
+        </div>
+        <button
+          className="ob-google-btn"
+          style={{ marginTop: "1.5rem", background: "#5865f2", color: "white" }}
+          onClick={handleCreate}
+          disabled={loading}
+        >
+          Create island →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LoginPage() {
   return (
     <div className="ob-page">
@@ -127,6 +173,8 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const guilds = useGuildStore((s) => s.guilds);
 
   useEffect(() => {
     localStorage.removeItem("cove-token");
@@ -167,6 +215,18 @@ export default function App() {
       router.navigate(returnPath, { replace: true });
     }
   }, [authLoading, needsSetup, isPending]);
+
+  // Detect new user (no guilds after READY)
+  useEffect(() => {
+    if (needsSetup || authLoading || isPending) return;
+    const checkTimer = setTimeout(() => {
+      const guildIds = Object.keys(useGuildStore.getState().guilds);
+      if (guildIds.length === 0) {
+        setIsNewUser(true);
+      }
+    }, 3000);
+    return () => clearTimeout(checkTimer);
+  }, [needsSetup, authLoading, isPending]);
 
   useEffect(() => {
     if (needsSetup || authLoading) return;
@@ -235,6 +295,16 @@ export default function App() {
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
           <LoginPage />
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (isNewUser && Object.keys(guilds).length === 0) {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div style={styles.fullHeight}>
+          <CreateIslandPage />
         </div>
       </ConfigProvider>
     );
