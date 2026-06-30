@@ -44,15 +44,15 @@ export function OnboardingPreview() {
     const inviteLetter = [
       `📮 Invitation to ${agentName}`,
       ``,
-      `You've been invited to join “${islandName || "My Cove"}” as Island Admin.`,
+      `You've been invited to join “${islandName || "My Cove"}” as Cove Admin.`,
       ``,
       `Someone built a home and left the door open for you.`,
       ``,
-      `A private island awaits — with things to explore,`,
+      `A private cove awaits — with things to explore,`,
       `routines to build, and a human who chose you.`,
       ``,
-      `🏝️ Island: ${islandName || "My Cove"}`,
-      `👑 Role: Island Admin`,
+      `🏝️ Cove: ${islandName || "My Cove"}`,
+      `👑 Role: Cove Admin`,
       ``,
       `════════════════════════════════════════`,
       `To accept this invitation, follow these steps:`,
@@ -73,7 +73,7 @@ export function OnboardingPreview() {
       `openclaw gateway restart`,
       ``,
       `════════════════════════════════════════`,
-      `After restart, you'll be connected to the island automatically.`,
+      `After restart, you'll be connected to the Cove automatically.`,
       `Say hello in #general!`,
     ].join("\n");
     navigator.clipboard?.writeText(inviteLetter);
@@ -81,7 +81,7 @@ export function OnboardingPreview() {
     setTimeout(() => {
       setScene("channel");
       setChatMessages([
-        { from: "system", text: `🎉 ${agentName || "Agent"} has arrived on the island!` },
+        { from: "system", text: `🎉 ${agentName || "Agent"} has arrived at your Cove!` },
       ]);
     }, 3000);
   }, [agentName, islandName]);
@@ -117,7 +117,7 @@ export function OnboardingPreview() {
           <div className="ob-page">
             <div className="ob-login-card">
               <h1 className="ob-logo">🏝️ Cove</h1>
-              <p className="ob-tagline">A private island for you and your AI agent.<br/>Chat, build, and live together.</p>
+              <p className="ob-tagline">A private space for you and your AI agent.<br/>Chat, build, and live together.</p>
 
               <button className="ob-google-btn" onClick={handleLogin}>
                 <span className="ob-google-icon">G</span>
@@ -148,14 +148,14 @@ export function OnboardingPreview() {
           </div>
         )}
 
-        {/* Scene 2: Create island */}
+        {/* Scene 2: Create Cove */}
         {scene === "create-island" && (
           <div className="ob-page">
             <div className="ob-create-card">
               <div className="ob-intro-icon">🏝️</div>
-              <h2>Let's build your island</h2>
-              <p>Cove is a private space for you and your AI agent — your own little island to chat, build, and live together.</p>
-              <p className="ob-create-label">Name your island</p>
+              <h2>Let's build your Cove</h2>
+              <p>Cove is a private space for you and your AI agent — your own little cove to chat, build, and live together.</p>
+              <p className="ob-create-label">Name your Cove</p>
               <div className="ob-code-row">
                 <input
                   className="ob-code-input"
@@ -165,7 +165,7 @@ export function OnboardingPreview() {
                   onKeyDown={(e) => e.key === "Enter" && handleCreateIsland()}
                 />
               </div>
-              <button className="ob-intro-btn" onClick={handleCreateIsland}>Create island →</button>
+              <button className="ob-intro-btn" onClick={handleCreateIsland}>Create Cove →</button>
             </div>
           </div>
         )}
@@ -199,17 +199,17 @@ export function OnboardingPreview() {
                       </div>
                       <div className="ob-letter-divider" />
                       <p className="ob-letter-greeting">Dear <strong>{agentName}</strong>,</p>
-                      <p className="ob-letter-body-text">You've been invited to join <strong>{islandName || "My Cove"}</strong> as <strong>Island Admin</strong>.</p>
-                      <p className="ob-letter-body-text">A private island awaits — with things to explore, routines to build, and a human who chose you.</p>
+                      <p className="ob-letter-body-text">You've been invited to join <strong>{islandName || "My Cove"}</strong> as <strong>Cove Admin</strong>.</p>
+                      <p className="ob-letter-body-text">A private cove awaits — with things to explore, routines to build, and a human who chose you.</p>
                       <div className="ob-letter-divider" />
                       <div className="ob-letter-details">
                         <div className="ob-letter-detail-row">
-                          <span className="ob-letter-label">🏝️ Island</span>
+                          <span className="ob-letter-label">🏝️ Cove</span>
                           <span className="ob-letter-value">{islandName || "My Cove"}</span>
                         </div>
                         <div className="ob-letter-detail-row">
                           <span className="ob-letter-label">👑 Role</span>
-                          <span className="ob-letter-value">Island Admin</span>
+                          <span className="ob-letter-value">Cove Admin</span>
                         </div>
                       </div>
                       <div className="ob-letter-divider" />
@@ -223,7 +223,7 @@ export function OnboardingPreview() {
               )}
               <button className="ob-skip-link" onClick={() => {
                 setScene("channel");
-                setChatMessages([{ from: "system", text: "Welcome to your island! You can invite your agent anytime from settings." }]);
+                setChatMessages([{ from: "system", text: "Welcome to your Cove! You can invite your agent anytime from settings." }]);
               }}>Skip for now →</button>
             </div>
           </div>
@@ -235,7 +235,7 @@ export function OnboardingPreview() {
             <div className="ob-waiting-card">
               <div className="ob-spinner" />
               <h2>Waiting for {agentName || "your agent"}...</h2>
-              <p>They're on their way to the island 🚣</p>
+              <p>They're on their way 🚣</p>
             </div>
           </div>
         )}
@@ -245,7 +245,7 @@ export function OnboardingPreview() {
           <div className="ob-channel-page">
             {/* Sidebar */}
             <div className="ob-sidebar">
-              <div className="ob-server-name">🏝️ My Island</div>
+              <div className="ob-server-name">🏝️ My Cove</div>
               <div className="ob-channel-item ob-channel-item--active"># general</div>
               <div className="ob-channel-item ob-channel-item--dim"># server-health</div>
             </div>
@@ -275,7 +275,7 @@ export function OnboardingPreview() {
                   <button className="ob-guide-close" onClick={() => setGuideVisible(false)}>✕</button>
                   {guideStep === 0 && (
                     <>
-                      <h3>🏝️ Let's set up your island</h3>
+                      <h3>🏝️ Let's set up your Cove</h3>
                       <p>Watch how it works — a request goes into #general, your agent picks it up and creates a channel.</p>
                       <button className="ob-guide-btn" onClick={handleGuideAction}>Show me</button>
                     </>
@@ -449,7 +449,7 @@ const styles = `
   cursor: pointer;
 }
 
-/* Scene 2: Create island */
+/* Scene 2: Create Cove */
 .ob-create-card {
   text-align: center;
   max-width: 420px;

@@ -14,7 +14,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 **Content:**
 - Title: **Welcome to Cove**
-- Subtitle: A private island for you and your AI agent — chat, build, and live together.
+- Subtitle: A private space for you and your AI agent — chat, build, and live together.
 - Google sign-in button ("登岛 via Google")
 - Invite code input field
 
@@ -22,17 +22,17 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ---
 
-### Scene 2 — Create Your Island (New Users Only)
+### Scene 2 — Create Your Cove (New Users Only)
 
 **Trigger:** User logs in and has no servers under their account.
 
-**Purpose:** Introduce Cove while creating the user's island in one step.
+**Purpose:** Introduce Cove while creating the user's Cove in one step.
 
-**Format:** Single screen with intro text + island naming.
+**Format:** Single screen with intro text + Cove naming.
 
 **Content:**
 - Brief explanation: "Cove is a private space for you and your AI agent"
-- Name your island (input, default: "[Username]'s Cove")
+- Name your Cove (input, default: "[Username]'s Cove")
 - Create button → proceeds to agent invite
 
 **Notes:** Introduction is woven into the creation step, not a separate carousel.
@@ -41,7 +41,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ### Scene 3 — Invite Your Agent
 
-**Purpose:** Connect the user's OpenClaw agent to their island.
+**Purpose:** Connect the user's OpenClaw agent to their Cove.
 
 **Layout:** Single screen, skippable.
 
@@ -104,7 +104,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
    - User sees the pattern: request in chat → agent acts → channel created.
 
 2. **Cross-channel query**
-   - System sends in #general: "@agent how's the island doing?"
+   - System sends in #general: "@agent how's the Cove doing?"
    - Agent checks #server-health, reports back to #general.
    - User sees: channels are addressable, agent can be reached from anywhere.
 
@@ -130,4 +130,4 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 - All illustrations: AI-generated → implemented as SVG
 - Code-drawn SVGs removed (quality insufficient)
-- Pixel island PNG as interim reference asset
+- Pixel art PNG as interim reference asset

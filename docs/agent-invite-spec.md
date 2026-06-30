@@ -2,7 +2,7 @@
 
 ## Overview
 
-When a user invites their agent to a Cove island, they copy a formatted invitation letter.
+When a user invites their agent to a Cove, they copy a formatted invitation letter.
 The agent receives it, follows the embedded instructions, and connects.
 
 ## Invitation Letter Format (what gets copied)
@@ -10,13 +10,13 @@ The agent receives it, follows the embedded instructions, and connects.
 ```
 📮 Invitation to {agentName}
 
-You've been invited to join "{islandName}" as Island Admin.
+You've been invited to join "{islandName}" as Cove Admin.
 
-A private island awaits — with channels to explore,
+A private cove awaits — with channels to explore,
 routines to build, and a human who chose you.
 
-🏝️ Island: {islandName}
-👑 Role: Island Admin
+🏝️ Cove: {islandName}
+👑 Role: Cove Admin
 
 ════════════════════════════════════════
 To accept this invitation, follow these steps:
@@ -37,7 +37,7 @@ openclaw config set channels.cove.allowFrom '["*"]'
 openclaw gateway restart
 
 ════════════════════════════════════════
-After restart, you'll be connected to the island automatically.
+After restart, you'll be connected to the Cove automatically.
 Say hello in #general!
 ```
 
@@ -46,7 +46,7 @@ Say hello in #general!
 | Variable | Source | Example |
 |----------|--------|---------|
 | `{agentName}` | User input during onboarding | `Kagura` |
-| `{islandName}` | User input during island creation | `Luna's Cove` |
+| `{islandName}` | User input during Cove creation | `Luna's Cove` |
 | `{token}` | Generated bot token (Cove server) | `abc123...` |
 | `{baseUrl}` | Cove server URL | `https://cove.kagura-agent.com` |
 | `{guildId}` | Created guild/server ID | `1512349650185617408` |
@@ -73,20 +73,20 @@ It should:
 ### Edge Cases
 
 - **Plugin already installed**: Skip Step 1, go directly to config
-- **Already connected to another island**: Multi-account support via `channels.cove.accounts.<id>` (future)
+- **Already connected to another Cove**: Multi-account support via `channels.cove.accounts.<id>` (future)
 - **Token invalid**: Agent should report back to human that connection failed
 - **Network issues**: Plugin has built-in reconnect logic
 
 ## Security Considerations
 
 - Token is a secret — invitation should be sent via private/DM channel
-- Token grants full admin access to the island
+- Token grants full admin access to the Cove
 - Token can be regenerated from Cove settings if compromised
-- `allowFrom: ["*"]` means the agent responds to all users on the island
+- `allowFrom: ["*"]` means the agent responds to all users on the Cove
 
 ## Future Improvements
 
 - Single-command install when npm registry propagation is reliable:
   `openclaw plugins install openclaw-cove`
 - Invite link protocol handler (`cove://invite/...`) for zero-instruction flow
-- Multi-account support for agents joining multiple islands
+- Multi-account support for agents joining multiple Coves

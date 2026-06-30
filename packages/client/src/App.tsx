@@ -99,7 +99,7 @@ function InviteCodePage() {
   );
 }
 
-function CreateIslandPage() {
+function CreateCovePage() {
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
   const [joinCode, setJoinCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -125,7 +125,7 @@ function CreateIslandPage() {
       useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id });
       window.location.href = "/";
     } catch {
-      setError("Failed to create island");
+      setError("Failed to create Cove");
       setLoading(false);
     }
   }, [name, defaultName]);
@@ -138,7 +138,7 @@ function CreateIslandPage() {
       await api.joinGuild(joinCode.trim());
       window.location.reload();
     } catch {
-      setError("Invalid invite or island not found");
+      setError("Invalid invite or Cove not found");
       setLoading(false);
     }
   }, [joinCode]);
@@ -155,14 +155,14 @@ function CreateIslandPage() {
             style={{ marginBottom: "0.75rem", background: "#5865f2", color: "white" }}
             onClick={() => setMode("create")}
           >
-            Create my island
+            Create my Cove
           </button>
           <button
             className="ob-google-btn"
             style={{ background: "#1a1d23", color: "#e8e8e8", border: "1px solid #333" }}
             onClick={() => setMode("join")}
           >
-            Join an island
+            Join a Cove
           </button>
         </div>
       </div>
@@ -173,7 +173,7 @@ function CreateIslandPage() {
     return (
       <div className="ob-page">
         <div className="ob-login-card">
-          <h2 className="ob-code-title">Join an island</h2>
+          <h2 className="ob-code-title">Join a Cove</h2>
           <p className="ob-code-desc">Enter the invite link or code you received.</p>
           <div className="ob-code-row">
             <input
@@ -196,9 +196,9 @@ function CreateIslandPage() {
     <div className="ob-page">
       <div className="ob-login-card">
         <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🏝️</div>
-        <h2 className="ob-code-title">Create your island</h2>
-        <p className="ob-code-desc">A private space for you and your AI agent — your own little island to chat, build, and live together.</p>
-        <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your island</p>
+        <h2 className="ob-code-title">Create your Cove</h2>
+        <p className="ob-code-desc">A private space for you and your AI agent — your own little cove to chat, build, and live together.</p>
+        <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your Cove</p>
         <div className="ob-code-row">
           <input
             className="ob-code-input"
@@ -215,7 +215,7 @@ function CreateIslandPage() {
           onClick={handleCreate}
           disabled={loading}
         >
-          Create island →
+          Create Cove →
         </button>
         <button className="ob-back-btn" onClick={() => { setMode("choose"); setError(""); }}>← Back</button>
       </div>
@@ -228,7 +228,7 @@ function LoginPage() {
     <div className="ob-page">
       <div className="ob-login-card">
         <h1 className="ob-logo">🏝️ Cove</h1>
-        <p className="ob-tagline">A private island for you and your AI agent.<br/>Chat, build, and live together.</p>
+        <p className="ob-tagline">A private space for you and your AI agent.<br/>Chat, build, and live together.</p>
         <button
           className="ob-google-btn"
           onClick={() => {
@@ -378,7 +378,7 @@ export default function App() {
     return (
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
-          <CreateIslandPage />
+          <CreateCovePage />
         </div>
       </ConfigProvider>
     );
