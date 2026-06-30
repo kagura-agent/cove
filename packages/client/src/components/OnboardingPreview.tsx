@@ -44,10 +44,10 @@ export function OnboardingPreview() {
 
   const handleGuideAction = useCallback(() => {
     if (guideStep === 0) {
-      // Cove introduces itself to agent
+      // System introduces and creates channel
       setChatMessages((prev) => [
         ...prev,
-        { from: "cove", text: "Welcome to the island! Each channel here has its own memory and context. Let me create one for you." },
+        { from: "system", text: "Each channel has its own memory and context. Creating #server-health..." },
         { from: "system", text: "Channel #server-health created." },
         { from: "agent", text: "Got it. I'll keep watch over there." },
       ]);
@@ -56,8 +56,8 @@ export function OnboardingPreview() {
       // Demo cross-channel wake
       setChatMessages((prev) => [
         ...prev,
-        { from: "cove", text: "Now try calling your agent from #general — they can be woken up from any channel." },
-        { from: "cove", text: "[from #general] @agent how's the island?" },
+        { from: "system", text: "Try calling your agent from #general — they can be woken up from any channel." },
+        { from: "system", text: "[from #general] @agent how's the island?" },
         { from: "agent", text: "Woke up in #server-health! Disk 62%, all services green. Going back to sleep 💤" },
       ]);
       setGuideStep(2);
@@ -174,7 +174,7 @@ export function OnboardingPreview() {
                 {chatMessages.map((msg, i) => (
                   <div key={i} className={`ob-msg ob-msg--${msg.from}`}>
                     <span className="ob-msg-author">
-                      {msg.from === "cove" ? "🏝️ Cove" : msg.from === "agent" ? "🤖 Agent" : "📢 System"}
+                      {msg.from === "agent" ? "🤖 Agent" : "📢 System"}
                     </span>
                     <span className="ob-msg-text">{msg.text}</span>
                   </div>
@@ -582,7 +582,6 @@ const styles = `
   color: #999;
 }
 
-.ob-msg--cove .ob-msg-author { color: #7dc4e4; }
 .ob-msg--agent .ob-msg-author { color: #a6da95; }
 .ob-msg--system .ob-msg-author { color: #f5a97f; }
 
