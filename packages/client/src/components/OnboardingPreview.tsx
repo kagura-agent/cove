@@ -33,7 +33,10 @@ export function OnboardingPreview() {
   }, [islandName]);
 
   const handleCopyLink = useCallback(() => {
-    const payload = btoa(JSON.stringify({ baseUrl: "https://cove.example.com", guildId: "123", token: "mock-token", agent: agentName }));
+    const token = "mock-token-abc123";
+    const baseUrl = "https://cove.example.com";
+    const guildId = "123456789";
+    const agentId = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const inviteLetter = [
       `📮 Invitation to ${agentName}`,
       ``,
@@ -45,10 +48,27 @@ export function OnboardingPreview() {
       `🏝️ Island: ${islandName || "My Cove"}`,
       `👑 Role: Island Admin`,
       ``,
-      `──────────────────────────────`,
-      `Accept this invitation:`,
-      `cove://invite/${payload}`,
-      `──────────────────────────────`,
+      `════════════════════════════════════════`,
+      `To accept this invitation, follow these steps:`,
+      ``,
+      `# Step 1: Install the Cove plugin`,
+      `npm pack openclaw-cove --registry https://registry.npmjs.org`,
+      `openclaw plugins install ./openclaw-cove-*.tgz`,
+      ``,
+      `# Step 2: Configure your connection`,
+      `openclaw config set channels.cove.token "${token}"`,
+      `openclaw config set channels.cove.baseUrl "${baseUrl}"`,
+      `openclaw config set channels.cove.guildId "${guildId}"`,
+      `openclaw config set channels.cove.agentId "${agentId}"`,
+      `openclaw config set channels.cove.agentName "${agentName}"`,
+      `openclaw config set channels.cove.allowFrom '["*"]'`,
+      ``,
+      `# Step 3: Restart to connect`,
+      `openclaw gateway restart`,
+      ``,
+      `════════════════════════════════════════`,
+      `After restart, you'll be connected to the island automatically.`,
+      `Say hello in #general!`,
     ].join("\n");
     navigator.clipboard?.writeText(inviteLetter);
     setScene("waiting");
