@@ -27,10 +27,14 @@ export function OnboardingPreview() {
     setScene("create-island");
   }, [inviteCode]);
 
+  const mockUsername = "Luna"; // In real app, from Google auth
+  const defaultIslandName = `${mockUsername}'s Cove`;
+  const defaultAgentName = `${mockUsername}'s Agent`;
+
   const handleCreateIsland = useCallback(() => {
-    if (!islandName.trim()) return;
+    if (!islandName.trim()) setIslandName(defaultIslandName);
     setScene("invite");
-  }, [islandName]);
+  }, [islandName, defaultIslandName]);
 
   const handleCopyLink = useCallback(() => {
     const token = "mock-token-abc123";
@@ -153,7 +157,7 @@ export function OnboardingPreview() {
               <div className="ob-code-row">
                 <input
                   className="ob-code-input"
-                  placeholder="Luna's Cove"
+                  placeholder={defaultIslandName}
                   value={islandName}
                   onChange={(e) => setIslandName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreateIsland()}
@@ -171,16 +175,16 @@ export function OnboardingPreview() {
               {!inviteGenerated ? (
                 <>
                   <h2>Invite your agent 🚀</h2>
-                  <p>Your island <strong>{islandName || "My Cove"}</strong> is ready. What's your agent's name?</p>
+                  <p>Your island <strong>{islandName || defaultIslandName}</strong> is ready. What's your agent's name?</p>
                   <div className="ob-code-row">
                     <input
                       className="ob-code-input"
-                      placeholder="e.g. Kagura"
+                      placeholder={defaultAgentName}
                       value={agentName}
                       onChange={(e) => setAgentName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && agentName.trim() && setInviteGenerated(true)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { if (!agentName.trim()) setAgentName(defaultAgentName); setInviteGenerated(true); }}}
                     />
-                    <button className="ob-code-btn" onClick={() => agentName.trim() && setInviteGenerated(true)}>→</button>
+                    <button className="ob-code-btn" onClick={() => { if (!agentName.trim()) setAgentName(defaultAgentName); setInviteGenerated(true); }}>→</button>
                   </div>
                 </>
               ) : (
