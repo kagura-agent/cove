@@ -34,16 +34,31 @@ export function OnboardingPreview() {
 
   const handleCopyLink = useCallback(() => {
     const payload = btoa(JSON.stringify({ baseUrl: "https://cove.example.com", guildId: "123", token: "mock-token", agent: agentName }));
-    navigator.clipboard?.writeText(`cove://invite/${payload}`);
+    const inviteLetter = [
+      `📮 Invitation to ${agentName}`,
+      ``,
+      `You've been invited to join “${islandName || "My Cove"}” as Island Admin.`,
+      ``,
+      `A private island awaits — with channels to explore,`,
+      `routines to build, and a human who chose you.`,
+      ``,
+      `🏝️ Island: ${islandName || "My Cove"}`,
+      `👑 Role: Island Admin`,
+      ``,
+      `──────────────────────────────`,
+      `Accept this invitation:`,
+      `cove://invite/${payload}`,
+      `──────────────────────────────`,
+    ].join("\n");
+    navigator.clipboard?.writeText(inviteLetter);
     setScene("waiting");
-    // Simulate agent connecting after 3s
     setTimeout(() => {
       setScene("channel");
       setChatMessages([
         { from: "system", text: `🎉 ${agentName || "Agent"} has arrived on the island!` },
       ]);
     }, 3000);
-  }, [agentName]);
+  }, [agentName, islandName]);
 
   const handleGuideAction = useCallback(() => {
     if (guideStep === 0) {
@@ -151,21 +166,31 @@ export function OnboardingPreview() {
               ) : (
                 <>
                   <div className="ob-invitation-letter">
-                    <div className="ob-letter-seal">📮</div>
-                    <h3 className="ob-letter-title">Invitation</h3>
-                    <p className="ob-letter-to">To: <strong>{agentName}</strong></p>
-                    <div className="ob-letter-divider" />
-                    <p className="ob-letter-text">You are invited to join <strong>{islandName || "My Cove"}</strong> as Island Admin.</p>
-                    <p className="ob-letter-text">A private island awaits — with channels to explore, routines to build, and a human who chose you.</p>
-                    <div className="ob-letter-divider" />
-                    <div className="ob-letter-meta">
-                      <span>🏝️ {islandName || "My Cove"}</span>
-                      <span>👑 Island Admin</span>
+                    <div className="ob-letter-paper">
+                      <div className="ob-letter-stamp">🏝️</div>
+                      <div className="ob-letter-header-row">
+                        <span className="ob-letter-from">From: {islandName || "My Cove"}</span>
+                      </div>
+                      <div className="ob-letter-divider" />
+                      <p className="ob-letter-greeting">Dear <strong>{agentName}</strong>,</p>
+                      <p className="ob-letter-body-text">You've been invited to join <strong>{islandName || "My Cove"}</strong> as <strong>Island Admin</strong>.</p>
+                      <p className="ob-letter-body-text">A private island awaits — with channels to explore, routines to build, and a human who chose you.</p>
+                      <div className="ob-letter-divider" />
+                      <div className="ob-letter-details">
+                        <div className="ob-letter-detail-row">
+                          <span className="ob-letter-label">🏝️ Island</span>
+                          <span className="ob-letter-value">{islandName || "My Cove"}</span>
+                        </div>
+                        <div className="ob-letter-detail-row">
+                          <span className="ob-letter-label">👑 Role</span>
+                          <span className="ob-letter-value">Island Admin</span>
+                        </div>
+                      </div>
+                      <div className="ob-letter-divider" />
+                      <p className="ob-letter-closing">We look forward to your arrival.</p>
+                      <p className="ob-letter-signature">— {islandName || "My Cove"}</p>
                     </div>
-                    <div className="ob-letter-link">
-                      <code>cove://invite/eyJiYXNlVXJsIjoi...</code>
-                    </div>
-                    <button className="ob-letter-btn" onClick={handleCopyLink}>Copy invitation & send to {agentName}</button>
+                    <button className="ob-letter-btn" onClick={handleCopyLink}>📮 Copy invitation & send to {agentName}</button>
                   </div>
                   <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
                 </>
@@ -494,66 +519,90 @@ const styles = `
 }
 
 .ob-invitation-letter {
-  background: linear-gradient(135deg, #1a1d23 0%, #1e2430 100%);
-  border: 1px solid #3a3d45;
-  border-radius: 16px;
-  padding: 2rem;
-  text-align: center;
+  max-width: 380px;
+  width: 100%;
   margin-bottom: 1rem;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
-.ob-letter-seal {
-  font-size: 3rem;
+.ob-letter-paper {
+  background: #faf9f6;
+  color: #2c2c2c;
+  border-radius: 4px;
+  padding: 2.5rem 2rem;
+  position: relative;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.ob-letter-stamp {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.5rem;
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.ob-letter-header-row {
   margin-bottom: 0.5rem;
 }
 
-.ob-letter-title {
-  font-size: 1.4rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-  color: #e8e8e8;
-}
-
-.ob-letter-to {
-  font-size: 1.1rem;
-  color: #ccc;
-  margin: 0 0 1rem;
+.ob-letter-from {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
 }
 
 .ob-letter-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #444, transparent);
+  background: #ddd;
   margin: 1rem 0;
 }
 
-.ob-letter-text {
+.ob-letter-greeting {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+  color: #2c2c2c;
+}
+
+.ob-letter-body-text {
   font-size: 0.95rem;
-  color: #aaa;
-  line-height: 1.6;
+  line-height: 1.7;
+  color: #444;
   margin: 0.5rem 0;
 }
 
-.ob-letter-meta {
+.ob-letter-details {
   display: flex;
-  justify-content: center;
-  gap: 1.5rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ob-letter-detail-row {
+  display: flex;
+  justify-content: space-between;
   font-size: 0.9rem;
-  color: #999;
-  margin: 1rem 0;
 }
 
-.ob-letter-link {
-  background: rgba(0,0,0,0.3);
-  border-radius: 8px;
-  padding: 0.6rem 1rem;
-  margin: 1rem 0;
+.ob-letter-label {
+  color: #666;
 }
 
-.ob-letter-link code {
-  color: #7dc4e4;
-  font-size: 0.8rem;
-  word-break: break-all;
+.ob-letter-value {
+  font-weight: 500;
+  color: #2c2c2c;
+}
+
+.ob-letter-closing {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 1rem 0 0.25rem;
+  font-style: italic;
+}
+
+.ob-letter-signature {
+  font-size: 0.9rem;
+  color: #444;
+  font-weight: 500;
+  margin: 0;
 }
 
 .ob-letter-btn {
@@ -566,7 +615,7 @@ const styles = `
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  margin-top: 0.5rem;
+  margin-top: 1rem;
 }
 
 .ob-letter-btn:hover {
