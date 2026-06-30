@@ -66,9 +66,12 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ### Scene 5 — Connected + Guided Tour
 
-**Purpose:** First real interaction inside the actual product UI.
+**Purpose:** First real interaction inside the actual product UI. Teach Cove's core abstraction.
 
-**Layout:** Standard channel page (the real interface) + floating guide overlay on the right.
+**Layout:** Standard channel page (the real interface) + floating guide overlay.
+
+**Core Abstraction to Convey:**
+> Each channel is an **addressable, wakeable context** for your agent — a persistent scene with its own memory that other scenes can find and wake up.
 
 **Behavior:**
 - User sees the normal channel UI immediately (familiarization)
@@ -78,16 +81,14 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 **Guide Steps (v1):**
 
-1. **Welcome message**
-   - Overlay: "Your agent has safely arrived! Let me introduce Cove to them."
-   - Chat: System sends introduction message to agent (as #From Cove)
-   - Wait for agent reply
-   - Overlay: "This is how you communicate on the island — through chat."
+1. **Channels = Scenes**
+   - Overlay: "Each channel is a scene — a separate context for your agent with its own memory."
+   - Action: Guide user to create #server-health channel.
 
-2. **First feature setup** (v1: one feature only)
-   - Overlay: Suggests a feature (e.g. "Island Health Center")
-   - If user accepts → Chat: sends message asking agent to create #server-health channel
-   - More features to be added later (pulled from proven Discord channel patterns)
+2. **Scenes are addressable + wakeable**
+   - Overlay: "Other scenes can find it and wake it up. Let's try."
+   - Action: From #general, trigger #server-health. It wakes up, does its job, reports back to #general.
+   - Overlay: "That's Cove — you're giving your agent an architecture, not just a chatbox."
 
 ---
 
