@@ -32,7 +32,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 **Content:**
 - Brief explanation: "Cove is a private space for you and your AI agent"
-- Name your Cove (input, default: "[Username]'s Cove")
+- Name your server (input, default: "[Username]'s Cove")
 - Create button → proceeds to agent invite
 
 **Notes:** Introduction is woven into the creation step, not a separate carousel.
@@ -104,7 +104,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
    - User sees the pattern: request in chat → agent acts → channel created.
 
 2. **Cross-channel query**
-   - System sends in #general: "@agent how's the Cove doing?"
+   - System sends in #general: "@agent how's the server doing?"
    - Agent checks #server-health, reports back to #general.
    - User sees: channels are addressable, agent can be reached from anywhere.
 

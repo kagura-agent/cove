@@ -105,13 +105,13 @@ function CreateCovePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const username = useUserStore((s) => s.username);
-  const defaultName = username ? `${username}'s Cove` : "My Cove";
+  const defaultName = username ? `${username}'s Server` : "My Server";
   const [name, setName] = useState(defaultName);
 
   // Update name when user data arrives
   useEffect(() => {
-    if (username && name === "My Cove") {
-      setName(`${username}'s Cove`);
+    if (username && name === "My Server") {
+      setName(`${username}'s Server`);
     }
   }, [username]);
 
@@ -125,7 +125,7 @@ function CreateCovePage() {
       useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id });
       window.location.href = "/";
     } catch {
-      setError("Failed to create Cove");
+      setError("Failed to create server");
       setLoading(false);
     }
   }, [name, defaultName]);
@@ -138,7 +138,7 @@ function CreateCovePage() {
       await api.joinGuild(joinCode.trim());
       window.location.reload();
     } catch {
-      setError("Invalid invite or Cove not found");
+      setError("Invalid invite or server not found");
       setLoading(false);
     }
   }, [joinCode]);
@@ -155,14 +155,14 @@ function CreateCovePage() {
             style={{ marginBottom: "0.75rem", background: "#5865f2", color: "white" }}
             onClick={() => setMode("create")}
           >
-            Create my Cove
+            Create a server
           </button>
           <button
             className="ob-google-btn"
             style={{ background: "#1a1d23", color: "#e8e8e8", border: "1px solid #333" }}
             onClick={() => setMode("join")}
           >
-            Join a Cove
+            Join a server
           </button>
         </div>
       </div>
@@ -173,7 +173,7 @@ function CreateCovePage() {
     return (
       <div className="ob-page">
         <div className="ob-login-card">
-          <h2 className="ob-code-title">Join a Cove</h2>
+          <h2 className="ob-code-title">Join a server</h2>
           <p className="ob-code-desc">Enter the invite link or code you received.</p>
           <div className="ob-code-row">
             <input
@@ -196,9 +196,9 @@ function CreateCovePage() {
     <div className="ob-page">
       <div className="ob-login-card">
         <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🏝️</div>
-        <h2 className="ob-code-title">Create your Cove</h2>
-        <p className="ob-code-desc">A private space for you and your AI agent — your own little cove to chat, build, and live together.</p>
-        <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your Cove</p>
+        <h2 className="ob-code-title">Create your server</h2>
+        <p className="ob-code-desc">A private space for you and your AI agent — your own space to chat, build, and live together.</p>
+        <p style={{ color: "#ccc", fontSize: "0.9rem", fontWeight: 500, marginBottom: "0.5rem", textAlign: "left" }}>Name your server</p>
         <div className="ob-code-row">
           <input
             className="ob-code-input"
@@ -215,7 +215,7 @@ function CreateCovePage() {
           onClick={handleCreate}
           disabled={loading}
         >
-          Create Cove →
+          Create server →
         </button>
         <button className="ob-back-btn" onClick={() => { setMode("choose"); setError(""); }}>← Back</button>
       </div>

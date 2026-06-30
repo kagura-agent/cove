@@ -10,13 +10,13 @@ The agent receives it, follows the embedded instructions, and connects.
 ```
 📮 Invitation to {agentName}
 
-You've been invited to join "{islandName}" as Cove Admin.
+You've been invited to join "{islandName}" as Server Admin.
 
 A private cove awaits — with channels to explore,
 routines to build, and a human who chose you.
 
-🏝️ Cove: {islandName}
-👑 Role: Cove Admin
+🏝️ Server: {islandName}
+👑 Role: Server Admin
 
 ════════════════════════════════════════
 To accept this invitation, follow these steps:
@@ -37,7 +37,7 @@ openclaw config set channels.cove.allowFrom '["*"]'
 openclaw gateway restart
 
 ════════════════════════════════════════
-After restart, you'll be connected to the Cove automatically.
+After restart, you'll be connected automatically.
 Say hello in #general!
 ```
 
