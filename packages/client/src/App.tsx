@@ -101,12 +101,12 @@ function InviteCodePage() {
 
 function CreateIslandPage() {
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
-  const [name, setName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const user = useUserStore((s) => s.user);
   const defaultName = user?.username ? `${user.username}'s Cove` : "My Cove";
+  const [name, setName] = useState(defaultName);
 
   const handleCreate = useCallback(async () => {
     setLoading(true);
