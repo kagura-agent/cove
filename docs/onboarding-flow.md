@@ -66,29 +66,37 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ### Scene 5 — Connected + Guided Tour
 
-**Purpose:** First real interaction inside the actual product UI. Teach Cove's core abstraction.
+**Purpose:** First real interaction inside the actual product UI. Teach Cove's core abstraction through live demonstration.
 
-**Layout:** Standard channel page (the real interface) + floating guide overlay.
+**Layout:** Standard channel page (the real interface). No floating overlay — the guide IS a channel.
 
 **Core Abstraction to Convey:**
 > Each channel is an **addressable, wakeable context** for your agent — a persistent scene with its own memory that other scenes can find and wake up.
 
-**Behavior:**
-- User sees the normal channel UI immediately (familiarization)
-- Right-side floating window provides step-by-step guidance
-- Each guide step triggers real actions in the chat area
-- User can dismiss the overlay at any time (skip)
+**Mechanism:** A #onboarding channel is auto-created. The system (Cove) sends messages there, and the agent naturally responds — creating a three-way interaction:
+- **Cove (system)** — sends guide prompts
+- **Agent** — responds naturally (proving the system works)
+- **User** — observes, then participates
 
-**Guide Steps (v1):**
+**Guide Flow (v1):**
 
-1. **Channels = Scenes**
-   - Overlay: "Each channel is a scene — a separate context for your agent with its own memory."
-   - Action: Guide user to create #server-health channel.
+1. **Welcome + context**
+   - Cove → Agent: "Welcome! Let me show you around. Each channel here is an independent scene with its own memory."
+   - Agent responds naturally.
 
-2. **Scenes are addressable + wakeable**
-   - Overlay: "Other scenes can find it and wake it up. Let's try."
-   - Action: From #general, trigger #server-health. It wakes up, does its job, reports back to #general.
-   - Overlay: "That's Cove — you're giving your agent an architecture, not just a chatbox."
+2. **Create a scene**
+   - Cove → Agent: "I've created #server-health for you. Go check it out."
+   - Agent acknowledges / moves to the new channel.
+
+3. **Cross-channel wake (user participates)**
+   - Cove prompts user: "Try calling your agent from #general."
+   - User sends message in #general → Agent in #server-health gets woken up → responds back to #general.
+   - User witnesses the core abstraction firsthand.
+
+**Notes:**
+- This is a REAL interaction, not a mock tooltip. Agent responses are live.
+- #onboarding channel can be deleted after or kept as reference.
+- Exact flow may vary in production — this is the conceptual design.
 
 ---
 
