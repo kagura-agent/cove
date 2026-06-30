@@ -108,6 +108,13 @@ function CreateIslandPage() {
   const defaultName = user?.username ? `${user.username}'s Cove` : "My Cove";
   const [name, setName] = useState(defaultName);
 
+  // Update name when user data arrives
+  useEffect(() => {
+    if (user?.username && name === "My Cove") {
+      setName(`${user.username}'s Cove`);
+    }
+  }, [user?.username]);
+
   const handleCreate = useCallback(async () => {
     setLoading(true);
     setError("");
