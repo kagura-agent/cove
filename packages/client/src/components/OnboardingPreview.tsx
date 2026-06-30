@@ -11,7 +11,9 @@ export function OnboardingPreview() {
   const [scene, setScene] = useState<Scene>("login");
   const [islandName, setIslandName] = useState("");
   const [guideStep, setGuideStep] = useState(0);
+  const [agentName, setAgentName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteGenerated, setInviteGenerated] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ from: string; text: string }>>([]);
   const [guideVisible, setGuideVisible] = useState(true);
 
@@ -31,16 +33,17 @@ export function OnboardingPreview() {
   }, [islandName]);
 
   const handleCopyLink = useCallback(() => {
-    navigator.clipboard?.writeText("https://cove.chat/invite/abc123");
+    const payload = btoa(JSON.stringify({ baseUrl: "https://cove.example.com", guildId: "123", token: "mock-token", agent: agentName }));
+    navigator.clipboard?.writeText(`cove://invite/${payload}`);
     setScene("waiting");
     // Simulate agent connecting after 3s
     setTimeout(() => {
       setScene("channel");
       setChatMessages([
-        { from: "system", text: "🏝️ Your agent has arrived on the island!" },
+        { from: "system", text: `🎉 ${agentName || "Agent"} has arrived on the island!` },
       ]);
     }, 3000);
-  }, []);
+  }, [agentName]);
 
   const handleGuideAction = useCallback(() => {
     if (guideStep === 0) {
@@ -130,17 +133,41 @@ export function OnboardingPreview() {
         {scene === "invite" && (
           <div className="ob-page">
             <div className="ob-invite-card">
-              <h2>Now, invite your agent 🚀</h2>
-              <p>Your island <strong>{islandName || "My Cove"}</strong> is ready. Send this link to your agent so they can find it.</p>
-              <div className="ob-link-box">
-                <code>https://cove.chat/invite/abc123</code>
-                <button className="ob-copy-btn" onClick={handleCopyLink}>Copy & Continue</button>
-              </div>
-              <p className="ob-hint">After copying, send this to your agent in whatever chat you use with them.</p>
-              <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
+              {!inviteGenerated ? (
+                <>
+                  <h2>Invite your agent 🚀</h2>
+                  <p>Your island <strong>{islandName || "My Cove"}</strong> is ready. What's your agent's name?</p>
+                  <div className="ob-code-row">
+                    <input
+                      className="ob-code-input"
+                      placeholder="e.g. Kagura"
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && agentName.trim() && setInviteGenerated(true)}
+                    />
+                    <button className="ob-code-btn" onClick={() => agentName.trim() && setInviteGenerated(true)}>→</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="ob-invitation-letter">
+                    <p className="ob-letter-header">📮 Invitation to {agentName}</p>
+                    <div className="ob-letter-body">
+                      <p>🏝️ <strong>{islandName || "My Cove"}</strong></p>
+                      <p>👤 Role: Island Admin</p>
+                    </div>
+                    <div className="ob-link-box">
+                      <code>cove://invite/eyJiYXNl...</code>
+                      <button className="ob-copy-btn" onClick={handleCopyLink}>Copy & Send to {agentName}</button>
+                    </div>
+                  </div>
+                  <p className="ob-hint">Send this to {agentName} — they'll auto-configure and connect.</p>
+                  <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
+                </>
+              )}
               <button className="ob-skip-link" onClick={() => {
                 setScene("channel");
-                setChatMessages([{ from: "system", text: "Welcome to your island! You can invite your agent or friends anytime from settings." }]);
+                setChatMessages([{ from: "system", text: "Welcome to your island! You can invite your agent anytime from settings." }]);
               }}>Skip for now →</button>
             </div>
           </div>
@@ -151,7 +178,7 @@ export function OnboardingPreview() {
           <div className="ob-page">
             <div className="ob-waiting-card">
               <div className="ob-spinner" />
-              <h2>Waiting for your agent...</h2>
+              <h2>Waiting for {agentName || "your agent"}...</h2>
               <p>They're on their way to the island 🚣</p>
             </div>
           </div>
@@ -459,6 +486,32 @@ const styles = `
   color: #555;
   font-size: 0.7rem;
   margin-top: 0.5rem;
+}
+
+.ob-invitation-letter {
+  background: #1a1d23;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: left;
+  margin-bottom: 1rem;
+}
+
+.ob-letter-header {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.ob-letter-body {
+  margin-bottom: 1rem;
+}
+
+.ob-letter-body p {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+  color: #ccc;
 }
 
 .ob-skip-link {

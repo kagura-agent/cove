@@ -41,14 +41,32 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 ### Scene 3 — Invite Your Agent
 
-**Purpose:** Transition from intro into action.
+**Purpose:** Connect the user's OpenClaw agent to their island.
 
-**Layout:** Single screen.
+**Layout:** Single screen, skippable.
 
-**Content:**
-- "Now, invite your agent" — shows island name they just created
-- Generated invite link (copy button)
-- Simple instructions: "Send this link to your agent. They'll use it to find your island."
+**Flow:**
+1. User enters their agent's name (e.g. "Kagura")
+2. Cove backend creates a bot user with that name (role: server admin)
+3. Generates an invite payload (baseUrl + token + guildId + bot username)
+4. Displays as an "invitation letter" with ceremony:
+   - "📮 Invitation to [Agent Name]"
+   - Server name, role, encoded link
+5. User copies and sends to their agent
+6. Agent auto-processes: decode → install plugin → configure → connect
+7. Connection success: "🎉 [Agent Name] has arrived!"
+
+**Agent-side processing (OpenClaw):**
+- Recognize `cove://invite/...` link format
+- Decode payload (baseUrl, token, guildId)
+- Install/enable Cove plugin if not present
+- Write config: `channels.cove.accounts.<id>`
+- Connect via WebSocket gateway
+
+**Notes:**
+- Currently supports OpenClaw agents only (small text note)
+- Agent name entered here = bot username on Cove (no rename needed later)
+- Skippable — users can invite later from settings
 
 ---
 
@@ -59,7 +77,7 @@ New user onboarding for Cove — from landing page to first guided interaction w
 **Layout:** Waiting state with subtle animation.
 
 **Content:**
-- "Waiting for your agent to arrive..."
+- "Waiting for [Agent Name] to arrive..."
 - Visual feedback when connection is detected
 
 ---
