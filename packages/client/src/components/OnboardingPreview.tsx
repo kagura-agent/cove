@@ -44,21 +44,21 @@ export function OnboardingPreview() {
 
   const handleGuideAction = useCallback(() => {
     if (guideStep === 0) {
-      // System introduces and creates channel
+      // System sends a request via webhook, agent responds and creates channel
       setChatMessages((prev) => [
         ...prev,
-        { from: "system", text: "Each channel has its own memory and context. Creating #server-health..." },
+        { from: "system", text: "#From System: I need a server-health channel to monitor the agent's machine health." },
+        { from: "agent", text: "On it. Creating #server-health..." },
         { from: "system", text: "Channel #server-health created." },
-        { from: "agent", text: "Got it. I'll keep watch over there." },
+        { from: "agent", text: "Done! Set up #server-health with cove.md — I'll check disk, memory, and services periodically." },
       ]);
       setGuideStep(1);
     } else if (guideStep === 1) {
       // Demo cross-channel wake
       setChatMessages((prev) => [
         ...prev,
-        { from: "system", text: "Try calling your agent from #general — they can be woken up from any channel." },
-        { from: "system", text: "[from #general] @agent how's the island?" },
-        { from: "agent", text: "Woke up in #server-health! Disk 62%, all services green. Going back to sleep 💤" },
+        { from: "system", text: "#From System: @agent how's the island doing?" },
+        { from: "agent", text: "Checked #server-health — disk 62%, memory fine, all services green ✅" },
       ]);
       setGuideStep(2);
     }
@@ -192,22 +192,22 @@ export function OnboardingPreview() {
                   <button className="ob-guide-close" onClick={() => setGuideVisible(false)}>✕</button>
                   {guideStep === 0 && (
                     <>
-                      <h3>🏝️ Welcome</h3>
-                      <p>Each channel has its own memory and context. Your agent can be in multiple channels at once.</p>
-                      <button className="ob-guide-btn" onClick={handleGuideAction}>Create first channel</button>
+                      <h3>🏝️ Let's set up your island</h3>
+                      <p>Watch how it works — a request goes into #general, your agent picks it up and creates a channel.</p>
+                      <button className="ob-guide-btn" onClick={handleGuideAction}>Show me</button>
                     </>
                   )}
                   {guideStep === 1 && (
                     <>
-                      <h3>🔔 Channels can wake each other</h3>
-                      <p>Any channel can reach and wake your agent in another channel. Let's see it in action.</p>
+                      <h3>🔔 Channels talk to each other</h3>
+                      <p>You can ask about any channel from #general. Your agent checks and reports back.</p>
                       <button className="ob-guide-btn" onClick={handleGuideAction}>Try it</button>
                     </>
                   )}
                   {guideStep === 2 && (
                     <>
-                      <h3>✨ That's Cove</h3>
-                      <p>Channels are addressable and wakeable. You're building your agent an architecture.</p>
+                      <h3>✨ That's it</h3>
+                      <p>Say what you need, your agent builds it. Each channel is its own context, addressable from anywhere.</p>
                       <button className="ob-guide-btn" onClick={() => setGuideVisible(false)}>Got it</button>
                     </>
                   )}

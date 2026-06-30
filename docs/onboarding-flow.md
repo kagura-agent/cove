@@ -80,16 +80,17 @@ New user onboarding for Cove — from landing page to first guided interaction w
 
 **Guide Flow (v1):**
 
-1. **Welcome + create channel**
-   - Cove → Agent: "Welcome! Each channel here has its own memory and context. Let me create one for you."
-   - #server-health is created. Agent acknowledges.
+1. **System demonstrates a request**
+   - System sends via webhook in #general: "#From System: I need a server-health channel to monitor the agent's machine health."
+   - Agent responds, creates #server-health, sets up cove.md.
+   - User sees the pattern: request in chat → agent acts → channel created.
 
-2. **Cross-channel wake (user participates)**
-   - Cove prompts user: "Try calling your agent from #general."
-   - User sends message in #general → Agent in #server-health gets woken → responds back.
-   - User sees channels communicating firsthand.
+2. **Cross-channel query**
+   - System sends in #general: "@agent how's the island doing?"
+   - Agent checks #server-health, reports back to #general.
+   - User sees: channels are addressable, agent can be reached from anywhere.
 
-**Key principle:** Don't map channel to another concept ("scene", "context"). Channel is the primitive — users learn what it means through the live demo, not definitions.
+**Key principle:** The guide demonstrates the real workflow — System mimics a user request so the user learns by watching, not by reading instructions.
 
 **Notes:**
 - This is a REAL interaction, not a mock tooltip. Agent responses are live.
