@@ -175,6 +175,7 @@ export default function App() {
   const [isPending, setIsPending] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
   const guilds = useGuildStore((s) => s.guilds);
+  const gatewayReady = useGuildStore((s) => s.gatewayReady);
 
   useEffect(() => {
     localStorage.removeItem("cove-token");
@@ -216,17 +217,12 @@ export default function App() {
     }
   }, [authLoading, needsSetup, isPending]);
 
-  // Detect new user (no guilds after READY)
+  // Detect new user (no guilds after gateway READY)
   useEffect(() => {
-    if (needsSetup || authLoading || isPending) return;
-    const checkTimer = setTimeout(() => {
-      const guildIds = Object.keys(useGuildStore.getState().guilds);
-      if (guildIds.length === 0) {
-        setIsNewUser(true);
-      }
-    }, 3000);
-    return () => clearTimeout(checkTimer);
-  }, [needsSetup, authLoading, isPending]);
+    if (gatewayReady && Object.keys(guilds).length === 0) {
+      setIsNewUser(true);
+    }
+  }, [gatewayReady, guilds]);
 
   useEffect(() => {
     if (needsSetup || authLoading) return;
@@ -305,6 +301,16 @@ export default function App() {
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
           <CreateIslandPage />
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (!gatewayReady) {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div className="ob-page">
+          <div style={{ fontSize: "2rem" }}>🏝️</div>
         </div>
       </ConfigProvider>
     );

@@ -3,7 +3,9 @@ import type { Guild } from "../types";
 
 interface GuildState {
   guilds: Record<string, Guild>;
+  gatewayReady: boolean;
   setGuilds: (guilds: Guild[]) => void;
+  setGatewayReady: () => void;
   addGuild: (guild: Guild) => void;
   updateGuild: (id: string, data: Partial<Guild>) => void;
   removeGuild: (id: string) => void;
@@ -11,10 +13,13 @@ interface GuildState {
 
 export const useGuildStore = create<GuildState>((set) => ({
   guilds: {},
+  gatewayReady: false,
   setGuilds: (guilds) =>
     set({
       guilds: Object.fromEntries(guilds.map((g) => [g.id, g])),
+      gatewayReady: true,
     }),
+  setGatewayReady: () => set({ gatewayReady: true }),
   addGuild: (guild) =>
     set((s) => ({
       guilds: { ...s.guilds, [guild.id]: guild },

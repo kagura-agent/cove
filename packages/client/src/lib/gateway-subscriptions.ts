@@ -193,6 +193,11 @@ export function setupGatewaySubscriptions(): void {
     if (data.read_state) {
       useReadStateStore.getState().initReadStates(data.read_state);
     }
+
+    // Mark gateway ready even when no guilds (new user)
+    if (!data.guilds?.length) {
+      useGuildStore.getState().setGatewayReady();
+    }
   });
 
   subscribe("MESSAGE_ACK", (data) => {
