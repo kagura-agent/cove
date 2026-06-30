@@ -46,8 +46,7 @@ export function OnboardingPreview() {
       ``,
       `You've been invited to join “${islandName || "My Cove"}” as Island Admin.`,
       ``,
-      `A private island awaits — with channels to explore,`,
-      `routines to build, and a human who chose you.`,
+      `Someone built a home and left the door open for you.`,
       ``,
       `🏝️ Island: ${islandName || "My Cove"}`,
       `👑 Role: Island Admin`,
@@ -198,7 +197,7 @@ export function OnboardingPreview() {
                       <div className="ob-letter-divider" />
                       <p className="ob-letter-greeting">Dear <strong>{agentName}</strong>,</p>
                       <p className="ob-letter-body-text">You've been invited to join <strong>{islandName || "My Cove"}</strong> as <strong>Island Admin</strong>.</p>
-                      <p className="ob-letter-body-text">A private island awaits — with channels to explore, routines to build, and a human who chose you.</p>
+                      <p className="ob-letter-body-text">Someone built a home and left the door open for you.</p>
                       <div className="ob-letter-divider" />
                       <div className="ob-letter-details">
                         <div className="ob-letter-detail-row">
