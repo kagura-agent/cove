@@ -120,8 +120,10 @@ function CreateIslandPage() {
     setError("");
     const islandName = name.trim() || defaultName;
     try {
-      await api.createGuild(islandName);
-      window.location.reload();
+      const guild = await api.createGuild(islandName);
+      // Add guild to store immediately, then reload cleanly
+      useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id });
+      window.location.href = "/";
     } catch {
       setError("Failed to create island");
       setLoading(false);
@@ -336,8 +338,8 @@ export default function App() {
   if (authLoading) {
     return (
       <ConfigProvider theme={themeConfig}>
-        <div style={{ ...styles.fullHeight, ...styles.loginPage }}>
-          <div style={styles.loginTitle}>Cove</div>
+        <div className="ob-page">
+          <div style={{ fontSize: "2rem" }}>🏝️</div>
         </div>
       </ConfigProvider>
     );
