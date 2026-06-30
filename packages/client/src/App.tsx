@@ -122,7 +122,7 @@ function CreateCovePage() {
     try {
       const guild = await api.createGuild(islandName);
       // Add guild to store immediately, then reload cleanly
-      useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id });
+      useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id, features: [] });
       window.location.href = "/";
     } catch {
       setError("Failed to create server");
