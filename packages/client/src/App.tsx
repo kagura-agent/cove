@@ -104,16 +104,16 @@ function CreateIslandPage() {
   const [joinCode, setJoinCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const user = useUserStore((s) => s.user);
-  const defaultName = user?.username ? `${user.username}'s Cove` : "My Cove";
+  const username = useUserStore((s) => s.username);
+  const defaultName = username ? `${username}'s Cove` : "My Cove";
   const [name, setName] = useState(defaultName);
 
   // Update name when user data arrives
   useEffect(() => {
-    if (user?.username && name === "My Cove") {
-      setName(`${user.username}'s Cove`);
+    if (username && name === "My Cove") {
+      setName(`${username}'s Cove`);
     }
-  }, [user?.username]);
+  }, [username]);
 
   const handleCreate = useCallback(async () => {
     setLoading(true);
