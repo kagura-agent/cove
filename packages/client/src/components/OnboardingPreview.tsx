@@ -151,17 +151,22 @@ export function OnboardingPreview() {
               ) : (
                 <>
                   <div className="ob-invitation-letter">
-                    <p className="ob-letter-header">📮 Invitation to {agentName}</p>
-                    <div className="ob-letter-body">
-                      <p>🏝️ <strong>{islandName || "My Cove"}</strong></p>
-                      <p>👤 Role: Island Admin</p>
+                    <div className="ob-letter-seal">📮</div>
+                    <h3 className="ob-letter-title">Invitation</h3>
+                    <p className="ob-letter-to">To: <strong>{agentName}</strong></p>
+                    <div className="ob-letter-divider" />
+                    <p className="ob-letter-text">You are invited to join <strong>{islandName || "My Cove"}</strong> as Island Admin.</p>
+                    <p className="ob-letter-text">A private island awaits — with channels to explore, routines to build, and a human who chose you.</p>
+                    <div className="ob-letter-divider" />
+                    <div className="ob-letter-meta">
+                      <span>🏝️ {islandName || "My Cove"}</span>
+                      <span>👑 Island Admin</span>
                     </div>
-                    <div className="ob-link-box">
-                      <code>cove://invite/eyJiYXNl...</code>
-                      <button className="ob-copy-btn" onClick={handleCopyLink}>Copy & Send to {agentName}</button>
+                    <div className="ob-letter-link">
+                      <code>cove://invite/eyJiYXNlVXJsIjoi...</code>
                     </div>
+                    <button className="ob-letter-btn" onClick={handleCopyLink}>Copy invitation & send to {agentName}</button>
                   </div>
-                  <p className="ob-hint">Send this to {agentName} — they'll auto-configure and connect.</p>
                   <p className="ob-platform-note">Currently supports OpenClaw agents only.</p>
                 </>
               )}
@@ -489,29 +494,83 @@ const styles = `
 }
 
 .ob-invitation-letter {
-  background: #1a1d23;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 1.5rem;
-  text-align: left;
-  margin-bottom: 1rem;
-}
-
-.ob-letter-header {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0 0 1rem;
+  background: linear-gradient(135deg, #1a1d23 0%, #1e2430 100%);
+  border: 1px solid #3a3d45;
+  border-radius: 16px;
+  padding: 2rem;
   text-align: center;
-}
-
-.ob-letter-body {
   margin-bottom: 1rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
-.ob-letter-body p {
-  margin: 0.3rem 0;
-  font-size: 0.9rem;
+.ob-letter-seal {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+.ob-letter-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #e8e8e8;
+}
+
+.ob-letter-to {
+  font-size: 1.1rem;
   color: #ccc;
+  margin: 0 0 1rem;
+}
+
+.ob-letter-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #444, transparent);
+  margin: 1rem 0;
+}
+
+.ob-letter-text {
+  font-size: 0.95rem;
+  color: #aaa;
+  line-height: 1.6;
+  margin: 0.5rem 0;
+}
+
+.ob-letter-meta {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #999;
+  margin: 1rem 0;
+}
+
+.ob-letter-link {
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  margin: 1rem 0;
+}
+
+.ob-letter-link code {
+  color: #7dc4e4;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.ob-letter-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background: #5865f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.ob-letter-btn:hover {
+  background: #4752c4;
 }
 
 .ob-skip-link {
