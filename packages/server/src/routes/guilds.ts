@@ -4,7 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { unknownGuild } from "./helpers.js";
-import { generateSnowflake, PermissionBits, DEFAULT_EVERYONE_PERMISSIONS, type Role, type Channel } from "@cove/shared";
+import { generateSnowflake, PermissionBits, DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, type Role, type Channel } from "@cove/shared";
 import { computeBasePermissions } from "../permissions/compute.js";
 
 const MAX_GUILDS_PER_USER = 10;
@@ -104,6 +104,111 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     dispatcher?.guildUpdate(guildId, updated);
 
     return c.json(updated);
+  });
+
+  // POST /guilds/:guildId/invite-agent — Create a bot user and invite them to the guild
+  app.post("/guilds/:guildId/invite-agent", async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const userId = c.get("botUser").id;
+
+    const guild = repos.guilds.getById(guildId);
+    if (!guild) return unknownGuild(c);
+
+    const member = repos.members.get(guildId, userId);
+    if (!member) return unknownGuild(c);
+
+    // Authorization: owner OR MANAGE_GUILD permission
+    const isOwner = guild.owner_id !== null && guild.owner_id === userId;
+    if (!isOwner) {
+      const roles = repos.roles.listByGuild(guildId);
+      const perms = computeBasePermissions(member, guild, roles);
+      if ((perms & PermissionBits.MANAGE_GUILD) === 0n) {
+        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      }
+    }
+
+    const body = await parseJsonBody<{ agentName: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.agentName, "agentName", { required: true, maxLength: 80 });
+    if (err) return validationError(c, err);
+
+    const agentName = body.agentName.trim();
+    const agentId = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+    // Check if bot user already exists
+    if (repos.users.exists(agentId)) {
+      return c.json({ message: `Agent '${agentName}' already exists. Choose a different name.` }, 409);
+    }
+
+    // Create bot user (auto-joins the specified guild)
+    const botUser = repos.users.create({ username: agentName, bot: true }, guildId);
+
+    // Create an ADMINISTRATOR role for the bot
+    const adminRole = repos.roles.create(guildId, {
+      name: "Server Admin",
+      permissions: ALL_PERMISSIONS.toString(),
+    });
+
+    // Assign the admin role to the bot member
+    repos.db
+      .prepare("UPDATE guild_members SET roles = ? WHERE guild_id = ? AND user_id = ?")
+      .run(JSON.stringify([adminRole.id]), guildId, botUser.id);
+
+    // Dispatch GUILD_MEMBER_ADD to notify guild members
+    dispatcher?.guildMemberAdd(guildId, {
+      user: { id: botUser.id },
+      nick: null,
+      roles: [adminRole.id],
+      joined_at: new Date().toISOString(),
+    });
+
+    // Derive baseUrl from request
+    const url = new URL(c.req.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+
+    const inviteLetter = [
+      `📮 Invitation to ${agentName}`,
+      ``,
+      `You've been invited to join "${guild.name}" as Server Admin.`,
+      ``,
+      `A private cove awaits — with channels to explore,`,
+      `routines to build, and a human who chose you.`,
+      ``,
+      `🏝️ Server: ${guild.name}`,
+      `👑 Role: Server Admin`,
+      ``,
+      `════════════════════════════════════════`,
+      `To accept this invitation, follow these steps:`,
+      ``,
+      `# Step 1: Install the Cove plugin`,
+      `npm pack openclaw-cove --registry https://registry.npmjs.org`,
+      `openclaw plugins install ./openclaw-cove-*.tgz`,
+      ``,
+      `# Step 2: Configure your connection`,
+      `openclaw config set channels.cove.token "${botUser.token}"`,
+      `openclaw config set channels.cove.baseUrl "${baseUrl}"`,
+      `openclaw config set channels.cove.guildId "${guildId}"`,
+      `openclaw config set channels.cove.agentId "${agentId}"`,
+      `openclaw config set channels.cove.agentName "${agentName}"`,
+      `openclaw config set channels.cove.allowFrom '["*"]'`,
+      ``,
+      `# Step 3: Restart to connect`,
+      `openclaw gateway restart`,
+      ``,
+      `════════════════════════════════════════`,
+      `After restart, you'll be connected automatically.`,
+      `Say hello in #general!`,
+    ].join("\n");
+
+    return c.json({
+      agentName,
+      token: botUser.token,
+      baseUrl,
+      guildId,
+      agentId,
+      inviteLetter,
+    }, 201);
   });
 
   // DELETE /guilds/:guildId — Delete guild

@@ -337,3 +337,12 @@ export function updateScene(guildId: string, sceneId: string, data: { name?: str
 export function deleteScene(guildId: string, sceneId: string) {
   return api<void>(`${API_PREFIX}/guilds/${guildId}/scenes/${sceneId}`, { method: "DELETE" });
 }
+
+// ─── Agent Invite ─────────────────────────────────────────────────────────
+
+export function inviteAgent(guildId: string, agentName: string) {
+  return api<{ agentName: string; token: string; baseUrl: string; guildId: string; agentId: string; inviteLetter: string }>(
+    `${API_PREFIX}/guilds/${guildId}/invite-agent`,
+    { method: "POST", body: JSON.stringify({ agentName }) },
+  );
+}

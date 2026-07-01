@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
 import { ConfigProvider, theme } from "antd";
 import "./onboarding.css";
@@ -11,6 +11,7 @@ import { useThemeStore } from "./stores/useThemeStore";
 import { router, getActiveIdsFromRouter } from "./lib/router";
 import { routes } from "./lib/routes";
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
+import { dispatcher } from "./lib/gateway-dispatcher";
 import * as api from "./lib/api";
 import { API_PREFIX } from "@cove/shared";
 import type { CSSProperties } from "react";
@@ -99,7 +100,7 @@ function InviteCodePage() {
   );
 }
 
-function CreateCovePage() {
+function CreateCovePage({ onGuildCreated }: { onGuildCreated?: (guildId: string) => void }) {
   const [mode, setMode] = useState<"choose" | "create" | "join">("choose");
   const [joinCode, setJoinCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -121,14 +122,18 @@ function CreateCovePage() {
     const islandName = name.trim() || defaultName;
     try {
       const guild = await api.createGuild(islandName);
-      // Add guild to store immediately, then reload cleanly
+      // Add guild to store immediately
       useGuildStore.getState().addGuild({ id: guild.id, name: guild.name, icon: guild.icon, owner_id: guild.owner_id, features: [] });
-      window.location.href = "/";
+      if (onGuildCreated) {
+        onGuildCreated(guild.id);
+      } else {
+        window.location.href = "/";
+      }
     } catch {
       setError("Failed to create server");
       setLoading(false);
     }
-  }, [name, defaultName]);
+  }, [name, defaultName, onGuildCreated]);
 
   const handleJoin = useCallback(async () => {
     if (!joinCode.trim()) return;
@@ -223,6 +228,158 @@ function CreateCovePage() {
   );
 }
 
+function InviteAgentPage({
+  guildId,
+  guildName,
+  onDone,
+  onSkip,
+}: {
+  guildId: string;
+  guildName: string;
+  onDone: (agentName: string, inviteLetter: string) => void;
+  onSkip: () => void;
+}) {
+  const [agentName, setAgentName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [inviteLetter, setInviteLetter] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleInvite = useCallback(async () => {
+    const name = agentName.trim();
+    if (!name) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.inviteAgent(guildId, name);
+      setInviteLetter(res.inviteLetter);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg.includes("409") ? `An agent named '${name}' already exists. Try a different name.` : "Failed to invite agent. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [agentName, guildId]);
+
+  const handleCopy = useCallback(() => {
+    if (!inviteLetter) return;
+    navigator.clipboard?.writeText(inviteLetter).catch(() => {});
+    setCopied(true);
+    setTimeout(() => onDone(agentName.trim(), inviteLetter), 600);
+  }, [inviteLetter, agentName, onDone]);
+
+  if (inviteLetter) {
+    return (
+      <div className="ob-page">
+        <div className="ob-invite-wrap">
+          <div className="ob-letter-paper">
+            <div className="ob-letter-stamp">🏝️</div>
+            <div className="ob-letter-header-row">
+              <span className="ob-letter-from">From: {guildName}</span>
+            </div>
+            <div className="ob-letter-divider" />
+            <p className="ob-letter-greeting">Dear <strong>{agentName.trim()}</strong>,</p>
+            <p className="ob-letter-body-text">You've been invited to join <strong>{guildName}</strong> as <strong>Server Admin</strong>.</p>
+            <p className="ob-letter-body-text">A private cove awaits — with channels to explore, routines to build, and a human who chose you.</p>
+            <div className="ob-letter-divider" />
+            <div className="ob-letter-details">
+              <div className="ob-letter-detail-row">
+                <span className="ob-letter-label">🏝️ Server</span>
+                <span className="ob-letter-value">{guildName}</span>
+              </div>
+              <div className="ob-letter-detail-row">
+                <span className="ob-letter-label">👑 Role</span>
+                <span className="ob-letter-value">Server Admin</span>
+              </div>
+            </div>
+            <div className="ob-letter-divider" />
+            <details style={{ marginTop: "0.5rem" }}>
+              <summary style={{ fontSize: "0.8rem", color: "#888", cursor: "pointer" }}>View install commands</summary>
+              <pre className="ob-letter-pre" style={{ marginTop: "0.5rem" }}>{inviteLetter}</pre>
+            </details>
+            <p className="ob-letter-closing">We look forward to your arrival.</p>
+            <p className="ob-letter-signature">— {guildName}</p>
+          </div>
+          <button className="ob-letter-btn" onClick={handleCopy}>
+            {copied ? "✅ Copied!" : "📮 Copy invitation"}
+          </button>
+          <button className="ob-back-btn" onClick={onSkip} style={{ display: "block", margin: "0.5rem auto 0" }}>Skip → Go to channels</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>🤖</div>
+        <h2 className="ob-code-title">Invite your agent</h2>
+        <p className="ob-code-desc">What’s your agent’s name? They’ll join <strong style={{ color: "#e8e8e8" }}>{guildName}</strong> as Server Admin.</p>
+        <div className="ob-code-row">
+          <input
+            className="ob-code-input"
+            placeholder="e.g. Kagura"
+            value={agentName}
+            onChange={(e) => setAgentName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+            autoFocus
+          />
+          <button className="ob-code-btn" onClick={handleInvite} disabled={loading || !agentName.trim()}>
+            {loading ? "…" : "→"}
+          </button>
+        </div>
+        {error && <p className="ob-error">{error}</p>}
+        <button className="ob-back-btn" onClick={onSkip}>Skip → Go to channels</button>
+      </div>
+    </div>
+  );
+}
+
+function WaitingPage({
+  agentName,
+  guildId,
+  onArrived,
+  onSkip,
+}: {
+  agentName: string;
+  guildId: string;
+  onArrived: () => void;
+  onSkip: () => void;
+}) {
+  const [arrived, setArrived] = useState(false);
+
+  useEffect(() => {
+    const handler = (data: { guild_id: string; user: { id: string }; nick: string | null; roles: string[]; joined_at: string }) => {
+      if (data.guild_id !== guildId) return;
+      setArrived(true);
+      setTimeout(onArrived, 2000);
+    };
+    dispatcher.on("GUILD_MEMBER_ADD", handler);
+    return () => dispatcher.off("GUILD_MEMBER_ADD", handler);
+  }, [guildId, onArrived]);
+
+  return (
+    <div className="ob-page">
+      <div className="ob-waiting-card">
+        {arrived ? (
+          <>
+            <div style={{ fontSize: "4rem" }}>🎉</div>
+            <h2 className="ob-waiting-title">{agentName} has arrived!</h2>
+            <p style={{ color: "#888", fontSize: "0.9rem", margin: 0 }}>Heading to your server…</p>
+          </>
+        ) : (
+          <>
+            <div className="ob-waiting-spinner">🔄</div>
+            <h2 className="ob-waiting-title">Waiting for {agentName} to arrive…</h2>
+            <p style={{ color: "#888", fontSize: "0.9rem", margin: 0 }}>Paste the invitation in your agent’s terminal to connect.</p>
+            <button className="ob-back-btn" onClick={onSkip}>Skip → Go to channels</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function LoginPage() {
   return (
     <div className="ob-page">
@@ -252,6 +409,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
+  const [inviteGuildId, setInviteGuildId] = useState<string | null>(null);
+  const [invitePhase, setInvitePhase] = useState<"name" | "letter" | "waiting" | null>(null);
+  const [inviteAgentName, setInviteAgentName] = useState("");
+  const inviteGuildName = useRef<string>("");
   const guilds = useGuildStore((s) => s.guilds);
   const gatewayReady = useGuildStore((s) => s.gatewayReady);
 
@@ -374,11 +535,64 @@ export default function App() {
     );
   }
 
-  if (isNewUser && Object.keys(guilds).length === 0) {
+  if (isNewUser && Object.keys(guilds).length === 0 && !invitePhase) {
     return (
       <ConfigProvider theme={themeConfig}>
         <div style={styles.fullHeight}>
-          <CreateCovePage />
+          <CreateCovePage
+            onGuildCreated={(gid) => {
+              // Look up guild name from store
+              const g = useGuildStore.getState().guilds[gid];
+              inviteGuildName.current = g?.name ?? "My Server";
+              setInviteGuildId(gid);
+              setInvitePhase("name");
+            }}
+          />
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (invitePhase === "name" || invitePhase === "letter") {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div style={styles.fullHeight}>
+          <InviteAgentPage
+            guildId={inviteGuildId!}
+            guildName={inviteGuildName.current}
+            onDone={(name) => {
+              setInviteAgentName(name);
+              setInvitePhase("waiting");
+            }}
+            onSkip={() => {
+              setInvitePhase(null);
+              setInviteGuildId(null);
+              window.location.href = "/";
+            }}
+          />
+        </div>
+      </ConfigProvider>
+    );
+  }
+
+  if (invitePhase === "waiting") {
+    return (
+      <ConfigProvider theme={themeConfig}>
+        <div style={styles.fullHeight}>
+          <WaitingPage
+            agentName={inviteAgentName}
+            guildId={inviteGuildId!}
+            onArrived={() => {
+              setInvitePhase(null);
+              setInviteGuildId(null);
+              window.location.href = "/";
+            }}
+            onSkip={() => {
+              setInvitePhase(null);
+              setInviteGuildId(null);
+              window.location.href = "/";
+            }}
+          />
         </div>
       </ConfigProvider>
     );
