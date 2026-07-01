@@ -284,6 +284,12 @@ export function createGuild(name: string) {
   });
 }
 
+export function joinGuild(inviteCode: string) {
+  return api<{ guild_id: string }>(`${API_PREFIX}/guilds/join`, {
+    method: "POST", body: JSON.stringify({ invite: inviteCode }),
+  });
+}
+
 export function updateGuild(guildId: string, data: { name?: string }) {
   return api<{ id: string; name: string; icon: string | null; owner_id: string | null }>(`${API_PREFIX}/guilds/${guildId}`, {
     method: "PATCH", body: JSON.stringify(data),
@@ -292,4 +298,51 @@ export function updateGuild(guildId: string, data: { name?: string }) {
 
 export function deleteGuild(guildId: string) {
   return api<void>(`${API_PREFIX}/guilds/${guildId}`, { method: "DELETE" });
+}
+
+// ─── Scenes ──────────────────────────────────────────────────────
+
+export interface SceneChannel {
+  id: string;
+  name: string;
+  position: number;
+}
+
+export interface Scene {
+  id: string;
+  guild_id: string;
+  name: string;
+  position: number;
+  channels: SceneChannel[];
+  created_at: string;
+  updated_at: string;
+}
+
+export function fetchScenes(guildId: string) {
+  return api<Scene[]>(`${API_PREFIX}/guilds/${guildId}/scenes`);
+}
+
+export function createScene(guildId: string, name: string, channelIds: string[]) {
+  return api<Scene>(`${API_PREFIX}/guilds/${guildId}/scenes`, {
+    method: "POST", body: JSON.stringify({ name, channel_ids: channelIds }),
+  });
+}
+
+export function updateScene(guildId: string, sceneId: string, data: { name?: string; channel_ids?: string[] }) {
+  return api<Scene>(`${API_PREFIX}/guilds/${guildId}/scenes/${sceneId}`, {
+    method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
+export function deleteScene(guildId: string, sceneId: string) {
+  return api<void>(`${API_PREFIX}/guilds/${guildId}/scenes/${sceneId}`, { method: "DELETE" });
+}
+
+// ─── Agent Invite ─────────────────────────────────────────────────────────
+
+export function inviteAgent(guildId: string, agentName: string) {
+  return api<{ agentName: string; token: string; baseUrl: string; guildId: string; agentId: string; inviteLetter: string }>(
+    `${API_PREFIX}/guilds/${guildId}/invite-agent`,
+    { method: "POST", body: JSON.stringify({ agentName }) },
+  );
 }

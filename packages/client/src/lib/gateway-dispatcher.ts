@@ -38,6 +38,9 @@ export interface GatewayEventMap {
   THREAD_LIST_SYNC: { guild_id: string; channel_ids?: string[]; threads: Channel[]; members: ThreadMember[] };
   THREAD_MEMBER_UPDATE: { id: string; user_id: string };
   THREAD_MEMBERS_UPDATE: { id: string; guild_id: string; added_members: Array<{ user_id: string }>; removed_members: Array<{ user_id: string }> };
+  SCENE_CREATE: { id: string; guild_id: string; name: string; position: number };
+  SCENE_UPDATE: { id: string; guild_id: string };
+  SCENE_DELETE: { id: string; guild_id: string };
 }
 
 type Handler<T> = (data: T) => void;

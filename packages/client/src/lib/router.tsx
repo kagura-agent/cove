@@ -6,12 +6,20 @@ export { getActiveIdsFromRouter, getGuildForChannel, getRouter } from "./router-
 
 export const router = createBrowserRouter([
   {
+    path: "/onboarding-preview",
+    lazy: () => import("../components/OnboardingPreview").then((m) => ({ Component: m.OnboardingPreview })),
+  },
+  {
     path: "/",
     lazy: () => import("../AppShell").then((m) => ({ Component: m.AppShell })),
     children: [
       {
         index: true,
         lazy: () => import("../components/RedirectToDefault").then((m) => ({ Component: m.RedirectToDefault })),
+      },
+      {
+        path: "channels/:guildId",
+        lazy: () => import("../components/ServerOverview").then((m) => ({ Component: m.ServerOverview })),
       },
       {
         path: "channels/:guildId/:channelId",
