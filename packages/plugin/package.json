@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "openclaw": {
     "extensions": [
-      "./src/index.ts"
+      "./dist/index.js"
     ],
     "channel": {
       "id": "cove",
