@@ -1,6 +1,6 @@
 {
   "name": "openclaw-cove",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenClaw channel plugin for Cove mirror world",
   "type": "module",
   "main": "./dist/index.js",
