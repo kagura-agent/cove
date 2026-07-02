@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
-import { ConfigProvider, theme, Button, Input } from "antd";
+import { ConfigProvider, theme, Button, Input, Modal } from "antd";
 import { GoogleOutlined } from "@ant-design/icons";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useGuildStore } from "./stores/useGuildStore";
+import { useMemberStore } from "./stores/useMemberStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
 import { router, getActiveIdsFromRouter } from "./lib/router";
@@ -116,6 +117,97 @@ function LoginPage() {
   );
 }
 
+/** Modal for inviting an AI agent to a guild. Used during FRE and from server settings. */
+export function InviteAgentModal({ guildId, open, onClose }: { guildId: string; open: boolean; onClose: () => void }) {
+  const [phase, setPhase] = useState<"name" | "letter">("name");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [inviteResult, setInviteResult] = useState<api.InviteAgentResponse | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (open) {
+      setPhase("name");
+      setName("");
+      setError("");
+      setInviteResult(null);
+      setCopied(false);
+    }
+  }, [open]);
+
+  const handleInvite = useCallback(async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.inviteAgent(guildId, name.trim());
+      setInviteResult(result);
+      setPhase("letter");
+    } catch {
+      setError("Failed to create invite. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [guildId, name]);
+
+  const handleCopy = useCallback(() => {
+    if (!inviteResult) return;
+    navigator.clipboard.writeText(inviteResult.inviteLetter).catch(() => {});
+    setCopied(true);
+  }, [inviteResult]);
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      title="Invite an Agent"
+      footer={null}
+      width={520}
+      destroyOnClose
+    >
+      {phase === "name" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
+          <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            Give your agent a name. They'll receive connection commands to say hello in #general.
+          </p>
+          <Input
+            placeholder="Agent name (e.g. Kagura)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onPressEnter={handleInvite}
+            size="large"
+            autoFocus
+          />
+          {error && <div style={{ color: "var(--danger)" }}>{error}</div>}
+          <Button type="primary" size="large" onClick={handleInvite} loading={loading} disabled={!name.trim()} block>
+            Generate Invite
+          </Button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
+          <p style={{ margin: 0 }}>
+            Run these commands in your agent's OpenClaw to connect <strong>{inviteResult?.agentName}</strong>:
+          </p>
+          <Input.TextArea
+            value={inviteResult?.inviteLetter ?? ""}
+            readOnly
+            rows={5}
+            style={{ fontFamily: "monospace", fontSize: 13, resize: "none" }}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button type="primary" onClick={handleCopy} style={{ flex: 1 }}>
+              {copied ? "✓ Copied!" : "Copy Commands"}
+            </Button>
+            <Button onClick={onClose}>Done</Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function App() {
   const themeConfig = useAntdThemeConfig();
   useVisualViewport();
@@ -123,6 +215,11 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
+
+  // FRE state: invite modal
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [freGuildId, setFreGuildId] = useState<string>("");
+  const freCheckedRef = useRef(false);
 
   useEffect(() => {
     localStorage.removeItem("cove-token");
@@ -197,6 +294,32 @@ export default function App() {
     };
   }, [needsSetup, authLoading, connect]);
 
+  // FRE detection: once member data is available, check if any guild has bots.
+  // If not, pop InviteAgentModal automatically.
+  useEffect(() => {
+    if (needsSetup || authLoading || isPending) return;
+
+    const unsub = useMemberStore.subscribe((state) => {
+      if (freCheckedRef.current) return;
+
+      const guildIds = Object.keys(state.membersByGuildId);
+      if (guildIds.length === 0) return;
+
+      const guildId = guildIds[0];
+      const members = Object.values(state.membersByGuildId[guildId] ?? {});
+      if (members.length === 0) return; // not yet populated
+
+      freCheckedRef.current = true;
+      const hasBots = members.some((m) => m.user.bot);
+      if (!hasBots) {
+        setFreGuildId(guildId);
+        setShowInviteModal(true);
+      }
+    });
+
+    return unsub;
+  }, [needsSetup, authLoading, isPending]);
+
   if (authLoading) {
     return (
       <ConfigProvider theme={themeConfig}>
@@ -230,6 +353,13 @@ export default function App() {
   return (
     <ConfigProvider theme={themeConfig}>
       <RouterProvider router={router} />
+      {freGuildId && (
+        <InviteAgentModal
+          guildId={freGuildId}
+          open={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+        />
+      )}
     </ConfigProvider>
   );
 }

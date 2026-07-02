@@ -284,6 +284,21 @@ export function createGuild(name: string) {
   });
 }
 
+export interface InviteAgentResponse {
+  agentName: string;
+  token: string;
+  baseUrl: string;
+  guildId: string;
+  agentId: string;
+  inviteLetter: string;
+}
+
+export function inviteAgent(guildId: string, name: string) {
+  return api<InviteAgentResponse>(`${API_PREFIX}/guilds/${guildId}/invite-agent`, {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+}
+
 export function updateGuild(guildId: string, data: { name?: string }) {
   return api<{ id: string; name: string; icon: string | null; owner_id: string | null }>(`${API_PREFIX}/guilds/${guildId}`, {
     method: "PATCH", body: JSON.stringify(data),

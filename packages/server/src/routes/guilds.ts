@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import crypto from "node:crypto";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
@@ -104,6 +105,106 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     dispatcher?.guildUpdate(guildId, updated);
 
     return c.json(updated);
+  });
+
+  // POST /guilds/:guildId/invite-agent — Invite (or re-invite) an agent bot to this guild
+  app.post("/guilds/:guildId/invite-agent", async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const userId = c.get("botUser").id;
+
+    const guild = repos.guilds.getById(guildId);
+    if (!guild) return unknownGuild(c);
+
+    const member = repos.members.get(guildId, userId);
+    if (!member) return unknownGuild(c);
+
+    const body = await parseJsonBody<{ name: string }>(c);
+    if (!body) return validationError(c, "Invalid JSON");
+
+    const err = validateString(body.name, "name", { required: true, maxLength: 80 });
+    if (err) return validationError(c, err);
+
+    const agentName = body.name.trim();
+
+    // Build baseUrl, respecting X-Forwarded-Proto for reverse-proxy deployments
+    const url = new URL(c.req.url);
+    const proto = c.req.header("x-forwarded-proto") || url.protocol.replace(":", "");
+    const baseUrl = `${proto}://${url.host}`;
+
+    // Check if a same-name bot already exists in this guild (re-invite flow)
+    const existingBotMember = repos.members
+      .list(guildId)
+      .find((m) => m.user.bot && m.user.username === agentName);
+
+    let agentId: string;
+    let token: string;
+
+    if (existingBotMember) {
+      // Re-invite: regenerate token for the existing bot
+      agentId = existingBotMember.user.id;
+      const newToken = repos.users.regenerateToken(agentId);
+      if (!newToken) return c.json({ message: "Failed to regenerate token" }, 500);
+      token = newToken;
+    } else {
+      // Fresh invite: create bot user + managed role in a transaction
+      agentId = generateSnowflake();
+      token = crypto.randomUUID();
+      const now = Date.now();
+
+      repos.db.transaction(() => {
+        // Insert bot user
+        repos.db.prepare(
+          "INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).run(agentId, agentName, null, 1, null, token, now, now, null);
+
+        // Add bot as guild member
+        repos.db.prepare(
+          "INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
+        ).run(guildId, agentId, null, "[]", now);
+
+        // Create a managed role for the bot
+        const roleId = generateSnowflake();
+        // Shift existing roles up to make room at position 1
+        repos.db.prepare(
+          "UPDATE roles SET position = position + 1 WHERE guild_id = ? AND position > 0"
+        ).run(guildId);
+        repos.db.prepare(
+          `INSERT INTO roles (id, guild_id, name, color, hoist, position, permissions, managed, mentionable, flags, bot_id)
+           VALUES (?, ?, ?, 0, 0, 1, ?, 1, 0, 0, ?)`
+        ).run(roleId, guildId, agentName, DEFAULT_EVERYONE_PERMISSIONS.toString(), agentId);
+
+        // Assign the managed role to the bot member
+        repos.db.prepare(
+          "UPDATE guild_members SET roles = ? WHERE guild_id = ? AND user_id = ?"
+        ).run(JSON.stringify([roleId]), guildId, agentId);
+      })();
+
+      // Dispatch gateway events so connected clients see the new bot
+      if (dispatcher) {
+        const botUser = repos.users.getById(agentId);
+        const botMember = repos.members.get(guildId, agentId);
+        if (botUser && botMember) {
+          dispatcher.guildMemberAdd(guildId, botMember);
+        }
+      }
+    }
+
+    // Build invite letter with properly quoted string values
+    const inviteLetter = [
+      `openclaw config set cove.server.url \"${baseUrl}\"`,
+      `openclaw config set cove.bot.token \"${token}\"`,
+      `openclaw config set cove.guild.id \"${guildId}\"`,
+      `openclaw config set cove.agent.id \"${agentId}\"`,
+    ].join("\n");
+
+    return c.json({
+      agentName,
+      token,
+      baseUrl,
+      guildId,
+      agentId,
+      inviteLetter,
+    }, 201);
   });
 
   // DELETE /guilds/:guildId — Delete guild
