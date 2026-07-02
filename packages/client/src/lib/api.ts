@@ -286,6 +286,7 @@ export function createGuild(name: string) {
 
 export interface InviteAgentResponse {
   agentName: string;
+  inviterName: string;
   token: string;
   baseUrl: string;
   guildId: string;

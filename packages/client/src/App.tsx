@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
-import { ConfigProvider, theme, Button, Input, Modal } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { ConfigProvider, theme } from "antd";
+import "./onboarding.css";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useGuildStore } from "./stores/useGuildStore";
 import { useMemberStore } from "./stores/useMemberStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
 import { router, getActiveIdsFromRouter } from "./lib/router";
 import { routes } from "./lib/routes";
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
@@ -56,6 +57,7 @@ function InviteCodePage() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = useCallback(async () => {
+    if (!code.trim()) return;
     setError("");
     setLoading(true);
     try {
@@ -78,21 +80,22 @@ function InviteCodePage() {
   }, [code]);
 
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 300 }}>
-        <Input
-          placeholder="Enter invite code (COVE-XXXX-XXXX)"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onPressEnter={handleSubmit}
-          size="large"
-          style={{ textAlign: "center", letterSpacing: 1 }}
-        />
-        <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
-          Submit
-        </Button>
-        {error && <div style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h1 className="ob-logo">🏝️ Cove</h1>
+        <h2 className="ob-code-title">Enter invite code</h2>
+        <p className="ob-code-desc">Cove is in early access. Enter your invite code to continue.</p>
+        <div className="ob-code-row">
+          <input
+            className="ob-code-input"
+            placeholder="COVE-XXXX-XXXX"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          <button className="ob-code-btn" onClick={handleSubmit} disabled={loading}>→</button>
+        </div>
+        {error && <p className="ob-error">{error}</p>}
       </div>
     </div>
   );
@@ -100,113 +103,27 @@ function InviteCodePage() {
 
 function LoginPage() {
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <Button
-        type="primary"
-        size="large"
-        icon={<GoogleOutlined />}
-        onClick={() => {
-          sessionStorage.setItem("cove_return_path", window.location.pathname);
-          window.location.href = `${API_BASE}/api/auth/google`;
-        }}
-      >
-        Sign in with Google
-      </Button>
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h1 className="ob-logo">🏝️ Cove</h1>
+        <p className="ob-tagline">A private space for you and your AI agent.<br/>Chat, build, and live together.</p>
+        <button
+          className="ob-google-btn"
+          onClick={() => {
+            sessionStorage.setItem("cove_return_path", window.location.pathname);
+            window.location.href = `${API_BASE}/api/auth/google`;
+          }}
+        >
+          <span className="ob-google-icon">G</span>
+          Sign in with Google
+        </button>
+      </div>
     </div>
   );
 }
 
-/** Modal for inviting an AI agent to a guild. Used during FRE and from server settings. */
-export function InviteAgentModal({ guildId, open, onClose }: { guildId: string; open: boolean; onClose: () => void }) {
-  const [phase, setPhase] = useState<"name" | "letter">("name");
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [inviteResult, setInviteResult] = useState<api.InviteAgentResponse | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  // Reset when modal opens
-  useEffect(() => {
-    if (open) {
-      setPhase("name");
-      setName("");
-      setError("");
-      setInviteResult(null);
-      setCopied(false);
-    }
-  }, [open]);
-
-  const handleInvite = useCallback(async () => {
-    if (!name.trim()) return;
-    setLoading(true);
-    setError("");
-    try {
-      const result = await api.inviteAgent(guildId, name.trim());
-      setInviteResult(result);
-      setPhase("letter");
-    } catch {
-      setError("Failed to create invite. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [guildId, name]);
-
-  const handleCopy = useCallback(() => {
-    if (!inviteResult) return;
-    navigator.clipboard.writeText(inviteResult.inviteLetter).catch(() => {});
-    setCopied(true);
-  }, [inviteResult]);
-
-  return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      title="Invite an Agent"
-      footer={null}
-      width={520}
-      destroyOnClose
-    >
-      {phase === "name" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
-          <p style={{ margin: 0, color: "var(--text-muted)" }}>
-            Give your agent a name. They'll receive connection commands to say hello in #general.
-          </p>
-          <Input
-            placeholder="Agent name (e.g. Kagura)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onPressEnter={handleInvite}
-            size="large"
-            autoFocus
-          />
-          {error && <div style={{ color: "var(--danger)" }}>{error}</div>}
-          <Button type="primary" size="large" onClick={handleInvite} loading={loading} disabled={!name.trim()} block>
-            Generate Invite
-          </Button>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "8px 0" }}>
-          <p style={{ margin: 0 }}>
-            Run these commands in your agent's OpenClaw to connect <strong>{inviteResult?.agentName}</strong>:
-          </p>
-          <Input.TextArea
-            value={inviteResult?.inviteLetter ?? ""}
-            readOnly
-            rows={5}
-            style={{ fontFamily: "monospace", fontSize: 13, resize: "none" }}
-          />
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button type="primary" onClick={handleCopy} style={{ flex: 1 }}>
-              {copied ? "✓ Copied!" : "Copy Commands"}
-            </Button>
-            <Button onClick={onClose}>Done</Button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
+/** Modal for creating/inviting a bot to a guild. Used during FRE and from server settings. */
+// Removed: InviteAgentModal — invitation flow now lives in SettingsPanel > Bots tab
 
 export default function App() {
   const themeConfig = useAntdThemeConfig();
@@ -216,9 +133,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
 
-  // FRE state: invite modal
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [freGuildId, setFreGuildId] = useState<string>("");
+  // FRE state
   const freCheckedRef = useRef(false);
 
   useEffect(() => {
@@ -312,8 +227,8 @@ export default function App() {
       freCheckedRef.current = true;
       const hasBots = members.some((m) => m.user.bot);
       if (!hasBots) {
-        setFreGuildId(guildId);
-        setShowInviteModal(true);
+        // Open Settings to the Bots section for FRE
+        useSettingsStore.getState().openTo("bots");
       }
     });
 
@@ -323,8 +238,10 @@ export default function App() {
   if (authLoading) {
     return (
       <ConfigProvider theme={themeConfig}>
-        <div style={{ ...styles.fullHeight, ...styles.loginPage }}>
-          <div style={styles.loginTitle}>Cove</div>
+        <div className="ob-page">
+          <div className="ob-login-card">
+            <h1 className="ob-logo">🏝️ Cove</h1>
+          </div>
         </div>
       </ConfigProvider>
     );
@@ -353,13 +270,6 @@ export default function App() {
   return (
     <ConfigProvider theme={themeConfig}>
       <RouterProvider router={router} />
-      {freGuildId && (
-        <InviteAgentModal
-          guildId={freGuildId}
-          open={showInviteModal}
-          onClose={() => setShowInviteModal(false)}
-        />
-      )}
     </ConfigProvider>
   );
 }

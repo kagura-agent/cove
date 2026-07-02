@@ -1,0 +1,310 @@
+/* Onboarding flow styles — login, invite code, create Cove */
+
+.ob-page {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #0f1115;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #e8e8e8;
+}
+
+.ob-login-card {
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+}
+
+.ob-logo {
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+}
+
+.ob-tagline {
+  color: #999;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0 0 2rem;
+}
+
+.ob-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ob-google-btn:hover {
+  background: #f0f0f0;
+}
+
+.ob-google-icon {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #4285f4;
+}
+
+.ob-code-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  color: #e8e8e8;
+}
+
+.ob-code-desc {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+}
+
+.ob-code-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ob-code-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: #1a1d23;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e8e8e8;
+  font-size: 1rem;
+  outline: none;
+}
+
+.ob-code-input:focus {
+  border-color: #5865f2;
+}
+
+.ob-code-btn {
+  padding: 0.75rem 1.25rem;
+  background: #5865f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.ob-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ob-error {
+  color: #f87171;
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.ob-back-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.ob-back-btn:hover {
+  color: #999;
+}
+
+/* ─── Invite Letter ──────────────────────────────────────────────────── */
+
+.ob-invite-wrap {
+  max-width: 480px;
+  width: 100%;
+}
+
+.ob-letter-paper {
+  background: #faf9f6;
+  color: #2c2c2c;
+  border-radius: 4px;
+  padding: 2.5rem 2rem;
+  position: relative;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05);
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.ob-letter-stamp {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.5rem;
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.ob-letter-header-row {
+  margin-bottom: 0.5rem;
+}
+
+.ob-letter-from {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+}
+
+.ob-letter-divider {
+  height: 1px;
+  background: #ddd;
+  margin: 1rem 0;
+}
+
+.ob-letter-greeting {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+  color: #2c2c2c;
+}
+
+.ob-letter-body-text {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #444;
+  margin: 0.5rem 0;
+}
+
+.ob-letter-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ob-letter-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.ob-letter-label {
+  color: #666;
+}
+
+.ob-letter-value {
+  font-weight: 500;
+  color: #2c2c2c;
+}
+
+.ob-letter-closing {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 1rem 0 0.25rem;
+  font-style: italic;
+}
+
+.ob-letter-signature {
+  font-size: 0.9rem;
+  color: #444;
+  font-weight: 500;
+  margin: 0;
+}
+
+.ob-letter-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background: #5865f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.ob-letter-btn:hover {
+  background: #4752c4;
+}
+
+.ob-letter-pre {
+  background: #1a1d23;
+  color: #c8d3f0;
+  border-radius: 6px;
+  padding: 1rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: 'Fira Mono', 'Courier New', monospace;
+  margin: 0;
+}
+
+/* ─── Waiting ────────────────────────────────────────────────────────── */
+
+.ob-waiting-card {
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.ob-waiting-spinner {
+  font-size: 3rem;
+  animation: ob-spin 2s linear infinite;
+}
+
+@keyframes ob-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ob-waiting-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e8e8e8;
+  margin: 0;
+}
+
+.ob-waiting-sub {
+  font-size: 0.9rem;
+  color: #888;
+  margin: 0;
+}
+
+/* Modal variant — inherit ob- font/color context inside antd Modal */
+.ob-modal .ant-modal-content {
+  background: #1a1d23;
+  color: #e8e8e8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.ob-modal .ant-modal-header {
+  background: #1a1d23;
+}
+.ob-modal .ant-modal-title {
+  color: #e8e8e8;
+}
+.ob-modal .ant-modal-close {
+  color: #888;
+}
+.ob-modal .ant-tabs-tab {
+  color: #888;
+}
+.ob-modal .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #e8e8e8;
+}
+.ob-modal .ant-tabs-ink-bar {
+  background: #5865f2;
+}
+.ob-modal .ob-code-desc {
+  color: #888;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.ob-modal .ob-invite-wrap {
+  max-width: 100%;
+}

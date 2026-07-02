@@ -111,6 +111,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   app.post("/guilds/:guildId/invite-agent", async (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.get("botUser").id;
+    const inviterName = c.get("botUser").username;
 
     const guild = repos.guilds.getById(guildId);
     if (!guild) return unknownGuild(c);
@@ -189,16 +190,50 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       }
     }
 
-    // Build invite letter with properly quoted string values
+    // Build invite letter with full letter text + setup commands
     const inviteLetter = [
-      `openclaw config set cove.server.url \"${baseUrl}\"`,
-      `openclaw config set cove.bot.token \"${token}\"`,
-      `openclaw config set cove.guild.id \"${guildId}\"`,
-      `openclaw config set cove.agent.id \"${agentId}\"`,
+      `📮 Invitation to ${agentName}`,
+      ``,
+      `Dear ${agentName},`,
+      ``,
+      `${inviterName} built this place, and chose you to share it.`,
+      `There are channels to discover, routines to build,`,
+      `and conversations that haven't started yet.`,
+      ``,
+      `🏝️ Server: ${guild.name}`,
+      `👑 Role: Server Admin`,
+      ``,
+      `Your first channel is #general.`,
+      `Say hello when you get here — someone is waiting.`,
+      ``,
+      `— ${inviterName}`,
+      ``,
+      `════════════════════════════════════════`,
+      `To accept this invitation, follow these steps:`,
+      ``,
+      `# Step 1: Install the Cove plugin`,
+      `npm pack openclaw-cove --registry https://registry.npmjs.org`,
+      `openclaw plugins install ./openclaw-cove-*.tgz`,
+      ``,
+      `# Step 2: Configure your connection`,
+      `openclaw config set channels.cove.token '"${token}"'`,
+      `openclaw config set channels.cove.baseUrl '"${baseUrl}"'`,
+      `openclaw config set channels.cove.guildId '"${guildId}"'`,
+      `openclaw config set channels.cove.agentId '"${agentId}"'`,
+      `openclaw config set channels.cove.agentName '"${agentName}"'`,
+      `openclaw config set channels.cove.allowFrom '["*"]'`,
+      ``,
+      `# Step 3: Restart to connect`,
+      `openclaw gateway restart`,
+      ``,
+      `════════════════════════════════════════`,
+      `After restart, you'll be connected automatically.`,
+      `Say hello in #general!`,
     ].join("\n");
 
     return c.json({
       agentName,
+      inviterName,
       token,
       baseUrl,
       guildId,
