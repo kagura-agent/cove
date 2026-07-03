@@ -2,7 +2,7 @@
 name: "cove-ops"
 description: "Cove platform operations: channel files, cove.md, webhooks, channels, messages, members, reactions, roles, and permissions."
 status: proposal
-version: "v1"
+version: "1.0.0"
 date: "2026-06-26T05:05:31.327Z"
 ---
 

@@ -1,51 +1,14 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
-import { generateSnowflake, DEFAULT_EVERYONE_PERMISSIONS } from "@cove/shared";
+import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import type { GuildsRepo } from "../repos/guilds.js";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../auth.js";
 import type { UsersRepo } from "../repos/users.js";
 import { SESSION_TTL_MS } from "../config.js";
 import { validateDisplayName } from "../validation.js";
-
-/**
- * Auto-create a personal guild for a new user if they have none.
- * Creates guild + @everyone role + #general channel + adds user as member.
- */
-function ensurePersonalGuild(db: Database.Database, userId: string, username: string): void {
-  const existing = db.prepare(
-    "SELECT COUNT(*) as count FROM guild_members WHERE user_id = ? AND guild_id IN (SELECT id FROM guilds WHERE owner_id = ?)"
-  ).get(userId, userId) as { count: number };
-  if (existing.count > 0) return;
-
-  const guildId = generateSnowflake();
-  const channelId = generateSnowflake();
-  const now = Date.now();
-
-  db.transaction(() => {
-    // Create guild
-    db.prepare(
-      "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(guildId, `${username}'s Server`, null, userId, now, now);
-
-    // Create @everyone role
-    db.prepare(
-      `INSERT INTO roles (id, guild_id, name, color, hoist, position, permissions, managed, mentionable, flags, bot_id)
-       VALUES (?, ?, ?, 0, 0, 0, ?, 0, 0, 0, NULL)`
-    ).run(guildId, guildId, "@everyone", DEFAULT_EVERYONE_PERMISSIONS.toString());
-
-    // Create #general channel
-    db.prepare(
-      "INSERT INTO channels (id, guild_id, name, topic, position, type) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(channelId, guildId, "general", null, 0, 0);
-
-    // Add user as member
-    db.prepare(
-      "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(guildId, userId, null, "[]", now);
-  })();
-}
+import { ensurePersonalGuild } from "../helpers/guild.js";
 
 export interface OAuthConfig {
   clientId: string;

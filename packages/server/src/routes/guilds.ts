@@ -111,7 +111,13 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
   app.post("/guilds/:guildId/invite-agent", async (c) => {
     const guildId = c.req.param("guildId")!;
     const userId = c.get("botUser").id;
-    const inviterName = c.get("botUser").username;
+    const user = c.get("botUser");
+    const inviterName = user.username;
+
+    // Bot principals cannot invite agents
+    if (user.bot) {
+      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    }
 
     const guild = repos.guilds.getById(guildId);
     if (!guild) return unknownGuild(c);
@@ -119,13 +125,28 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     const member = repos.members.get(guildId, userId);
     if (!member) return unknownGuild(c);
 
-    const body = await parseJsonBody<{ name: string }>(c);
+    // Authorization: owner OR MANAGE_GUILD permission
+    const isOwner = guild.owner_id !== null && guild.owner_id === userId;
+    if (!isOwner) {
+      const roles = repos.roles.listByGuild(guildId);
+      const perms = computeBasePermissions(member, guild, roles);
+      if ((perms & PermissionBits.MANAGE_GUILD) === 0n) {
+        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      }
+    }
+
+    const body = await parseJsonBody<{ name: string; rotate?: boolean }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const err = validateString(body.name, "name", { required: true, maxLength: 80 });
     if (err) return validationError(c, err);
 
     const agentName = body.name.trim();
+
+    // Validate agent name: only safe characters allowed
+    if (!/^[a-zA-Z0-9_-]{2,80}$/.test(agentName)) {
+      return validationError(c, "name must be 2-80 characters and contain only letters, numbers, hyphens, and underscores");
+    }
 
     // Build baseUrl, respecting X-Forwarded-Proto for reverse-proxy deployments
     const url = new URL(c.req.url);
@@ -141,7 +162,10 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     let token: string;
 
     if (existingBotMember) {
-      // Re-invite: regenerate token for the existing bot
+      // Re-invite: return 409 by default, only rotate token if explicitly requested
+      if (!body.rotate) {
+        return c.json({ message: "Agent with this name already exists in the guild", code: 40009 }, 409);
+      }
       agentId = existingBotMember.user.id;
       const newToken = repos.users.regenerateToken(agentId);
       if (!newToken) return c.json({ message: "Failed to regenerate token" }, 500);
@@ -188,6 +212,14 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
           dispatcher.guildMemberAdd(guildId, botMember);
         }
       }
+
+      // Auto-grant VIEW_CHANNEL on #general so the bot can speak on arrival
+      const guildChannels = repos.channels.list(guildId);
+      const generalChannel = guildChannels.find((ch) => ch.name === "general");
+      if (generalChannel) {
+        const VIEW_CHANNEL = (1n << 10n).toString();
+        repos.permissions.upsert(generalChannel.id, agentId, 1, VIEW_CHANNEL, "0");
+      }
     }
 
     // Build invite letter with full letter text + setup commands
@@ -201,7 +233,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       `and conversations that haven't started yet.`,
       ``,
       `🏝️ Server: ${guild.name}`,
-      `👑 Role: Server Admin`,
+      `🤖 Role: Member`,
       ``,
       `Your first channel is #general.`,
       `Say hello when you get here — someone is waiting.`,
@@ -209,13 +241,16 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       `— ${inviterName}`,
       ``,
       `════════════════════════════════════════`,
-      `To accept this invitation, follow these steps:`,
+      `To accept this invitation, set up Cove as a new channel`,
+      `in your OpenClaw. This won't affect your existing channels`,
+      `(Discord, Feishu, etc.) — Cove runs alongside them.`,
       ``,
-      `# Step 1: Install the Cove plugin`,
+      `# Step 1: Install the Cove plugin and skill`,
       `npm pack openclaw-cove --registry https://registry.npmjs.org`,
       `openclaw plugins install ./openclaw-cove-*.tgz`,
+      `clawhub install cove-ops`,
       ``,
-      `# Step 2: Configure your connection`,
+      `# Step 2: Configure your Cove connection`,
       `openclaw config set channels.cove.token '"${token}"'`,
       `openclaw config set channels.cove.baseUrl '"${baseUrl}"'`,
       `openclaw config set channels.cove.guildId '"${guildId}"'`,
@@ -223,7 +258,10 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       `openclaw config set channels.cove.agentName '"${agentName}"'`,
       `openclaw config set channels.cove.allowFrom '["*"]'`,
       ``,
-      `# Step 3: Restart to connect`,
+      `# Step 3: Add a binding so you receive messages from Cove`,
+      `# Use your own agent id in the binding (the same id from your OpenClaw config).`,
+      ``,
+      `# Step 4: Restart to connect`,
       `openclaw gateway restart`,
       ``,
       `════════════════════════════════════════`,

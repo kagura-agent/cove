@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useBotStore } from "../stores/useBotStore";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useUserStore } from "../stores/useUserStore";
-import { List, Button, Popconfirm, Spin } from "antd";
+import { getActiveIdsFromRouter } from "../lib/router-helpers";
+import { List, Button, Popconfirm, Spin, Input } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { BotCreateForm } from "./BotCreateForm";
 import * as api from "../lib/api";
@@ -10,16 +11,17 @@ import "../onboarding.css";
 
 type BotTab = "invitation" | "general";
 
-function InvitationTab() {
+function InvitationTab({ onBotCreated }: { onBotCreated: () => void }) {
   const guilds = useGuildStore((s) => s.guilds);
   const username = useUserStore((s) => s.username);
   const globalName = useUserStore((s) => s.global_name);
 
   const guildEntries = Object.values(guilds);
-  const guild = guildEntries[0];
+  // Use the active guild from the router if available, fall back to first guild
+  const { guildId: activeGuildId } = getActiveIdsFromRouter();
+  const guild = (activeGuildId ? guilds[activeGuildId] : null) ?? guildEntries[0];
   const guildId = guild?.id ?? "";
   const guildName = guild?.name ?? "My Server";
-  const inviterName = globalName || username || "You";
 
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,12 +36,13 @@ function InvitationTab() {
     try {
       const result = await api.inviteAgent(guildId, name.trim());
       setInviteResult(result);
+      onBotCreated();
     } catch {
       setError("Failed to create invite. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [guildId, name]);
+  }, [guildId, name, onBotCreated]);
 
   const handleCopy = useCallback(() => {
     if (!inviteResult) return;
@@ -51,22 +54,22 @@ function InvitationTab() {
     return (
       <div style={{ padding: "var(--space-sm) 0" }}>
         <p style={{ color: "var(--text-muted)", margin: "0 0 var(--space-lg)" }}>
-          What's your agent's name? They'll join <strong>{guildName}</strong> as Server Admin.
+          What's your agent's name? They'll join <strong>{guildName}</strong> as a Member.
         </p>
-        <div className="ob-code-row">
-          <input
-            className="ob-code-input"
+        <div style={{ display: "flex", gap: 8 }}>
+          <Input
             placeholder="e.g. Kagura"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+            onPressEnter={handleInvite}
+            size="large"
             autoFocus
           />
-          <button className="ob-code-btn" onClick={handleInvite} disabled={loading || !name.trim()}>
-            {loading ? "…" : "→"}
-          </button>
+          <Button type="primary" size="large" onClick={handleInvite} loading={loading} disabled={!name.trim()}>
+            →
+          </Button>
         </div>
-        {error && <p className="ob-error">{error}</p>}
+        {error && <p style={{ color: "var(--danger)", marginTop: 8 }}>{error}</p>}
       </div>
     );
   }
@@ -89,8 +92,8 @@ function InvitationTab() {
             <span className="ob-letter-value">{guildName}</span>
           </div>
           <div className="ob-letter-detail-row">
-            <span className="ob-letter-label">👑 Role</span>
-            <span className="ob-letter-value">Server Admin</span>
+            <span className="ob-letter-label">🤖 Role</span>
+            <span className="ob-letter-value">Member</span>
           </div>
         </div>
         <div className="ob-letter-divider" />
@@ -111,6 +114,10 @@ export function BotManagement({ defaultTab }: { defaultTab?: BotTab }) {
 
   useEffect(() => {
     fetchBots().catch(console.error).finally(() => setLoading(false));
+  }, [fetchBots]);
+
+  const refreshBots = useCallback(() => {
+    fetchBots().catch(console.error);
   }, [fetchBots]);
 
   if (loading) {
@@ -135,6 +142,29 @@ export function BotManagement({ defaultTab }: { defaultTab?: BotTab }) {
 
   return (
     <div>
+      {/* Bot list — always visible above tabs */}
+      {bots.length > 0 && (
+        <List
+          dataSource={bots}
+          renderItem={(bot) => (
+            <List.Item
+              actions={[
+                <Popconfirm key="delete" title={`Delete bot "${bot.username}"?`} onConfirm={() => deleteBot(bot.id)} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
+                  <Button type="text" icon={<DeleteOutlined />} danger size="small" />
+                </Popconfirm>,
+              ]}
+            >
+              <List.Item.Meta
+                avatar={<span style={{ fontSize: "var(--icon-size-lg)" }}>🤖</span>}
+                title={bot.username}
+                description={bot.bio}
+              />
+            </List.Item>
+          )}
+          style={{ marginBottom: "var(--space-lg)" }}
+        />
+      )}
+
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--bg-modifier-hover)", marginBottom: "var(--space-lg)" }}>
         <button style={tabStyle("invitation")} onClick={() => setActiveTab("invitation")}>
@@ -146,33 +176,8 @@ export function BotManagement({ defaultTab }: { defaultTab?: BotTab }) {
       </div>
 
       {/* Tab content */}
-      {activeTab === "invitation" && <InvitationTab />}
-      {activeTab === "general" && (
-        <div>
-          {bots.length > 0 && (
-            <List
-              dataSource={bots}
-              renderItem={(bot) => (
-                <List.Item
-                  actions={[
-                    <Popconfirm key="delete" title={`Delete bot "${bot.username}"?`} onConfirm={() => deleteBot(bot.id)} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
-                      <Button type="text" icon={<DeleteOutlined />} danger size="small" />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    avatar={<span style={{ fontSize: "var(--icon-size-lg)" }}>🤖</span>}
-                    title={bot.username}
-                    description={bot.bio}
-                  />
-                </List.Item>
-              )}
-              style={{ marginBottom: "var(--space-lg)" }}
-            />
-          )}
-          <BotCreateForm />
-        </div>
-      )}
+      {activeTab === "invitation" && <InvitationTab onBotCreated={refreshBots} />}
+      {activeTab === "general" && <BotCreateForm />}
     </div>
   );
 }

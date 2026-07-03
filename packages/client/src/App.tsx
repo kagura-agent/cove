@@ -122,8 +122,7 @@ function LoginPage() {
   );
 }
 
-/** Modal for creating/inviting a bot to a guild. Used during FRE and from server settings. */
-// Removed: InviteAgentModal — invitation flow now lives in SettingsPanel > Bots tab
+// Invitation flow now lives in SettingsPanel > Bots tab
 
 export default function App() {
   const themeConfig = useAntdThemeConfig();
@@ -214,7 +213,7 @@ export default function App() {
   useEffect(() => {
     if (needsSetup || authLoading || isPending) return;
 
-    const unsub = useMemberStore.subscribe((state) => {
+    const checkFRE = (state: ReturnType<typeof useMemberStore.getState>) => {
       if (freCheckedRef.current) return;
 
       const guildIds = Object.keys(state.membersByGuildId);
@@ -230,7 +229,13 @@ export default function App() {
         // Open Settings to the Bots section for FRE
         useSettingsStore.getState().openTo("bots");
       }
-    });
+    };
+
+    // Check current state immediately (members may already be loaded)
+    checkFRE(useMemberStore.getState());
+
+    // Also subscribe to future updates
+    const unsub = useMemberStore.subscribe(checkFRE);
 
     return unsub;
   }, [needsSetup, authLoading, isPending]);

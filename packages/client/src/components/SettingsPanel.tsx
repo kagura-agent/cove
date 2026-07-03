@@ -223,10 +223,12 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
   const avatarLetter = username ? (global_name || username)[0].toUpperCase() : "?";
   const initialSection = useSettingsStore((s) => s.initialSection);
 
-  // Apply initialSection when panel opens
+  // Apply initialSection when panel opens, then clear it so it doesn't re-trigger
   useEffect(() => {
     if (open && initialSection) {
       setActiveSection(initialSection);
+      // Clear after consuming so it doesn't re-fire on next open
+      useSettingsStore.setState({ initialSection: undefined });
     }
   }, [open, initialSection]);
 

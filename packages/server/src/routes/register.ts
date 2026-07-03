@@ -1,40 +1,11 @@
 import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import crypto from "node:crypto";
-import { generateSnowflake, DEFAULT_EVERYONE_PERMISSIONS } from "@cove/shared";
+import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
 import { SESSION_TTL_MS } from "../config.js";
-
-/**
- * Auto-create a personal guild for a newly registered user.
- */
-function createPersonalGuild(db: Database.Database, userId: string, username: string): void {
-  const guildId = generateSnowflake();
-  const channelId = generateSnowflake();
-  const now = Date.now();
-
-  // Create guild
-  db.prepare(
-    "INSERT INTO guilds (id, name, icon, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(guildId, `${username}'s Server`, null, userId, now, now);
-
-  // Create @everyone role
-  db.prepare(
-    `INSERT INTO roles (id, guild_id, name, color, hoist, position, permissions, managed, mentionable, flags, bot_id)
-     VALUES (?, ?, ?, 0, 0, 0, ?, 0, 0, 0, NULL)`
-  ).run(guildId, guildId, "@everyone", DEFAULT_EVERYONE_PERMISSIONS.toString());
-
-  // Create #general channel
-  db.prepare(
-    "INSERT INTO channels (id, guild_id, name, topic, position, type) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(channelId, guildId, "general", null, 0, 0);
-
-  // Add user as member
-  db.prepare(
-    "INSERT OR IGNORE INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(guildId, userId, null, "[]", now);
-}
+import { createPersonalGuild } from "../helpers/guild.js";
 
 /**
  * Invite-code registration route.
@@ -94,6 +65,9 @@ export function registerRoutes(db: Database.Database): Hono {
 
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
 
+      // Auto-create personal guild atomically within the same transaction
+      createPersonalGuild(db, userId, pending.username);
+
       return token;
     });
     const result = register();
@@ -101,9 +75,6 @@ export function registerRoutes(db: Database.Database): Hono {
     if (result === null) {
       return c.json({ message: "Invalid or already used invite code", code: 50035 }, 400);
     }
-
-    // Auto-create personal guild for the new user
-    createPersonalGuild(db, userId, pending.username);
 
     // BFF: set session cookie and clear pending cookie
     setCookie(c, SESSION_COOKIE, result, COOKIE_OPTIONS);

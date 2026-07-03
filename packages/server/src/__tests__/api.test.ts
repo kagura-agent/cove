@@ -1097,7 +1097,7 @@ describe("Cove API — Discord-compatible", () => {
 
       const userRow = db.prepare("SELECT id FROM users WHERE email = ?").get("noguild@example.com") as { id: string } | undefined;
       expect(userRow).toBeDefined();
-      const memberRows = db.prepare("SELECT * FROM guild_members WHERE user_id = ?").all(userRow!.id);
+      const memberRows = db.prepare("SELECT * FROM guild_members WHERE user_id = ? AND guild_id = ?").all(userRow!.id, defaultGuildId);
       expect(memberRows).toHaveLength(0);
     });
 

@@ -232,4 +232,74 @@ describe("Guild CRUD API", () => {
       expect(chRes.status).toBe(404); // unknownGuild because not a member
     });
   });
+
+  describe("POST /guilds/:guildId/invite-agent", () => {
+    it("owner can invite an agent (201, returns token + invite letter)", async () => {
+      const res = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "TestBot" });
+      expect(res.status).toBe(201);
+
+      const data = await res.json() as { agentName: string; token: string; inviteLetter: string; agentId: string };
+      expect(data.agentName).toBe("TestBot");
+      expect(data.token).toBeTruthy();
+      expect(data.inviteLetter).toContain("TestBot");
+      expect(data.agentId).toBeTruthy();
+    });
+
+    it("non-owner without MANAGE_GUILD gets 403", async () => {
+      const now = Date.now();
+      const memberToken = "member-token-invite";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("member-invite", "Member", null, 0, null, memberToken, now, now);
+      db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run(defaultGuildId, "member-invite", null, "[]", now);
+
+      const res = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "HackerBot" }, memberToken);
+      expect(res.status).toBe(403);
+    });
+
+    it("re-invite same-name bot returns 409 by default", async () => {
+      // First invite succeeds
+      const res1 = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "DupeBot" });
+      expect(res1.status).toBe(201);
+
+      // Second invite same name should 409
+      const res2 = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "DupeBot" });
+      expect(res2.status).toBe(409);
+    });
+
+    it("re-invite with { rotate: true } succeeds and returns new token", async () => {
+      // First invite
+      const res1 = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "RotateBot" });
+      expect(res1.status).toBe(201);
+      const data1 = await res1.json() as { token: string };
+
+      // Re-invite with rotate
+      const res2 = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "RotateBot", rotate: true });
+      expect(res2.status).toBe(201);
+      const data2 = await res2.json() as { token: string };
+
+      // Token should have changed
+      expect(data2.token).toBeTruthy();
+      expect(data2.token).not.toBe(data1.token);
+    });
+
+    it("invalid agent name (special chars) gets 400", async () => {
+      const res = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "bad bot!@#" });
+      expect(res.status).toBe(400);
+    });
+
+    it("bot user cannot invite agents (403)", async () => {
+      const now = Date.now();
+      const botToken = "bot-invite-token";
+      db.prepare("INSERT INTO users (id, username, avatar, bot, bio, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run("bot-inviter", "BotInviter", null, 1, null, botToken, now, now);
+      db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run(defaultGuildId, "bot-inviter", null, "[]", now);
+      // Make it owner to isolate the bot check from permission check
+      db.prepare("UPDATE guilds SET owner_id = ? WHERE id = ?").run("bot-inviter", defaultGuildId);
+
+      const res = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "SubBot" }, botToken);
+      expect(res.status).toBe(403);
+    });
+  });
 });
