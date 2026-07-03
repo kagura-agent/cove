@@ -8,6 +8,7 @@ import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS, resolveUser } from "../
 import type { UsersRepo } from "../repos/users.js";
 import { SESSION_TTL_MS } from "../config.js";
 import { validateDisplayName } from "../validation.js";
+import { ensurePersonalGuild } from "../helpers/guild.js";
 
 export interface OAuthConfig {
   clientId: string;
@@ -85,6 +86,8 @@ export function authRoutes(db: Database.Database, config: OAuthConfig, guildsRep
       const expiresAt = now + SESSION_TTL_MS;
       db.prepare("UPDATE users SET username = ?, avatar = ?, google_id = ?, email = ?, token = ?, expires_at = ?, updated_at = ? WHERE id = ?")
         .run(googleUser.name, googleUser.picture, googleUser.id, googleUser.email, token, expiresAt, now, existing.id);
+      // Auto-create a personal guild if this user has none
+      ensurePersonalGuild(db, existing.id, googleUser.name);
       setCookie(c, SESSION_COOKIE, token, COOKIE_OPTIONS);
       return c.redirect("/");
     }

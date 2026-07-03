@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useUserStore } from "../stores/useUserStore";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import { BotManagement } from "./BotManagement";
 import { THEME_PRESETS, type ThemePreviewData } from "../lib/theme-previews";
 import * as api from "../lib/api";
@@ -220,6 +221,16 @@ export function SettingsPanel({ open, onOpenChange }: { open: boolean; onOpenCha
   const [activeSection, setActiveSection] = useState<SectionKey>("appearance");
   const { logout, username, global_name } = useUserStore();
   const avatarLetter = username ? (global_name || username)[0].toUpperCase() : "?";
+  const initialSection = useSettingsStore((s) => s.initialSection);
+
+  // Apply initialSection when panel opens, then clear it so it doesn't re-trigger
+  useEffect(() => {
+    if (open && initialSection) {
+      setActiveSection(initialSection);
+      // Clear after consuming so it doesn't re-fire on next open
+      useSettingsStore.setState({ initialSection: undefined });
+    }
+  }, [open, initialSection]);
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 

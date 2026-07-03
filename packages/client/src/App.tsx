@@ -1,12 +1,14 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
-import { ConfigProvider, theme, Button, Input } from "antd";
-import { GoogleOutlined } from "@ant-design/icons";
+import { ConfigProvider, theme } from "antd";
+import "./onboarding.css";
 import { useUserStore } from "./stores/useUserStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useGuildStore } from "./stores/useGuildStore";
+import { useMemberStore } from "./stores/useMemberStore";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useThemeStore } from "./stores/useThemeStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
 import { router, getActiveIdsFromRouter } from "./lib/router";
 import { routes } from "./lib/routes";
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./lib/gateway-subscriptions";
@@ -55,6 +57,7 @@ function InviteCodePage() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = useCallback(async () => {
+    if (!code.trim()) return;
     setError("");
     setLoading(true);
     try {
@@ -77,21 +80,22 @@ function InviteCodePage() {
   }, [code]);
 
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 300 }}>
-        <Input
-          placeholder="Enter invite code (COVE-XXXX-XXXX)"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onPressEnter={handleSubmit}
-          size="large"
-          style={{ textAlign: "center", letterSpacing: 1 }}
-        />
-        <Button type="primary" size="large" onClick={handleSubmit} loading={loading}>
-          Submit
-        </Button>
-        {error && <div style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h1 className="ob-logo">🏝️ Cove</h1>
+        <h2 className="ob-code-title">Enter invite code</h2>
+        <p className="ob-code-desc">Cove is in early access. Enter your invite code to continue.</p>
+        <div className="ob-code-row">
+          <input
+            className="ob-code-input"
+            placeholder="COVE-XXXX-XXXX"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          <button className="ob-code-btn" onClick={handleSubmit} disabled={loading}>→</button>
+        </div>
+        {error && <p className="ob-error">{error}</p>}
       </div>
     </div>
   );
@@ -99,22 +103,26 @@ function InviteCodePage() {
 
 function LoginPage() {
   return (
-    <div style={styles.loginPage}>
-      <div style={styles.loginTitle}>Cove</div>
-      <Button
-        type="primary"
-        size="large"
-        icon={<GoogleOutlined />}
-        onClick={() => {
-          sessionStorage.setItem("cove_return_path", window.location.pathname);
-          window.location.href = `${API_BASE}/api/auth/google`;
-        }}
-      >
-        Sign in with Google
-      </Button>
+    <div className="ob-page">
+      <div className="ob-login-card">
+        <h1 className="ob-logo">🏝️ Cove</h1>
+        <p className="ob-tagline">A private space for you and your AI agent.<br/>Chat, build, and live together.</p>
+        <button
+          className="ob-google-btn"
+          onClick={() => {
+            sessionStorage.setItem("cove_return_path", window.location.pathname);
+            window.location.href = `${API_BASE}/api/auth/google`;
+          }}
+        >
+          <span className="ob-google-icon">G</span>
+          Sign in with Google
+        </button>
+      </div>
     </div>
   );
 }
+
+// Invitation flow now lives in SettingsPanel > Bots tab
 
 export default function App() {
   const themeConfig = useAntdThemeConfig();
@@ -123,6 +131,9 @@ export default function App() {
   const connect = useWebSocketStore((s) => s.connect);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
+
+  // FRE state
+  const freCheckedRef = useRef(false);
 
   useEffect(() => {
     localStorage.removeItem("cove-token");
@@ -197,11 +208,45 @@ export default function App() {
     };
   }, [needsSetup, authLoading, connect]);
 
+  // FRE detection: once member data is available, check if any guild has bots.
+  // If not, pop InviteAgentModal automatically.
+  useEffect(() => {
+    if (needsSetup || authLoading || isPending) return;
+
+    const checkFRE = (state: ReturnType<typeof useMemberStore.getState>) => {
+      if (freCheckedRef.current) return;
+
+      const guildIds = Object.keys(state.membersByGuildId);
+      if (guildIds.length === 0) return;
+
+      const guildId = guildIds[0];
+      const members = Object.values(state.membersByGuildId[guildId] ?? {});
+      if (members.length === 0) return; // not yet populated
+
+      freCheckedRef.current = true;
+      const hasBots = members.some((m) => m.user.bot);
+      if (!hasBots) {
+        // Open Settings to the Bots section for FRE
+        useSettingsStore.getState().openTo("bots");
+      }
+    };
+
+    // Check current state immediately (members may already be loaded)
+    checkFRE(useMemberStore.getState());
+
+    // Also subscribe to future updates
+    const unsub = useMemberStore.subscribe(checkFRE);
+
+    return unsub;
+  }, [needsSetup, authLoading, isPending]);
+
   if (authLoading) {
     return (
       <ConfigProvider theme={themeConfig}>
-        <div style={{ ...styles.fullHeight, ...styles.loginPage }}>
-          <div style={styles.loginTitle}>Cove</div>
+        <div className="ob-page">
+          <div className="ob-login-card">
+            <h1 className="ob-logo">🏝️ Cove</h1>
+          </div>
         </div>
       </ConfigProvider>
     );

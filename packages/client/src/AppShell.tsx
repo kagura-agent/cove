@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useGuildStore } from "./stores/useGuildStore";
 import { useChannelStore } from "./stores/useChannelStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
 import { Sidebar } from "./components/Sidebar";
 import { GuildSidebar } from "./components/GuildSidebar";
 import { UserBar } from "./components/UserBar";
@@ -33,7 +34,9 @@ export function AppShell() {
   });
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpen = useSettingsStore((s) => s.open);
+  const closeSettings = useSettingsStore((s) => s.close);
+  const openSettings = useSettingsStore((s) => s.openSettings);
 
   return (
     <div style={styles.fullHeight}>
@@ -46,14 +49,14 @@ export function AppShell() {
         <div style={styles.sidebarColumn} className="sidebar-column">
           <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
           <div style={styles.sidebarFooter} className="sidebar-footer-cell">
-            <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={() => setSettingsOpen(true)} />
+            <UserBar onCloseSidebar={() => setSidebarOpen(false)} onSettingsOpen={openSettings} />
           </div>
         </div>
 
         <Outlet context={{ sidebarOpen, setSidebarOpen }} />
       </div>
 
-      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsPanel open={settingsOpen} onOpenChange={(v) => { if (!v) closeSettings(); }} />
     </div>
   );
 }

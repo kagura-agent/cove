@@ -5,6 +5,7 @@ import { generateSnowflake } from "@cove/shared";
 import type Database from "better-sqlite3";
 import { SESSION_COOKIE, PENDING_COOKIE, COOKIE_OPTIONS } from "../auth.js";
 import { SESSION_TTL_MS } from "../config.js";
+import { createPersonalGuild } from "../helpers/guild.js";
 
 /**
  * Invite-code registration route.
@@ -63,6 +64,9 @@ export function registerRoutes(db: Database.Database): Hono {
       }
 
       db.prepare("DELETE FROM pending_registrations WHERE id = ?").run(pending.id);
+
+      // Auto-create personal guild atomically within the same transaction
+      createPersonalGuild(db, userId, pending.username);
 
       return token;
     });
