@@ -218,18 +218,7 @@ Send messages between channels via webhooks. Webhook messages appear as a differ
 
 Always set the `username` field to `From #channel-name` (the source channel's name). This tells the receiving channel where the message came from.
 
-### Helper Script (recommended)
-
-```bash
-node ~/.openclaw/workspace-ruantang/cove/skills/cove-webhook/scripts/cove-webhook-send.mjs \
-  --to TARGET_CHANNEL_NAME \
-  --from SOURCE_CHANNEL_NAME \
-  --message "Your message here"
-```
-
-The script auto-creates and caches webhooks. No manual webhook management needed.
-
-### Manual: Create Webhook
+### Create Webhook
 
 ```bash
 curl -s -X POST "$COVE_BASE/api/v10/channels/CHANNEL_ID/webhooks" \
