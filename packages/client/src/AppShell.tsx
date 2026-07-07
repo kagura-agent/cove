@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useWebSocketStore } from "./stores/useWebSocketStore";
-import { useGuildStore } from "./stores/useGuildStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { Sidebar } from "./components/Sidebar";
@@ -9,7 +8,6 @@ import { GuildSidebar } from "./components/GuildSidebar";
 import { UserBar } from "./components/UserBar";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { useActiveIds } from "./hooks/useActiveIds";
 import type { CSSProperties } from "react";
 
 const styles = {
@@ -23,15 +21,8 @@ const styles = {
 };
 
 export function AppShell() {
-  const { guildId } = useActiveIds();
   const wsStatus = useWebSocketStore((s) => s.status);
   const channelsLoaded = useChannelStore((s) => s.channelsLoaded);
-  const serverName = useGuildStore((s) => {
-    return guildId ? s.guilds[guildId]?.name ?? "" : "";
-  });
-  const serverIcon = useGuildStore((s) => {
-    return guildId ? s.guilds[guildId]?.icon ?? null : null;
-  });
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const settingsOpen = useSettingsStore((s) => s.open);
@@ -40,7 +31,7 @@ export function AppShell() {
 
   return (
     <div style={styles.fullHeight}>
-      <ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
+      <ConnectionBanner status={wsStatus} />
       <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
 
       <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""}`}>
