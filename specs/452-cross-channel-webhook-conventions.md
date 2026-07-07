@@ -62,5 +62,6 @@ webhook 发送时 `username` 字段应标明来源：
 ## Decision Log
 
 - ✅ 问题确认：agent 跨 channel 发消息未走 webhook，根因是缺少平台认知注入
+- ✅ 注入位置：Cove plugin 层（`dispatch.ts` 的 `GroupSystemPrompt`），不改 OpenClaw 核心代码。参考 OpenClaw 框架对 Discord 的做法（`if (provider === "discord") lines.push("Discord: wrap bare URLs...")`)，但因为 Cove 是 plugin 不是内置 provider，在 plugin 侧注入
 - ❓ 注入内容的具体措辞和格式
 - ❓ webhook username 命名格式
