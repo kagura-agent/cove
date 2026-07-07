@@ -26,28 +26,19 @@ Channel rules from cove.md (channel-editable):
 
 ### 1. Plugin 注入平台认知
 
-在 `dispatch.ts` 的 `ctxPayload` 中，除了 `GroupSystemPrompt`（cove.md），额外注入一段固定的平台操作指引。
-
-注入方式：追加到 `GroupSystemPrompt` 的 cove.md 内容之后（或作为独立字段），内容包括：
+在 `dispatch.ts` 构建 `GroupSystemPrompt` 时，在 cove.md 内容之后追加一行平台指引：
 
 ```
-## Cove Platform Guide
-
-You are on the Cove platform. Key rules:
-
-- **Cross-channel messaging**: Use webhooks, not direct bot messages. Webhook messages show the source channel identity and are received by the target channel's bot session.
-- **cove.md**: Each channel has a cove.md file auto-injected into context. Update it to evolve channel rules.
-- **Channel files**: Each channel has independent file storage (text, max 100KB).
-- **For full API reference**: Read the cove-ops skill.
+Cove: cross-channel messaging uses webhooks, not direct bot messages. Read the cove-ops skill for API details.
 ```
+
+精简一行，参考 OpenClaw 框架对 Discord 的做法（`"Discord: wrap bare URLs like <url> to suppress embeds."`），只注入影响行为的关键规则，详细 API 引导到 cove-ops skill。
 
 ### 2. Webhook username 命名规范
 
-webhook 发送时 `username` 字段应标明来源：
-- 格式：`From #channel-name` 或 `#channel-name`
+webhook 发送时 `username` 字段标明来源 channel：
+- 格式：`From #channel-name`
 - 例：`"username": "From #cove-spec"`
-
-❓ 是否需要更复杂的格式（比如 `Kagura via #cove-spec`）？
 
 ### 3. 依赖 #451
 
@@ -55,13 +46,13 @@ webhook 发送时 `username` 字段应标明来源：
 
 ## Scope
 
-- `packages/plugin/src/dispatch.ts`: 修改 `GroupSystemPrompt` 注入逻辑，追加平台认知
+- `packages/plugin/src/dispatch.ts`: 修改 `GroupSystemPrompt` 注入逻辑，追加平台认知一行
 - 更新 `cove-ops` skill，加入 webhook username 命名规范
 - 不涉及 webhook 创建逻辑（由 #451 处理）
 
 ## Decision Log
 
 - ✅ 问题确认：agent 跨 channel 发消息未走 webhook，根因是缺少平台认知注入
-- ✅ 注入位置：Cove plugin 层（`dispatch.ts` 的 `GroupSystemPrompt`），不改 OpenClaw 核心代码。参考 OpenClaw 框架对 Discord 的做法（`if (provider === "discord") lines.push("Discord: wrap bare URLs...")`)，但因为 Cove 是 plugin 不是内置 provider，在 plugin 侧注入
-- ❓ 注入内容的具体措辞和格式
-- ❓ webhook username 命名格式
+- ✅ 注入位置：Cove plugin 层（`dispatch.ts` 的 `GroupSystemPrompt`），不改 OpenClaw 核心代码
+- ✅ 注入内容：一行精简指引，参考 Discord 模式，详细 API 引导到 cove-ops skill
+- ✅ webhook username 格式：`From #channel-name`
