@@ -36,7 +36,6 @@ Channel rules from cove.md (channel-editable):
 You are on the Cove platform. Key rules:
 
 - **Cross-channel messaging**: Use webhooks, not direct bot messages. Webhook messages show the source channel identity and are received by the target channel's bot session.
-  Helper: `node ~/.openclaw/workspace-ruantang/cove/skills/cove-webhook/scripts/cove-webhook-send.mjs --to TARGET --from SOURCE --message "..."`
 - **cove.md**: Each channel has a cove.md file auto-injected into context. Update it to evolve channel rules.
 - **Channel files**: Each channel has independent file storage (text, max 100KB).
 - **For full API reference**: Read the cove-ops skill.
