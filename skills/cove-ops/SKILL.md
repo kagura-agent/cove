@@ -1,7 +1,7 @@
 ---
 name: "cove-ops"
 description: "Cove platform operations: channel files, cove.md, webhooks, channels, messages, members, reactions, roles, and permissions."
-status: proposal
+status: active
 version: "1.0.0"
 date: "2026-06-26T05:05:31.327Z"
 ---
@@ -213,6 +213,10 @@ Send messages between channels via webhooks. Webhook messages appear as a differ
 ### Key Principle
 
 **One-way push only.** Each channel processes what it receives. Results do NOT auto-return unless explicitly requested. This prevents echo loops.
+
+### Webhook Username Convention
+
+Always set the `username` field to `From #channel-name` (the source channel's name). This tells the receiving channel where the message came from.
 
 ### Helper Script (recommended)
 

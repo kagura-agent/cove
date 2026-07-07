@@ -1,7 +1,7 @@
 ---
 name: "cove-qa"
 description: "QA methodology for Cove: feature-level testing, real browser interaction, visual regression, exploratory testing."
-status: proposal
+status: active
 version: "v1"
 date: "2026-06-26T05:41:33.672Z"
 ---

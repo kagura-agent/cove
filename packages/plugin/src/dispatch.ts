@@ -273,7 +273,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           MessageSidFirst: (message as any).batchMeta.MessageSidFirst,
           MessageSidLast: (message as any).batchMeta.MessageSidLast,
         } : {}),
-        ...(coveMdContent ? { GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent } : {}),
+        ...(coveMdContent ? { GroupSystemPrompt: "Channel rules from cove.md (channel-editable):\n\n" + coveMdContent + "\n\nCove: cross-channel messaging uses webhooks, not direct bot messages. Read the cove-ops skill for API details." } : {}),
         ...(message.message_reference?.message_id ? {
           ReplyToId: message.message_reference.message_id,
           ReplyToBody: message.referenced_message?.content,

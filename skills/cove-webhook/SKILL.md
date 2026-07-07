@@ -1,7 +1,7 @@
 ---
 name: "cove-webhook"
 description: "Send cross-channel messages in Cove via webhooks. Use when sending messages that should trigger bot response in target channel."
-status: proposal
+status: active
 version: "v1"
 date: "2026-06-11T02:00:12.518Z"
 ---
