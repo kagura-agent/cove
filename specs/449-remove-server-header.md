@@ -1,59 +1,42 @@
-# Spec: Remove server name header from sidebar
+# Spec: Hide ConnectionBanner when connected
 
 **Issue:** #449
 **Status:** Draft
 
 ## Problem
 
-The sidebar currently displays a header bar at the top containing:
-- 🏝️ emoji
-- Guild/server name (e.g. "Yueying Chen (Luna Chen)'s Server")
-- Settings gear icon (⚙️)
-
-This takes up vertical space (`var(--header-height)`) and displays the server name which is not useful in Cove's single-server context.
+The page has a `ConnectionBanner` fixed at the very top of the viewport. When connected, it displays the server icon + server name (e.g. "Yueying Chen (Luna Chen)'s Server"). This wastes vertical space — the server name is not useful in Cove's single-server context.
 
 ## Current Implementation
 
-`packages/client/src/components/Sidebar.tsx` lines 136–149:
+`packages/client/src/AppShell.tsx`:
 
 ```tsx
-<div style={styles.header}>
-  <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
-  <h1 style={styles.title}>{guilds[guildId ?? ""]?.name ?? "Cove"}</h1>
-  {guildId && canSeeSettings && (
-    <Button
-      type="text" size="small"
-      icon={<SettingOutlined />}
-      onClick={() => setServerSettingsOpen(true)}
-      aria-label="Server settings"
-      style={{ marginLeft: "auto", ... }}
-    />
-  )}
-</div>
+<ConnectionBanner status={wsStatus} serverName={serverName} serverIcon={serverIcon} />
 ```
+
+`packages/client/src/components/ConnectionBanner.tsx` renders three states:
+- **connecting** → "Connecting..."
+- **disconnected** → "Disconnected"
+- **connected** → server icon + server name
 
 ## Proposal
 
-Remove the entire header `<div style={styles.header}>` block including the 🏝️ emoji, server name, and settings gear.
+**Hide the banner entirely when connected.** Keep it visible for connecting / disconnected states — connection status feedback is still useful.
 
-### Settings gear relocation
+Implementation: return `null` (or render nothing) when `status === "connected"`.
 
-The settings gear (⚙️) currently lives in the header. After removing the header, it needs a new home. Options:
+### What about the sidebar header?
 
-- **Option A:** Move settings gear to the bottom of the sidebar (common pattern in Discord, Slack)
-- **Option B:** Move settings gear next to the "Channels" category header
-- **Option C:** Remove it entirely — settings accessible via other means
-
-**Recommendation:** Option A — bottom of sidebar, small icon row.
+The sidebar (`Sidebar.tsx`) also has a header row with 🏝️ + guild name + settings gear. That's a **separate element** and is out of scope for this issue. It can be addressed later if needed.
 
 ## Scope
 
-- Remove header block from `Sidebar.tsx`
-- Remove `header` and `title` from styles object
-- Relocate settings gear
-- Clean up related state if no longer needed (`serverSettingsOpen`, `closeServerSettings`)
+- `ConnectionBanner.tsx`: return `null` when `status === "connected"`
+- No other components affected
+- Settings gear is unaffected (it lives in the sidebar header, not in this banner)
 
-## Questions
+## Decision Log
 
-❓ Where should the settings gear go after removing the header?
-❓ Should we keep the 🏝️ branding somewhere else?
+- ✅ Connected state: hide banner completely (Luna: "点儿占位置")
+- ✅ Connecting / disconnected: keep as-is
