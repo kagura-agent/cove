@@ -121,7 +121,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       try {
         await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
       } catch (e: any) {
-        log?.warn?.(`cove: freshSend sendText failed for [${channelId}]: ${e.message}`);
+        log?.warn?.(`cove: freshSend sendText failed for [${channelId}] (message: ${message.id}): ${e.message}`);
         throw e;
       }
       finalReplyDelivered = true;
@@ -171,11 +171,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
         if (!text) {
+          // info not warn — empty text is legitimate for tool-only turns
           log?.info?.(`cove: deliver called with empty text for [${channelId}] (message: ${message.id})`);
-          return;
-        }
-        if (isAborted()) {
-          log?.warn?.(`cove: deliver skipped (post-text) — dispatch aborted for [${channelId}] (message: ${message.id}, ${text.length} chars)`);
           return;
         }
         progressDraft.markFinalReplyDelivered();
@@ -340,7 +337,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}] (message: ${message.id}, aborted: ${isAborted()})`);
         await draft.discardPending();
         await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
-          log?.warn?.(`cove: failed to delete orphaned draft: ${e.message}`)
+          log?.warn?.(`cove: failed to delete orphaned draft (message: ${message.id}): ${e.message}`)
         );
       }
     }
