@@ -45,8 +45,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let finalizedViaPreviewMessage = false;
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
+    let warnedSendOrEditAborted = false;
     const sendOrEdit = async (text: string): Promise<boolean> => {
-      if (isAborted()) return false;
+      if (isAborted()) {
+        if (!warnedSendOrEditAborted) {
+          log?.warn?.(`cove: stream update skipped — dispatch aborted for [${channelId}] (message: ${message.id})`);
+          warnedSendOrEditAborted = true;
+        }
+        return false;
+      }
       if (draftState.stopped && !draftState.final) return false;
       const trimmed = text.trimEnd();
       if (!trimmed || trimmed === lastSentText) return false;
@@ -100,7 +107,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
 
     const freshSend = async (text: string) => {
-      if (isAborted()) return;
+      if (isAborted()) {
+        log?.warn?.(`cove: freshSend skipped — dispatch aborted for [${channelId}] (message: ${message.id}, ${text.length} chars)`);
+        return;
+      }
       if (draftMessageId) {
         try { await restClient.deleteMessage(channelId, draftMessageId); }
         catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
@@ -108,7 +118,12 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
-      await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
+      try {
+        await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
+      } catch (e: any) {
+        log?.warn?.(`cove: freshSend sendText failed for [${channelId}] (message: ${message.id}): ${e.message}`);
+        throw e;
+      }
       finalReplyDelivered = true;
     };
 
@@ -127,7 +142,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       },
       buildFinalEdit: (payload) => payload.text || undefined,
       editFinal: async (id, text) => {
-        if (isAborted()) throw new Error("cove: dispatch aborted");
+        if (isAborted()) {
+          log?.warn?.(`cove: editFinal skipped — dispatch aborted for [${channelId}] (message: ${message.id}, ${text.length} chars)`);
+          throw new Error("cove: dispatch aborted");
+        }
         if (text.length > COVE_TEXT_CHUNK_LIMIT) {
           await freshSend(text);
         } else {
@@ -146,11 +164,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const dispatcherOptions = {
       typingCallbacks,
       deliver: async (payload: any, _info: { kind: string }) => {
-        if (isAborted()) return;
+        if (isAborted()) {
+          log?.warn?.(`cove: deliver skipped — dispatch aborted for [${channelId}] (message: ${message.id})`);
+          return;
+        }
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
-        if (!text) return;
-        if (isAborted()) return;
+        if (!text) {
+          // info not warn — empty text is legitimate for tool-only turns
+          log?.info?.(`cove: deliver called with empty text for [${channelId}] (message: ${message.id})`);
+          return;
+        }
         progressDraft.markFinalReplyDelivered();
         const canFinalize = Boolean(draftMessageId && !draftState.stopped);
         await deliverWithFinalizableLivePreviewAdapter({
@@ -307,11 +331,13 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       } else { throw err; }
     } finally {
       // Orphaned draft cleanup (Discord parity)
+      // Runs when final delivery never happened — delete stale progress preview
+      // so user doesn't see it frozen. Runs regardless of abort state.
       if (!finalReplyDelivered && !finalizedViaPreviewMessage && draftMessageId) {
-        log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}]`);
+        log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}] (message: ${message.id}, aborted: ${isAborted()})`);
         await draft.discardPending();
         await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
-          log?.warn?.(`cove: failed to delete orphaned draft: ${e.message}`)
+          log?.warn?.(`cove: failed to delete orphaned draft (message: ${message.id}): ${e.message}`)
         );
       }
     }
