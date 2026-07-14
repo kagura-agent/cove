@@ -48,7 +48,11 @@
             }
           },
           "defaultAccount": { "type": "string" },
-          "reactionNotifications": { "type": "string", "enum": ["off", "own", "all"] }
+          "reactionNotifications": { "type": "string", "enum": ["off", "own", "all"] },
+          "groupAllowFrom": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       },
       "uiHints": {
