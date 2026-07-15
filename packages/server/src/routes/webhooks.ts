@@ -5,6 +5,7 @@ import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
 import { PermissionBits } from "@cove/shared";
+import { WebhookType } from "../repos/webhooks.js";
 
 function stripToken<T extends { token?: unknown }>(webhook: T): Omit<T, "token"> {
   const { token: _, ...rest } = webhook;
@@ -67,6 +68,10 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
 
+    if (webhook.type === WebhookType.INTERNAL) {
+      return c.json({ message: "Cannot modify internal webhook", code: 50013 }, 403);
+    }
+
     await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
     const body = await parseJsonBody<{ name?: string; avatar?: string | null }>(c);
@@ -96,6 +101,10 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+
+    if (webhook.type === WebhookType.INTERNAL) {
+      return c.json({ message: "Cannot delete internal webhook", code: 50013 }, 403);
+    }
 
     await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 

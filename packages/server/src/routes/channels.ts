@@ -63,6 +63,8 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
     const channel = repos.channels.create(guildId, name, body.topic, body.type ?? 0);
 
+    repos.webhooks.createInternal(channel.id, guildId);
+
     dispatcher?.channelCreate(channel);
 
     return c.json(channel, 201);

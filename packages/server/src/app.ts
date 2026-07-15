@@ -13,6 +13,7 @@ import { channelFilesRoutes } from "./routes/channel-files.js";
 import { threadRoutes } from "./routes/threads.js";
 import { roleRoutes } from "./routes/roles.js";
 import { guildRoutes } from "./routes/guilds.js";
+import { incomingRoutes } from "./routes/incoming.js";
 import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
 import { API_PREFIX } from "@cove/shared";
@@ -135,6 +136,7 @@ export function createApp(
   app.route(API_PREFIX, channelFilesRoutes(repos, dispatcher));
   app.route(API_PREFIX, threadRoutes(repos, dispatcher));
   app.route(API_PREFIX, roleRoutes(repos, dispatcher));
+  app.route(API_PREFIX, incomingRoutes(repos, dispatcher));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get(`${API_PREFIX}/gateway`, (c) => c.json({ url: gwUrl }));
