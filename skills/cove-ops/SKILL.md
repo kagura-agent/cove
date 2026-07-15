@@ -214,20 +214,23 @@ Send messages between channels via webhooks. Webhook messages appear as a differ
 
 **One-way push only.** Each channel processes what it receives. Results do NOT auto-return unless explicitly requested. This prevents echo loops.
 
-### Webhook Username Convention
-
-Always set the `username` field to `From #channel-name` (the source channel's name). This tells the receiving channel where the message came from.
-
 ### Helper Script (recommended)
 
 ```bash
-node ~/.openclaw/workspace-ruantang/cove/skills/cove-webhook/scripts/cove-webhook-send.mjs \
+node skills/cove-ops/scripts/cove-webhook-send.mjs \
   --to TARGET_CHANNEL_NAME \
   --from SOURCE_CHANNEL_NAME \
-  --message "Your message here"
+  -m "Your message here"
+
+# With thread:
+node skills/cove-ops/scripts/cove-webhook-send.mjs \
+  --to TARGET_CHANNEL_NAME \
+  --from SOURCE_CHANNEL_NAME \
+  -m "Thread reply" \
+  --thread THREAD_ID
 ```
 
-The script auto-creates and caches webhooks. No manual webhook management needed.
+The script auto-creates and caches webhooks (`~/.cache/cove-webhooks/`). Accepts channel names or IDs. Env auto-read from `openclaw.json`.
 
 ### Manual: Create Webhook
 
