@@ -282,7 +282,6 @@ export interface IncomingMessageRequest {
   content: string;
   username?: string;
   avatar_url?: string;
-  embeds?: unknown[];
   thread_id?: string;
 }
 

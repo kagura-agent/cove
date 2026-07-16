@@ -42,6 +42,9 @@ export function incomingRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     let targetChannelId = channelId;
     if (body.thread_id) {
+      const threadIdErr = validateString(body.thread_id, "thread_id", { maxLength: 64 });
+      if (threadIdErr) return validationError(c, threadIdErr);
+
       const thread = repos.channels.getById(body.thread_id);
       if (!thread || ![10, 11, 12].includes(thread.type) || thread.parent_id !== channelId) {
         return c.json({ message: "Unknown Channel", code: 10003 }, 404);

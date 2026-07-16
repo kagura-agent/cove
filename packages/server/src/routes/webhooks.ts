@@ -55,7 +55,9 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const user = c.get("botUser");
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
-    if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    if (!webhook || webhook.type === WebhookType.INTERNAL) {
+      return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    }
 
     await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
 
