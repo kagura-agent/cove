@@ -274,6 +274,15 @@ export interface Webhook {
   name: string;
   avatar: string | null;
   token?: string;
+  type?: number;
+}
+
+/** Request body for the cross-channel incoming message API. */
+export interface IncomingMessageRequest {
+  content: string;
+  username?: string;
+  avatar_url?: string;
+  thread_id?: string;
 }
 
 /** A thread member entry. */

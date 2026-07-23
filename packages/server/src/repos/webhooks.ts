@@ -2,6 +2,8 @@ import type Database from "better-sqlite3";
 import { generateSnowflake, type Webhook } from "@cove/shared";
 import crypto from "node:crypto";
 
+export const WebhookType = { USER: 1, INTERNAL: 2 } as const;
+
 interface WebhookRow {
   id: string;
   channel_id: string;
@@ -9,6 +11,7 @@ interface WebhookRow {
   name: string;
   avatar: string | null;
   token: string;
+  type: number;
   created_at: number;
 }
 
@@ -20,6 +23,7 @@ function toWebhook(row: WebhookRow): Webhook {
     name: row.name,
     avatar: row.avatar,
     token: row.token,
+    type: row.type,
   };
 }
 
@@ -30,22 +34,27 @@ function toPublicWebhook(row: WebhookRow): Webhook {
     guild_id: row.guild_id,
     name: row.name,
     avatar: row.avatar,
+    type: row.type,
   };
 }
 
 export class WebhooksRepo {
   constructor(private db: Database.Database) {}
 
-  create(channelId: string, guildId: string, name: string, avatar?: string | null): Webhook {
+  create(channelId: string, guildId: string, name: string, avatar?: string | null, type: number = WebhookType.USER): Webhook {
     const id = generateSnowflake();
     const token = crypto.randomUUID();
     const now = Date.now();
 
     this.db.prepare(
-      "INSERT INTO webhooks (id, channel_id, guild_id, name, avatar, token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, channelId, guildId, name, avatar ?? null, token, now);
+      "INSERT INTO webhooks (id, channel_id, guild_id, name, avatar, token, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, guildId, name, avatar ?? null, token, type, now);
 
-    return { id, channel_id: channelId, guild_id: guildId, name, avatar: avatar ?? null, token };
+    return { id, channel_id: channelId, guild_id: guildId, name, avatar: avatar ?? null, token, type };
+  }
+
+  createInternal(channelId: string, guildId: string): Webhook {
+    return this.create(channelId, guildId, "Internal", null, WebhookType.INTERNAL);
   }
 
   findById(id: string): Webhook | null {
@@ -63,13 +72,24 @@ export class WebhooksRepo {
     return row ? toWebhook(row) : null;
   }
 
-  listByChannel(channelId: string): Webhook[] {
-    const rows = this.db.prepare("SELECT * FROM webhooks WHERE channel_id = ? ORDER BY created_at").all(channelId) as WebhookRow[];
+  findInternalByChannel(channelId: string): Webhook | null {
+    const row = this.db.prepare("SELECT * FROM webhooks WHERE channel_id = ? AND type = 2 LIMIT 1").get(channelId) as WebhookRow | undefined;
+    return row ? toWebhook(row) : null;
+  }
+
+  listByChannel(channelId: string, includeInternal = false): Webhook[] {
+    const sql = includeInternal
+      ? "SELECT * FROM webhooks WHERE channel_id = ? ORDER BY created_at"
+      : "SELECT * FROM webhooks WHERE channel_id = ? AND type = 1 ORDER BY created_at";
+    const rows = this.db.prepare(sql).all(channelId) as WebhookRow[];
     return rows.map(toPublicWebhook);
   }
 
-  listByGuild(guildId: string): Webhook[] {
-    const rows = this.db.prepare("SELECT * FROM webhooks WHERE guild_id = ? ORDER BY created_at").all(guildId) as WebhookRow[];
+  listByGuild(guildId: string, includeInternal = false): Webhook[] {
+    const sql = includeInternal
+      ? "SELECT * FROM webhooks WHERE guild_id = ? ORDER BY created_at"
+      : "SELECT * FROM webhooks WHERE guild_id = ? AND type = 1 ORDER BY created_at";
+    const rows = this.db.prepare(sql).all(guildId) as WebhookRow[];
     return rows.map(toPublicWebhook);
   }
 
