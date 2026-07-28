@@ -1,8 +1,9 @@
+import type { AgentToolResult } from "openclaw/plugin-sdk/agent-core";
 import type { ChannelMessageActionContext } from "openclaw/plugin-sdk/channel-contract";
 import { readStringParam, readPositiveIntegerParam, jsonResult } from "openclaw/plugin-sdk/channel-actions";
 import { resolveAccount, getRestClient } from "./channel.js";
 
-export async function handleCoveMessageAction(ctx: ChannelMessageActionContext) {
+export async function handleCoveMessageAction(ctx: ChannelMessageActionContext): Promise<AgentToolResult<unknown>> {
   const { action, params, cfg, accountId } = ctx;
   const account = resolveAccount(cfg, accountId);
   const client = getRestClient(account.baseUrl, account.token);
@@ -50,8 +51,6 @@ export async function handleCoveMessageAction(ctx: ChannelMessageActionContext) 
       const result = await client.listActiveThreads(target!);
       return jsonResult({ ok: true, action: "thread-list", threads: result.threads });
     }
-    case "thread-reply":
-      return null; // same as send — handled by outbound pipeline
     // P1: channel info
     case "channel-info": {
       const channel = await client.getChannel(target!);
@@ -62,10 +61,7 @@ export async function handleCoveMessageAction(ctx: ChannelMessageActionContext) 
       const channels = await client.getChannels(account.guildId);
       return jsonResult({ ok: true, action: "channel-list", channels });
     }
-    // fallthrough
-    case "send":
-      return null; // handled by outbound durable pipeline
     default:
-      return null; // unsupported actions fall through to framework
+      throw new Error(`cove: unsupported message action: ${action}`);
   }
 }

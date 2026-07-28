@@ -7,10 +7,11 @@
  * - handleAction: lazy-loads runtime module for actual execution
  */
 
-import type { ChannelMessageActionAdapter, ChannelMessageActionName } from "openclaw/plugin-sdk/channel-contract";
+import type { ChannelMessageActionAdapter, ChannelMessageActionName, ChannelToolSend } from "openclaw/plugin-sdk/channel-contract";
+import { extractToolSend } from "openclaw/plugin-sdk/tool-send";
 
 /** Actions that go through the outbound durable pipeline (not handleAction). */
-const LOCAL_ACTIONS: ReadonlySet<string> = new Set(["send"]);
+const LOCAL_ACTIONS: ReadonlySet<string> = new Set(["send", "thread-reply"]);
 
 /** All actions this adapter declares support for. */
 const SUPPORTED_ACTIONS: ChannelMessageActionName[] = [
@@ -28,6 +29,8 @@ const SUPPORTED_ACTIONS: ChannelMessageActionName[] = [
   "channel-list",
 ];
 
+let runtimePromise: Promise<typeof import("./message-actions.runtime.js")> | undefined;
+
 export const coveMessageActionAdapter: ChannelMessageActionAdapter = {
   describeMessageTool() {
     return {
@@ -40,9 +43,18 @@ export const coveMessageActionAdapter: ChannelMessageActionAdapter = {
     return LOCAL_ACTIONS.has(action) ? "local" : "gateway";
   },
 
+  extractToolSend({ args }): ChannelToolSend | null {
+    const action = typeof args.action === "string" ? args.action.trim() : "";
+    if (action === "send") return extractToolSend(args, "send");
+    if (action === "thread-reply") {
+      const channelId = typeof args.channelId === "string" ? args.channelId.trim() : "";
+      return channelId ? { to: `channel:${channelId}` } : null;
+    }
+    return null;
+  },
+
   async handleAction(ctx) {
-    // Lazy-load runtime to avoid startup cost (Discord pattern)
-    const { handleCoveMessageAction } = await import("./message-actions.runtime.js");
-    return handleCoveMessageAction(ctx);
+    runtimePromise ??= import("./message-actions.runtime.js");
+    return (await runtimePromise).handleCoveMessageAction(ctx);
   },
 };
