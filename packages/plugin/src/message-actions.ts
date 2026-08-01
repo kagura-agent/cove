@@ -7,8 +7,9 @@
  * - handleAction: lazy-loads runtime module for actual execution
  */
 
-import type { ChannelMessageActionAdapter, ChannelMessageActionName, ChannelToolSend } from "openclaw/plugin-sdk/channel-contract";
+import type { ChannelMessageActionAdapter, ChannelMessageActionName, ChannelToolSend, ChannelMessageToolSchemaContribution } from "openclaw/plugin-sdk/channel-contract";
 import { extractToolSend } from "openclaw/plugin-sdk/tool-send";
+import { Type } from "typebox";
 
 /** Actions that go through the outbound durable pipeline (not handleAction). */
 const LOCAL_ACTIONS: ReadonlySet<string> = new Set(["send", "thread-reply"]);
@@ -34,6 +35,22 @@ const SUPPORTED_ACTIONS: ChannelMessageActionName[] = [
   "task-update" as ChannelMessageActionName,
 ];
 
+const TASK_SCHEMA: ChannelMessageToolSchemaContribution = {
+  properties: {
+    taskId: Type.Optional(Type.String({ description: "Task ID (required for task-get, task-update)" })),
+    title: Type.Optional(Type.String({ description: "Task title (required for task-create)" })),
+    assigneeId: Type.Optional(Type.String({ description: "User ID to assign the task to" })),
+    status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done" })),
+  },
+  actions: [
+    "task-create" as ChannelMessageActionName,
+    "task-list" as ChannelMessageActionName,
+    "task-get" as ChannelMessageActionName,
+    "task-update" as ChannelMessageActionName,
+  ],
+  visibility: "current-channel",
+};
+
 let runtimePromise: Promise<typeof import("./message-actions.runtime.js")> | undefined;
 
 export const coveMessageActionAdapter: ChannelMessageActionAdapter = {
@@ -41,6 +58,7 @@ export const coveMessageActionAdapter: ChannelMessageActionAdapter = {
     return {
       actions: [...SUPPORTED_ACTIONS],
       capabilities: [],
+      schema: [TASK_SCHEMA],
     };
   },
 
