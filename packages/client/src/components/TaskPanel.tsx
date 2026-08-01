@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
 import type { Task, TaskStatus } from "@cove/shared";
@@ -99,7 +99,8 @@ export function TaskPanel({ channelId, onClose, onNewTask }: Props) {
   const navigate = useNavigate();
   const { guildId } = useActiveIds();
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
-  const tasks = useTaskStore((s) => s.getTasksForChannel(channelId));
+  const byTaskId = useTaskStore((s) => s.byTaskId);
+  const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId), [byTaskId, channelId]);
 
   useEffect(() => {
     setLoading(true);
