@@ -1,12 +1,8 @@
 import type { CSSProperties } from "react";
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import type { Message } from "../types";
 import type { TaskStatus } from "@cove/shared";
 import { useTaskStore } from "../stores/useTaskStore";
-import { useActiveIds } from "../hooks/useActiveIds";
-import { routes } from "../lib/routes";
-import { ThreadIcon } from "./ThreadIcon";
 import * as api from "../lib/api";
 
 interface TaskSnapshot {
@@ -111,10 +107,6 @@ function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string
 }
 
 export function TaskStatusBar({ message }: { message: Message }) {
-  const navigate = useNavigate();
-  const { guildId } = useActiveIds();
-  const [hovered, setHovered] = useState(false);
-
   let snapshot: TaskSnapshot;
   try {
     snapshot = JSON.parse(message.content);
@@ -130,14 +122,8 @@ export function TaskStatusBar({ message }: { message: Message }) {
   });
 
   const status = liveTask?.status ?? snapshot.status;
+  const seq = liveTask?.seq ?? snapshot.seq;
   const taskId = liveTask?.task_id ?? null;
-  const threadId = liveTask?.thread_id ?? snapshot.thread_id ?? message.thread?.id;
-
-  function handleThreadClick() {
-    if (guildId && threadId) {
-      navigate(routes.thread(guildId, message.channel_id, threadId));
-    }
-  }
 
   return (
     <div style={{
@@ -147,29 +133,7 @@ export function TaskStatusBar({ message }: { message: Message }) {
       marginTop: "4px",
     }}>
       <TaskStatusPill status={status} taskId={taskId} />
-      {threadId && (
-        <div
-          onClick={handleThreadClick}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-sm)",
-            padding: "4px var(--space-sm)",
-            borderRadius: "var(--space-xs)",
-            cursor: "pointer",
-            color: "var(--text-link, #00aff4)",
-            fontSize: "var(--font-size-sm)",
-            fontWeight: 500,
-            background: hovered ? "var(--bg-modifier-hover)" : "transparent",
-            transition: "background 0.15s",
-          }}
-        >
-          <ThreadIcon size={16} style={{ color: "var(--text-link, #00aff4)" }} />
-          <span>View Task Thread &#8250;</span>
-        </div>
-      )}
+      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>#{seq}</span>
     </div>
   );
 }
