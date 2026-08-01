@@ -1,8 +1,12 @@
 import type { CSSProperties } from "react";
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Message } from "../types";
 import type { TaskStatus } from "@cove/shared";
 import { useTaskStore } from "../stores/useTaskStore";
+import { useActiveIds } from "../hooks/useActiveIds";
+import { routes } from "../lib/routes";
+import { ThreadIcon } from "./ThreadIcon";
 import * as api from "../lib/api";
 
 interface TaskSnapshot {
@@ -10,6 +14,7 @@ interface TaskSnapshot {
   status: TaskStatus;
   assignee_id: string | null;
   seq: number;
+  thread_id?: string;
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -105,12 +110,16 @@ function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string
   );
 }
 
-export function TaskCard({ message }: { message: Message }) {
+export function TaskStatusBar({ message }: { message: Message }) {
+  const navigate = useNavigate();
+  const { guildId } = useActiveIds();
+  const [hovered, setHovered] = useState(false);
+
   let snapshot: TaskSnapshot;
   try {
     snapshot = JSON.parse(message.content);
   } catch {
-    return <div style={{ color: "var(--text-muted)" }}>Invalid task card</div>;
+    return null;
   }
 
   const liveTask = useTaskStore((s) => {
@@ -120,34 +129,58 @@ export function TaskCard({ message }: { message: Message }) {
     return null;
   });
 
-  const title = liveTask?.title ?? snapshot.title;
   const status = liveTask?.status ?? snapshot.status;
-  const seq = liveTask?.seq ?? snapshot.seq;
   const taskId = liveTask?.task_id ?? null;
+  const threadId = liveTask?.thread_id ?? snapshot.thread_id ?? message.thread?.id;
 
-  const cardStyle: CSSProperties = {
-    background: "var(--bg-secondary)",
-    border: "1px solid var(--bg-modifier-hover)",
-    borderLeft: `3px solid ${STATUS_COLORS[status]}`,
-    borderRadius: 8,
-    padding: "10px 14px",
-    maxWidth: 480,
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  };
+  function handleThreadClick() {
+    if (guildId && threadId) {
+      navigate(routes.thread(guildId, message.channel_id, threadId));
+    }
+  }
 
   return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--header-primary)" }}>
-        {title}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>
-        <TaskStatusPill status={status} taskId={taskId} />
-        <span>#{seq}</span>
-      </div>
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "var(--space-sm)",
+      marginTop: "4px",
+    }}>
+      <TaskStatusPill status={status} taskId={taskId} />
+      {threadId && (
+        <div
+          onClick={handleThreadClick}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-sm)",
+            padding: "4px var(--space-sm)",
+            borderRadius: "var(--space-xs)",
+            cursor: "pointer",
+            color: "var(--text-link, #00aff4)",
+            fontSize: "var(--font-size-sm)",
+            fontWeight: 500,
+            background: hovered ? "var(--bg-modifier-hover)" : "transparent",
+            transition: "background 0.15s",
+          }}
+        >
+          <ThreadIcon size={16} style={{ color: "var(--text-link, #00aff4)" }} />
+          <span>View Task Thread &#8250;</span>
+        </div>
+      )}
     </div>
   );
+}
+
+export function parseTaskTitle(content: string): string {
+  try {
+    const data = JSON.parse(content);
+    return data.title ?? content;
+  } catch {
+    return content;
+  }
 }
 
 export function TaskAssignmentMessage({ message }: { message: Message }) {

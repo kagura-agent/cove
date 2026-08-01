@@ -5,7 +5,7 @@ import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { MessageReplyQuote } from "./MessageReplyQuote";
 import { ThreadIndicator } from "./ThreadIndicator";
-import { TaskCard, TaskAssignmentMessage, TaskHeartbeatMessage } from "./TaskCard";
+import { TaskStatusBar, parseTaskTitle, TaskAssignmentMessage, TaskHeartbeatMessage } from "./TaskCard";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useEditStore } from "../stores/useEditStore";
@@ -235,14 +235,6 @@ function PendingIndicator({ status, messageId, channelId, content, author, messa
 export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextMenu }: MessageItemProps) {
   const contentType = parseMetadataContentType(message);
 
-  if (contentType === "task") {
-    return (
-      <div className="discord-msg-row" data-message-id={message.id} style={{ padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-start)" }}>
-        <TaskCard message={message} />
-      </div>
-    );
-  }
-
   if (contentType === "task_assignment") {
     return (
       <div className="discord-msg-row" data-message-id={message.id}>
@@ -375,7 +367,10 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
               wordBreak: "break-word",
             }}
           >
-            <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
+            {contentType === "task"
+              ? <span style={{ fontWeight: 600 }}>{parseTaskTitle(message.content)}</span>
+              : <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
+            }
             {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
             <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
           </div>
@@ -401,6 +396,9 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
           {/* Reactions */}
           <ReactionPills message={message} />
+
+          {/* Task status bar */}
+          {contentType === "task" && <TaskStatusBar message={message} />}
 
           {/* Thread indicator */}
           {message.thread && (
@@ -452,7 +450,10 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             wordBreak: "break-word",
           }}
         >
-          <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
+          {contentType === "task"
+            ? <span style={{ fontWeight: 600 }}>{parseTaskTitle(message.content)}</span>
+            : <ChatMarkdown content={message.content} mentionUsers={mentionUsers} mentionChannels={mentionChannels} />
+          }
           {message.edited_timestamp && <span style={editedStyle}>(edited)</span>}
           <PendingIndicator status={pendingStatus} messageId={message.id} channelId={message.channel_id} content={message.content} author={message.author} messageReference={message.message_reference} referencedMessage={message.referenced_message} />
         </div>
@@ -478,6 +479,9 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
         {/* Reactions */}
         <ReactionPills message={message} />
+
+        {/* Task status bar */}
+        {contentType === "task" && <TaskStatusBar message={message} />}
 
         {/* Thread indicator */}
         {message.thread && (
