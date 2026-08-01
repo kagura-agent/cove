@@ -1,5 +1,5 @@
 import type { Message, Channel, Guild } from "../types";
-import type { Role, ThreadMember } from "@cove/shared";
+import type { Role, Task, ThreadMember } from "@cove/shared";
 
 export interface ReadyGuild extends Guild {
   channels: Channel[];
@@ -38,6 +38,8 @@ export interface GatewayEventMap {
   THREAD_LIST_SYNC: { guild_id: string; channel_ids?: string[]; threads: Channel[]; members: ThreadMember[] };
   THREAD_MEMBER_UPDATE: { id: string; user_id: string };
   THREAD_MEMBERS_UPDATE: { id: string; guild_id: string; added_members: Array<{ user_id: string }>; removed_members: Array<{ user_id: string }> };
+  TASK_CREATED: Task;
+  TASK_UPDATED: Task;
 }
 
 type Handler<T> = (data: T) => void;

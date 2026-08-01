@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, Message } from "@cove/shared";
+import type { Channel, Message, Task } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -225,5 +225,28 @@ export class CoveRestClient {
       if (err instanceof CoveApiError && (err.status === 404 || err.status === 403)) return null;
       throw err;
     }
+  }
+
+  /** POST /api/v10/channels/:channelId/tasks — create a task. */
+  async createTask(channelId: string, title: string, assigneeId?: string): Promise<Task> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, {
+      title,
+      ...(assigneeId ? { assignee_id: assigneeId } : {}),
+    });
+  }
+
+  /** GET /api/v10/channels/:channelId/tasks — list tasks in a channel. */
+  async getTasks(channelId: string): Promise<Task[]> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/tasks`);
+  }
+
+  /** GET /api/v10/tasks/:taskId — get a single task. */
+  async getTask(taskId: string): Promise<Task> {
+    return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
+  }
+
+  /** PATCH /api/v10/tasks/:taskId — update a task. */
+  async updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string }): Promise<Task> {
+    return this.request("PATCH", `${API_PREFIX}/tasks/${taskId}`, fields);
   }
 }

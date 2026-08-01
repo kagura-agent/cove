@@ -5,6 +5,7 @@ import { pickAvatarColor, getContrastTextColor } from "../lib/avatar-palette";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { MessageReplyQuote } from "./MessageReplyQuote";
 import { ThreadIndicator } from "./ThreadIndicator";
+import { TaskCard, TaskAssignmentMessage, TaskHeartbeatMessage } from "./TaskCard";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useReplyStore } from "../stores/useReplyStore";
 import { useEditStore } from "../stores/useEditStore";
@@ -16,6 +17,16 @@ import { useState, useMemo } from "react";
 import { ImageLightbox } from "./ImageLightbox";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
+
+function parseMetadataContentType(message: Message): string | null {
+  if (!message.metadata) return null;
+  try {
+    const meta = JSON.parse(message.metadata);
+    return meta.content_type ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function formatTime(ts: string): string {
   try {
@@ -222,6 +233,32 @@ function PendingIndicator({ status, messageId, channelId, content, author, messa
 }
 
 export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextMenu }: MessageItemProps) {
+  const contentType = parseMetadataContentType(message);
+
+  if (contentType === "task") {
+    return (
+      <div className="discord-msg-row" data-message-id={message.id} style={{ padding: "var(--space-xs) var(--message-right-pad) 0 var(--content-start)" }}>
+        <TaskCard message={message} />
+      </div>
+    );
+  }
+
+  if (contentType === "task_assignment") {
+    return (
+      <div className="discord-msg-row" data-message-id={message.id}>
+        <TaskAssignmentMessage message={message} />
+      </div>
+    );
+  }
+
+  if (contentType === "task_heartbeat") {
+    return (
+      <div className="discord-msg-row" data-message-id={message.id}>
+        <TaskHeartbeatMessage message={message} />
+      </div>
+    );
+  }
+
   const pendingStatus = useMessageStore((s) => s.pendingStatus[message.id]);
   const currentUserId = useUserStore((s) => s.id);
   const rowExtraStyle = pendingStatus === "pending" ? pendingStyle : pendingStatus === "failed" ? failedRowStyle : undefined;
