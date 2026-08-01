@@ -135,8 +135,14 @@ export class CoveRestClient {
   }
 
   /** GET /api/v10/channels/:id/messages — fetch recent messages. */
-  async getMessages(channelId: string, limit = 50): Promise<Message[]> {
-    return this.request("GET", `${API_PREFIX}/channels/${channelId}/messages?limit=${limit}`);
+  async getMessages(channelId: string, options?: { limit?: number; before?: string; after?: string } | number): Promise<Message[]> {
+    const opts = typeof options === "number" ? { limit: options } : options ?? {};
+    const params = new URLSearchParams();
+    if (opts.limit) params.set("limit", String(opts.limit));
+    if (opts.before) params.set("before", opts.before);
+    if (opts.after) params.set("after", opts.after);
+    const qs = params.toString();
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/messages${qs ? `?${qs}` : ""}`);
   }
 
   /** DELETE /api/v10/channels/:id/messages/:msgId — delete a message. */
@@ -177,6 +183,37 @@ export class CoveRestClient {
       ...(username ? { username } : {}),
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     });
+  }
+
+  /** PUT /api/v10/channels/:ch/messages/:msg/reactions/:emoji/@me — add reaction. */
+  async addReaction(channelId: string, messageId: string, emoji: string): Promise<void> {
+    return this.requestVoid("PUT", `${API_PREFIX}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`);
+  }
+
+  /** DELETE /api/v10/channels/:ch/messages/:msg/reactions/:emoji/@me — remove reaction. */
+  async removeReaction(channelId: string, messageId: string, emoji: string): Promise<void> {
+    return this.requestVoid("DELETE", `${API_PREFIX}/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`);
+  }
+
+  /** POST /api/v10/channels/:channelId/messages/:messageId/threads — create thread from message. */
+  async createThreadFromMessage(channelId: string, messageId: string, name: string, autoArchiveDuration?: number): Promise<Channel> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/messages/${messageId}/threads`, {
+      name,
+      ...(autoArchiveDuration ? { auto_archive_duration: autoArchiveDuration } : {}),
+    });
+  }
+
+  /** POST /api/v10/channels/:channelId/threads — create standalone thread. */
+  async createThread(channelId: string, name: string, autoArchiveDuration?: number): Promise<Channel> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/threads`, {
+      name,
+      ...(autoArchiveDuration ? { auto_archive_duration: autoArchiveDuration } : {}),
+    });
+  }
+
+  /** GET /api/v10/channels/:channelId/threads/active — list active threads. */
+  async listActiveThreads(channelId: string): Promise<{ threads: Channel[]; has_more: boolean }> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/threads/active`);
   }
 
   /** GET /api/v10/channels/:channelId/files/:filename — get a channel file. */

@@ -1,6 +1,7 @@
 /** Cove channel plugin — createChatChannelPlugin shell with outbound + message adapter. */
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { createChannelMessageAdapterFromOutbound } from "openclaw/plugin-sdk/channel-message";
+import { coveMessageActionAdapter } from "./message-actions.js";
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
@@ -58,7 +59,7 @@ const coveOutbound = {
   attachedResults: { channel: "cove", sendText: coveSendText },
 };
 
-const coveMessageAdapter = createChannelMessageAdapterFromOutbound({
+const coveMessageBaseAdapter = createChannelMessageAdapterFromOutbound({
   id: "cove",
   outbound: { sendText: async (ctx: any) => coveSendText(ctx) },
 });
@@ -109,7 +110,8 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
         });
       },
     },
-    message: coveMessageAdapter,
+    message: coveMessageBaseAdapter,
+    actions: coveMessageActionAdapter,
     gateway: {
       startAccount: async (ctx) => {
         const { account, cfg, log } = ctx;
