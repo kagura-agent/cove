@@ -21,7 +21,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return c.json({ message: "Cannot create tasks inside a thread", code: 50035 }, 400);
     }
 
-    const body = await parseJsonBody<{ title: string; assignee_id?: string }>(c);
+    const body = await parseJsonBody<{ title: string; assignee_id?: string; description?: string }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const titleErr = validateString(body.title, "title", { required: true, maxLength: 200 });
@@ -124,7 +124,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       };
 
       // 5. Task row — written last. Agent may receive message before this exists.
-      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq);
+      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
 
       return { cardMessage, thread, assignmentMessage, task };
     })();

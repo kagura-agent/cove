@@ -10,6 +10,11 @@ interface TaskRow {
   assignee_id: string | null;
   title: string;
   seq: number;
+  guild_id: string;
+  description: string;
+  created_by: string;
+  heartbeat_interval_ms: number;
+  heartbeat_last_at: number;
   created_at: number;
   updated_at: number;
 }
@@ -24,6 +29,11 @@ function toTask(row: TaskRow): Task {
     assignee_id: row.assignee_id,
     title: row.title,
     seq: row.seq,
+    guild_id: row.guild_id,
+    description: row.description,
+    created_by: row.created_by,
+    heartbeat_interval_ms: row.heartbeat_interval_ms,
+    heartbeat_last_at: row.heartbeat_last_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -32,12 +42,15 @@ function toTask(row: TaskRow): Task {
 export class TasksRepo {
   constructor(private db: Database.Database) {}
 
-  create(taskId: string, channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number): Task {
+  create(taskId: string, channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number, opts?: { guild_id?: string; description?: string; created_by?: string }): Task {
     const now = Date.now();
+    const guildId = opts?.guild_id ?? "";
+    const description = opts?.description ?? "";
+    const createdBy = opts?.created_by ?? "";
     this.db.prepare(
-      "INSERT INTO tasks (task_id, channel_id, thread_id, message_id, status, assignee_id, title, seq, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)"
-    ).run(taskId, channelId, threadId, messageId, assigneeId, title, seq, now, now);
-    return { task_id: taskId, channel_id: channelId, thread_id: threadId, message_id: messageId, status: "open", assignee_id: assigneeId, title, seq, created_at: now, updated_at: now };
+      "INSERT INTO tasks (task_id, channel_id, thread_id, message_id, status, assignee_id, title, seq, guild_id, description, created_by, heartbeat_interval_ms, heartbeat_last_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)"
+    ).run(taskId, channelId, threadId, messageId, assigneeId, title, seq, guildId, description, createdBy, now, now);
+    return { task_id: taskId, channel_id: channelId, thread_id: threadId, message_id: messageId, status: "open", assignee_id: assigneeId, title, seq, guild_id: guildId, description, created_by: createdBy, heartbeat_interval_ms: 0, heartbeat_last_at: 0, created_at: now, updated_at: now };
   }
 
   getById(taskId: string): Task | null {
@@ -50,7 +63,7 @@ export class TasksRepo {
     return rows.map(toTask);
   }
 
-  update(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string }): Task | null {
+  update(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number; heartbeat_last_at?: number }): Task | null {
     const task = this.getById(taskId);
     if (!task) return null;
 
@@ -60,6 +73,9 @@ export class TasksRepo {
     if (fields.status !== undefined) { sets.push("status = ?"); values.push(fields.status); }
     if (fields.assignee_id !== undefined) { sets.push("assignee_id = ?"); values.push(fields.assignee_id); }
     if (fields.title !== undefined) { sets.push("title = ?"); values.push(fields.title); }
+    if (fields.description !== undefined) { sets.push("description = ?"); values.push(fields.description); }
+    if (fields.heartbeat_interval_ms !== undefined) { sets.push("heartbeat_interval_ms = ?"); values.push(fields.heartbeat_interval_ms); }
+    if (fields.heartbeat_last_at !== undefined) { sets.push("heartbeat_last_at = ?"); values.push(fields.heartbeat_last_at); }
 
     if (sets.length === 0) return task;
 

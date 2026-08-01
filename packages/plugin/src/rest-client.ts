@@ -228,10 +228,11 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:channelId/tasks — create a task. */
-  async createTask(channelId: string, title: string, assigneeId?: string): Promise<Task> {
+  async createTask(channelId: string, title: string, assigneeId?: string, description?: string): Promise<Task> {
     return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, {
       title,
       ...(assigneeId ? { assignee_id: assigneeId } : {}),
+      ...(description ? { description } : {}),
     });
   }
 

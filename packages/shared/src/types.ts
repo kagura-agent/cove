@@ -300,6 +300,11 @@ export interface Task {
   assignee_id: string | null;
   title: string;
   seq: number;
+  guild_id: string;
+  description: string;
+  created_by: string;
+  heartbeat_interval_ms: number;
+  heartbeat_last_at: number;
   created_at: number;
   updated_at: number;
 }

@@ -25,6 +25,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
       assigneeId: Type.Optional(Type.String({ description: "User ID to assign the task to" })),
       status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done (for update)" })),
+      description: Type.Optional(Type.String({ description: "Task description (optional for create)" })),
     }, { additionalProperties: false }),
     execute: async (_toolCallId: string, rawParams: Record<string, unknown>) => {
       const action = String(rawParams.action ?? "");
@@ -33,6 +34,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       const title = rawParams.title as string | undefined;
       const assigneeId = rawParams.assigneeId as string | undefined;
       const status = rawParams.status as string | undefined;
+      const description = rawParams.description as string | undefined;
 
       let account;
       try {
@@ -46,7 +48,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
         case "create": {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for create" });
-          const task = await client.createTask(channelId, title, assigneeId);
+          const task = await client.createTask(channelId, title, assigneeId, description);
           return jsonResult({ ok: true, action: "create", task });
         }
         case "list": {
