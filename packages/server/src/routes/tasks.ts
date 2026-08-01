@@ -38,10 +38,10 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       const messageId = generateSnowflake();
 
       const cardContent = JSON.stringify({ title: body.title.trim(), status: "open", assignee_id: assigneeId, seq });
+      const metadata = JSON.stringify({ content_type: "task" });
       repos.db.prepare(
         "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(messageId, channelId, user.id, user.username, cardContent, now, JSON.stringify({ content_type: "task" }), null);
-
+      ).run(messageId, channelId, user.id, user.username, cardContent, now, metadata, null);
       const cardMessage: Message = {
         id: messageId,
         channel_id: channelId,
@@ -57,6 +57,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         pinned: false,
         tts: false,
         mention_everyone: false,
+        metadata,
       };
 
       const thread = repos.threads.createFromMessage(
