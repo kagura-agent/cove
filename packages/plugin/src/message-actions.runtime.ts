@@ -61,34 +61,6 @@ export async function handleCoveMessageAction(ctx: ChannelMessageActionContext):
       const channels = await client.getChannels(account.guildId);
       return jsonResult({ ok: true, action: "channel-list", channels });
     }
-    // Task actions
-    case "task-create" as string: {
-      const title = readStringParam(params, "title", { required: true })!;
-      const assigneeId = readStringParam(params, "assigneeId");
-      const task = await client.createTask(target!, title, assigneeId ?? undefined);
-      return jsonResult({ ok: true, action: "task-create", task });
-    }
-    case "task-list" as string: {
-      const tasks = await client.getTasks(target!);
-      return jsonResult({ ok: true, action: "task-list", tasks });
-    }
-    case "task-get" as string: {
-      const taskId = readStringParam(params, "taskId", { required: true })!;
-      const task = await client.getTask(taskId);
-      return jsonResult({ ok: true, action: "task-get", task });
-    }
-    case "task-update" as string: {
-      const taskId = readStringParam(params, "taskId", { required: true })!;
-      const status = readStringParam(params, "status");
-      const assigneeId = readStringParam(params, "assigneeId");
-      const title = readStringParam(params, "title");
-      const task = await client.updateTask(taskId, {
-        ...(status ? { status } : {}),
-        ...(assigneeId !== undefined ? { assignee_id: assigneeId } : {}),
-        ...(title ? { title } : {}),
-      });
-      return jsonResult({ ok: true, action: "task-update", task });
-    }
     default:
       throw new Error(`cove: unsupported message action: ${action}`);
   }
