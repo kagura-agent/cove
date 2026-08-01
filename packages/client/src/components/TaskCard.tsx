@@ -90,7 +90,9 @@ function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string
               key={s}
               onClick={() => {
                 setOpen(false);
-                api.updateTask(taskId, { status: s });
+                api.updateTask(taskId, { status: s }).catch((err) => {
+                  console.error("Failed to update task status:", err);
+                });
               }}
               style={{
                 padding: "4px 8px",
@@ -162,6 +164,7 @@ export function TaskStatusBar({ message }: { message: Message }) {
   return (
     <div ref={ref} style={{ display: "inline-block", position: "relative", marginTop: "4px" }}>
       <button
+        aria-label={`Task #${seq} status: ${STATUS_LABELS[status]}`}
         onClick={() => taskId && setOpen(!open)}
         style={{
           display: "inline-flex",
@@ -185,9 +188,10 @@ export function TaskStatusBar({ message }: { message: Message }) {
         {assigneeName && <span>@{assigneeName}</span>}
       </button>
       {open && taskId && (
-        <div style={{
-          position: "absolute",
-          bottom: "100%",
+        <div
+          role="menu"
+          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+          style={{
           left: 0,
           marginBottom: 4,
           background: "var(--bg-secondary)",
@@ -200,9 +204,22 @@ export function TaskStatusBar({ message }: { message: Message }) {
           {ALL_STATUSES.map((s) => (
             <div
               key={s}
+              role="menuitem"
+              tabIndex={0}
               onClick={() => {
                 setOpen(false);
-                api.updateTask(taskId, { status: s });
+                api.updateTask(taskId, { status: s }).catch((err) => {
+                  console.error("Failed to update task status:", err);
+                });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setOpen(false);
+                  api.updateTask(taskId, { status: s }).catch((err) => {
+                    console.error("Failed to update task status:", err);
+                  });
+                }
               }}
               style={{
                 padding: "4px 8px",

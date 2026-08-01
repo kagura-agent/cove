@@ -282,6 +282,11 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
         break;
       }
 
+      case "TASK_UPDATED": {
+        this.emit("taskUpdated", payload.d as any);
+        break;
+      }
+
       default:
         break;
     }

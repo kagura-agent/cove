@@ -50,6 +50,7 @@ export interface GatewayEvents {
   channelFileUpdate: (payload: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number }) => void;
   channelFileDelete: (payload: { channel_id: string; guild_id: string; filename: string }) => void;
   taskCreated: (task: { task_id: string; channel_id: string; thread_id: string; message_id: string; status: string; assignee_id: string | null; title: string; seq: number; created_at: number; updated_at: number }) => void;
+  taskUpdated: (task: { task_id: string; channel_id: string; thread_id: string; message_id: string; status: string; assignee_id: string | null; title: string; seq: number; created_at: number; updated_at: number }) => void;
   error: (error: Error) => void;
   close: () => void;
   reconnect: () => void;
