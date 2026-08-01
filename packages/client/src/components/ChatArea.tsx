@@ -3,7 +3,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { Typography, Button, Popconfirm } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, FileTextOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { ThreadBrowser } from "./ThreadBrowser";
 import * as api from "../lib/api";
@@ -21,7 +21,7 @@ const styles = {
   membersBtnActive: { color: "var(--interactive-active)" } as CSSProperties,
 };
 
-export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClick, filesOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean; onFilesClick?: () => void; filesOpen?: boolean }) {
+export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClick, filesOpen, onTasksClick, tasksOpen }: { onMenuClick?: () => void; onMembersClick?: () => void; membersOpen?: boolean; onFilesClick?: () => void; filesOpen?: boolean; onTasksClick?: () => void; tasksOpen?: boolean }) {
   const { guildId, channelId } = useActiveIds();
   const getChannels = useChannelStore((s) => s.getChannels);
   const channels = getChannels(guildId);
@@ -61,6 +61,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, onFilesClic
         <Button type="text" icon={<ThreadIcon size={16} />} onClick={() => setThreadBrowserOpen(!threadBrowserOpen)} style={threadBrowserOpen ? styles.membersBtnActive : styles.membersBtn} />
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
         {onFilesClick && <Button type="text" icon={<FileTextOutlined />} onClick={onFilesClick} style={filesOpen ? styles.membersBtnActive : styles.membersBtn} />}
+        {onTasksClick && <Button type="text" icon={<CheckSquareOutlined />} onClick={onTasksClick} style={tasksOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
       <MessageList channelId={channel.id} />
       {threadBrowserOpen && channel && (
