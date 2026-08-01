@@ -36,6 +36,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       const seq = repos.tasks.getNextSeq(channelId);
       const now = Date.now();
       const messageId = generateSnowflake();
+      const taskId = generateSnowflake();
       const title = body.title.trim();
 
       // 1. Card message — skip_agent_notify so it doesn't trigger agent sessions
@@ -89,10 +90,10 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       const assignmentNow = Date.now();
       const assignmentId = generateSnowflake();
       const preamble = [
-        `This is a task assignment (task_id: pending).`,
+        `This is a task assignment (task_id: ${taskId}).`,
         `Title: ${title}`,
         `工作属于这个 thread，就在这里做。`,
-        `开工设 in_progress。`,
+        `开工时用 message action task-update 设 status 为 in_progress（taskId: ${taskId}）。`,
         `完成后设 in_review 并 @通知相关人验收。`,
       ].join("\n");
       const assignmentContent = preamble;
@@ -122,7 +123,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       };
 
       // 5. Task row — written last. Agent may receive message before this exists.
-      const task = repos.tasks.create(channelId, thread.id, messageId, assigneeId, title, seq);
+      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq);
 
       return { cardMessage, thread, assignmentMessage, task };
     })();

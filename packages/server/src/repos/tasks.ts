@@ -32,8 +32,7 @@ function toTask(row: TaskRow): Task {
 export class TasksRepo {
   constructor(private db: Database.Database) {}
 
-  create(channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number): Task {
-    const taskId = generateSnowflake();
+  create(taskId: string, channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number): Task {
     const now = Date.now();
     this.db.prepare(
       "INSERT INTO tasks (task_id, channel_id, thread_id, message_id, status, assignee_id, title, seq, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)"
