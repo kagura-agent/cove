@@ -244,42 +244,16 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
 
         gatewayClient.on("messageCreate", async (message) => {
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
+          // Skip card messages with skip_agent_notify (task cards in parent channel)
+          if (message.metadata) {
+            try {
+              const meta = JSON.parse(message.metadata);
+              if (meta.skip_agent_notify) { log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (skip_agent_notify)`); return; }
+            } catch {}
+          }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
           debouncer.enqueue({ message });
-        });
-
-        // Task assignment — when a task is created and assigned to the bot, synthesize
-        // an inbound message in the task thread so OpenClaw creates a session and responds.
-        gatewayClient.on("taskCreated", async (task) => {
-          if (!gatewayClient.botUser) return;
-          if (task.assignee_id !== gatewayClient.botUser.id) {
-            log?.info?.(`cove: task #${task.seq} assigned to ${task.assignee_id ?? 'nobody'}, not me — skipping`);
-            return;
-          }
-          log?.info?.(`cove: task #${task.seq} "${task.title}" assigned to me — triggering session in thread ${task.thread_id}`);
-
-          // Fetch the task_assignment message from the thread to use as the trigger
-          try {
-            const messages = await restClient.getMessages(task.thread_id, { limit: 5 });
-            const assignmentMsg = messages.find((m: any) => {
-              if (!m.metadata) return false;
-              try { return JSON.parse(m.metadata).content_type === "task_assignment"; } catch { return false; }
-            });
-            if (assignmentMsg) {
-              // Synthesize as if a non-bot user sent it so the filter doesn't skip it
-              const syntheticMessage = {
-                ...assignmentMsg,
-                content: `Task #${task.seq}: ${task.title}`,
-                author: { ...assignmentMsg.author, bot: false },
-              };
-              debouncer.enqueue({ message: syntheticMessage });
-            } else {
-              log?.warn?.(`cove: no task_assignment message found in thread ${task.thread_id}`);
-            }
-          } catch (err: any) {
-            log?.error?.(`cove: failed to fetch thread messages for task dispatch: ${err.message}`);
-          }
         });
 
         gatewayClient.on("error", (err) => log?.error?.(`cove: gateway error: ${err.message}`));

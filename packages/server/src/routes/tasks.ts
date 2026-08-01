@@ -32,16 +32,18 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return c.json({ message: "Unknown Member", code: 10007 }, 404);
     }
 
-    const task = repos.db.transaction(() => {
+    const result = repos.db.transaction(() => {
       const seq = repos.tasks.getNextSeq(channelId);
       const now = Date.now();
       const messageId = generateSnowflake();
+      const title = body.title.trim();
 
-      const cardContent = JSON.stringify({ title: body.title.trim(), status: "open", assignee_id: assigneeId, seq });
-      const metadata = JSON.stringify({ content_type: "task" });
+      // 1. Card message — skip_agent_notify so it doesn't trigger agent sessions
+      const cardContent = JSON.stringify({ title, status: "open", assignee_id: assigneeId, seq });
+      const cardMetadata = JSON.stringify({ content_type: "task", skip_agent_notify: true });
       repos.db.prepare(
         "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(messageId, channelId, user.id, user.username, cardContent, now, metadata, null);
+      ).run(messageId, channelId, user.id, user.username, cardContent, now, cardMetadata, null);
       const cardMessage: Message = {
         id: messageId,
         channel_id: channelId,
@@ -57,40 +59,81 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         pinned: false,
         tts: false,
         mention_everyone: false,
-        metadata,
+        metadata: cardMetadata,
       };
 
+      // 2. Derive thread from card message (name: first 30 chars by codepoint)
+      const threadName = [...title].slice(0, 30).join("");
       const thread = repos.threads.createFromMessage(
         channel.guild_id,
         channelId,
         messageId,
-        body.title.trim(),
+        threadName,
         user.id,
       );
 
+      // 3. Add assignee to thread members
       if (assigneeId && assigneeId !== user.id) {
         repos.threads.addMember(thread.id, assigneeId);
       }
+      // Add channel owner if they are still a guild member and not already in thread
+      if (channel.owner_id && channel.owner_id !== user.id && channel.owner_id !== assigneeId) {
+        if (repos.members.exists(channel.guild_id, channel.owner_id)) {
+          repos.threads.addMember(thread.id, channel.owner_id);
+        }
+      }
 
+      // 4. Assignment message in thread — this is the signal that wakes the agent.
+      //    DB stores real author; WS frame rewrites to "system" (see below).
+      //    Preamble carries all instructions so agent doesn't need to understand "task".
       const assignmentNow = Date.now();
       const assignmentId = generateSnowflake();
-      const assignmentContent = assigneeId
-        ? `Task #${seq} assigned`
-        : `Task #${seq} created`;
+      const preamble = [
+        `This is a task assignment (task_id: pending).`,
+        `Title: ${title}`,
+        `工作属于这个 thread，就在这里做。`,
+        `开工设 in_progress。`,
+        `完成后设 in_review 并 @通知相关人验收。`,
+      ].join("\n");
+      const assignmentContent = preamble;
+      const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
       repos.db.prepare(
         "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(assignmentId, thread.id, user.id, user.username, assignmentContent, assignmentNow, JSON.stringify({ content_type: "task_assignment" }), null);
+      ).run(assignmentId, thread.id, user.id, user.username, assignmentContent, assignmentNow, assignmentMetadata, null);
 
-      const task = repos.tasks.create(channelId, thread.id, messageId, assigneeId, body.title.trim(), seq);
+      // Build the WS frame for assignment — rewrite author to "system"
+      // so agent's self-loop filter doesn't discard it when agent assigns to itself
+      const assignmentMessage: Message = {
+        id: assignmentId,
+        channel_id: thread.id,
+        content: assignmentContent,
+        author: { id: "system", username: "System", bot: false, avatar: null, discriminator: "0", global_name: "System" },
+        timestamp: new Date(assignmentNow).toISOString(),
+        edited_timestamp: null,
+        type: 0,
+        attachments: [],
+        embeds: [],
+        mentions: [],
+        mention_roles: [],
+        pinned: false,
+        tts: false,
+        mention_everyone: false,
+        metadata: assignmentMetadata,
+      };
 
-      dispatcher?.messageCreate(cardMessage);
-      dispatcher?.threadCreate(thread);
-      dispatcher?.taskCreated(task);
+      // 5. Task row — written last. Agent may receive message before this exists.
+      const task = repos.tasks.create(channelId, thread.id, messageId, assigneeId, title, seq);
 
-      return task;
+      return { cardMessage, thread, assignmentMessage, task };
     })();
 
-    return c.json(task, 201);
+    // Broadcast outside transaction
+    dispatcher?.messageCreate(result.cardMessage);   // skip_agent_notify in metadata
+    dispatcher?.threadCreate(result.thread);
+    dispatcher?.messageCreate(result.assignmentMessage);  // this wakes the agent
+    dispatcher?.taskCreated(result.task);
+
+    return c.json(result.task, 201);
   });
 
   app.get("/channels/:channelId/tasks", async (c) => {
