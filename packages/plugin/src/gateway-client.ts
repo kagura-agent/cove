@@ -277,6 +277,11 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
         break;
       }
 
+      case "TASK_CREATED": {
+        this.emit("taskCreated", payload.d as any);
+        break;
+      }
+
       default:
         break;
     }
