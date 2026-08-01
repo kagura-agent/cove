@@ -5,6 +5,7 @@ import type { TaskStatus } from "@cove/shared";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useActiveIds } from "../hooks/useActiveIds";
+import { FileTextOutlined, SyncOutlined, EyeOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 
 interface TaskSnapshot {
@@ -15,11 +16,11 @@ interface TaskSnapshot {
   thread_id?: string;
 }
 
-const STATUS_ICONS: Record<TaskStatus, string> = {
-  open: "📋",
-  in_progress: "🔧",
-  in_review: "👀",
-  done: "✅",
+const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
+  open: <FileTextOutlined style={{ color: "var(--text-muted)" }} />,
+  in_progress: <SyncOutlined spin style={{ color: "#5865f2" }} />,
+  in_review: <EyeOutlined style={{ color: "#e67e22" }} />,
+  done: <CheckCircleOutlined style={{ color: "#3ba55c" }} />,
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -179,7 +180,7 @@ export function TaskStatusBar({ message }: { message: Message }) {
         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
       >
-        <span>{STATUS_ICONS[status]}</span>
+        <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
         <span style={{ color: "var(--text-muted)" }}>#{seq}</span>
         {assigneeName && <span>@{assigneeName}</span>}
       </button>
@@ -221,7 +222,7 @@ export function TaskStatusBar({ message }: { message: Message }) {
                 if (s !== status) (e.currentTarget.style.background = "transparent");
               }}
             >
-              <span>{STATUS_ICONS[s]}</span>
+              <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[s]}</span>
               <span>{STATUS_LABELS[s]}</span>
             </div>
           ))}
