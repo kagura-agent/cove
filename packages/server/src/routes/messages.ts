@@ -205,6 +205,11 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (channel.type === 11) {
       repos.threads.addMember(channelId, user.id);
       repos.threads.incrementMessageCount(channelId);
+      // Broadcast updated thread so client sees new message_count
+      const updatedThread = repos.channels.getById(channelId);
+      if (updatedThread) {
+        dispatcher?.threadUpdate(updatedThread);
+      }
     }
 
     // Update channel's last_message_id
