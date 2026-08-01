@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Modal, Input, Select } from "antd";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useMemberStore } from "../stores/useMemberStore";
@@ -15,7 +15,8 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const { guildId } = useActiveIds();
-  const members = useMemberStore((s) => (guildId ? s.getMembers(guildId) : []));
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
 
   async function handleCreate() {
     if (!title.trim()) return;
