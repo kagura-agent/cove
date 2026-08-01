@@ -167,7 +167,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
-    const body = await parseJsonBody<{ status?: string; assignee_id?: string | null; title?: string }>(c);
+    const body = await parseJsonBody<{ status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     if (body.status !== undefined && !VALID_STATUSES.has(body.status)) {
@@ -190,6 +190,8 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       status: body.status,
       assignee_id: body.assignee_id,
       title: body.title?.trim(),
+      description: body.description,
+      heartbeat_interval_ms: body.heartbeat_interval_ms,
     });
 
     if (updated) {

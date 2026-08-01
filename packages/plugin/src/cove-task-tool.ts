@@ -25,6 +25,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
       assigneeId: Type.Optional(Type.String({ description: "User ID to assign the task to" })),
       status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done (for update)" })),
+      heartbeatIntervalMs: Type.Optional(Type.Number({ description: "Heartbeat interval in ms. 0 = disabled (for update)" })),
       description: Type.Optional(Type.String({ description: "Task description (optional for create)" })),
     }, { additionalProperties: false }),
     execute: async (_toolCallId: string, rawParams: Record<string, unknown>) => {
@@ -67,6 +68,9 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           if (status) fields.status = status;
           if (assigneeId !== undefined) fields.assignee_id = assigneeId;
           if (title) fields.title = title;
+          if (description !== undefined) fields.description = description;
+          const heartbeatInterval = rawParams.heartbeatIntervalMs as number | undefined;
+          if (heartbeatInterval !== undefined) fields.heartbeat_interval_ms = heartbeatInterval;
           const task = await client.updateTask(taskId, fields as any);
           return jsonResult({ ok: true, action: "update", task });
         }

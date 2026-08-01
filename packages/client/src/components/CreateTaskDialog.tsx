@@ -12,6 +12,7 @@ interface Props {
 
 export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const { guildId } = useActiveIds();
@@ -22,8 +23,9 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
     if (!title.trim()) return;
     setSubmitting(true);
     try {
-      await api.createTask(channelId, title.trim(), assigneeId);
+      await api.createTask(channelId, title.trim(), assigneeId, description.trim() || undefined);
       setTitle("");
+      setDescription("");
       setAssigneeId(undefined);
       onClose();
     } catch (err) {
@@ -54,6 +56,17 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
             onChange={(e) => setTitle(e.target.value)}
             onPressEnter={handleCreate}
             autoFocus
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: "var(--font-size-sm, 13px)", fontWeight: 500, marginBottom: 4, display: "block" }}>
+            Description (optional)
+          </label>
+          <Input.TextArea
+            placeholder="Task description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
           />
         </div>
         <div>
