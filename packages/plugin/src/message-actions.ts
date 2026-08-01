@@ -28,10 +28,10 @@ const SUPPORTED_ACTIONS: ChannelMessageActionName[] = [
   "channel-info",
   "channel-list",
   // Task
-  "task-create",
-  "task-list",
-  "task-get",
-  "task-update",
+  "task-create" as ChannelMessageActionName,
+  "task-list" as ChannelMessageActionName,
+  "task-get" as ChannelMessageActionName,
+  "task-update" as ChannelMessageActionName,
 ];
 
 let runtimePromise: Promise<typeof import("./message-actions.runtime.js")> | undefined;
