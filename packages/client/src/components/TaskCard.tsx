@@ -16,10 +16,10 @@ interface TaskSnapshot {
 }
 
 const STATUS_ICONS: Record<TaskStatus, string> = {
-  open: "⚪",
-  in_progress: "🔵",
-  in_review: "🟠",
-  done: "🟢",
+  open: "📋",
+  in_progress: "🔧",
+  in_review: "👀",
+  done: "✅",
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
