@@ -10,16 +10,24 @@ import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
 import { coveChannelPlugin } from "./channel.js";
 import { createCoveTaskTool } from "./cove-task-tool.js";
 
+console.log('[cove-plugin] module loaded at', new Date().toISOString());
+
 const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEntry({
   id: "cove",
   name: "Cove",
   description: "Connect OpenClaw to the Cove mirror world",
   plugin: coveChannelPlugin as ChannelPlugin,
   registerFull: (api) => {
-    api.registerTool(
-      (context) => createCoveTaskTool({ cfg: (context as any).config ?? (context as any).runtimeConfig ?? {} }),
-      { names: ["cove_task"], optional: true }
-    );
+    console.log('[cove] registerFull called, registrationMode:', (api as any).registrationMode);
+    try {
+      api.registerTool(
+        (context) => createCoveTaskTool({ cfg: (context as any).config ?? (context as any).runtimeConfig ?? {} }),
+        { names: ["cove_task"] }
+      );
+      console.log('[cove] cove_task tool registered successfully');
+    } catch (err: any) {
+      console.error('[cove] registerTool failed:', err.message);
+    }
   },
 });
 
