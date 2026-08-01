@@ -93,8 +93,9 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         `This is a task assignment (task_id: ${taskId}).`,
         `Title: ${title}`,
         `工作属于这个 thread，就在这里做。`,
-        `开工时用 message action task-update 设 status 为 in_progress（taskId: ${taskId}）。`,
-        `完成后设 in_review 并 @通知相关人验收。`,
+        `开工时用 cove_task 工具设 status 为 in_progress（action: "update", taskId: "${taskId}", status: "in_progress"）。`,
+        `完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。`,
+        `不要用 curl 调 REST API，用 cove_task 工具。`,
       ].join("\n");
       const assignmentContent = preamble;
       const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
