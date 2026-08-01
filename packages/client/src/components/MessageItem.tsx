@@ -236,11 +236,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const contentType = parseMetadataContentType(message);
 
   if (contentType === "task_assignment") {
-    return (
-      <div className="discord-msg-row" data-message-id={message.id}>
-        <TaskAssignmentMessage message={message} />
-      </div>
-    );
+    return null;
   }
 
   if (contentType === "task_heartbeat") {
