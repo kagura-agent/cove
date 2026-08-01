@@ -242,14 +242,20 @@ export function parseTaskTitle(content: string): string {
 }
 
 export function TaskAssignmentMessage({ message }: { message: Message }) {
+  // Extract task_id and title from preamble for short display
+  const taskIdMatch = message.content.match(/task_id:\s*([\w-]+)/);
+  const titleMatch = message.content.match(/Title:\s*(.+)/);
+  const title = titleMatch?.[1]?.trim() ?? "Task";
+
   return (
     <div style={{
       textAlign: "center",
-      padding: "4px 0",
+      padding: "6px 0",
       fontSize: "var(--font-size-sm)",
       color: "var(--text-muted)",
+      fontStyle: "italic",
     }}>
-      {message.content}
+      📋 {title} — assigned
     </div>
   );
 }
