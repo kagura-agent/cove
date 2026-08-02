@@ -73,7 +73,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   app.patch("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const user = c.get("botUser");
-    const channel = await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
+
+    // Peek at channel type first — threads need lower permission for archive/unarchive
+    const peek = repos.channels.getById(id);
+    if (!peek) return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+
+    const requiredPerm = peek.type === 11 ? PermissionBits.SEND_MESSAGES : PermissionBits.MANAGE_CHANNELS;
+    const channel = await requireChannelPermission(repos, id, user.id, requiredPerm);
 
     const body = await parseJsonBody<{
       name?: string;
