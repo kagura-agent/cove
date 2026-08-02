@@ -426,6 +426,16 @@ function InlineThreadList({ channelId }: { channelId: string }) {
     }
   }, [guildId, channelId, navigate]);
 
+  const handleStatusChange = useCallback(async (thread: Channel, archived: boolean) => {
+    try {
+      await api.updateChannel(thread.id, { archived });
+      // Update local state
+      setAllThreads((prev) => prev.map((t) => t.id === thread.id ? { ...t, _archived: archived } as any : t));
+    } catch (err) {
+      console.error("update thread status:", err);
+    }
+  }, []);
+
   const columns: ColumnsType<Channel> = [
     {
       title: "Name",
@@ -442,7 +452,7 @@ function InlineThreadList({ channelId }: { channelId: string }) {
     {
       title: "Status",
       key: "status",
-      width: 100,
+      width: 120,
       filters: [
         { text: "Active", value: "active" },
         { text: "Archived", value: "archived" },
@@ -450,7 +460,19 @@ function InlineThreadList({ channelId }: { channelId: string }) {
       onFilter: (value, record) => (value === "archived") === !!(record as any)._archived,
       render: (_: unknown, record: Channel) => {
         const archived = (record as any)._archived;
-        return <Tag color={archived ? "default" : "processing"}>{archived ? "Archived" : "Active"}</Tag>;
+        return (
+          <Select
+            value={archived ? "archived" : "active"}
+            size="small"
+            variant="borderless"
+            style={{ width: "100%" }}
+            onChange={(v) => handleStatusChange(record, v === "archived")}
+            options={[
+              { label: <Tag color="processing">Active</Tag>, value: "active" },
+              { label: <Tag color="default">Archived</Tag>, value: "archived" },
+            ]}
+          />
+        );
       },
     },
     {
