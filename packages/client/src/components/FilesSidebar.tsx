@@ -49,6 +49,13 @@ const styles = {
     overflowY: "auto",
     paddingTop: "var(--header-height)",
   } as CSSProperties,
+  rootInline: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflowY: "auto",
+    background: "var(--bg-primary)",
+  } as CSSProperties,
   header: {
     padding: "var(--space-lg) var(--space-lg) var(--space-xs)",
     fontSize: "var(--font-size-xs)",
@@ -198,7 +205,7 @@ const MONACO_OPTIONS = {
   automaticLayout: true,
 };
 
-export function FilesSidebar({ channelId }: { channelId: string }) {
+export function FilesSidebar({ channelId, inline }: { channelId: string; inline?: boolean }) {
   const {
     files,
     loading,
@@ -305,7 +312,7 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
     const language = getLanguageFromFilename(selectedFile);
 
     return (
-      <div style={styles.root} className="files-sidebar scroll-container">
+      <div style={inline ? styles.rootInline : styles.root} className="files-sidebar scroll-container">
         <div style={styles.editorArea}>
           <div style={styles.editorHeader}>
             <Button
@@ -391,7 +398,7 @@ export function FilesSidebar({ channelId }: { channelId: string }) {
 
   // File list view
   return (
-    <div style={styles.root} className="files-sidebar scroll-container">
+    <div style={inline ? styles.rootInline : styles.root} className="files-sidebar scroll-container">
       <div style={styles.header}>
         <span>Files — {files.length}</span>
         <Button
