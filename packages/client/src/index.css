@@ -674,3 +674,14 @@ textarea:focus-visible {
 .ant-table-sticky-holder {
   background: var(--bg-secondary, #2b2d31) !important;
 }
+
+/* Active thread parent message highlight */
+.discord-msg-row.active-thread-parent {
+  background: color-mix(in srgb, var(--accent, #5865f2) 12%, transparent);
+  border-left: 2px solid var(--accent, #5865f2);
+}
+
+/* Active thread task row highlight */
+.task-row-active-thread td {
+  background: color-mix(in srgb, var(--accent, #5865f2) 12%, transparent) !important;
+}

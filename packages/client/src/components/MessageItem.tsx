@@ -288,7 +288,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
     return (
       <>
       <div
-        className="discord-msg-row"
+        className={`discord-msg-row${isActiveThreadParent ? " active-thread-parent" : ""}`}
         data-message-id={message.id}
         onContextMenu={onContextMenu ? (e) => onContextMenu(e, message) : undefined}
         style={{
@@ -415,7 +415,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   return (
     <>
     <div
-      className="discord-msg-row"
+      className={`discord-msg-row${isActiveThreadParent ? " active-thread-parent" : ""}`}
       data-message-id={message.id}
       onContextMenu={onContextMenu ? (e) => onContextMenu(e, message) : undefined}
       style={{
