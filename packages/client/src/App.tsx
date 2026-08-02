@@ -37,9 +37,26 @@ function useVisualViewport() {
 function useAntdThemeConfig() {
   const currentTheme = useThemeStore((s) => s.theme);
   const accentBrand = getComputedStyle(document.documentElement).getPropertyValue("--accent-brand").trim() || "#f4a261";
+  const isDark = currentTheme !== "light";
   return {
-    algorithm: currentTheme === "light" ? theme.defaultAlgorithm : theme.darkAlgorithm,
-    token: { colorPrimary: accentBrand, colorBgContainer: "var(--bg-secondary)", colorBgElevated: "var(--bg-tertiary)" },
+    algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    token: {
+      colorPrimary: accentBrand,
+      colorBgContainer: isDark ? "#1e1f22" : "#ffffff",
+      colorBgElevated: isDark ? "#2b2d31" : "#f5f5f5",
+      colorText: isDark ? "#dbdee1" : "#313338",
+      colorTextSecondary: isDark ? "#949ba4" : "#5c5e66",
+      colorBorderSecondary: isDark ? "#3f4147" : "#e3e5e8",
+    },
+    components: {
+      Table: {
+        headerBg: isDark ? "#2b2d31" : "#fafafa",
+        headerColor: isDark ? "#dbdee1" : "#313338",
+        rowHoverBg: isDark ? "#35373c" : "#f0f0f0",
+        borderColor: isDark ? "#3f4147" : "#e3e5e8",
+        colorBgContainer: isDark ? "#1e1f22" : "#ffffff",
+      },
+    },
   };
 }
 
