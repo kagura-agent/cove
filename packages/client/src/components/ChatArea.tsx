@@ -394,9 +394,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
 
 /** Inline thread table for the Threads tab */
 function InlineThreadList({ channelId }: { channelId: string }) {
-  const [subTab, setSubTab] = useState<"active" | "archived">("active");
-  const [activeThreads, setActiveThreads] = useState<Channel[]>([]);
-  const [archivedThreads, setArchivedThreads] = useState<Channel[]>([]);
+  const [allThreads, setAllThreads] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { guildId } = useActiveIds();
@@ -414,12 +412,13 @@ function InlineThreadList({ channelId }: { channelId: string }) {
       api.fetchActiveThreads(channelId),
       api.fetchArchivedThreads(channelId),
     ]).then(([active, archived]) => {
-      setActiveThreads(active.threads);
-      setArchivedThreads(archived.threads);
+      // Merge and dedupe by id
+      const map = new Map<string, Channel & { _archived?: boolean }>();
+      for (const t of active.threads) map.set(t.id, { ...t, _archived: false });
+      for (const t of archived.threads) if (!map.has(t.id)) map.set(t.id, { ...t, _archived: true });
+      setAllThreads(Array.from(map.values()));
     }).catch(console.error).finally(() => setLoading(false));
   }, [channelId]);
-
-  const threads = subTab === "active" ? activeThreads : archivedThreads;
 
   const handleClick = useCallback((thread: Channel) => {
     if (guildId) {
@@ -439,6 +438,20 @@ function InlineThreadList({ channelId }: { channelId: string }) {
           {name}
         </span>
       ),
+    },
+    {
+      title: "Status",
+      key: "status",
+      width: 100,
+      filters: [
+        { text: "Active", value: "active" },
+        { text: "Archived", value: "archived" },
+      ],
+      onFilter: (value, record) => (value === "archived") === !!(record as any)._archived,
+      render: (_: unknown, record: Channel) => {
+        const archived = (record as any)._archived;
+        return <Tag color={archived ? "default" : "processing"}>{archived ? "Archived" : "Active"}</Tag>;
+      },
     },
     {
       title: "Messages",
@@ -467,52 +480,16 @@ function InlineThreadList({ channelId }: { channelId: string }) {
   ];
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ display: "flex", gap: "var(--space-xs)", padding: "var(--space-sm) var(--space-md)", flexShrink: 0 }}>
-        <button
-          style={{
-            padding: "var(--space-xs) var(--space-md)",
-            cursor: "pointer",
-            borderRadius: "var(--space-xs)",
-            fontSize: "var(--font-size-md)",
-            fontWeight: 500,
-            border: "none",
-            color: subTab === "active" ? "var(--interactive-active)" : "var(--text-muted)",
-            background: subTab === "active" ? "var(--bg-modifier-active)" : "transparent",
-            transition: "background 0.15s, color 0.15s",
-          }}
-          onClick={() => setSubTab("active")}
-        >
-          Active
-        </button>
-        <button
-          style={{
-            padding: "var(--space-xs) var(--space-md)",
-            cursor: "pointer",
-            borderRadius: "var(--space-xs)",
-            fontSize: "var(--font-size-md)",
-            fontWeight: 500,
-            border: "none",
-            color: subTab === "archived" ? "var(--interactive-active)" : "var(--text-muted)",
-            background: subTab === "archived" ? "var(--bg-modifier-active)" : "transparent",
-            transition: "background 0.15s, color 0.15s",
-          }}
-          onClick={() => setSubTab("archived")}
-        >
-          Archived
-        </button>
-      </div>
-      <div style={{ flex: 1, overflow: "auto", padding: "0 var(--space-md)" }} className="scroll-container">
-        <Table<Channel>
-          columns={columns}
-          dataSource={threads}
-          rowKey="id"
-          loading={loading}
-          size="small"
-          pagination={false}
-          locale={{ emptyText: `No ${subTab} threads` }}
-        />
-      </div>
+    <div style={{ flex: 1, overflow: "auto", padding: "var(--space-md)" }} className="scroll-container">
+      <Table<Channel>
+        columns={columns}
+        dataSource={allThreads}
+        rowKey="id"
+        loading={loading}
+        size="small"
+        pagination={false}
+        locale={{ emptyText: "No threads" }}
+      />
     </div>
   );
 }
