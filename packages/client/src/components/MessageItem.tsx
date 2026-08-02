@@ -15,6 +15,7 @@ import type { PendingStatus } from "../stores/useMessageStore";
 import * as api from "../lib/api";
 import { useState, useMemo } from "react";
 import { ImageLightbox } from "./ImageLightbox";
+import { useActiveIds } from "../hooks/useActiveIds";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
 
@@ -256,6 +257,8 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   const bgColor = avatarColor(message.author.username);
   const textColor = getContrastTextColor(bgColor);
   const [lightboxSrc, setLightboxSrc] = useState<{src: string; alt: string} | null>(null);
+  const { threadId } = useActiveIds();
+  const isActiveThreadParent = Boolean(threadId && message.id === threadId);
 
   // Build mention user map for rendering
   const mentionUsers = new Map<string, string>();
