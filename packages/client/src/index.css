@@ -673,6 +673,11 @@ textarea:focus-visible {
 }
 .ant-table-sticky-holder {
   background: var(--bg-secondary, #2b2d31) !important;
+  z-index: 2;
+}
+.ant-table-sticky-holder .ant-table-thead > tr > th,
+.ant-table-sticky-holder .ant-table-thead > tr > td {
+  background: var(--bg-secondary, #2b2d31) !important;
 }
 
 /* Active thread parent message highlight */
