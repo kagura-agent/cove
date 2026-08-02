@@ -77,10 +77,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           const heartbeatInterval = rawParams.heartbeatIntervalMs as number | undefined;
           if (heartbeatInterval !== undefined) fields.heartbeat_interval_ms = heartbeatInterval;
           const task = await client.updateTask(taskId, fields as any);
-          const hints: string[] = [];
-          if (status === "done") hints.push("Task marked done. Notify the task creator or channel that this task is complete.");
-          if (status === "in_review") hints.push("Task moved to in_review. Notify the task creator or relevant reviewers that this is ready for review.");
-          return jsonResult({ ok: true, action: "update", task, ...(hints.length > 0 ? { _hint: hints.join(" ") } : {}) });
+          return jsonResult({ ok: true, action: "update", task });
         }
         default:
           return jsonResult({ ok: false, error: `Unknown action: ${action}. Use one of: create, list, get, update` });
