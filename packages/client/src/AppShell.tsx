@@ -4,7 +4,6 @@ import { useWebSocketStore } from "./stores/useWebSocketStore";
 import { useChannelStore } from "./stores/useChannelStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { Sidebar } from "./components/Sidebar";
-import { GuildSidebar } from "./components/GuildSidebar";
 import { UserBar } from "./components/UserBar";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SettingsPanel } from "./components/SettingsPanel";
