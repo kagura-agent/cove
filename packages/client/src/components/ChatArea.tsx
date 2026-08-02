@@ -9,7 +9,6 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { Typography, Button, Popconfirm, Table, Tag, Space, Input, Select, Modal, Switch } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
-import { ThreadBrowser } from "./ThreadBrowser";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
@@ -19,6 +18,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
 import { STATUS_ICON_COMPONENTS } from "./TaskCard";
+import type { Channel } from "../types";
 
 const HEARTBEAT_OPTIONS = [
   { label: "5 min", value: 300000 },
@@ -29,7 +29,7 @@ const HEARTBEAT_OPTIONS = [
   { label: "120 min", value: 7200000 },
 ];
 
-type ChannelTab = "chat" | "tasks" | "files";
+type ChannelTab = "chat" | "tasks" | "files" | "threads";
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   open: "var(--text-muted)",
@@ -77,7 +77,6 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
   const channels = getChannels(guildId);
   const setMessages = useMessageStore((s) => s.setMessages);
   const channel = channels.find((c) => c.id === channelId);
-  const [threadBrowserOpen, setThreadBrowserOpen] = useState(false);
 
   async function handleClear() {
     if (!channel) return;
@@ -110,9 +109,6 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
             <Button type="text" icon={<DeleteOutlined />} style={styles.clearBtn} />
           </Popconfirm>
         )}
-        {activeTab === "chat" && (
-          <Button type="text" icon={<ThreadIcon size={16} />} onClick={() => setThreadBrowserOpen(!threadBrowserOpen)} style={threadBrowserOpen ? styles.membersBtnActive : styles.membersBtn} />
-        )}
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
       </div>
 
@@ -121,24 +117,21 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
         <span style={activeTab === "chat" ? styles.tabActive : styles.tab} onClick={() => onTabChange("chat")}>Chat</span>
         <span style={activeTab === "tasks" ? styles.tabActive : styles.tab} onClick={() => onTabChange("tasks")}>Tasks</span>
         <span style={activeTab === "files" ? styles.tabActive : styles.tab} onClick={() => onTabChange("files")}>Files</span>
+        <span style={activeTab === "threads" ? styles.tabActive : styles.tab} onClick={() => onTabChange("threads")}>Threads</span>
         {activeTab === "tasks" && (
           <button style={styles.newTaskBtn} onClick={onNewTask}>+ New Task</button>
         )}
       </div>
 
       {/* Tab content */}
-      {activeTab === "chat" && (
-        <>
-          <MessageList channelId={channel.id} />
-          {threadBrowserOpen && <ThreadBrowser channelId={channel.id} onClose={() => setThreadBrowserOpen(false)} />}
-        </>
-      )}
+      {activeTab === "chat" && <MessageList channelId={channel.id} />}
       {activeTab === "tasks" && channelId && <InlineTaskList channelId={channelId} />}
       {activeTab === "files" && channelId && (
         <div style={styles.filesContainer}>
           <FilesSidebar channelId={channelId} inline />
         </div>
       )}
+      {activeTab === "threads" && channelId && <InlineThreadList channelId={channelId} />}
     </div>
   );
 }
@@ -395,6 +388,108 @@ function InlineTaskList({ channelId }: { channelId: string }) {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/** Inline thread list for the Threads tab */
+function InlineThreadList({ channelId }: { channelId: string }) {
+  const [subTab, setSubTab] = useState<"active" | "archived">("active");
+  const [activeThreads, setActiveThreads] = useState<Channel[]>([]);
+  const [archivedThreads, setArchivedThreads] = useState<Channel[]>([]);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { guildId } = useActiveIds();
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      api.fetchActiveThreads(channelId),
+      api.fetchArchivedThreads(channelId),
+    ]).then(([active, archived]) => {
+      setActiveThreads(active.threads);
+      setArchivedThreads(archived.threads);
+    }).catch(console.error).finally(() => setLoading(false));
+  }, [channelId]);
+
+  const threads = subTab === "active" ? activeThreads : archivedThreads;
+
+  const handleClick = useCallback((thread: Channel) => {
+    if (guildId) {
+      navigate(routes.thread(guildId, channelId, thread.id) + "?tab=threads", { replace: true });
+    }
+  }, [guildId, channelId, navigate]);
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: "var(--space-xs)", padding: "var(--space-sm) var(--space-md)", flexShrink: 0 }}>
+        <button
+          style={{
+            padding: "var(--space-xs) var(--space-md)",
+            cursor: "pointer",
+            borderRadius: "var(--space-xs)",
+            fontSize: "var(--font-size-md)",
+            fontWeight: 500,
+            border: "none",
+            color: subTab === "active" ? "var(--interactive-active)" : "var(--text-muted)",
+            background: subTab === "active" ? "var(--bg-modifier-active)" : "transparent",
+            transition: "background 0.15s, color 0.15s",
+          }}
+          onClick={() => setSubTab("active")}
+        >
+          Active
+        </button>
+        <button
+          style={{
+            padding: "var(--space-xs) var(--space-md)",
+            cursor: "pointer",
+            borderRadius: "var(--space-xs)",
+            fontSize: "var(--font-size-md)",
+            fontWeight: 500,
+            border: "none",
+            color: subTab === "archived" ? "var(--interactive-active)" : "var(--text-muted)",
+            background: subTab === "archived" ? "var(--bg-modifier-active)" : "transparent",
+            transition: "background 0.15s, color 0.15s",
+          }}
+          onClick={() => setSubTab("archived")}
+        >
+          Archived
+        </button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 var(--space-sm)" }} className="scroll-container">
+        {loading && <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>Loading...</div>}
+        {!loading && threads.length === 0 && (
+          <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>No {subTab} threads</div>
+        )}
+        {threads.map((t) => {
+          const name = t.name.length > 80 ? t.name.slice(0, 80) + "\u2026" : t.name;
+          return (
+            <div
+              key={t.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-sm)",
+                padding: "var(--space-sm) var(--space-md)",
+                borderRadius: "var(--space-xs)",
+                cursor: "pointer",
+                transition: "background 0.15s",
+                fontSize: "var(--font-size-md)",
+                color: "var(--text-normal)",
+              }}
+              onClick={() => handleClick(t)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <ThreadIcon size={16} style={{ opacity: 0.5, color: "var(--interactive-normal)", flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", flexShrink: 0 }}>
+                {t.message_count ?? 0} messages
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

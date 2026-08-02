@@ -20,7 +20,7 @@ interface AppShellContext {
   setSidebarOpen: (v: boolean) => void;
 }
 
-type ChannelTab = "chat" | "tasks" | "files";
+type ChannelTab = "chat" | "tasks" | "files" | "threads";
 
 const styles = {
   chatColumn: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } as CSSProperties,
