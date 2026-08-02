@@ -285,6 +285,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         size="small"
         pagination={false}
         sticky
+        rowClassName={(record) => record.thread_id === threadId ? "task-row-active-thread" : ""}
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
       />
       <Modal
