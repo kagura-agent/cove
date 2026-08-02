@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
-import { Typography, Button, Popconfirm, Table, Tag, Space, Input, Select, Modal } from "antd";
+import { useMemberStore } from "../stores/useMemberStore";
+import { Typography, Button, Popconfirm, Table, Tag, Space, Input, Select, Modal, Switch } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { ThreadBrowser } from "./ThreadBrowser";
@@ -17,6 +18,15 @@ import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
+
+const HEARTBEAT_OPTIONS = [
+  { label: "5 min", value: 300000 },
+  { label: "10 min", value: 600000 },
+  { label: "15 min", value: 900000 },
+  { label: "30 min", value: 1800000 },
+  { label: "60 min", value: 3600000 },
+  { label: "120 min", value: 7200000 },
+];
 
 type ChannelTab = "chat" | "tasks" | "files";
 
@@ -137,14 +147,30 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [editStatus, setEditStatus] = useState<TaskStatus>("open");
+  const [editAssigneeId, setEditAssigneeId] = useState<string | undefined>(undefined);
+  const [editHeartbeatEnabled, setEditHeartbeatEnabled] = useState(false);
+  const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(600000);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { guildId } = useActiveIds();
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
   const removeTask = useTaskStore((s) => s.removeTask);
   const byTaskId = useTaskStore((s) => s.byTaskId);
   const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => a.seq - b.seq), [byTaskId, channelId]);
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
+
+  // Build a userId -> display name map
+  const userNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of members) {
+      map[m.user.id] = m.nick || m.user.global_name || m.user.username;
+    }
+    return map;
+  }, [members]);
 
   useEffect(() => {
     setLoading(true);
@@ -152,7 +178,10 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   }, [channelId, fetchTasks]);
 
   const handleOpenThread = useCallback((task: Task) => {
-    if (guildId) navigate(routes.thread(guildId, channelId, task.thread_id));
+    if (guildId) {
+      // Navigate to thread but keep ?tab=tasks so we stay on the Tasks tab
+      navigate(routes.thread(guildId, channelId, task.thread_id) + "?tab=tasks");
+    }
   }, [guildId, channelId, navigate]);
 
   const handleDelete = useCallback(async (task: Task) => {
@@ -164,31 +193,49 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     }
   }, [removeTask]);
 
+  const handleStatusChange = useCallback(async (task: Task, newStatus: TaskStatus) => {
+    try {
+      await api.updateTask(task.task_id, { status: newStatus });
+    } catch (err) {
+      console.error("update status:", err);
+    }
+  }, []);
+
   const handleEditOpen = useCallback((task: Task) => {
     setEditingTask(task);
     setEditTitle(task.title);
+    setEditDescription(task.description ?? "");
     setEditStatus(task.status);
+    setEditAssigneeId(task.assignee_id ?? undefined);
+    setEditHeartbeatEnabled((task.heartbeat_interval_ms ?? 0) > 0);
+    setEditHeartbeatInterval(task.heartbeat_interval_ms > 0 ? task.heartbeat_interval_ms : 600000);
   }, []);
 
   const handleEditSave = useCallback(async () => {
     if (!editingTask) return;
     setSaving(true);
     try {
-      await api.updateTask(editingTask.task_id, { title: editTitle.trim(), status: editStatus });
+      await api.updateTask(editingTask.task_id, {
+        title: editTitle.trim(),
+        description: editDescription.trim(),
+        status: editStatus,
+        assignee_id: editAssigneeId ?? null,
+        heartbeat_interval_ms: editHeartbeatEnabled ? editHeartbeatInterval : 0,
+      });
       setEditingTask(null);
     } catch (err) {
       console.error("update task:", err);
     } finally {
       setSaving(false);
     }
-  }, [editingTask, editTitle, editStatus]);
+  }, [editingTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval]);
 
   const columns: ColumnsType<Task> = [
     {
       title: "#",
       dataIndex: "seq",
       key: "seq",
-      width: 60,
+      width: 50,
       sorter: (a, b) => a.seq - b.seq,
     },
     {
@@ -201,7 +248,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       title: "Status",
       dataIndex: "status",
       key: "status",
-      width: 120,
+      width: 140,
       filters: [
         { text: "Open", value: "open" },
         { text: "In Progress", value: "in_progress" },
@@ -209,16 +256,43 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         { text: "Done", value: "done" },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (status: TaskStatus) => {
-        const color = { open: "default", in_progress: "processing", in_review: "warning", done: "success" }[status];
-        return <Tag color={color}>{STATUS_LABELS[status]}</Tag>;
-      },
+      render: (status: TaskStatus, task: Task) => (
+        <Select
+          value={status}
+          size="small"
+          variant="borderless"
+          style={{ width: "100%" }}
+          onChange={(v) => handleStatusChange(task, v)}
+          options={[
+            { label: <Tag color="default">Open</Tag>, value: "open" },
+            { label: <Tag color="processing">In Progress</Tag>, value: "in_progress" },
+            { label: <Tag color="warning">In Review</Tag>, value: "in_review" },
+            { label: <Tag color="success">Done</Tag>, value: "done" },
+          ]}
+        />
+      ),
+    },
+    {
+      title: "Creator",
+      dataIndex: "created_by",
+      key: "created_by",
+      width: 120,
+      ellipsis: true,
+      render: (id: string) => userNameMap[id] || id || "—",
+    },
+    {
+      title: "Assignee",
+      dataIndex: "assignee_id",
+      key: "assignee_id",
+      width: 120,
+      ellipsis: true,
+      render: (id: string | null) => (id ? (userNameMap[id] || id) : "—"),
     },
     {
       title: "Created",
       dataIndex: "created_at",
       key: "created_at",
-      width: 160,
+      width: 150,
       sorter: (a, b) => a.created_at - b.created_at,
       render: (ts: number) => new Date(ts).toLocaleString(),
     },
@@ -226,20 +300,20 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       title: "Updated",
       dataIndex: "updated_at",
       key: "updated_at",
-      width: 160,
+      width: 150,
       sorter: (a, b) => a.updated_at - b.updated_at,
       render: (ts: number) => new Date(ts).toLocaleString(),
     },
     {
       title: "Actions",
       key: "actions",
-      width: 140,
+      width: 120,
       render: (_, task) => (
         <Space size="small">
-          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(task)} />
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(task)} title="Edit" />
           <Button type="text" size="small" icon={<MessageOutlined />} onClick={() => handleOpenThread(task)} title="Open thread" />
           <Popconfirm title="Delete this task?" onConfirm={() => handleDelete(task)} okText="Delete" okButtonProps={{ danger: true }}>
-            <Button type="text" size="small" icon={<DeleteOutlined />} danger />
+            <Button type="text" size="small" icon={<DeleteOutlined />} danger title="Delete" />
           </Popconfirm>
         </Space>
       ),
@@ -256,7 +330,6 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         size="small"
         pagination={false}
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
-        style={{ background: "transparent" }}
       />
       <Modal
         title="Edit Task"
@@ -273,6 +346,10 @@ function InlineTaskList({ channelId }: { channelId: string }) {
             <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
           </div>
           <div>
+            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Description</label>
+            <Input.TextArea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
+          </div>
+          <div>
             <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Status</label>
             <Select
               value={editStatus}
@@ -285,6 +362,35 @@ function InlineTaskList({ channelId }: { channelId: string }) {
                 { label: "Done", value: "done" },
               ]}
             />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Assignee</label>
+            <Select
+              placeholder="Select assignee"
+              value={editAssigneeId}
+              onChange={setEditAssigneeId}
+              allowClear
+              style={{ width: "100%" }}
+              options={members.map((m) => ({
+                label: m.nick || m.user.global_name || m.user.username,
+                value: m.user.id,
+              }))}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Heartbeat</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Switch checked={editHeartbeatEnabled} onChange={setEditHeartbeatEnabled} size="small" />
+              {editHeartbeatEnabled && (
+                <Select
+                  value={editHeartbeatInterval}
+                  onChange={setEditHeartbeatInterval}
+                  style={{ width: 120 }}
+                  options={HEARTBEAT_OPTIONS}
+                />
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Nudge agent when thread goes silent</div>
           </div>
         </div>
       </Modal>
