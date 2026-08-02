@@ -189,7 +189,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     const replyOptions = {
-      disableBlockStreaming: true,
+      disableBlockStreaming: false,
       suppressDefaultToolProgressMessages: true,
       onToolStart: (p: any) => {
         if (isAborted()) return;
