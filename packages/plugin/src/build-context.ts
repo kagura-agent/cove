@@ -19,7 +19,7 @@ import type { Message } from "@cove/shared";
 export async function resolveThreadContext(
   restClient: CoveRestClient,
   channelId: string,
-): Promise<{ coveMdChannelId: string; channel?: { type: number; parent_id?: string } }> {
+): Promise<{ coveMdChannelId: string; channel?: { type: number; parent_id?: string | null } }> {
   try {
     const channel = await restClient.getChannel(channelId);
     const coveMdChannelId =
@@ -49,7 +49,7 @@ export async function resolveCoveMdChannelId(
 export async function isTaskThread(
   restClient: CoveRestClient,
   channelId: string,
-  channel?: { type: number; parent_id?: string },
+  channel?: { type: number; parent_id?: string | null },
 ): Promise<boolean> {
   try {
     const ch = channel ?? (await restClient.getChannel(channelId));
