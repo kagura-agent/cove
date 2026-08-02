@@ -23,7 +23,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
-  const [heartbeatEnabled, setHeartbeatEnabled] = useState(false);
+  const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
   const [heartbeatInterval, setHeartbeatInterval] = useState(600000); // default 10min
   const [submitting, setSubmitting] = useState(false);
   const { guildId } = useActiveIds();
