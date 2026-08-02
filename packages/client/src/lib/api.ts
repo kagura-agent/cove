@@ -315,10 +315,10 @@ export function deleteGuild(guildId: string) {
 export function fetchTasks(channelId: string) {
   return api<Task[]>(`${API_PREFIX}/channels/${channelId}/tasks`);
 }
-export function createTask(channelId: string, title: string, assigneeId?: string, description?: string) {
+export function createTask(channelId: string, title: string, assigneeId?: string, description?: string, heartbeatIntervalMs?: number) {
   return api<any>(`${API_PREFIX}/channels/${channelId}/tasks`, {
     method: "POST",
-    body: JSON.stringify({ title, ...(assigneeId ? { assignee_id: assigneeId } : {}), ...(description ? { description } : {}) }),
+    body: JSON.stringify({ title, ...(assigneeId ? { assignee_id: assigneeId } : {}), ...(description ? { description } : {}), ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}) }),
   });
 }
 export function updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }) {
