@@ -73,7 +73,13 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
   app.patch("/channels/:id", async (c) => {
     const id = c.req.param("id")!;
     const user = c.get("botUser");
-    const channel = await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
+
+    // Peek at channel type first — threads need lower permission for archive/unarchive
+    const peek = repos.channels.getById(id);
+    if (!peek) return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+
+    const requiredPerm = peek.type === 11 ? PermissionBits.SEND_MESSAGES : PermissionBits.MANAGE_CHANNELS;
+    const channel = await requireChannelPermission(repos, id, user.id, requiredPerm);
 
     const body = await parseJsonBody<{
       name?: string;
@@ -108,9 +114,12 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
     // Handle thread-specific fields (archived/locked) for type=11 channels
     if (channel.type === 11 && (body.archived !== undefined || body.locked !== undefined)) {
-      // Only thread owner can archive/lock
       if (channel.owner_id && channel.owner_id !== user.id) {
-        return c.json({ message: 'Missing Permissions', code: 50013 }, 403);
+        try {
+          await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
+        } catch {
+          return c.json({ message: 'Missing Permissions', code: 50013 }, 403);
+        }
       }
       let threadUpdated: import("@cove/shared").Channel | null = null;
       if (body.archived !== undefined) {

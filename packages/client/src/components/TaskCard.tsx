@@ -16,7 +16,7 @@ interface TaskSnapshot {
   thread_id?: string;
 }
 
-const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
+export const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
   open: <FileTextOutlined style={{ color: "var(--text-muted)" }} />,
   in_progress: <SyncOutlined spin style={{ color: "#5865f2" }} />,
   in_review: <EyeOutlined style={{ color: "#e67e22" }} />,
@@ -277,15 +277,15 @@ export function TaskAssignmentMessage({ message }: { message: Message }) {
   );
 }
 
-export function TaskHeartbeatMessage({ message }: { message: Message }) {
+export function TaskHeartbeatMessage({ message, collapsedCount }: { message: Message; collapsedCount?: number }) {
   return (
     <div style={{
       padding: "2px 0",
-      fontSize: "var(--font-size-xs)",
+      fontSize: "12px",
       color: "var(--text-muted)",
-      opacity: 0.6,
+      textAlign: "center",
     }}>
-      {message.content}
+      Heartbeat: status update requested{collapsedCount && collapsedCount > 0 ? ` (${collapsedCount} previous)` : ""}
     </div>
   );
 }

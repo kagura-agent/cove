@@ -21,7 +21,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return c.json({ message: "Cannot create tasks inside a thread", code: 50035 }, 400);
     }
 
-    const body = await parseJsonBody<{ title: string; assignee_id?: string; description?: string }>(c);
+    const body = await parseJsonBody<{ title: string; assignee_id?: string; description?: string; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const titleErr = validateString(body.title, "title", { required: true, maxLength: 200 });
@@ -126,6 +126,13 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       // 5. Task row — written last. Agent may receive message before this exists.
       const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
 
+      // Set heartbeat if requested
+      if (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) {
+        repos.tasks.update(taskId, { heartbeat_interval_ms: body.heartbeat_interval_ms, heartbeat_last_at: Date.now() });
+        task.heartbeat_interval_ms = body.heartbeat_interval_ms;
+        task.heartbeat_last_at = Date.now();
+      }
+
       return { cardMessage, thread, assignmentMessage, task };
     })();
 
@@ -199,6 +206,28 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     }
 
     return c.json(updated);
+  });
+
+  app.delete("/tasks/:taskId", async (c) => {
+    const taskId = c.req.param("taskId");
+    const task = repos.tasks.getById(taskId);
+    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
+
+    const user = c.get("botUser");
+    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
+
+    if (task.created_by !== user.id && task.assignee_id !== user.id) {
+      try {
+        await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.MANAGE_CHANNELS);
+      } catch {
+        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      }
+    }
+
+    repos.tasks.delete(taskId);
+    dispatcher?.taskDeleted(task);
+
+    return c.json({ deleted: true });
   });
 
   return app;

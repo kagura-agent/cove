@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useThreadStore } from "../stores/useThreadStore";
@@ -20,10 +20,15 @@ interface AppShellContext {
   setSidebarOpen: (v: boolean) => void;
 }
 
+type ChannelTab = "chat" | "tasks" | "files" | "threads";
+
 const styles = {
   chatColumn: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } as CSSProperties,
   chatBody: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
   chatFooter: { flexShrink: 0, minHeight: "var(--footer-height)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px))", background: "var(--bg-secondary)" } as CSSProperties,
+  tabBar: { display: "flex", alignItems: "center", gap: 0, background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", paddingLeft: "var(--content-pad)" } as CSSProperties,
+  tab: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 500, cursor: "pointer", color: "var(--text-muted)", borderBottom: "2px solid transparent", transition: "color 0.15s, border-color 0.15s" } as CSSProperties,
+  tabActive: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 600, cursor: "pointer", color: "var(--header-primary)", borderBottom: "2px solid var(--accent, #5865f2)", transition: "color 0.15s, border-color 0.15s" } as CSSProperties,
 };
 
 export function ChannelView() {
@@ -34,14 +39,28 @@ export function ChannelView() {
   navigateRef.current = navigate;
   const channelsLoaded = useChannelStore((s) => s.channelsLoaded);
   const [membersOpen, setMembersOpen] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
-  const [tasksOpen, setTasksOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [resizeDragging, setResizeDragging] = useState(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(400);
+
+  // Tab state via URL query param
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("tab") as ChannelTab) || "chat";
+  const setActiveTab = useCallback((tab: ChannelTab) => {
+    setSearchParams((prev) => {
+      if (tab === "chat") prev.delete("tab");
+      else prev.set("tab", tab);
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // Sync files store open state with tab
+  useEffect(() => {
+    setFilesStoreOpen(activeTab === "files");
+  }, [activeTab, setFilesStoreOpen]);
 
   // Validate channel exists after data loads
   useEffect(() => {
@@ -60,16 +79,13 @@ export function ChannelView() {
     const channelThreads = useThreadStore.getState().threads[channelId] ?? [];
     const threadExists = channelThreads.some((t) => t.id === threadId);
     if (channelsLoaded && !threadExists) {
-      // Guard: don't re-fetch if already in progress or completed for this threadId
       if (threadFetchRef.current === threadId) return;
       threadFetchRef.current = threadId;
-      // Thread not found — try to fetch it (deep link case)
       useThreadStore.getState().fetchThread(threadId).then((thread) => {
         if (!thread && guildId && channelId) {
           navigateRef.current(routes.channel(guildId, channelId), { replace: true });
         }
       }).catch(() => {
-        // Network failure — navigate back to parent channel
         if (guildId && channelId) {
           navigateRef.current(routes.channel(guildId, channelId), { replace: true });
         }
@@ -79,12 +95,11 @@ export function ChannelView() {
 
   const closeThread = useCallback(() => {
     if (!guildId || !channelId) return;
-    if (window.history.state?.idx === 0) {
-      navigateRef.current(routes.channel(guildId, channelId), { replace: true });
-    } else {
-      navigateRef.current(-1);
-    }
-  }, [guildId, channelId]);
+    // Always navigate to current channel, preserving the active tab
+    const tabParam = searchParams.get("tab");
+    const url = routes.channel(guildId, channelId) + (tabParam ? `?tab=${tabParam}` : "");
+    navigateRef.current(url, { replace: true });
+  }, [guildId, channelId, searchParams]);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -111,35 +126,22 @@ export function ChannelView() {
         <div style={styles.chatBody} className="chat-body-cell">
           <ChatArea
             onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-            onMembersClick={() => {
-              const next = !membersOpen;
-              setMembersOpen(next);
-              if (next) { setFilesOpen(false); setFilesStoreOpen(false); setTasksOpen(false); }
-            }}
+            onMembersClick={() => setMembersOpen(!membersOpen)}
             membersOpen={membersOpen}
-            onFilesClick={() => {
-              const next = !filesOpen;
-              setFilesOpen(next);
-              setFilesStoreOpen(next);
-              if (next) { setMembersOpen(false); setTasksOpen(false); }
-            }}
-            filesOpen={filesOpen}
-            onTasksClick={() => {
-              const next = !tasksOpen;
-              setTasksOpen(next);
-              if (next) { setMembersOpen(false); setFilesOpen(false); setFilesStoreOpen(false); }
-            }}
-            tasksOpen={tasksOpen}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onNewTask={() => setCreateTaskOpen(true)}
           />
         </div>
-        <div style={styles.chatFooter} className="chat-footer-cell">
-          {channelId && <ReplyBar channelId={channelId} />}
-          {channelId && <MessageInput channelId={channelId} />}
-        </div>
+        {activeTab === "chat" && (
+          <div style={styles.chatFooter} className="chat-footer-cell">
+            {channelId && <ReplyBar channelId={channelId} />}
+            {channelId && <MessageInput channelId={channelId} />}
+          </div>
+        )}
       </div>
 
       {!threadId && membersOpen && <MemberList />}
-      {!threadId && filesOpen && channelId && <FilesSidebar channelId={channelId} />}
       {threadId && (
         <>
           <div
@@ -158,13 +160,6 @@ export function ChannelView() {
             <ThreadPanel threadId={threadId} onClose={closeThread} />
           </div>
         </>
-      )}
-      {tasksOpen && channelId && (
-        <TaskPanel
-          channelId={channelId}
-          onClose={() => setTasksOpen(false)}
-          onNewTask={() => setCreateTaskOpen(true)}
-        />
       )}
       {createTaskOpen && channelId && (
         <CreateTaskDialog

@@ -98,8 +98,20 @@ export class TasksRepo {
     return row ? toTask(row) : null;
   }
 
+  listDueForHeartbeat(): Task[] {
+    const now = Date.now();
+    const rows = this.db.prepare(
+      "SELECT * FROM tasks WHERE heartbeat_interval_ms > 0 AND thread_id IS NOT NULL AND thread_id != '' AND status != 'done' AND (heartbeat_last_at + heartbeat_interval_ms) <= ?"
+    ).all(now) as TaskRow[];
+    return rows.map(toTask);
+  }
+
   getNextSeq(channelId: string): number {
     const row = this.db.prepare("SELECT MAX(seq) as max_seq FROM tasks WHERE channel_id = ?").get(channelId) as { max_seq: number | null } | undefined;
     return (row?.max_seq ?? 0) + 1;
+  }
+
+  delete(taskId: string): void {
+    this.db.prepare("DELETE FROM tasks WHERE task_id = ?").run(taskId);
   }
 }

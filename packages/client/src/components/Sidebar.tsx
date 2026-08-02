@@ -158,7 +158,6 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
               <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)", opacity: 0.6 }} />
             </div>
             {parentChannels.map((ch) => {
-              const chThreads = threadsByParent[ch.id] ?? [];
               return (
                 <div key={ch.id}>
                   <ChannelItem
@@ -170,14 +169,6 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
                     onSelect={() => handleSelectChannel(ch.id)}
                     onSettings={() => setSettingsChannelId(ch.id)}
                   />
-                  {chThreads.map((t) => (
-                    <ThreadItem
-                      key={t.id}
-                      name={t.name}
-                      isActive={activeThreadId === t.id}
-                      onSelect={() => handleSelectThread(t)}
-                    />
-                  ))}
                 </div>
               );
             })}

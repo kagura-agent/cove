@@ -236,6 +236,31 @@ export class MessagesRepo {
     return msg;
   }
 
+  createSystemMessage(channelId: string, senderId: string, senderName: string, content: string, metadata: string): Message {
+    const now = Date.now();
+    const id = generateSnowflake();
+    this.db.prepare(
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, senderId, senderName, content, now, metadata, null);
+    return {
+      id,
+      channel_id: channelId,
+      content,
+      author: { id: senderId, username: senderName, bot: false, avatar: null, discriminator: "0", global_name: null },
+      timestamp: new Date(now).toISOString(),
+      edited_timestamp: null,
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      metadata,
+    };
+  }
+
   update(channelId: string, messageId: string, content: string): Message | null {
     const editedTimestamp = Date.now();
     const result = this.db.prepare(
@@ -255,6 +280,13 @@ export class MessagesRepo {
     const result = this.db.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
       .run(messageId, channelId);
     return result.changes > 0;
+  }
+
+  hasRecentActivity(channelId: string, sinceMs: number): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 FROM messages WHERE channel_id = ? AND timestamp > ? AND (metadata IS NULL OR json_extract(metadata, '$.content_type') != 'task_heartbeat') LIMIT 1"
+    ).get(channelId, sinceMs) as unknown | undefined;
+    return row !== undefined;
   }
 
   deleteAll(channelId: string): number {
