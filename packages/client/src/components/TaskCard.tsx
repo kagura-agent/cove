@@ -192,6 +192,8 @@ export function TaskStatusBar({ message }: { message: Message }) {
           role="menu"
           onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
           style={{
+          position: "absolute",
+          bottom: "100%",
           left: 0,
           marginBottom: 4,
           background: "var(--bg-secondary)",
