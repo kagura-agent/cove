@@ -6,6 +6,8 @@ import { useTaskStore } from "../stores/useTaskStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { FileTextOutlined, SyncOutlined, EyeOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { Dropdown } from "antd";
+import type { MenuProps } from "antd";
 import * as api from "../lib/api";
 
 interface TaskSnapshot {
@@ -119,19 +121,8 @@ function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string
 }
 
 export function TaskStatusBar({ message }: { message: Message }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const { guildId } = useActiveIds();
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   let snapshot: TaskSnapshot;
   try {
@@ -161,90 +152,47 @@ export function TaskStatusBar({ message }: { message: Message }) {
     return member.nick || member.user.global_name || member.user.username;
   }, [assigneeId, guildId, membersByGuildId]);
 
+  const statusMenuItems: MenuProps["items"] = ALL_STATUSES.map((s) => ({
+    key: s,
+    label: (
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {STATUS_ICON_COMPONENTS[s]}
+        {STATUS_LABELS[s]}
+      </span>
+    ),
+    style: s === status ? { background: STATUS_COLORS[s], color: "#fff", borderRadius: 4 } : undefined,
+    onClick: () => {
+      if (taskId) api.updateTask(taskId, { status: s }).catch(console.error);
+    },
+  }));
+
   return (
-    <div ref={ref} style={{ display: "inline-block", position: "relative", marginTop: "4px" }}>
-      <button
-        aria-label={`Task #${seq} status: ${STATUS_LABELS[status]}`}
-        onClick={() => taskId && setOpen(!open)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px",
-          padding: "4px 10px",
-          borderRadius: "6px",
-          border: "1px solid var(--bg-modifier-hover)",
-          background: "var(--bg-secondary)",
-          color: "var(--text-normal)",
-          fontSize: "var(--font-size-sm)",
-          cursor: taskId ? "pointer" : "default",
-          userSelect: "none",
-          transition: "background 0.15s",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
-      >
-        <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
-        <span style={{ color: "var(--text-muted)" }}>#{seq}</span>
-        {assigneeName && <span>@{assigneeName}</span>}
-      </button>
-      {open && taskId && (
-        <div
-          role="menu"
-          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+    <div style={{ display: "inline-block", marginTop: "4px" }}>
+      <Dropdown menu={{ items: statusMenuItems }} trigger={["click"]} disabled={!taskId} placement="bottomLeft">
+        <button
+          aria-label={`Task #${seq} status: ${STATUS_LABELS[status]}`}
           style={{
-          left: 0,
-          marginBottom: 4,
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--bg-modifier-hover)",
-          borderRadius: 6,
-          padding: 4,
-          zIndex: 100,
-          minWidth: 140,
-        }}>
-          {ALL_STATUSES.map((s) => (
-            <div
-              key={s}
-              role="menuitem"
-              tabIndex={0}
-              onClick={() => {
-                setOpen(false);
-                api.updateTask(taskId, { status: s }).catch((err) => {
-                  console.error("Failed to update task status:", err);
-                });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setOpen(false);
-                  api.updateTask(taskId, { status: s }).catch((err) => {
-                    console.error("Failed to update task status:", err);
-                  });
-                }
-              }}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                cursor: "pointer",
-                fontSize: "var(--font-size-sm)",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                color: s === status ? "#fff" : "var(--text-normal)",
-                background: s === status ? STATUS_COLORS[s] : "transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (s !== status) (e.currentTarget.style.background = "var(--bg-modifier-hover)");
-              }}
-              onMouseLeave={(e) => {
-                if (s !== status) (e.currentTarget.style.background = "transparent");
-              }}
-            >
-              <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[s]}</span>
-              <span>{STATUS_LABELS[s]}</span>
-            </div>
-          ))}
-        </div>
-      )}
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "4px 10px",
+            borderRadius: "6px",
+            border: "1px solid var(--bg-modifier-hover)",
+            background: "var(--bg-secondary)",
+            color: "var(--text-normal)",
+            fontSize: "var(--font-size-sm)",
+            cursor: taskId ? "pointer" : "default",
+            userSelect: "none",
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
+        >
+          <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
+          <span style={{ color: "var(--text-muted)" }}>#{seq}</span>
+          {assigneeName && <span>@{assigneeName}</span>}
+        </button>
+      </Dropdown>
     </div>
   );
 }
