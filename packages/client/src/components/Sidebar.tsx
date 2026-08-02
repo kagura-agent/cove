@@ -1,22 +1,21 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useUserPermissions } from "../lib/useUserPermissions";
 import { PermissionBits } from "@cove/shared";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
-import { useThreadStore } from "../stores/useThreadStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
 import { saveLastChannel } from "./GuildSidebar";
-import { Button, Input, Spin } from "antd";
-import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { Button, Input, Spin, Dropdown } from "antd";
+import { PlusOutlined, SettingOutlined, DownOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
-import { useState } from "react";
 import type { CSSProperties } from "react";
+import type { MenuProps } from "antd";
 import { ChannelSettings } from "./ChannelSettings";
 import { ServerSettings } from "./ServerSettings";
-import { ThreadIcon } from "./ThreadIcon";
+import { CreateServerDialog } from "./CreateServerDialog";
 
 const styles = {
   root: { display: "flex", flexDirection: "column", background: "var(--bg-secondary)", borderRight: "none", minHeight: 0, overflow: "hidden" } as CSSProperties,
@@ -66,28 +65,10 @@ function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSe
   );
 }
 
-function ThreadItem({ name, isActive, onSelect }: {
-  name: string; isActive: boolean; onSelect: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      style={{ ...styles.threadItem, ...(isActive ? styles.channelActive : hovered ? styles.channelHover : {}) }}
-      onClick={onSelect}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <span style={styles.threadConnector}>└</span>
-      <ThreadIcon size={14} style={{ color: "var(--interactive-normal)" }} />
-      <span style={{ ...styles.threadName, ...(isActive ? { color: "var(--interactive-active)", fontWeight: 500 } : {}) }}>{name}</span>
-    </div>
-  );
-}
 
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
   const navigate = useNavigate();
-  const { guildId: activeGuildId, channelId: activeChannelId, threadId: activeThreadId } = useActiveIds();
+  const { guildId: activeGuildId, channelId: activeChannelId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
   const guilds = useGuildStore((s) => s.guilds);
 
@@ -98,12 +79,12 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const canSeeSettings = isOwner || !!(userPermissions & PermissionBits.MANAGE_GUILD) || !!(userPermissions & PermissionBits.MANAGE_ROLES);
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
-  const threadsByParent = useThreadStore((s) => s.threads);
   const { unreadChannels, mentionCounts } = useReadStateStore();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [createServerOpen, setCreateServerOpen] = useState(false);
   const closeServerSettings = useCallback(() => setServerSettingsOpen(false), []);
 
   function handleSelectChannel(id: string) {
@@ -113,11 +94,6 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
     onClose?.();
   }
 
-  function handleSelectThread(thread: { id: string; parent_id?: string | null }) {
-    if (!guildId || !thread.parent_id) return;
-    navigate(routes.thread(guildId, thread.parent_id, thread.id));
-    onClose?.();
-  }
 
   async function handleAddChannel(e: React.FormEvent) {
     e.preventDefault();
@@ -131,11 +107,42 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
     } catch (err) { console.error("create channel:", err); }
   }
 
+  function navigateToGuild(targetGuildId: string) {
+    const lastChannel = (() => { try { return localStorage.getItem("cove_last_channel_" + targetGuildId); } catch { return null; } })();
+    const guildChannels = getChannels(targetGuildId);
+    let targetChannel: string | null = null;
+    if (lastChannel && guildChannels.some((c) => c.id === lastChannel)) {
+      targetChannel = lastChannel;
+    } else if (guildChannels.length > 0) {
+      const textChannel = guildChannels.find((c) => c.type === 0);
+      targetChannel = textChannel?.id ?? guildChannels[0].id;
+    }
+    if (targetChannel) navigate(routes.channel(targetGuildId, targetChannel));
+    onClose?.();
+  }
+
+  const guildList = Object.values(guilds);
+  const serverMenuItems: MenuProps["items"] = [
+    ...guildList.map((g) => ({
+      key: g.id,
+      label: g.name,
+      style: g.id === guildId ? { fontWeight: 600, color: "var(--interactive-active)" } : undefined,
+      onClick: () => navigateToGuild(g.id),
+    })),
+    { type: "divider" as const },
+    { key: "create", label: "+ Create Server", onClick: () => setCreateServerOpen(true) },
+  ];
+
   return (
     <div style={{ ...styles.root, ...style }} className="sidebar-panel">
       <div style={styles.header}>
-        <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
-        <h1 style={styles.title}>{guilds[guildId ?? ""]?.name ?? "Cove"}</h1>
+        <Dropdown menu={{ items: serverMenuItems }} trigger={["click"]} placement="bottomLeft">
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", cursor: "pointer", flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: "var(--font-size-xl)" }}>🏝️</span>
+            <h1 style={styles.title}>{guilds[guildId ?? ""]?.name ?? "Cove"}</h1>
+            <DownOutlined style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }} />
+          </div>
+        </Dropdown>
         {guildId && canSeeSettings && (
           <Button
             type="text"
@@ -197,6 +204,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           onClose={closeServerSettings}
         />
       )}
+      <CreateServerDialog open={createServerOpen} onClose={() => setCreateServerOpen(false)} />
     </div>
   );
 }

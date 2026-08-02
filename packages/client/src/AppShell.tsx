@@ -35,7 +35,6 @@ export function AppShell() {
       <div onClick={() => setSidebarOpen(false)} style={{...styles.overlay, ...(sidebarOpen ? styles.overlayVisible : {})}} className="mobile-sidebar-backdrop" />
 
       <div style={styles.layout} className={`app-layout ${sidebarOpen ? "sidebar-open" : ""}`}>
-        <GuildSidebar />
 
         <div style={styles.sidebarColumn} className="sidebar-column">
           <Sidebar onClose={() => setSidebarOpen(false)} loading={!channelsLoaded} style={styles.sidebarBody} />
