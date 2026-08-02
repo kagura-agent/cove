@@ -214,7 +214,15 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
 
     const user = c.get("botUser");
-    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
+    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
+
+    if (task.created_by !== user.id && task.assignee_id !== user.id) {
+      try {
+        await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.MANAGE_CHANNELS);
+      } catch {
+        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      }
+    }
 
     repos.tasks.delete(taskId);
     dispatcher?.taskDeleted(task);

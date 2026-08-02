@@ -19,31 +19,10 @@ import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
 import { STATUS_ICON_COMPONENTS } from "./TaskCard";
 import type { Channel } from "../types";
-
-const HEARTBEAT_OPTIONS = [
-  { label: "5 min", value: 300000 },
-  { label: "10 min", value: 600000 },
-  { label: "15 min", value: 900000 },
-  { label: "30 min", value: 1800000 },
-  { label: "60 min", value: 3600000 },
-  { label: "120 min", value: 7200000 },
-];
+import { HEARTBEAT_OPTIONS } from "../lib/constants";
 
 type ChannelTab = "chat" | "tasks" | "files" | "threads";
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  open: "var(--text-muted)",
-  in_progress: "#5865f2",
-  in_review: "#e67e22",
-  done: "#3ba55c",
-};
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  open: "Open",
-  in_progress: "In Progress",
-  in_review: "In Review",
-  done: "Done",
-};
+type ThreadWithArchived = Channel & { _archived?: boolean };
 
 const styles = {
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "var(--space-md)", opacity: 0.6 } as CSSProperties,
@@ -56,8 +35,6 @@ const styles = {
   tabBar: { display: "flex", alignItems: "center", gap: 0, background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", paddingLeft: "var(--content-pad)", flexShrink: 0 } as CSSProperties,
   tab: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 500, cursor: "pointer", color: "var(--text-muted)", borderBottom: "2px solid transparent", transition: "color 0.15s, border-color 0.15s", userSelect: "none" } as CSSProperties,
   tabActive: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 600, cursor: "pointer", color: "var(--header-primary)", borderBottom: "2px solid var(--accent, #5865f2)", transition: "color 0.15s, border-color 0.15s", userSelect: "none" } as CSSProperties,
-  taskList: { flex: 1, overflowY: "auto", padding: "var(--space-md)" } as CSSProperties,
-  taskItem: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--space-md)", borderRadius: "var(--space-xs)", cursor: "pointer", transition: "background 0.15s", fontSize: "var(--font-size-md)", color: "var(--text-normal)" } as CSSProperties,
   newTaskBtn: { background: "var(--accent, #5865f2)", color: "#fff", border: "none", borderRadius: "var(--space-xs)", padding: "var(--space-xs) var(--space-md)", fontSize: "var(--font-size-sm)", fontWeight: 600, cursor: "pointer", marginLeft: "auto", marginRight: "var(--content-pad)" } as CSSProperties,
   filesContainer: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" } as CSSProperties,
 };
@@ -394,7 +371,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
 
 /** Inline thread table for the Threads tab */
 function InlineThreadList({ channelId }: { channelId: string }) {
-  const [allThreads, setAllThreads] = useState<Channel[]>([]);
+  const [allThreads, setAllThreads] = useState<ThreadWithArchived[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { guildId } = useActiveIds();
@@ -430,7 +407,7 @@ function InlineThreadList({ channelId }: { channelId: string }) {
     try {
       await api.updateChannel(thread.id, { archived });
       // Update local state
-      setAllThreads((prev) => prev.map((t) => t.id === thread.id ? { ...t, _archived: archived } as any : t));
+      setAllThreads((prev) => prev.map((t) => t.id === thread.id ? { ...t, _archived: archived } : t));
     } catch (err) {
       console.error("update thread status:", err);
     }
@@ -457,9 +434,9 @@ function InlineThreadList({ channelId }: { channelId: string }) {
         { text: "Active", value: "active" },
         { text: "Archived", value: "archived" },
       ],
-      onFilter: (value, record) => (value === "archived") === !!(record as any)._archived,
+      onFilter: (value, record) => (value === "archived") === !!(record as ThreadWithArchived)._archived,
       render: (_: unknown, record: Channel) => {
-        const archived = (record as any)._archived;
+        const archived = (record as ThreadWithArchived)._archived;
         return (
           <Select
             value={archived ? "archived" : "active"}

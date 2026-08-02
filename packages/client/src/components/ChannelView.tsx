@@ -50,13 +50,12 @@ export function ChannelView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get("tab") as ChannelTab) || "chat";
   const setActiveTab = useCallback((tab: ChannelTab) => {
-    if (tab === "chat") {
-      searchParams.delete("tab");
-    } else {
-      searchParams.set("tab", tab);
-    }
-    setSearchParams(searchParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+    setSearchParams((prev) => {
+      if (tab === "chat") prev.delete("tab");
+      else prev.set("tab", tab);
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Sync files store open state with tab
   useEffect(() => {

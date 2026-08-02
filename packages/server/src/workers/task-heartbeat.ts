@@ -1,6 +1,6 @@
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { generateSnowflake, type Message } from "@cove/shared";
+import type { Message } from "@cove/shared";
 
 const TICK_MS = parseInt(process.env["TASK_HEARTBEAT_TICK_MS"] ?? "60000", 10);
 
@@ -56,25 +56,17 @@ export class TaskHeartbeatWorker {
   }
 
   private sendHeartbeat(taskId: string, threadId: string, createdBy: string, seq: number): void {
-    const now = Date.now();
-    const messageId = generateSnowflake();
     const content = `${AGENT_PREAMBLE}\n\n${VISIBLE_TEXT}`;
     const metadata = JSON.stringify({ content_type: "task_heartbeat" });
 
-    // Look up creator's username for DB record
     const creator = this.repos.users.getById(createdBy);
     const senderName = creator?.username ?? "System";
 
-    // Store message in DB with real sender (for audit trail)
-    this.repos.db.prepare(
-      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(messageId, threadId, createdBy, senderName, content, now, metadata, null);
+    const msg = this.repos.messages.createSystemMessage(threadId, createdBy, senderName, content, metadata);
 
     // Dispatch via WS with author rewritten to "system" — bypasses agent self-loop filter
     const wsMessage: Message = {
-      id: messageId,
-      channel_id: threadId,
-      content,
+      ...msg,
       author: {
         id: "system",
         username: "System",
@@ -83,17 +75,6 @@ export class TaskHeartbeatWorker {
         discriminator: "0",
         global_name: "System",
       },
-      timestamp: new Date(now).toISOString(),
-      edited_timestamp: null,
-      type: 0,
-      attachments: [],
-      embeds: [],
-      mentions: [],
-      mention_roles: [],
-      pinned: false,
-      tts: false,
-      mention_everyone: false,
-      metadata,
     };
 
     this.dispatcher.messageCreate(wsMessage);

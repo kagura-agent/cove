@@ -236,6 +236,31 @@ export class MessagesRepo {
     return msg;
   }
 
+  createSystemMessage(channelId: string, senderId: string, senderName: string, content: string, metadata: string): Message {
+    const now = Date.now();
+    const id = generateSnowflake();
+    this.db.prepare(
+      "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, channelId, senderId, senderName, content, now, metadata, null);
+    return {
+      id,
+      channel_id: channelId,
+      content,
+      author: { id: senderId, username: senderName, bot: false, avatar: null, discriminator: "0", global_name: null },
+      timestamp: new Date(now).toISOString(),
+      edited_timestamp: null,
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+      metadata,
+    };
+  }
+
   update(channelId: string, messageId: string, content: string): Message | null {
     const editedTimestamp = Date.now();
     const result = this.db.prepare(
