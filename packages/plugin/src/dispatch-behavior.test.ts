@@ -114,7 +114,7 @@ import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channe
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -122,6 +122,7 @@ const createMockRestClient = (): MockRestClient => ({
   editMessage: vi.fn().mockResolvedValue({ id: "msg-draft-1" }),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
+  getTasks: vi.fn().mockResolvedValue([]),
 });
 
 const createMockChannelRuntime = () => ({
@@ -1059,5 +1060,46 @@ describe("I. Long Message Chunking (Bug #391)", () => {
 
     blocker.resolve();
     await p;
+  });
+});
+
+describe("J. Task Thread Direct Policy (#473)", () => {
+  beforeEach(resetState);
+
+  it("J1: Regular channel uses ChatType 'channel'", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":group:");
+  });
+
+  it("J2: Task thread uses ChatType 'direct'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":direct:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":direct:");
+  });
+
+  it("J3: Thread without task stays as 'channel'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTasks.mockResolvedValue([]);
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+  });
+
+  it("J4: Error in task detection gracefully falls back to 'channel'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockRejectedValue(new Error("API down"));
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
   });
 });

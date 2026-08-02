@@ -6,7 +6,7 @@ import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, define
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
 import { getCoveMd } from "./cove-md-cache.js";
-import { resolveCoveMdChannelId, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
+import { resolveThreadContext, isTaskThread, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
@@ -277,7 +277,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
-    const coveMdChannelId = await resolveCoveMdChannelId(restClient, channelId);
+    const { coveMdChannelId, channel } = await resolveThreadContext(restClient, channelId);
+    const taskThread = await isTaskThread(restClient, channelId, channel);
+    const chatType = taskThread ? "direct" : "channel";
+    const sessionType = taskThread ? "direct" : "group";
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
     const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
     const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
@@ -288,9 +291,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         Body: message.content, BodyForAgent: bodyForAgent,
         CommandBody: message.content, RawBody: message.content,
         From: senderId, To: channelId, ChannelId: channelId,
-        SessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
+        SessionKey: `agent:${targetAgent}:cove:${sessionType}:${channelId}`,
         AgentId: targetAgent, AccountId: accountId, MessageSid: messageId,
-        Provider: "cove", Surface: "cove", ChatType: "channel",
+        Provider: "cove", Surface: "cove", ChatType: chatType,
         SenderId: senderId, SenderName: senderName, CommandAuthorized: false,
         ...((message as any).batchMeta ? {
           MessageSids: (message as any).batchMeta.MessageSids,
@@ -315,7 +318,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           }),
           resolveTurn: () => ({
             channel: "cove", accountId, agentId: targetAgent,
-            routeSessionKey: `agent:${targetAgent}:cove:group:${channelId}`,
+            routeSessionKey: `agent:${targetAgent}:cove:${sessionType}:${channelId}`,
             storePath: "", ctxPayload, recordInboundSession,
             runDispatch: async () => {
               await typingCallbacks.onReplyStart?.();
