@@ -18,6 +18,7 @@ import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
+import { STATUS_ICON_COMPONENTS } from "./TaskCard";
 
 const HEARTBEAT_OPTIONS = [
   { label: "5 min", value: 300000 },
@@ -179,8 +180,8 @@ function InlineTaskList({ channelId }: { channelId: string }) {
 
   const handleOpenThread = useCallback((task: Task) => {
     if (guildId) {
-      // Navigate to thread but keep ?tab=tasks so we stay on the Tasks tab
-      navigate(routes.thread(guildId, channelId, task.thread_id) + "?tab=tasks");
+      // Navigate with replace so closing thread goes back to tasks, not previous thread
+      navigate(routes.thread(guildId, channelId, task.thread_id) + "?tab=tasks", { replace: true });
     }
   }, [guildId, channelId, navigate]);
 
@@ -264,10 +265,10 @@ function InlineTaskList({ channelId }: { channelId: string }) {
           style={{ width: "100%" }}
           onChange={(v) => handleStatusChange(task, v)}
           options={[
-            { label: <Tag color="default">Open</Tag>, value: "open" },
-            { label: <Tag color="processing">In Progress</Tag>, value: "in_progress" },
-            { label: <Tag color="warning">In Review</Tag>, value: "in_review" },
-            { label: <Tag color="success">Done</Tag>, value: "done" },
+            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.open} Open</span>, value: "open" },
+            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.in_progress} In Progress</span>, value: "in_progress" },
+            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.in_review} In Review</span>, value: "in_review" },
+            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.done} Done</span>, value: "done" },
           ]}
         />
       ),

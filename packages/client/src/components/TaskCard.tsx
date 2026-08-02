@@ -16,7 +16,7 @@ interface TaskSnapshot {
   thread_id?: string;
 }
 
-const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
+export const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
   open: <FileTextOutlined style={{ color: "var(--text-muted)" }} />,
   in_progress: <SyncOutlined spin style={{ color: "#5865f2" }} />,
   in_review: <EyeOutlined style={{ color: "#e67e22" }} />,
