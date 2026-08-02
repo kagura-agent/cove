@@ -277,15 +277,15 @@ export function TaskAssignmentMessage({ message }: { message: Message }) {
   );
 }
 
-export function TaskHeartbeatMessage({ message }: { message: Message }) {
+export function TaskHeartbeatMessage({ message, collapsedCount }: { message: Message; collapsedCount?: number }) {
   return (
     <div style={{
       padding: "2px 0",
-      fontSize: "var(--font-size-xs)",
+      fontSize: "12px",
       color: "var(--text-muted)",
-      opacity: 0.6,
+      textAlign: "center",
     }}>
-      {message.content}
+      Heartbeat: status update requested{collapsedCount && collapsedCount > 0 ? ` (${collapsedCount} previous)` : ""}
     </div>
   );
 }

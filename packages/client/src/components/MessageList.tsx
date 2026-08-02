@@ -659,7 +659,35 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
           {(() => {
           const lastReadId = lastReadIdSnapshotRef.current;
           const lastReadIdInMessages = lastReadId ? messages.some((m) => m.id === lastReadId) : false;
+
+          // Collapse consecutive heartbeat messages — only render the last in each run
+          const heartbeatMeta = new Map<number, { skip: boolean; collapsedCount: number }>();
+          for (let i = 0; i < messages.length; i++) {
+            const meta = messages[i].metadata;
+            const isHb = meta && typeof meta === "string" && meta.includes('"task_heartbeat"');
+            if (!isHb) continue;
+            const nextMeta = messages[i + 1]?.metadata;
+            const nextIsHb = nextMeta && typeof nextMeta === "string" && nextMeta.includes('"task_heartbeat"');
+            if (nextIsHb) {
+              heartbeatMeta.set(i, { skip: true, collapsedCount: 0 });
+            }
+          }
+          // Count collapsed for the last in each run
+          for (let i = 0; i < messages.length; i++) {
+            const meta = messages[i].metadata;
+            const isHb = meta && typeof meta === "string" && meta.includes('"task_heartbeat"');
+            if (!isHb || heartbeatMeta.get(i)?.skip) continue;
+            let count = 0;
+            for (let j = i - 1; j >= 0; j--) {
+              if (heartbeatMeta.get(j)?.skip) count++;
+              else break;
+            }
+            if (count > 0) heartbeatMeta.set(i, { skip: false, collapsedCount: count });
+          }
+
           return messages.map((msg, i) => {
+          if (heartbeatMeta.get(i)?.skip) return null;
+          const collapsedCount = heartbeatMeta.get(i)?.collapsedCount;
           const prev = i > 0 ? messages[i - 1] : null;
           const isGroupStart =
             !prev ||
@@ -690,7 +718,7 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
                   eager={eager}
                   scrollRoot={scrollRoot}
                 >
-                  <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} />
+                  <MessageItem message={msg} isGroupStart={isGroupStart} onJumpToMessage={handleJumpToMessage} onContextMenu={handleContextMenu} collapsedCount={collapsedCount} />
                 </LazyMessageItem>
               </div>
             );

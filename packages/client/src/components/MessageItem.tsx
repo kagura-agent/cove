@@ -80,6 +80,7 @@ interface MessageItemProps {
   isGroupStart: boolean;
   onJumpToMessage?: (messageId: string) => void;
   onContextMenu?: (e: React.MouseEvent, message: Message) => void;
+  collapsedCount?: number;
 }
 
 function MessageActions({ message }: { message: Message }) {
@@ -232,7 +233,7 @@ function PendingIndicator({ status, messageId, channelId, content, author, messa
   );
 }
 
-export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextMenu }: MessageItemProps) {
+export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextMenu, collapsedCount }: MessageItemProps) {
   const contentType = parseMetadataContentType(message);
 
   if (contentType === "task_assignment") {
@@ -242,7 +243,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
   if (contentType === "task_heartbeat") {
     return (
       <div className="discord-msg-row" data-message-id={message.id}>
-        <TaskHeartbeatMessage message={message} />
+        <TaskHeartbeatMessage message={message} collapsedCount={collapsedCount} />
       </div>
     );
   }

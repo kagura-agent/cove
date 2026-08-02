@@ -257,6 +257,13 @@ export class MessagesRepo {
     return result.changes > 0;
   }
 
+  hasRecentActivity(channelId: string, sinceMs: number): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 FROM messages WHERE channel_id = ? AND timestamp > ? AND (metadata IS NULL OR json_extract(metadata, '$.content_type') != 'task_heartbeat') LIMIT 1"
+    ).get(channelId, sinceMs) as unknown | undefined;
+    return row !== undefined;
+  }
+
   deleteAll(channelId: string): number {
     const result = this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(channelId);
     return result.changes;

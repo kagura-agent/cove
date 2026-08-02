@@ -3,6 +3,7 @@ import { initDb, seedChannels, seedUsers } from "./db/schema.js";
 import { createApp } from "./app.js";
 import { createRepos } from "./repos/index.js";
 import { setupGateway, GatewayDispatcher } from "./ws/index.js";
+import { TaskHeartbeatWorker } from "./workers/task-heartbeat.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
 const DB_PATH = process.env["COVE_DB_PATH"] ?? process.env["DB_PATH"] ?? "cove.db";
@@ -42,6 +43,9 @@ const dispatcher = new GatewayDispatcher(repos.channels, repos.guilds);
 dispatcher.setPermissionsRepo(repos.permissions);
 dispatcher.setMembersRepo(repos.members);
 dispatcher.setRolesRepo(repos.roles);
+
+const heartbeatWorker = new TaskHeartbeatWorker(repos, dispatcher);
+heartbeatWorker.start();
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
