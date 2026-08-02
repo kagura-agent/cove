@@ -392,7 +392,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   );
 }
 
-/** Inline thread list for the Threads tab */
+/** Inline thread table for the Threads tab */
 function InlineThreadList({ channelId }: { channelId: string }) {
   const [subTab, setSubTab] = useState<"active" | "archived">("active");
   const [activeThreads, setActiveThreads] = useState<Channel[]>([]);
@@ -400,6 +400,13 @@ function InlineThreadList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { guildId } = useActiveIds();
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
+  const userNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of members) map[m.user.id] = m.nick || m.user.global_name || m.user.username;
+    return map;
+  }, [members]);
 
   useEffect(() => {
     setLoading(true);
@@ -419,6 +426,45 @@ function InlineThreadList({ channelId }: { channelId: string }) {
       navigate(routes.thread(guildId, channelId, thread.id) + "?tab=threads", { replace: true });
     }
   }, [guildId, channelId, navigate]);
+
+  const columns: ColumnsType<Channel> = [
+    {
+      title: "Name",
+      dataIndex: "name",
+      key: "name",
+      ellipsis: true,
+      render: (name: string) => (
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <ThreadIcon size={14} style={{ opacity: 0.5, color: "var(--interactive-normal)", flexShrink: 0 }} />
+          {name}
+        </span>
+      ),
+    },
+    {
+      title: "Messages",
+      dataIndex: "message_count",
+      key: "message_count",
+      width: 100,
+      sorter: (a, b) => (a.message_count ?? 0) - (b.message_count ?? 0),
+      render: (count: number | undefined) => count ?? 0,
+    },
+    {
+      title: "Creator",
+      dataIndex: "owner_id",
+      key: "owner_id",
+      width: 120,
+      ellipsis: true,
+      render: (id: string | null | undefined) => (id ? (userNameMap[id] || id) : "\u2014"),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 80,
+      render: (_, thread) => (
+        <Button type="text" size="small" icon={<MessageOutlined />} onClick={() => handleClick(thread)} title="Open thread" />
+      ),
+    },
+  ];
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -456,39 +502,16 @@ function InlineThreadList({ channelId }: { channelId: string }) {
           Archived
         </button>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 var(--space-sm)" }} className="scroll-container">
-        {loading && <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>Loading...</div>}
-        {!loading && threads.length === 0 && (
-          <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>No {subTab} threads</div>
-        )}
-        {threads.map((t) => {
-          const name = t.name.length > 80 ? t.name.slice(0, 80) + "\u2026" : t.name;
-          return (
-            <div
-              key={t.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-sm)",
-                padding: "var(--space-sm) var(--space-md)",
-                borderRadius: "var(--space-xs)",
-                cursor: "pointer",
-                transition: "background 0.15s",
-                fontSize: "var(--font-size-md)",
-                color: "var(--text-normal)",
-              }}
-              onClick={() => handleClick(t)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <ThreadIcon size={16} style={{ opacity: 0.5, color: "var(--interactive-normal)", flexShrink: 0 }} />
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", flexShrink: 0 }}>
-                {t.message_count ?? 0} messages
-              </span>
-            </div>
-          );
-        })}
+      <div style={{ flex: 1, overflow: "auto", padding: "0 var(--space-md)" }} className="scroll-container">
+        <Table<Channel>
+          columns={columns}
+          dataSource={threads}
+          rowKey="id"
+          loading={loading}
+          size="small"
+          pagination={false}
+          locale={{ emptyText: `No ${subTab} threads` }}
+        />
       </div>
     </div>
   );
