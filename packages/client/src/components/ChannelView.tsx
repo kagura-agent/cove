@@ -96,12 +96,11 @@ export function ChannelView() {
 
   const closeThread = useCallback(() => {
     if (!guildId || !channelId) return;
-    if (window.history.state?.idx === 0) {
-      navigateRef.current(routes.channel(guildId, channelId), { replace: true });
-    } else {
-      navigateRef.current(-1);
-    }
-  }, [guildId, channelId]);
+    // Always navigate to current channel, preserving the active tab
+    const tabParam = searchParams.get("tab");
+    const url = routes.channel(guildId, channelId) + (tabParam ? `?tab=${tabParam}` : "");
+    navigateRef.current(url, { replace: true });
+  }, [guildId, channelId, searchParams]);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
