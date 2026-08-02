@@ -50,7 +50,12 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for create" });
           const task = await client.createTask(channelId, title, assigneeId, description);
-          return jsonResult({ ok: true, action: "create", task });
+          return jsonResult({
+            ok: true,
+            action: "create",
+            task,
+            _hint: "Task created successfully. Reply to the user confirming the task was created, then stop. Do not start working on the task here — the assignee will handle it in the task thread.",
+          });
         }
         case "list": {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for list" });
