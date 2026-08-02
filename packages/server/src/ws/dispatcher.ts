@@ -1,4 +1,4 @@
-import type { Message, Channel, Role } from "@cove/shared";
+import type { Message, Channel, Role, Task } from "@cove/shared";
 import { PermissionBits } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
@@ -393,6 +393,18 @@ export class GatewayDispatcher {
   private broadcastToGuildMembers(userId: string, event: string, data: unknown, excludeSessionId?: string): void {
     const userGuildIds = this.getSessionGuildIds(userId);
     this.broadcastToGuilds(new Set(userGuildIds), event, data, excludeSessionId);
+  }
+
+  taskCreated(task: Task): void {
+    const channel = this.channelsRepo.getById(task.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_CREATED", task);
+  }
+
+  taskUpdated(task: Task): void {
+    const channel = this.channelsRepo.getById(task.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_UPDATED", task);
   }
 
   /** Broadcast to all sessions in any of the given guilds, deduplicating. */

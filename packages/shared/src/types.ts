@@ -199,6 +199,8 @@ export interface Message {
   guild_id?: string;
   /** Thread spawned from this message (present on parent messages that have threads). */
   thread?: Channel | null;
+  /** Server-set metadata JSON (e.g. content_type for task cards). */
+  metadata?: string | null;
 }
 
 /** A reaction summary for a message. */
@@ -283,6 +285,28 @@ export interface IncomingMessageRequest {
   username?: string;
   avatar_url?: string;
   thread_id?: string;
+}
+
+/** Task status lifecycle. */
+export type TaskStatus = "open" | "in_progress" | "in_review" | "done";
+
+/** A channel-level task with a linked thread. */
+export interface Task {
+  task_id: string;
+  channel_id: string;
+  thread_id: string;
+  message_id: string;
+  status: TaskStatus;
+  assignee_id: string | null;
+  title: string;
+  seq: number;
+  guild_id: string;
+  description: string;
+  created_by: string;
+  heartbeat_interval_ms: number;
+  heartbeat_last_at: number;
+  created_at: number;
+  updated_at: number;
 }
 
 /** A thread member entry. */

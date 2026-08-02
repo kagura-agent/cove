@@ -360,6 +360,10 @@ export function setupGatewaySubscriptions(): void {
     } else {
       useThreadStore.getState().updateThread(thread);
     }
+    // Update parent message's thread field so ThreadIndicator shows current count
+    if (thread.parent_id && thread.message_id) {
+      useMessageStore.getState().setMessageThread(thread.parent_id, thread.message_id, thread);
+    }
   });
 
   subscribe("THREAD_DELETE", (data) => {

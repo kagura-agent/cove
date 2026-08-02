@@ -244,6 +244,13 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
 
         gatewayClient.on("messageCreate", async (message) => {
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
+          // Skip card messages with skip_agent_notify (task cards in parent channel)
+          if (message.metadata) {
+            try {
+              const meta = JSON.parse(message.metadata);
+              if (meta.skip_agent_notify) { log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (skip_agent_notify)`); return; }
+            } catch {}
+          }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
           debouncer.enqueue({ message });

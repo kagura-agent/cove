@@ -1,7 +1,9 @@
 {
   "id": "cove",
   "kind": "channel",
-  "channels": ["cove"],
+  "channels": [
+    "cove"
+  ],
   "name": "Cove",
   "description": "Connect OpenClaw to the Cove mirror world",
   "activation": {
@@ -18,40 +20,99 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "token": { "type": "string" },
-          "baseUrl": { "type": "string", "default": "http://localhost:3400" },
-          "guildId": { "type": "string" },
+          "token": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string",
+            "default": "http://localhost:3400"
+          },
+          "guildId": {
+            "type": "string"
+          },
           "allowFrom": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "agentId": { "type": "string" },
-          "agentName": { "type": "string" },
-          "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] },
+          "agentId": {
+            "type": "string"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "dmSecurity": {
+            "type": "string",
+            "enum": [
+              "open",
+              "allowlist",
+              "closed"
+            ]
+          },
           "accounts": {
             "type": "object",
-            "propertyNames": { "type": "string" },
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "name": { "type": "string" },
-                "enabled": { "type": "boolean" },
-                "token": { "type": "string" },
-                "baseUrl": { "type": "string" },
-                "guildId": { "type": "string" },
-                "agentId": { "type": "string" },
-                "agentName": { "type": "string" },
-                "allowFrom": { "type": "array", "items": { "type": "string" } },
-                "dmSecurity": { "type": "string", "enum": ["open", "allowlist", "closed"] }
+                "name": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "baseUrl": {
+                  "type": "string"
+                },
+                "guildId": {
+                  "type": "string"
+                },
+                "agentId": {
+                  "type": "string"
+                },
+                "agentName": {
+                  "type": "string"
+                },
+                "allowFrom": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "dmSecurity": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "allowlist",
+                    "closed"
+                  ]
+                }
               }
             }
           },
-          "defaultAccount": { "type": "string" },
-          "reactionNotifications": { "type": "string", "enum": ["off", "own", "all"] },
+          "defaultAccount": {
+            "type": "string"
+          },
+          "reactionNotifications": {
+            "type": "string",
+            "enum": [
+              "off",
+              "own",
+              "all"
+            ]
+          },
           "groupAllowFrom": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -65,5 +126,10 @@
         }
       }
     }
+  },
+  "contracts": {
+    "tools": [
+      "cove_task"
+    ]
   }
 }

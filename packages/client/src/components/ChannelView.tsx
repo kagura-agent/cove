@@ -9,6 +9,8 @@ import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
 import { MemberList } from "./MemberList";
 import { FilesSidebar } from "./FilesSidebar";
+import { TaskPanel } from "./TaskPanel";
+import { CreateTaskDialog } from "./CreateTaskDialog";
 import { ThreadPanel } from "./ThreadPanel";
 import { routes } from "../lib/routes";
 import type { CSSProperties } from "react";
@@ -33,6 +35,8 @@ export function ChannelView() {
   const channelsLoaded = useChannelStore((s) => s.channelsLoaded);
   const [membersOpen, setMembersOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [resizeDragging, setResizeDragging] = useState(false);
@@ -110,16 +114,22 @@ export function ChannelView() {
             onMembersClick={() => {
               const next = !membersOpen;
               setMembersOpen(next);
-              if (next) { setFilesOpen(false); setFilesStoreOpen(false); }
+              if (next) { setFilesOpen(false); setFilesStoreOpen(false); setTasksOpen(false); }
             }}
             membersOpen={membersOpen}
             onFilesClick={() => {
               const next = !filesOpen;
               setFilesOpen(next);
               setFilesStoreOpen(next);
-              if (next) setMembersOpen(false);
+              if (next) { setMembersOpen(false); setTasksOpen(false); }
             }}
             filesOpen={filesOpen}
+            onTasksClick={() => {
+              const next = !tasksOpen;
+              setTasksOpen(next);
+              if (next) { setMembersOpen(false); setFilesOpen(false); setFilesStoreOpen(false); }
+            }}
+            tasksOpen={tasksOpen}
           />
         </div>
         <div style={styles.chatFooter} className="chat-footer-cell">
@@ -148,6 +158,20 @@ export function ChannelView() {
             <ThreadPanel threadId={threadId} onClose={closeThread} />
           </div>
         </>
+      )}
+      {tasksOpen && channelId && (
+        <TaskPanel
+          channelId={channelId}
+          onClose={() => setTasksOpen(false)}
+          onNewTask={() => setCreateTaskOpen(true)}
+        />
+      )}
+      {createTaskOpen && channelId && (
+        <CreateTaskDialog
+          channelId={channelId}
+          open={createTaskOpen}
+          onClose={() => setCreateTaskOpen(false)}
+        />
       )}
     </>
   );

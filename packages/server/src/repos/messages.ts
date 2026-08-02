@@ -76,6 +76,9 @@ function toMessage(row: MessageRow, reactions?: Reaction[]): Message {
   if (row.referenced_message_id) {
     msg.message_reference = { message_id: row.referenced_message_id, channel_id: row.channel_id };
   }
+  if (row.metadata) {
+    msg.metadata = row.metadata;
+  }
   return msg;
 }
 
