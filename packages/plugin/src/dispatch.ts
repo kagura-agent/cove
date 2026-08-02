@@ -280,7 +280,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const { coveMdChannelId, channel } = await resolveThreadContext(restClient, channelId);
     const taskThread = await isTaskThread(restClient, channelId, channel);
     const chatType = taskThread ? "direct" : "channel";
-    const sessionType = taskThread ? "direct" : "group";
+    const sessionType = taskThread ? "task" : "group";
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
     const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
     const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);

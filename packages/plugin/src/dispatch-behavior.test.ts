@@ -1080,8 +1080,8 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":direct:");
-    expect(capturedResolvedTurn?.routeSessionKey).toContain(":direct:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":task:");
   });
 
   it("J3: Thread without task stays as 'channel'", async () => {
