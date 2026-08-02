@@ -671,3 +671,6 @@ textarea:focus-visible {
   0%, 30% { background-color: color-mix(in srgb, var(--accent) 20%, transparent); }
   100% { background-color: transparent; }
 }
+.ant-table-sticky-holder {
+  background: var(--bg-secondary, #2b2d31) !important;
+}

@@ -110,7 +110,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { guildId } = useActiveIds();
+  const { guildId, threadId } = useActiveIds();
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
   const removeTask = useTaskStore((s) => s.removeTask);
   const byTaskId = useTaskStore((s) => s.byTaskId);
@@ -284,6 +284,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         loading={loading}
         size="small"
         pagination={false}
+        sticky
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
       />
       <Modal
@@ -471,6 +472,7 @@ function InlineThreadList({ channelId }: { channelId: string }) {
         loading={loading}
         size="small"
         pagination={false}
+        sticky
         locale={{ emptyText: "No threads" }}
       />
     </div>
