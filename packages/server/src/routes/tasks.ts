@@ -126,12 +126,11 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       // 5. Task row — written last. Agent may receive message before this exists.
       const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
 
-      // Set heartbeat if requested
-      if (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) {
-        repos.tasks.update(taskId, { heartbeat_interval_ms: body.heartbeat_interval_ms, heartbeat_last_at: Date.now() });
-        task.heartbeat_interval_ms = body.heartbeat_interval_ms;
-        task.heartbeat_last_at = Date.now();
-      }
+      // Set heartbeat — default to 10 min if not specified
+      const heartbeatMs = (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) ? body.heartbeat_interval_ms : 600000;
+      repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatMs, heartbeat_last_at: Date.now() });
+      task.heartbeat_interval_ms = heartbeatMs;
+      task.heartbeat_last_at = Date.now();
 
       return { cardMessage, thread, assignmentMessage, task };
     })();
