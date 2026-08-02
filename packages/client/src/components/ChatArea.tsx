@@ -1,18 +1,19 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
-import { Typography, Button, Popconfirm } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined } from "@ant-design/icons";
+import { Typography, Button, Popconfirm, Table, Tag, Space, Input, Select, Modal } from "antd";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { ThreadBrowser } from "./ThreadBrowser";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import type { Task, TaskStatus } from "@cove/shared";
+import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
@@ -131,50 +132,162 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
   );
 }
 
-/** Inline task list for the Tasks tab */
+/** Inline task table for the Tasks tab */
 function InlineTaskList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editStatus, setEditStatus] = useState<TaskStatus>("open");
+  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const { guildId } = useActiveIds();
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
+  const removeTask = useTaskStore((s) => s.removeTask);
   const byTaskId = useTaskStore((s) => s.byTaskId);
-  const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId), [byTaskId, channelId]);
+  const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => a.seq - b.seq), [byTaskId, channelId]);
 
   useEffect(() => {
     setLoading(true);
     fetchTasks(channelId).finally(() => setLoading(false));
   }, [channelId, fetchTasks]);
 
-  function handleClick(task: Task) {
+  const handleOpenThread = useCallback((task: Task) => {
     if (guildId) navigate(routes.thread(guildId, channelId, task.thread_id));
-  }
+  }, [guildId, channelId, navigate]);
+
+  const handleDelete = useCallback(async (task: Task) => {
+    try {
+      await api.deleteTask(task.task_id);
+      removeTask(task.task_id);
+    } catch (err) {
+      console.error("delete task:", err);
+    }
+  }, [removeTask]);
+
+  const handleEditOpen = useCallback((task: Task) => {
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditStatus(task.status);
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    if (!editingTask) return;
+    setSaving(true);
+    try {
+      await api.updateTask(editingTask.task_id, { title: editTitle.trim(), status: editStatus });
+      setEditingTask(null);
+    } catch (err) {
+      console.error("update task:", err);
+    } finally {
+      setSaving(false);
+    }
+  }, [editingTask, editTitle, editStatus]);
+
+  const columns: ColumnsType<Task> = [
+    {
+      title: "#",
+      dataIndex: "seq",
+      key: "seq",
+      width: 60,
+      sorter: (a, b) => a.seq - b.seq,
+    },
+    {
+      title: "Title",
+      dataIndex: "title",
+      key: "title",
+      ellipsis: true,
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      width: 120,
+      filters: [
+        { text: "Open", value: "open" },
+        { text: "In Progress", value: "in_progress" },
+        { text: "In Review", value: "in_review" },
+        { text: "Done", value: "done" },
+      ],
+      onFilter: (value, record) => record.status === value,
+      render: (status: TaskStatus) => {
+        const color = { open: "default", in_progress: "processing", in_review: "warning", done: "success" }[status];
+        return <Tag color={color}>{STATUS_LABELS[status]}</Tag>;
+      },
+    },
+    {
+      title: "Created",
+      dataIndex: "created_at",
+      key: "created_at",
+      width: 160,
+      sorter: (a, b) => a.created_at - b.created_at,
+      render: (ts: number) => new Date(ts).toLocaleString(),
+    },
+    {
+      title: "Updated",
+      dataIndex: "updated_at",
+      key: "updated_at",
+      width: 160,
+      sorter: (a, b) => a.updated_at - b.updated_at,
+      render: (ts: number) => new Date(ts).toLocaleString(),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 140,
+      render: (_, task) => (
+        <Space size="small">
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(task)} />
+          <Button type="text" size="small" icon={<MessageOutlined />} onClick={() => handleOpenThread(task)} title="Open thread" />
+          <Popconfirm title="Delete this task?" onConfirm={() => handleDelete(task)} okText="Delete" okButtonProps={{ danger: true }}>
+            <Button type="text" size="small" icon={<DeleteOutlined />} danger />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   return (
-    <div style={styles.taskList} className="scroll-container">
-      {loading && (
-        <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>Loading...</div>
-      )}
-      {!loading && tasks.length === 0 && (
-        <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--text-muted)" }}>
-          No tasks yet. Click "+ New Task" to create one.
+    <div style={{ flex: 1, overflow: "auto", padding: "var(--space-md)" }} className="scroll-container">
+      <Table<Task>
+        columns={columns}
+        dataSource={tasks}
+        rowKey="task_id"
+        loading={loading}
+        size="small"
+        pagination={false}
+        locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
+        style={{ background: "transparent" }}
+      />
+      <Modal
+        title="Edit Task"
+        open={!!editingTask}
+        onCancel={() => setEditingTask(null)}
+        onOk={handleEditSave}
+        okText="Save"
+        okButtonProps={{ loading: saving, disabled: !editTitle.trim() }}
+        destroyOnClose
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Title</label>
+            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Status</label>
+            <Select
+              value={editStatus}
+              onChange={setEditStatus}
+              style={{ width: "100%" }}
+              options={[
+                { label: "Open", value: "open" },
+                { label: "In Progress", value: "in_progress" },
+                { label: "In Review", value: "in_review" },
+                { label: "Done", value: "done" },
+              ]}
+            />
+          </div>
         </div>
-      )}
-      {tasks.map((t) => (
-        <div
-          key={t.task_id}
-          style={styles.taskItem}
-          onClick={() => handleClick(t)}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: STATUS_COLORS[t.status], flexShrink: 0 }} />
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-          <span style={{ fontSize: "var(--font-size-xs)", padding: "2px 8px", borderRadius: 10, fontWeight: 600, color: "#fff", background: STATUS_COLORS[t.status] }}>
-            {STATUS_LABELS[t.status]}
-          </span>
-          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>#{t.seq}</span>
-        </div>
-      ))}
+      </Modal>
     </div>
   );
 }

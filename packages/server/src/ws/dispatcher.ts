@@ -407,6 +407,12 @@ export class GatewayDispatcher {
     this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_UPDATED", task);
   }
 
+  taskDeleted(task: Task): void {
+    const channel = this.channelsRepo.getById(task.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_DELETED", task);
+  }
+
   /** Broadcast to all sessions in any of the given guilds, deduplicating. */
   private broadcastToGuilds(guildIds: Set<string>, event: string, data: unknown, excludeSessionId?: string): void {
     for (const session of this.sessions) {

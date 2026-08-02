@@ -110,4 +110,8 @@ export class TasksRepo {
     const row = this.db.prepare("SELECT MAX(seq) as max_seq FROM tasks WHERE channel_id = ?").get(channelId) as { max_seq: number | null } | undefined;
     return (row?.max_seq ?? 0) + 1;
   }
+
+  delete(taskId: string): void {
+    this.db.prepare("DELETE FROM tasks WHERE task_id = ?").run(taskId);
+  }
 }

@@ -326,3 +326,6 @@ export function updateTask(taskId: string, fields: { status?: string; assignee_i
     method: "PATCH", body: JSON.stringify(fields),
   });
 }
+export function deleteTask(taskId: string) {
+  return api<{ deleted: boolean }>(`${API_PREFIX}/tasks/${taskId}`, { method: "DELETE" });
+}

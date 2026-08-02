@@ -40,6 +40,7 @@ export interface GatewayEventMap {
   THREAD_MEMBERS_UPDATE: { id: string; guild_id: string; added_members: Array<{ user_id: string }>; removed_members: Array<{ user_id: string }> };
   TASK_CREATED: Task;
   TASK_UPDATED: Task;
+  TASK_DELETED: Task;
 }
 
 type Handler<T> = (data: T) => void;

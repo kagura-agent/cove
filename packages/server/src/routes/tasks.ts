@@ -208,5 +208,19 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     return c.json(updated);
   });
 
+  app.delete("/tasks/:taskId", async (c) => {
+    const taskId = c.req.param("taskId");
+    const task = repos.tasks.getById(taskId);
+    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
+
+    const user = c.get("botUser");
+    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
+
+    repos.tasks.delete(taskId);
+    dispatcher?.taskDeleted(task);
+
+    return c.json({ deleted: true });
+  });
+
   return app;
 }
