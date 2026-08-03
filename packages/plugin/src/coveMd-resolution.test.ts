@@ -103,25 +103,17 @@ describe("isTaskThread", () => {
     ...overrides,
   }) as any;
 
-  it("returns true when channel is type 11 and parent has a task with matching thread_id", async () => {
+  it("returns true when channel is type 11 with is_task_thread flag", async () => {
     const restClient = createMockRestClient({
-      getChannel: vi.fn().mockResolvedValue({ type: 11, parent_id: "parent-1" }),
-      getTasks: vi.fn().mockResolvedValue([
-        { id: "task-1", thread_id: "thread-1" },
-        { id: "task-2", thread_id: "thread-2" },
-      ]),
+      getChannel: vi.fn().mockResolvedValue({ type: 11, parent_id: "parent-1", is_task_thread: true }),
     });
 
     expect(await isTaskThread(restClient, "thread-2")).toBe(true);
-    expect(restClient.getTasks).toHaveBeenCalledWith("parent-1");
   });
 
-  it("returns false when channel is type 11 but no matching task", async () => {
+  it("returns false when channel is type 11 but no is_task_thread flag", async () => {
     const restClient = createMockRestClient({
       getChannel: vi.fn().mockResolvedValue({ type: 11, parent_id: "parent-1" }),
-      getTasks: vi.fn().mockResolvedValue([
-        { id: "task-1", thread_id: "other-thread" },
-      ]),
     });
 
     expect(await isTaskThread(restClient, "thread-99")).toBe(false);
@@ -133,7 +125,6 @@ describe("isTaskThread", () => {
     });
 
     expect(await isTaskThread(restClient, "ch-1")).toBe(false);
-    expect(restClient.getTasks).not.toHaveBeenCalled();
   });
 
   it("returns false on API error", async () => {
@@ -145,10 +136,8 @@ describe("isTaskThread", () => {
   });
 
   it("accepts a pre-fetched channel object to avoid double-fetch", async () => {
-    const restClient = createMockRestClient({
-      getTasks: vi.fn().mockResolvedValue([{ id: "t1", thread_id: "thread-1" }]),
-    });
-    const channel = { type: 11, parent_id: "parent-1" };
+    const restClient = createMockRestClient();
+    const channel = { type: 11, parent_id: "parent-1", is_task_thread: true };
 
     expect(await isTaskThread(restClient, "thread-1", channel)).toBe(true);
     expect(restClient.getChannel).not.toHaveBeenCalled();

@@ -27,7 +27,8 @@ export function createAllTables(db: Database.Database): void {
       message_count    INTEGER NOT NULL DEFAULT 0,
       member_count     INTEGER NOT NULL DEFAULT 0,
       owner_id         TEXT REFERENCES users(id) ON DELETE SET NULL,
-      total_message_sent INTEGER NOT NULL DEFAULT 0
+      total_message_sent INTEGER NOT NULL DEFAULT 0,
+      is_task_thread   INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS users (

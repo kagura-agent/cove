@@ -201,6 +201,7 @@ interface ChannelRow {
   member_count: number;
   owner_id: string | null;
   total_message_sent: number;
+  is_task_thread: number;
 }
 
 interface ThreadMemberRow {
@@ -229,5 +230,6 @@ function toChannel(row: ChannelRow): Channel {
     member_count: row.member_count ?? undefined,
     owner_id: row.owner_id ?? undefined,
     total_message_sent: row.total_message_sent ?? undefined,
+    is_task_thread: Boolean(row.is_task_thread) || undefined,
   };
 }
