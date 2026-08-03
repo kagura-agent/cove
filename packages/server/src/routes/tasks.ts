@@ -4,7 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { generateSnowflake, PermissionBits, TASK_STATUSES, type Message, type Task } from "@cove/shared";
+import { generateSnowflake, PermissionBits, TASK_STATUSES, type Message, type Task, type TaskStatus } from "@cove/shared";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
 
@@ -176,7 +176,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     const body = await parseJsonBody<{ status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
-    if (body.status !== undefined && !VALID_STATUSES.has(body.status)) {
+    if (body.status !== undefined && !VALID_STATUSES.has(body.status as TaskStatus)) {
       return validationError(c, "status must be one of: open, in_progress, in_review, done");
     }
 
