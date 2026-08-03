@@ -114,7 +114,7 @@ import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channe
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -123,6 +123,7 @@ const createMockRestClient = (): MockRestClient => ({
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
   getTasks: vi.fn().mockResolvedValue([]),
+  getTaskByThreadId: vi.fn().mockResolvedValue(null),
 });
 
 const createMockChannelRuntime = () => ({
@@ -1137,7 +1138,7 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
-    restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "t1" });
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
     expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");
@@ -1148,7 +1149,7 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
-    restClient.getTasks.mockResolvedValue([]);
+    restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
     expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");

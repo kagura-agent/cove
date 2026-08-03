@@ -25,8 +25,10 @@ import { migrateV23 } from "./v23-cleanup-ghost-luna-final.js";
 import { migrateV24 } from "./v24-webhook-type.js";
 import { migrateV25 } from "./v25-tasks.js";
 import { migrateV26 } from "./v26-tasks-fields.js";
+import { migrateV27 } from "./v27-placeholder.js";
+import { migrateV28 } from "./v28-drop-is-task-thread.js";
 
-const LATEST_VERSION = 26;
+const LATEST_VERSION = 28;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -57,13 +59,16 @@ const migrations: Record<number, MigrationFn> = {
   24: migrateV24,
   25: migrateV25,
   26: migrateV26,
+  27: migrateV27,
+  28: migrateV28,
 };
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = db.pragma("user_version", { simple: true }) as number;
 
   if (currentVersion > LATEST_VERSION) {
-    throw new Error(`Database version ${currentVersion} is newer than supported version ${LATEST_VERSION}. Update the application.`);
+    console.warn(`⚠️ Database version ${currentVersion} is newer than supported version ${LATEST_VERSION}. Skipping migrations.`);
+    return;
   }
   if (currentVersion >= LATEST_VERSION) return;
 

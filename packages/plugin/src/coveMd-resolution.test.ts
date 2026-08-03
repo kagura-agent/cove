@@ -99,29 +99,24 @@ describe("cove.md channel resolution", () => {
 describe("isTaskThread", () => {
   const createMockRestClient = (overrides: any = {}) => ({
     getChannel: vi.fn().mockResolvedValue({ type: 0 }),
-    getTasks: vi.fn().mockResolvedValue([]),
+    getTaskByThreadId: vi.fn().mockResolvedValue(null),
     ...overrides,
   }) as any;
 
-  it("returns true when channel is type 11 and parent has a task with matching thread_id", async () => {
+  it("returns true when channel is type 11 and has an associated task", async () => {
     const restClient = createMockRestClient({
       getChannel: vi.fn().mockResolvedValue({ type: 11, parent_id: "parent-1" }),
-      getTasks: vi.fn().mockResolvedValue([
-        { id: "task-1", thread_id: "thread-1" },
-        { id: "task-2", thread_id: "thread-2" },
-      ]),
+      getTaskByThreadId: vi.fn().mockResolvedValue({ task_id: "task-1", thread_id: "thread-2" }),
     });
 
     expect(await isTaskThread(restClient, "thread-2")).toBe(true);
-    expect(restClient.getTasks).toHaveBeenCalledWith("parent-1");
+    expect(restClient.getTaskByThreadId).toHaveBeenCalledWith("thread-2");
   });
 
-  it("returns false when channel is type 11 but no matching task", async () => {
+  it("returns false when channel is type 11 but no associated task", async () => {
     const restClient = createMockRestClient({
       getChannel: vi.fn().mockResolvedValue({ type: 11, parent_id: "parent-1" }),
-      getTasks: vi.fn().mockResolvedValue([
-        { id: "task-1", thread_id: "other-thread" },
-      ]),
+      getTaskByThreadId: vi.fn().mockResolvedValue(null),
     });
 
     expect(await isTaskThread(restClient, "thread-99")).toBe(false);
@@ -133,7 +128,7 @@ describe("isTaskThread", () => {
     });
 
     expect(await isTaskThread(restClient, "ch-1")).toBe(false);
-    expect(restClient.getTasks).not.toHaveBeenCalled();
+    expect(restClient.getTaskByThreadId).not.toHaveBeenCalled();
   });
 
   it("returns false on API error", async () => {
@@ -146,7 +141,7 @@ describe("isTaskThread", () => {
 
   it("accepts a pre-fetched channel object to avoid double-fetch", async () => {
     const restClient = createMockRestClient({
-      getTasks: vi.fn().mockResolvedValue([{ id: "t1", thread_id: "thread-1" }]),
+      getTaskByThreadId: vi.fn().mockResolvedValue({ task_id: "t1", thread_id: "thread-1" }),
     });
     const channel = { type: 11, parent_id: "parent-1" };
 
