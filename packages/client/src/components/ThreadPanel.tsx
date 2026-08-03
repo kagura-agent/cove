@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useMessageStore } from "../stores/useMessageStore";
+import { useTaskStore } from "../stores/useTaskStore";
+import { useMemberStore } from "../stores/useMemberStore";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
 import { MessageItem } from "./MessageItem";
+import { TaskBadge } from "./TaskBadge";
 import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
@@ -22,6 +26,33 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const threadFetchRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+
+  const byTaskId = useTaskStore((s) => s.byTaskId);
+  const task = useMemo(
+    () => Object.values(byTaskId).find((t) => t.thread_id === threadId) ?? null,
+    [byTaskId, threadId],
+  );
+
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const assigneeName = useMemo(() => {
+    if (!task?.assignee_id || !thread?.guild_id) return null;
+    const members = membersByGuildId[thread.guild_id];
+    if (!members) return null;
+    const member = members[task.assignee_id];
+    if (!member) return null;
+    return member.nick || member.user.global_name || member.user.username;
+  }, [task?.assignee_id, thread?.guild_id, membersByGuildId]);
+
+  // Ensure tasks are loaded for the parent channel so we can find the associated task
+  useEffect(() => {
+    if (!thread?.parent_id) return;
+    // Only fetch if we don't already have a task for this thread
+    const alreadyHave = Object.values(useTaskStore.getState().byTaskId).some((t) => t.thread_id === threadId);
+    if (!alreadyHave) {
+      useTaskStore.getState().fetchTasks(thread.parent_id);
+    }
+  }, [thread?.parent_id, threadId]);
 
   // Find thread in store or fetch it
   useEffect(() => {
@@ -158,6 +189,20 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}>{displayName}</span>
+        {task && (
+          <TaskBadge
+            taskId={task.task_id}
+            status={task.status}
+            seq={task.seq}
+            assigneeName={assigneeName}
+            onSeqClick={() => {
+              const guildId = thread?.guild_id;
+              if (guildId) {
+                navigate(`/channels/${guildId}/${task.channel_id}/threads/${threadId}?tab=tasks`);
+              }
+            }}
+          />
+        )}
         <div style={{ position: "relative" }}>
           <button
             ref={menuBtnRef}
