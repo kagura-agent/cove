@@ -41,21 +41,22 @@ export function TaskBadge({ taskId, status, seq, assigneeName, onSeqClick }: Tas
           gap: "6px",
           padding: "4px 10px",
           borderRadius: "6px",
-          border: "1px solid var(--bg-modifier-hover)",
-          background: "var(--bg-secondary)",
-          color: "var(--text-normal)",
+          border: "none",
+          background: STATUS_COLORS[status],
+          color: "#fff",
           fontSize: "var(--font-size-sm)",
+          fontWeight: 600,
           cursor: taskId ? "pointer" : "default",
           userSelect: "none",
-          transition: "background 0.15s",
+          transition: "opacity 0.15s",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
       >
         <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
         <span
           onClick={onSeqClick ? (e) => { e.stopPropagation(); onSeqClick(); } : undefined}
-          style={{ color: onSeqClick ? "var(--text-link)" : "var(--text-muted)", cursor: onSeqClick ? "pointer" : "inherit" }}
+          style={{ cursor: onSeqClick ? "pointer" : "inherit", textDecoration: onSeqClick ? "underline" : "none" }}
         >#{seq}</span>
         {assigneeName && <span>@{assigneeName}</span>}
       </button>
