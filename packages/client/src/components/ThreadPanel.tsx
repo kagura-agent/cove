@@ -34,6 +34,16 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
     [byTaskId, threadId],
   );
 
+  // Ensure tasks are loaded for the parent channel so we can find the associated task
+  useEffect(() => {
+    if (!thread?.parent_id) return;
+    // Only fetch if we don't already have a task for this thread
+    const alreadyHave = Object.values(useTaskStore.getState().byTaskId).some((t) => t.thread_id === threadId);
+    if (!alreadyHave) {
+      useTaskStore.getState().fetchTasks(thread.parent_id);
+    }
+  }, [thread?.parent_id, threadId]);
+
   // Find thread in store or fetch it
   useEffect(() => {
     if (!threadId) return;
