@@ -288,7 +288,10 @@ export interface IncomingMessageRequest {
 }
 
 /** Task status lifecycle. */
-export type TaskStatus = "open" | "in_progress" | "in_review" | "done";
+export type TaskStatus = "open" | "in_progress" | "in_review" | "done" | "cancelled";
+
+/** Canonical ordered list of all task statuses. */
+export const TASK_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", "done", "cancelled"];
 
 /** A channel-level task with a linked thread. */
 export interface Task {

@@ -5,20 +5,7 @@ import type { Task, TaskStatus } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
 import { routes } from "../lib/routes";
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  open: "var(--text-muted)",
-  in_progress: "#5865f2",
-  in_review: "#e67e22",
-  done: "#3ba55c",
-};
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  open: "Open",
-  in_progress: "In Progress",
-  in_review: "In Review",
-  done: "Done",
-};
+import { STATUS_COLORS, STATUS_LABELS, STATUS_TITLE_STYLE } from "../lib/taskStatusConfig";
 
 const overlayStyle: CSSProperties = {
   position: "fixed",
@@ -149,7 +136,7 @@ export function TaskPanel({ channelId, onClose, onNewTask }: Props) {
                   flexShrink: 0,
                 }}
               />
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...STATUS_TITLE_STYLE[t.status] }}>
                 {t.title}
               </span>
               <span

@@ -4,9 +4,9 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { generateSnowflake, PermissionBits, type Message, type Task } from "@cove/shared";
+import { generateSnowflake, PermissionBits, TASK_STATUSES, type Message, type Task } from "@cove/shared";
 
-const VALID_STATUSES = new Set(["open", "in_progress", "in_review", "done"]);
+const VALID_STATUSES = new Set(TASK_STATUSES);
 
 export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();

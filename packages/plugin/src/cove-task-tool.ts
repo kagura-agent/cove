@@ -24,7 +24,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       taskId: Type.Optional(Type.String({ description: "Task ID (required for get, update)" })),
       title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
       assigneeId: Type.Optional(Type.String({ description: "User ID to assign the task to" })),
-      status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done (for update)" })),
+      status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done, cancelled (for update)" })),
       heartbeatIntervalMs: Type.Optional(Type.Number({ description: "Heartbeat interval in ms. 0 = disabled (for update)" })),
       description: Type.Optional(Type.String({ description: "Task description (optional for create)" })),
     }, { additionalProperties: false }),
