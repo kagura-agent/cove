@@ -5,6 +5,7 @@ import type { MenuProps } from "antd";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useTaskStore } from "../stores/useTaskStore";
+import { useMemberStore } from "../stores/useMemberStore";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
@@ -34,6 +35,16 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
     () => Object.values(byTaskId).find((t) => t.thread_id === threadId) ?? null,
     [byTaskId, threadId],
   );
+
+  const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
+  const assigneeName = useMemo(() => {
+    if (!task?.assignee_id || !thread?.guild_id) return null;
+    const members = membersByGuildId[thread.guild_id];
+    if (!members) return null;
+    const member = members[task.assignee_id];
+    if (!member) return null;
+    return member.nick || member.user.global_name || member.user.username;
+  }, [task?.assignee_id, thread?.guild_id, membersByGuildId]);
 
   // Ensure tasks are loaded for the parent channel so we can find the associated task
   useEffect(() => {
@@ -228,6 +239,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
                 }}
                 style={{ color: "var(--text-link)", cursor: "pointer" }}
               >#{task.seq}</span>
+              {assigneeName && <span>@{assigneeName}</span>}
             </button>
           </Dropdown>
         )}
