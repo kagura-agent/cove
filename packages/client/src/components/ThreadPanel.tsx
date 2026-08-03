@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Dropdown } from "antd";
+import type { MenuProps } from "antd";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useTaskStore } from "../stores/useTaskStore";
@@ -9,8 +12,7 @@ import { MessageItem } from "./MessageItem";
 import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
-import { STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from "../lib/taskStatusConfig";
-import { getRouter, getGuildForChannel } from "../lib/router-helpers";
+import { STATUS_COLORS, STATUS_LABELS, STATUS_ICON_COMPONENTS, TASK_STATUSES } from "../lib/taskStatusConfig";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -22,11 +24,10 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const statusRef = useRef<HTMLDivElement>(null);
   const threadFetchRef = useRef<string | null>(null);
+  const [, setSearchParams] = useSearchParams();
 
   const byTaskId = useTaskStore((s) => s.byTaskId);
   const task = useMemo(
@@ -94,15 +95,6 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       document.removeEventListener("keydown", handleKey);
     };
   }, [showMenu]);
-
-  useEffect(() => {
-    if (!statusOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [statusOpen]);
 
   useEffect(() => {
     if (!thread?.message_id || !thread?.parent_id) {
@@ -189,77 +181,52 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
           whiteSpace: "nowrap",
         }}>{displayName}</span>
         {task && (
-          <>
-            <span
-              onClick={() => {
-                const guildId = getGuildForChannel(task.channel_id);
-                if (guildId) getRouter().navigate(`/channels/${guildId}/${task.channel_id}`);
-              }}
+          <Dropdown
+            menu={{ items: TASK_STATUSES.map((s) => ({
+              key: s,
+              label: (
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {STATUS_ICON_COMPONENTS[s]} {STATUS_LABELS[s]}
+                </span>
+              ),
+              style: s === task.status ? { background: STATUS_COLORS[s], color: "#fff", borderRadius: 4 } : undefined,
+              onClick: () => {
+                api.updateTask(task.task_id, { status: s }).catch(console.error);
+              },
+            })) }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <button
+              onClick={(e) => e.stopPropagation()}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                border: "1px solid var(--bg-modifier-hover)",
+                background: "var(--bg-secondary)",
+                color: "var(--text-normal)",
                 fontSize: "var(--font-size-sm)",
-                color: "var(--text-link)",
                 cursor: "pointer",
+                userSelect: "none",
+                transition: "background 0.15s",
+                flexShrink: 0,
               }}
-            >#{task.seq}</span>
-            <div ref={statusRef} style={{ display: "inline-block", position: "relative" }}>
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
+            >
+              <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[task.status]}</span>
               <span
-                onClick={() => setStatusOpen(!statusOpen)}
-                style={{
-                  display: "inline-block",
-                  padding: "2px 8px",
-                  borderRadius: 10,
-                  fontSize: "var(--font-size-xs)",
-                  fontWeight: 600,
-                  color: "#fff",
-                  background: STATUS_COLORS[task.status],
-                  cursor: "pointer",
-                  userSelect: "none",
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearchParams((prev) => { prev.set("tab", "task"); return prev; });
                 }}
-              >{STATUS_LABELS[task.status]}</span>
-              {statusOpen && (
-                <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  marginTop: 4,
-                  background: "var(--bg-secondary)",
-                  border: "1px solid var(--bg-modifier-hover)",
-                  borderRadius: 6,
-                  padding: 4,
-                  zIndex: 100,
-                  minWidth: 120,
-                }}>
-                  {TASK_STATUSES.map((s) => (
-                    <div
-                      key={s}
-                      onClick={() => {
-                        setStatusOpen(false);
-                        api.updateTask(task.task_id, { status: s }).catch((err) => {
-                          console.error("Failed to update task status:", err);
-                        });
-                      }}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 4,
-                        cursor: "pointer",
-                        fontSize: "var(--font-size-sm)",
-                        color: s === task.status ? "#fff" : "var(--text-normal)",
-                        background: s === task.status ? STATUS_COLORS[s] : "transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (s !== task.status) (e.currentTarget.style.background = "var(--bg-modifier-hover)");
-                      }}
-                      onMouseLeave={(e) => {
-                        if (s !== task.status) (e.currentTarget.style.background = "transparent");
-                      }}
-                    >
-                      {STATUS_LABELS[s]}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+                style={{ color: "var(--text-link)", cursor: "pointer" }}
+              >#{task.seq}</span>
+            </button>
+          </Dropdown>
         )}
         <div style={{ position: "relative" }}>
           <button
