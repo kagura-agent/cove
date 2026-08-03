@@ -41,16 +41,16 @@ export function TaskBadge({ taskId, status, seq, assigneeName, onSeqClick }: Tas
           gap: "6px",
           padding: "4px 10px",
           borderRadius: "6px",
-          border: "none",
-          background: STATUS_COLORS[status],
-          color: "#fff",
+          border: `1px solid color-mix(in srgb, ${STATUS_COLORS[status]} 40%, transparent)`,
+          background: `color-mix(in srgb, ${STATUS_COLORS[status]} 12%, transparent)`,
+          color: STATUS_COLORS[status],
           fontSize: "var(--font-size-sm)",
           fontWeight: 600,
           cursor: taskId ? "pointer" : "default",
           userSelect: "none",
           transition: "opacity 0.15s",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
         onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
       >
         <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
