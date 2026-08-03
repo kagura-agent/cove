@@ -14,7 +14,7 @@ describe("versioned migration system", () => {
   it("fresh DB gets user_version = 22", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(26);
+    expect(version).toBe(28);
     db.close();
   });
 
@@ -66,15 +66,21 @@ describe("versioned migration system", () => {
     db.close();
   });
 
-  it("throws on future DB version (newer than supported)", () => {
+  it("warns but does not throw on future DB version (newer than supported)", () => {
     const tmpFile = tmpDb();
     try {
-      const setup = new Database(tmpFile);
-      setup.pragma("journal_mode = WAL");
-      setup.pragma("user_version = 999");
-      setup.close();
+      // First initialize normally so all tables exist
+      initDb(tmpFile);
 
-      expect(() => initDb(tmpFile)).toThrow(/newer than supported/);
+      // Then bump version to simulate a future migration
+      const db = new Database(tmpFile);
+      db.pragma("user_version = 999");
+      db.close();
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(() => initDb(tmpFile)).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("newer than supported"));
+      warnSpy.mockRestore();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
@@ -102,7 +108,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(28);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -173,7 +179,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(28);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -199,7 +205,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(28);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -321,7 +327,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(28);
 
       db2.close();
     } finally {
@@ -393,7 +399,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(26);
+      expect(db.pragma("user_version", { simple: true })).toBe(28);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -571,7 +577,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(28);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -623,7 +629,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(26);
+      expect(db2.pragma("user_version", { simple: true })).toBe(28);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
