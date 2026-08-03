@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Dropdown } from "antd";
-import type { MenuProps } from "antd";
 import { useThreadStore } from "../stores/useThreadStore";
 import { useMessageStore } from "../stores/useMessageStore";
 import { useTaskStore } from "../stores/useTaskStore";
@@ -10,10 +8,10 @@ import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
 import { MessageItem } from "./MessageItem";
+import { TaskBadge } from "./TaskBadge";
 import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
-import { STATUS_COLORS, STATUS_LABELS, STATUS_ICON_COMPONENTS, TASK_STATUSES } from "../lib/taskStatusConfig";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -192,56 +190,18 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
           whiteSpace: "nowrap",
         }}>{displayName}</span>
         {task && (
-          <Dropdown
-            menu={{ items: TASK_STATUSES.map((s) => ({
-              key: s,
-              label: (
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {STATUS_ICON_COMPONENTS[s]} {STATUS_LABELS[s]}
-                </span>
-              ),
-              style: s === task.status ? { background: STATUS_COLORS[s], color: "#fff", borderRadius: 4 } : undefined,
-              onClick: () => {
-                api.updateTask(task.task_id, { status: s }).catch(console.error);
-              },
-            })) }}
-            trigger={["click"]}
-            placement="bottomRight"
-          >
-            <button
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                border: "1px solid var(--bg-modifier-hover)",
-                background: "var(--bg-secondary)",
-                color: "var(--text-normal)",
-                fontSize: "var(--font-size-sm)",
-                cursor: "pointer",
-                userSelect: "none",
-                transition: "background 0.15s",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
-            >
-              <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[task.status]}</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const guildId = thread?.guild_id;
-                  if (guildId) {
-                    navigate(`/channels/${guildId}/${task.channel_id}?tab=task`);
-                  }
-                }}
-                style={{ color: "var(--text-link)", cursor: "pointer" }}
-              >#{task.seq}</span>
-              {assigneeName && <span>@{assigneeName}</span>}
-            </button>
-          </Dropdown>
+          <TaskBadge
+            taskId={task.task_id}
+            status={task.status}
+            seq={task.seq}
+            assigneeName={assigneeName}
+            onSeqClick={() => {
+              const guildId = thread?.guild_id;
+              if (guildId) {
+                navigate(`/channels/${guildId}/${task.channel_id}?tab=task`);
+              }
+            }}
+          />
         )}
         <div style={{ position: "relative" }}>
           <button

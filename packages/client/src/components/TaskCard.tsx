@@ -9,6 +9,7 @@ import { Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import * as api from "../lib/api";
 import { STATUS_ICON_COMPONENTS, STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from "../lib/taskStatusConfig";
+import { TaskBadge } from "./TaskBadge";
 
 export { STATUS_ICON_COMPONENTS };
 
@@ -131,47 +132,9 @@ export function TaskStatusBar({ message }: { message: Message }) {
     return member.nick || member.user.global_name || member.user.username;
   }, [assigneeId, guildId, membersByGuildId]);
 
-  const statusMenuItems: MenuProps["items"] = TASK_STATUSES.map((s) => ({
-    key: s,
-    label: (
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {STATUS_ICON_COMPONENTS[s]}
-        {STATUS_LABELS[s]}
-      </span>
-    ),
-    style: s === status ? { background: STATUS_COLORS[s], color: "#fff", borderRadius: 4 } : undefined,
-    onClick: () => {
-      if (taskId) api.updateTask(taskId, { status: s }).catch(console.error);
-    },
-  }));
-
   return (
     <div style={{ display: "inline-block", marginTop: "4px" }}>
-      <Dropdown menu={{ items: statusMenuItems }} trigger={["click"]} disabled={!taskId} placement="bottomLeft">
-        <button
-          aria-label={`Task #${seq} status: ${STATUS_LABELS[status]}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "4px 10px",
-            borderRadius: "6px",
-            border: "1px solid var(--bg-modifier-hover)",
-            background: "var(--bg-secondary)",
-            color: "var(--text-normal)",
-            fontSize: "var(--font-size-sm)",
-            cursor: taskId ? "pointer" : "default",
-            userSelect: "none",
-            transition: "background 0.15s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-modifier-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
-        >
-          <span style={{ display: "flex", alignItems: "center" }}>{STATUS_ICON_COMPONENTS[status]}</span>
-          <span style={{ color: "var(--text-muted)" }}>#{seq}</span>
-          {assigneeName && <span>@{assigneeName}</span>}
-        </button>
-      </Dropdown>
+      <TaskBadge taskId={taskId} status={status} seq={seq} assigneeName={assigneeName} />
     </div>
   );
 }
