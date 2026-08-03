@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useThreadStore } from "../stores/useThreadStore";
@@ -27,7 +27,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const threadFetchRef = useRef<string | null>(null);
-  const [, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const byTaskId = useTaskStore((s) => s.byTaskId);
   const task = useMemo(
@@ -221,7 +221,10 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
               <span
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSearchParams((prev) => { prev.set("tab", "task"); return prev; });
+                  const guildId = thread?.guild_id;
+                  if (guildId) {
+                    navigate(`/channels/${guildId}/${task.channel_id}?tab=task`);
+                  }
                 }}
                 style={{ color: "var(--text-link)", cursor: "pointer" }}
               >#{task.seq}</span>
