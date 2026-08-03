@@ -175,7 +175,7 @@ export function TaskHeartbeatMessage({ message, collapsedCount }: { message: Mes
       color: "var(--text-muted)",
       textAlign: "center",
     }}>
-      Heartbeat: status update requested{collapsedCount && collapsedCount > 0 ? ` (${collapsedCount} previous)` : ""}
+      Heartbeat: status update requested · {new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}{collapsedCount && collapsedCount > 0 ? ` (${collapsedCount} previous)` : ""}
     </div>
   );
 }
