@@ -1,0 +1,50 @@
+name: Backup Staging
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 19 * * *'  # Daily 3:00 AM GMT+8
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download staging database
+        env:
+          SSH_KEY: ${{ secrets.VM1_SSH_KEY }}
+          HOST: moltbook.kagura-agent.com
+          USER: azureuser
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $USER@$HOST"
+          SCP="scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Create a safe copy using SQLite backup API (not just cp)
+          $SSH "sqlite3 /home/azureuser/cove-staging/cove-staging.db '.backup /tmp/cove-staging-backup.db'"
+
+          # Download
+          $SCP $USER@$HOST:/tmp/cove-staging-backup.db ./cove-staging-backup.db
+
+          # Cleanup remote temp
+          $SSH "rm -f /tmp/cove-staging-backup.db"
+
+          # Verify integrity
+          sqlite3 ./cove-staging-backup.db "PRAGMA integrity_check;" | head -1
+
+          # Print info
+          ls -lh ./cove-staging-backup.db
+          sqlite3 ./cove-staging-backup.db "PRAGMA user_version;"
+          sqlite3 ./cove-staging-backup.db "SELECT COUNT(*) || ' messages' FROM messages;"
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cove-staging-backup-${{ github.run_number }}
+          path: cove-staging-backup.db
+          retention-days: 30
