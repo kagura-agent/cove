@@ -114,7 +114,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
   const removeTask = useTaskStore((s) => s.removeTask);
   const byTaskId = useTaskStore((s) => s.byTaskId);
-  const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => a.seq - b.seq), [byTaskId, channelId]);
+  const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => b.updated_at - a.updated_at), [byTaskId, channelId]);
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
 
@@ -198,6 +198,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       dataIndex: "title",
       key: "title",
       ellipsis: true,
+      width: 300,
     },
     {
       title: "Status",
@@ -227,14 +228,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         />
       ),
     },
-    {
-      title: "Creator",
-      dataIndex: "created_by",
-      key: "created_by",
-      width: 120,
-      ellipsis: true,
-      render: (id: string) => userNameMap[id] || id || "—",
-    },
+
     {
       title: "Assignee",
       dataIndex: "assignee_id",
@@ -243,14 +237,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       ellipsis: true,
       render: (id: string | null) => (id ? (userNameMap[id] || id) : "—"),
     },
-    {
-      title: "Created",
-      dataIndex: "created_at",
-      key: "created_at",
-      width: 150,
-      sorter: (a, b) => a.created_at - b.created_at,
-      render: (ts: number) => new Date(ts).toLocaleString(),
-    },
+
     {
       title: "Updated",
       dataIndex: "updated_at",
@@ -284,7 +271,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         loading={loading}
         size="small"
         pagination={false}
-        sticky
+        scroll={{ x: "max-content" }}
         rowClassName={(record) => record.thread_id === threadId ? "task-row-active-thread" : ""}
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
       />
