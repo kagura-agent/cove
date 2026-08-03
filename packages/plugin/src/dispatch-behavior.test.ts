@@ -1136,8 +1136,7 @@ describe("J. Task Thread Direct Policy (#473)", () => {
   it("J2: Task thread uses ChatType 'direct'", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
-    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
-    restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch", is_task_thread: true });
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
     expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");

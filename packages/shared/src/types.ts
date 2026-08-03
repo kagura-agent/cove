@@ -154,6 +154,7 @@ export interface Channel {
   member_count?: number;
   owner_id?: string | null;
   total_message_sent?: number;
+  is_task_thread?: boolean;
 }
 
 /** Attachment object (Discord-compatible). */

@@ -1,0 +1,6 @@
+import type Database from "better-sqlite3";
+
+export function migrateV27(db: Database.Database): void {
+  db.exec(`ALTER TABLE channels ADD COLUMN is_task_thread INTEGER NOT NULL DEFAULT 0`);
+  db.exec(`UPDATE channels SET is_task_thread = 1 WHERE id IN (SELECT thread_id FROM tasks)`);
+}

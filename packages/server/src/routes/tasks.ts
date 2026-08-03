@@ -73,6 +73,9 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         user.id,
       );
 
+      // 2b. Mark thread as task thread for session routing
+      repos.db.prepare('UPDATE channels SET is_task_thread = 1 WHERE id = ?').run(thread.id);
+
       // 3. Add assignee to thread members
       if (assigneeId && assigneeId !== user.id) {
         repos.threads.addMember(thread.id, assigneeId);
