@@ -198,7 +198,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
             onSeqClick={() => {
               const guildId = thread?.guild_id;
               if (guildId) {
-                navigate(`/channels/${guildId}/${task.channel_id}?tab=task`);
+                navigate(`/channels/${guildId}/${task.channel_id}/threads/${threadId}?tab=tasks`);
               }
             }}
           />
