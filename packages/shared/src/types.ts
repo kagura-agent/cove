@@ -287,6 +287,31 @@ export interface IncomingMessageRequest {
   thread_id?: string;
 }
 
+/** Recurring task schedule type. */
+export type RecurringScheduleType = "interval" | "on_complete";
+
+/** Valid recurring schedule types. */
+export const RECURRING_SCHEDULE_TYPES: RecurringScheduleType[] = ["interval", "on_complete"];
+
+/** A recurring task template that auto-creates task instances on schedule. */
+export interface RecurringTask {
+  id: string;
+  guild_id: string;
+  channel_id: string;
+  title: string;
+  description: string;
+  assignee_id: string | null;
+  created_by: string;
+  schedule_type: RecurringScheduleType;
+  interval_ms: number;
+  enabled: boolean;
+  last_task_id: string | null;
+  last_spawned_at: number;
+  heartbeat_interval_ms: number;
+  created_at: number;
+  updated_at: number;
+}
+
 /** Task status lifecycle. */
 export type TaskStatus = "open" | "in_progress" | "in_review" | "done" | "cancelled";
 
@@ -308,6 +333,8 @@ export interface Task {
   created_by: string;
   heartbeat_interval_ms: number;
   heartbeat_last_at: number;
+  recurring_id: string | null;
+  recurring_seq: number;
   created_at: number;
   updated_at: number;
 }

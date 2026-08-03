@@ -15,6 +15,8 @@ interface TaskRow {
   created_by: string;
   heartbeat_interval_ms: number;
   heartbeat_last_at: number;
+  recurring_id: string | null;
+  recurring_seq: number;
   created_at: number;
   updated_at: number;
 }
@@ -34,6 +36,8 @@ function toTask(row: TaskRow): Task {
     created_by: row.created_by,
     heartbeat_interval_ms: row.heartbeat_interval_ms,
     heartbeat_last_at: row.heartbeat_last_at,
+    recurring_id: row.recurring_id,
+    recurring_seq: row.recurring_seq,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -42,15 +46,17 @@ function toTask(row: TaskRow): Task {
 export class TasksRepo {
   constructor(private db: Database.Database) {}
 
-  create(taskId: string, channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number, opts?: { guild_id?: string; description?: string; created_by?: string }): Task {
+  create(taskId: string, channelId: string, threadId: string, messageId: string, assigneeId: string | null, title: string, seq: number, opts?: { guild_id?: string; description?: string; created_by?: string; recurring_id?: string; recurring_seq?: number }): Task {
     const now = Date.now();
     const guildId = opts?.guild_id ?? "";
     const description = opts?.description ?? "";
     const createdBy = opts?.created_by ?? "";
+    const recurringId = opts?.recurring_id ?? null;
+    const recurringSeq = opts?.recurring_seq ?? 0;
     this.db.prepare(
-      "INSERT INTO tasks (task_id, channel_id, thread_id, message_id, status, assignee_id, title, seq, guild_id, description, created_by, heartbeat_interval_ms, heartbeat_last_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)"
-    ).run(taskId, channelId, threadId, messageId, assigneeId, title, seq, guildId, description, createdBy, now, now);
-    return { task_id: taskId, channel_id: channelId, thread_id: threadId, message_id: messageId, status: "open", assignee_id: assigneeId, title, seq, guild_id: guildId, description, created_by: createdBy, heartbeat_interval_ms: 0, heartbeat_last_at: 0, created_at: now, updated_at: now };
+      "INSERT INTO tasks (task_id, channel_id, thread_id, message_id, status, assignee_id, title, seq, guild_id, description, created_by, heartbeat_interval_ms, heartbeat_last_at, recurring_id, recurring_seq, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)"
+    ).run(taskId, channelId, threadId, messageId, assigneeId, title, seq, guildId, description, createdBy, recurringId, recurringSeq, now, now);
+    return { task_id: taskId, channel_id: channelId, thread_id: threadId, message_id: messageId, status: "open", assignee_id: assigneeId, title, seq, guild_id: guildId, description, created_by: createdBy, heartbeat_interval_ms: 0, heartbeat_last_at: 0, recurring_id: recurringId, recurring_seq: recurringSeq, created_at: now, updated_at: now };
   }
 
   getById(taskId: string): Task | null {

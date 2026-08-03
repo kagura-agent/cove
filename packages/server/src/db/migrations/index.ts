@@ -25,8 +25,9 @@ import { migrateV23 } from "./v23-cleanup-ghost-luna-final.js";
 import { migrateV24 } from "./v24-webhook-type.js";
 import { migrateV25 } from "./v25-tasks.js";
 import { migrateV26 } from "./v26-tasks-fields.js";
+import { migrateV27 } from "./v27-recurring-tasks.js";
 
-const LATEST_VERSION = 26;
+const LATEST_VERSION = 27;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -57,6 +58,7 @@ const migrations: Record<number, MigrationFn> = {
   24: migrateV24,
   25: migrateV25,
   26: migrateV26,
+  27: migrateV27,
 };
 
 export function runMigrations(db: Database.Database): void {

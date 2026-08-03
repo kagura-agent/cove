@@ -4,6 +4,7 @@ import { createApp } from "./app.js";
 import { createRepos } from "./repos/index.js";
 import { setupGateway, GatewayDispatcher } from "./ws/index.js";
 import { TaskHeartbeatWorker } from "./workers/task-heartbeat.js";
+import { RecurringTaskWorker } from "./workers/recurring-task.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "3400", 10);
 const DB_PATH = process.env["COVE_DB_PATH"] ?? process.env["DB_PATH"] ?? "cove.db";
@@ -46,6 +47,9 @@ dispatcher.setRolesRepo(repos.roles);
 
 const heartbeatWorker = new TaskHeartbeatWorker(repos, dispatcher);
 heartbeatWorker.start();
+
+const recurringTaskWorker = new RecurringTaskWorker(repos, dispatcher);
+recurringTaskWorker.start();
 
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
