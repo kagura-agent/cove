@@ -114,7 +114,7 @@ import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channe
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -122,6 +122,7 @@ const createMockRestClient = (): MockRestClient => ({
   editMessage: vi.fn().mockResolvedValue({ id: "msg-draft-1" }),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
+  getTasks: vi.fn().mockResolvedValue([]),
 });
 
 const createMockChannelRuntime = () => ({
@@ -1059,5 +1060,106 @@ describe("I. Long Message Chunking (Bug #391)", () => {
 
     blocker.resolve();
     await p;
+  });
+});
+
+describe("I6. editFinal stops draft to prevent stale throttle overwrites (#118348)", () => {
+  beforeEach(resetState);
+
+  it("I6a: after successful final edit, sendOrEdit returns false (throttle cannot overwrite)", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Create a draft
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft progress...");
+    expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
+
+    // Deliver final text (edit-in-place path)
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: "Final answer" }, { kind: "final" });
+    expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Final answer");
+
+    // Simulate a stale throttle callback firing after editFinal
+    restClient.editMessage.mockClear();
+    if (capturedSendOrEdit) {
+      const r = await capturedSendOrEdit("Stale progress that should not land");
+      expect(r).toBe(false);
+    }
+    expect(restClient.editMessage).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I6b: after successful freshSend in editFinal (long text), sendOrEdit returns false", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const longText = "x".repeat(5000);
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: longText }, { kind: "final" });
+    expect(sendDurableMessageBatch).toHaveBeenCalled();
+
+    // Stale throttle callback should be blocked
+    restClient.editMessage.mockClear();
+    if (capturedSendOrEdit) {
+      const r = await capturedSendOrEdit("Stale throttle content");
+      expect(r).toBe(false);
+    }
+    expect(restClient.editMessage).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
+  });
+});
+
+describe("J. Task Thread Direct Policy (#473)", () => {
+  beforeEach(resetState);
+
+  it("J1: Regular channel uses ChatType 'channel'", async () => {
+    await dispatchMessage(createBaseOpts());
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":group:");
+  });
+
+  it("J2: Task thread uses ChatType 'direct'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":task:");
+  });
+
+  it("J3: Thread without task stays as 'channel'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTasks.mockResolvedValue([]);
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+  });
+
+  it("J4: Error in task detection gracefully falls back to 'channel'", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockRejectedValue(new Error("API down"));
+    await dispatchMessage(opts);
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
   });
 });

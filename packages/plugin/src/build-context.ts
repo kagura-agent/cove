@@ -10,25 +10,55 @@ import type { CoveRestClient } from "./rest-client.js";
 import type { Message } from "@cove/shared";
 
 /**
- * For threads (channel.type === 11), cove.md lives on the parent channel,
- * not the thread itself. Returns the channelId where getCoveMd should look.
+ * Resolves thread context: the channelId for cove.md lookup and the raw
+ * channel object (so callers can reuse it without re-fetching).
  *
- * Failure (e.g. getChannel throws) falls back to the original channelId
- * — matches main behavior at dispatch.ts L262-271.
+ * For threads (channel.type === 11), cove.md lives on the parent channel.
+ * Failure falls back to the original channelId with channel undefined.
+ */
+export async function resolveThreadContext(
+  restClient: CoveRestClient,
+  channelId: string,
+): Promise<{ coveMdChannelId: string; channel?: { type: number; parent_id?: string | null } }> {
+  try {
+    const channel = await restClient.getChannel(channelId);
+    const coveMdChannelId =
+      channel.type === 11 && channel.parent_id ? channel.parent_id : channelId;
+    return { coveMdChannelId, channel };
+  } catch {
+    return { coveMdChannelId: channelId };
+  }
+}
+
+/**
+ * Back-compat wrapper — delegates to resolveThreadContext.
  */
 export async function resolveCoveMdChannelId(
   restClient: CoveRestClient,
   channelId: string,
 ): Promise<string> {
+  const { coveMdChannelId } = await resolveThreadContext(restClient, channelId);
+  return coveMdChannelId;
+}
+
+/**
+ * Returns true if the channel is a thread (type 11) whose parent channel
+ * has a task with thread_id matching this channel. Accepts an optional
+ * pre-fetched channel object to avoid redundant API calls.
+ */
+export async function isTaskThread(
+  restClient: CoveRestClient,
+  channelId: string,
+  channel?: { type: number; parent_id?: string | null },
+): Promise<boolean> {
   try {
-    const channel = await restClient.getChannel(channelId);
-    if (channel.type === 11 && channel.parent_id) {
-      return channel.parent_id;
-    }
+    const ch = channel ?? (await restClient.getChannel(channelId));
+    if (ch.type !== 11 || !ch.parent_id) return false;
+    const tasks = await restClient.getTasks(ch.parent_id);
+    return tasks.some((t) => t.thread_id === channelId);
   } catch {
-    /* fall back to channelId */
+    return false;
   }
-  return channelId;
 }
 
 /**
