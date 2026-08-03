@@ -84,7 +84,12 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         }
       }
 
-      // 4. Assignment message in thread — this is the signal that wakes the agent.
+      // 4. Task row — written BEFORE assignment message so isTaskThread() can
+      //    find it when the agent receives the assignment. Fixes race condition
+      //    where agent message arrived before task row existed (#492).
+      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
+
+      // 5. Assignment message in thread — this is the signal that wakes the agent.
       //    DB stores real author; WS frame rewrites to "system" (see below).
       //    Preamble carries all instructions so agent doesn't need to understand "task".
       const assignmentNow = Date.now();
@@ -123,9 +128,6 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         metadata: assignmentMetadata,
       };
 
-      // 5. Task row — written last. Agent may receive message before this exists.
-      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
-
       // Set heartbeat — default to 5 min if not specified
       const heartbeatMs = (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) ? body.heartbeat_interval_ms : 300000;
       repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatMs, heartbeat_last_at: Date.now() });
@@ -152,6 +154,17 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     const tasks = repos.tasks.listByChannel(channelId);
     return c.json(tasks);
+  });
+
+  app.get("/tasks/by-thread/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    const task = repos.tasks.getByThreadId(threadId);
+    if (!task) return c.json(null, 200);
+
+    const user = c.get("botUser");
+    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
+
+    return c.json(task);
   });
 
   app.get("/tasks/:taskId", async (c) => {

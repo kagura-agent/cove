@@ -42,9 +42,10 @@ export async function resolveCoveMdChannelId(
 }
 
 /**
- * Returns true if the channel is a thread (type 11) whose parent channel
- * has a task with thread_id matching this channel. Accepts an optional
- * pre-fetched channel object to avoid redundant API calls.
+ * Returns true if the channel is a thread (type 11) that has an associated
+ * task. Queries the tasks table by thread_id — single precise lookup instead
+ * of listing all parent tasks. Accepts an optional pre-fetched channel object
+ * to avoid redundant API calls.
  */
 export async function isTaskThread(
   restClient: CoveRestClient,
@@ -53,9 +54,9 @@ export async function isTaskThread(
 ): Promise<boolean> {
   try {
     const ch = channel ?? (await restClient.getChannel(channelId));
-    if (ch.type !== 11 || !ch.parent_id) return false;
-    const tasks = await restClient.getTasks(ch.parent_id);
-    return tasks.some((t) => t.thread_id === channelId);
+    if (ch.type !== 11) return false;
+    const task = await restClient.getTaskByThreadId(channelId);
+    return task !== null;
   } catch {
     return false;
   }

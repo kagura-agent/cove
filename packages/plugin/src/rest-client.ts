@@ -241,6 +241,11 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/channels/${channelId}/tasks`);
   }
 
+  /** GET /api/v10/tasks/by-thread/:threadId — get task by thread ID, or null. */
+  async getTaskByThreadId(threadId: string): Promise<Task | null> {
+    return this.request("GET", `${API_PREFIX}/tasks/by-thread/${threadId}`);
+  }
+
   /** GET /api/v10/tasks/:taskId — get a single task. */
   async getTask(taskId: string): Promise<Task> {
     return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
