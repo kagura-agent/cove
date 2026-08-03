@@ -1063,6 +1063,66 @@ describe("I. Long Message Chunking (Bug #391)", () => {
   });
 });
 
+describe("I6. editFinal stops draft to prevent stale throttle overwrites (#118348)", () => {
+  beforeEach(resetState);
+
+  it("I6a: after successful final edit, sendOrEdit returns false (throttle cannot overwrite)", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Create a draft
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft progress...");
+    expect(restClient.sendMessage).toHaveBeenCalledTimes(1);
+
+    // Deliver final text (edit-in-place path)
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: "Final answer" }, { kind: "final" });
+    expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Final answer");
+
+    // Simulate a stale throttle callback firing after editFinal
+    restClient.editMessage.mockClear();
+    if (capturedSendOrEdit) {
+      const r = await capturedSendOrEdit("Stale progress that should not land");
+      expect(r).toBe(false);
+    }
+    expect(restClient.editMessage).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
+  });
+
+  it("I6b: after successful freshSend in editFinal (long text), sendOrEdit returns false", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const longText = "x".repeat(5000);
+
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts);
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    if (deliver) await deliver({ text: longText }, { kind: "final" });
+    expect(sendDurableMessageBatch).toHaveBeenCalled();
+
+    // Stale throttle callback should be blocked
+    restClient.editMessage.mockClear();
+    if (capturedSendOrEdit) {
+      const r = await capturedSendOrEdit("Stale throttle content");
+      expect(r).toBe(false);
+    }
+    expect(restClient.editMessage).not.toHaveBeenCalled();
+
+    blocker.resolve();
+    await p;
+  });
+});
+
 describe("J. Task Thread Direct Policy (#473)", () => {
   beforeEach(resetState);
 

@@ -152,6 +152,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           await restClient.editMessage(channelId, id, text);
           finalizedViaPreviewMessage = true;
         }
+        // Prevent pending throttle callbacks from overwriting the finalized message (openclaw/openclaw#118348)
+        draftState.stopped = true;
       },
       handlePreviewEditError: () => "fallback",
       logPreviewEditFailure: (err: unknown) => {
