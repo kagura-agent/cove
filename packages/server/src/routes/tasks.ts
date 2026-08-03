@@ -96,7 +96,6 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         `开工时用 cove_task 工具设 status 为 in_progress（action: "update", taskId: "${taskId}", status: "in_progress"）。`,
         `完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。`,
         `不要用 curl 调 REST API，用 cove_task 工具。`,
-        `完成所有工具调用后，最后一条回复必须是可见的工作总结（不要把总结和工具调用放在同一个 turn）。绝对不要以 NO_REPLY 结束。`,
       ].join("\n");
       const assignmentContent = preamble;
       const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
