@@ -16,7 +16,7 @@ import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
-import { STATUS_ICON_COMPONENTS } from "./TaskCard";
+import { STATUS_ICON_COMPONENTS, getStatusSelectOptions, getStatusFilterOptions, getStatusLabelOptions } from "../lib/taskStatusConfig";
 import type { Channel } from "../types";
 import { HEARTBEAT_OPTIONS } from "../lib/constants";
 
@@ -205,12 +205,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       dataIndex: "status",
       key: "status",
       width: 140,
-      filters: [
-        { text: "Open", value: "open" },
-        { text: "In Progress", value: "in_progress" },
-        { text: "In Review", value: "in_review" },
-        { text: "Done", value: "done" },
-      ],
+      filters: getStatusFilterOptions(),
       onFilter: (value, record) => record.status === value,
       render: (status: TaskStatus, task: Task) => (
         <Select
@@ -219,12 +214,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
           variant="borderless"
           style={{ width: "100%" }}
           onChange={(v) => handleStatusChange(task, v)}
-          options={[
-            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.open} Open</span>, value: "open" },
-            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.in_progress} In Progress</span>, value: "in_progress" },
-            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.in_review} In Review</span>, value: "in_review" },
-            { label: <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{STATUS_ICON_COMPONENTS.done} Done</span>, value: "done" },
-          ]}
+          options={getStatusSelectOptions()}
         />
       ),
     },
@@ -299,12 +289,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
               value={editStatus}
               onChange={setEditStatus}
               style={{ width: "100%" }}
-              options={[
-                { label: "Open", value: "open" },
-                { label: "In Progress", value: "in_progress" },
-                { label: "In Review", value: "in_review" },
-                { label: "Done", value: "done" },
-              ]}
+              options={getStatusLabelOptions()}
             />
           </div>
           <div>

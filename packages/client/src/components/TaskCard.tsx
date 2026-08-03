@@ -5,10 +5,12 @@ import type { TaskStatus } from "@cove/shared";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useActiveIds } from "../hooks/useActiveIds";
-import { FileTextOutlined, SyncOutlined, EyeOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import * as api from "../lib/api";
+import { STATUS_ICON_COMPONENTS, STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from "../lib/taskStatusConfig";
+
+export { STATUS_ICON_COMPONENTS };
 
 interface TaskSnapshot {
   title: string;
@@ -17,29 +19,6 @@ interface TaskSnapshot {
   seq: number;
   thread_id?: string;
 }
-
-export const STATUS_ICON_COMPONENTS: Record<TaskStatus, React.ReactNode> = {
-  open: <FileTextOutlined style={{ color: "var(--text-muted)" }} />,
-  in_progress: <SyncOutlined spin style={{ color: "#5865f2" }} />,
-  in_review: <EyeOutlined style={{ color: "#e67e22" }} />,
-  done: <CheckCircleOutlined style={{ color: "#3ba55c" }} />,
-};
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  open: "var(--text-muted)",
-  in_progress: "#5865f2",
-  in_review: "#e67e22",
-  done: "#3ba55c",
-};
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  open: "Open",
-  in_progress: "In Progress",
-  in_review: "In Review",
-  done: "Done",
-};
-
-const ALL_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", "done"];
 
 function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string | null }) {
   const [open, setOpen] = useState(false);
@@ -87,7 +66,7 @@ function TaskStatusPill({ status, taskId }: { status: TaskStatus; taskId: string
           zIndex: 100,
           minWidth: 120,
         }}>
-          {ALL_STATUSES.map((s) => (
+          {TASK_STATUSES.map((s) => (
             <div
               key={s}
               onClick={() => {
@@ -152,7 +131,7 @@ export function TaskStatusBar({ message }: { message: Message }) {
     return member.nick || member.user.global_name || member.user.username;
   }, [assigneeId, guildId, membersByGuildId]);
 
-  const statusMenuItems: MenuProps["items"] = ALL_STATUSES.map((s) => ({
+  const statusMenuItems: MenuProps["items"] = TASK_STATUSES.map((s) => ({
     key: s,
     label: (
       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
