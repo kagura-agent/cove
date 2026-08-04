@@ -107,7 +107,14 @@ export class RecurringTasksRepo {
     if (fields.title !== undefined) { sets.push("title = ?"); values.push(fields.title); }
     if (fields.description !== undefined) { sets.push("description = ?"); values.push(fields.description); }
     if (fields.assignee_id !== undefined) { sets.push("assignee_id = ?"); values.push(fields.assignee_id); }
-    if (fields.interval_ms !== undefined) { sets.push("interval_ms = ?"); values.push(fields.interval_ms); }
+    if (fields.interval_ms !== undefined) {
+      sets.push("interval_ms = ?");
+      values.push(fields.interval_ms);
+      if (fields.next_run_at === undefined) {
+        sets.push("next_run_at = ?");
+        values.push(Date.now() + fields.interval_ms);
+      }
+    }
     if (fields.occurrence_mode !== undefined) { sets.push("occurrence_mode = ?"); values.push(fields.occurrence_mode); }
     if (fields.enabled !== undefined) { sets.push("enabled = ?"); values.push(fields.enabled ? 1 : 0); }
     if (fields.last_task_id !== undefined) { sets.push("last_task_id = ?"); values.push(fields.last_task_id); }

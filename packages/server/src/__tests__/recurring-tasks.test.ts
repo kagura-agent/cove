@@ -96,17 +96,51 @@ describe("recurring task templates API", () => {
     }
   });
 
-  it("updates and deletes templates with the normal task permission rules", async () => {
+  it("re-anchors the next run when updating a template interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
     const created = await createTemplate();
-    const template = await created.json() as { id: string };
+    const template = await created.json() as { id: string; next_run_at: number };
 
+    vi.setSystemTime(new Date("2026-08-04T12:00:30.000Z"));
     const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify({ title: "  Follow up  ", interval_ms: 120_000, occurrence_mode: "new_task", enabled: false }),
+      body: JSON.stringify({ interval_ms: 120_000 }),
     });
+
     expect(update.status).toBe(200);
-    expect(await update.json()).toMatchObject({ title: "Follow up", interval_ms: 120_000, occurrence_mode: "new_task", enabled: false });
+    expect(await update.json()).toMatchObject({
+      interval_ms: 120_000,
+      next_run_at: new Date("2026-08-04T12:02:30.000Z").getTime(),
+    });
+  });
+
+  it("preserves the next run when updating a template without an interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const created = await createTemplate();
+    const template = await created.json() as { id: string; next_run_at: number };
+
+    vi.setSystemTime(new Date("2026-08-04T12:00:30.000Z"));
+    const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ title: "  Follow up  ", occurrence_mode: "new_task", enabled: false }),
+    });
+
+    expect(update.status).toBe(200);
+    expect(await update.json()).toMatchObject({
+      title: "Follow up",
+      occurrence_mode: "new_task",
+      enabled: false,
+      next_run_at: template.next_run_at,
+    });
+  });
+
+  it("deletes templates with the normal task permission rules", async () => {
+    const created = await createTemplate();
+    const template = await created.json() as { id: string };
 
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
