@@ -6,12 +6,12 @@ import { useTaskStore } from "../stores/useTaskStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { Typography, Button, Popconfirm, Table, Tag, Space, Input, Select, Modal, Switch } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined, PauseCircleOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
-import type { Task, TaskStatus } from "@cove/shared";
+import type { RecurringTask, Task, TaskStatus } from "@cove/shared";
 import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
@@ -22,6 +22,16 @@ import { HEARTBEAT_OPTIONS } from "../lib/constants";
 
 type ChannelTab = "chat" | "tasks" | "files" | "threads";
 type ThreadWithArchived = Channel & { _archived?: boolean };
+
+function formatRecurringInterval(intervalMs: number) {
+  for (const [unit, unitMs] of [["day", 86_400_000], ["hour", 3_600_000], ["minute", 60_000]] as const) {
+    if (intervalMs % unitMs === 0) {
+      const value = intervalMs / unitMs;
+      return `Wait ${value} ${unit}${value === 1 ? "" : "s"} after completion`;
+    }
+  }
+  return `Wait ${Math.round(intervalMs / 60_000)} minutes after completion`;
+}
 
 const styles = {
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: "var(--space-md)", opacity: 0.6 } as CSSProperties,
@@ -44,9 +54,10 @@ interface Props {
   activeTab: ChannelTab;
   onTabChange: (tab: ChannelTab) => void;
   onNewTask: () => void;
+  taskListVersion: number;
 }
 
-export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, onTabChange, onNewTask }: Props) {
+export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, onTabChange, onNewTask, taskListVersion }: Props) {
   const { guildId, channelId } = useActiveIds();
   const getChannels = useChannelStore((s) => s.getChannels);
   const channels = getChannels(guildId);
@@ -86,7 +97,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
 
       {/* Tab content */}
       {activeTab === "chat" && <MessageList channelId={channel.id} />}
-      {activeTab === "tasks" && channelId && <InlineTaskList channelId={channelId} />}
+      {activeTab === "tasks" && channelId && <InlineTaskList channelId={channelId} taskListVersion={taskListVersion} />}
       {activeTab === "files" && channelId && (
         <div style={styles.filesContainer}>
           <FilesSidebar channelId={channelId} inline />
@@ -98,8 +109,12 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
 }
 
 /** Inline task table for the Tasks tab */
-function InlineTaskList({ channelId }: { channelId: string }) {
+function InlineTaskList({ channelId, taskListVersion }: { channelId: string; taskListVersion: number }) {
   const [loading, setLoading] = useState(false);
+  const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
+  const [recurringLoading, setRecurringLoading] = useState(false);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [mutatingRecurringId, setMutatingRecurringId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -131,6 +146,46 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     setLoading(true);
     fetchTasks(channelId).finally(() => setLoading(false));
   }, [channelId, fetchTasks]);
+
+  useEffect(() => {
+    let current = true;
+    setRecurringLoading(true);
+    setRecurringError(null);
+    api.fetchRecurringTasks(channelId)
+      .then((templates) => { if (current) setRecurringTasks(templates); })
+      .catch((err) => {
+        console.error("load recurring tasks:", err);
+        if (current) setRecurringError("Could not load repeating tasks.");
+      })
+      .finally(() => { if (current) setRecurringLoading(false); });
+    return () => { current = false; };
+  }, [channelId, taskListVersion]);
+
+  const handleRecurringEnabledChange = useCallback(async (recurringTask: RecurringTask, enabled: boolean) => {
+    setMutatingRecurringId(recurringTask.id);
+    try {
+      const updated = await api.updateRecurringTask(recurringTask.id, { enabled });
+      setRecurringTasks((current) => current.map((task) => task.id === updated.id ? updated : task));
+    } catch (err) {
+      console.error("update recurring task:", err);
+      setRecurringError("Could not update repeating task.");
+    } finally {
+      setMutatingRecurringId(null);
+    }
+  }, []);
+
+  const handleRecurringDelete = useCallback(async (recurringTask: RecurringTask) => {
+    setMutatingRecurringId(recurringTask.id);
+    try {
+      await api.deleteRecurringTask(recurringTask.id);
+      setRecurringTasks((current) => current.filter((task) => task.id !== recurringTask.id));
+    } catch (err) {
+      console.error("delete recurring task:", err);
+      setRecurringError("Could not delete repeating task.");
+    } finally {
+      setMutatingRecurringId(null);
+    }
+  }, []);
 
   const handleOpenThread = useCallback((task: Task) => {
     if (guildId) {
@@ -252,6 +307,38 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     },
   ];
 
+  const recurringColumns: ColumnsType<RecurringTask> = [
+    { title: "Title", dataIndex: "title", key: "title", ellipsis: true, width: 300 },
+    {
+      title: "Schedule", key: "schedule", width: 220,
+      render: (_, recurringTask) => recurringTask.schedule_type === "on_complete"
+        ? "After completion"
+        : formatRecurringInterval(recurringTask.interval_ms),
+    },
+    {
+      title: "Status", key: "status", width: 120,
+      render: (_, recurringTask) => <Tag color={recurringTask.enabled ? "processing" : "default"}>{recurringTask.enabled ? "Active" : "Paused"}</Tag>,
+    },
+    {
+      title: "Actions", key: "actions", width: 110,
+      render: (_, recurringTask) => (
+        <Space size="small">
+          <Button
+            type="text"
+            size="small"
+            loading={mutatingRecurringId === recurringTask.id}
+            icon={recurringTask.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+            onClick={() => handleRecurringEnabledChange(recurringTask, !recurringTask.enabled)}
+            title={recurringTask.enabled ? "Pause" : "Resume"}
+          />
+          <Popconfirm title="Delete this repeating task?" onConfirm={() => handleRecurringDelete(recurringTask)} okText="Delete" okButtonProps={{ danger: true }}>
+            <Button type="text" size="small" icon={<DeleteOutlined />} danger title="Delete" loading={mutatingRecurringId === recurringTask.id} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "var(--space-md)" }} className="scroll-container">
       <Table<Task>
@@ -265,6 +352,21 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         rowClassName={(record) => record.thread_id === threadId ? "task-row-active-thread" : ""}
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
       />
+      <div style={{ marginTop: 24 }}>
+        <Typography.Title level={5} style={{ marginBottom: 4 }}>Repeating tasks</Typography.Title>
+        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>Your first task starts within 30 seconds. Later tasks follow the selected completion or delay schedule.</Typography.Text>
+        {recurringError && <Typography.Text type="danger" style={{ display: "block", marginBottom: 8 }}>{recurringError}</Typography.Text>}
+        <Table<RecurringTask>
+          columns={recurringColumns}
+          dataSource={recurringTasks}
+          rowKey="id"
+          loading={recurringLoading}
+          size="small"
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          locale={{ emptyText: 'No repeating tasks yet. Turn on "Repeat" when creating a task.' }}
+        />
+      </div>
       <Modal
         title="Edit Task"
         open={!!editingTask}
