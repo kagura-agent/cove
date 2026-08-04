@@ -61,3 +61,35 @@ export function recurrenceScheduleFromInterval(intervalMs: number): { schedule: 
 
   return { schedule: "custom", value: intervalMs / REPEAT_INTERVAL_MS.minutes, unit: "minutes" };
 }
+
+type RecurrenceOccurrenceMode = "same_task" | "new_task";
+
+export function recurrenceEditorSettingsFromTemplate(template: { enabled: boolean; interval_ms: number; occurrence_mode: RecurrenceOccurrenceMode }) {
+  const { schedule, value, unit } = recurrenceScheduleFromInterval(template.interval_ms);
+  return {
+    enabled: template.enabled,
+    schedule,
+    intervalValue: value,
+    intervalUnit: unit,
+    occurrenceMode: template.occurrence_mode,
+  };
+}
+
+export function recurrenceUpdateFields(settings: {
+  enabled: boolean;
+  schedule: RepeatSchedule;
+  intervalValue: number;
+  intervalUnit: RepeatIntervalUnit;
+  occurrenceMode: RecurrenceOccurrenceMode;
+  storedIntervalMs: number;
+  storedOccurrenceMode: RecurrenceOccurrenceMode;
+}): { enabled: boolean; interval_ms?: number; occurrence_mode?: RecurrenceOccurrenceMode } {
+  if (!settings.enabled || settings.schedule === "never") return { enabled: false };
+
+  const intervalMs = repeatScheduleIntervalMs(settings.schedule, settings.intervalValue, settings.intervalUnit);
+  return {
+    enabled: true,
+    ...(intervalMs !== settings.storedIntervalMs ? { interval_ms: intervalMs } : {}),
+    ...(settings.occurrenceMode !== settings.storedOccurrenceMode ? { occurrence_mode: settings.occurrenceMode } : {}),
+  };
+}

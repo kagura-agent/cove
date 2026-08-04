@@ -23,8 +23,9 @@ import {
   REPEAT_INTERVAL_OPTIONS,
   REPEAT_SCHEDULE_OPTIONS,
   mergeRecurringTasks,
-  recurrenceScheduleFromInterval,
+  recurrenceEditorSettingsFromTemplate,
   recurrenceSeriesLabel,
+  recurrenceUpdateFields,
   repeatScheduleIntervalMs,
   type RepeatIntervalUnit,
   type RepeatSchedule,
@@ -118,6 +119,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [editHeartbeatEnabled, setEditHeartbeatEnabled] = useState(false);
   const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(600000);
   const [editingRecurringTask, setEditingRecurringTask] = useState<RecurringTask | null>(null);
+  const [editRepeatEnabled, setEditRepeatEnabled] = useState(false);
   const [editRepeatSchedule, setEditRepeatSchedule] = useState<RepeatSchedule>("never");
   const [editOccurrenceMode, setEditOccurrenceMode] = useState<api.RecurringTaskOccurrenceMode>("same_task");
   const [editRepeatIntervalValue, setEditRepeatIntervalValue] = useState(1);
@@ -211,13 +213,14 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       try {
         const recurringTask = await api.fetchRecurringTask(task.recurring_id);
         if (requestId !== editRequestId.current) return;
-        const schedule = recurrenceScheduleFromInterval(recurringTask.interval_ms);
+        const settings = recurrenceEditorSettingsFromTemplate(recurringTask);
         setRecurringTasksById((previous) => mergeRecurringTasks(previous, [recurringTask]));
         setEditingRecurringTask(recurringTask);
-        setEditRepeatSchedule(recurringTask.enabled ? schedule.schedule : "never");
-        setEditRepeatIntervalValue(schedule.value);
-        setEditRepeatIntervalUnit(schedule.unit);
-        setEditOccurrenceMode(recurringTask.occurrence_mode);
+        setEditRepeatEnabled(settings.enabled);
+        setEditRepeatSchedule(settings.schedule);
+        setEditRepeatIntervalValue(settings.intervalValue);
+        setEditRepeatIntervalUnit(settings.intervalUnit);
+        setEditOccurrenceMode(settings.occurrenceMode);
       } catch (err) {
         if (requestId === editRequestId.current) console.error("fetch recurring task:", err);
       }
@@ -225,7 +228,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   }, []);
 
   const editRepeatIntervalMs = repeatScheduleIntervalMs(editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit);
-  const validEditRepeatInterval = editRepeatSchedule === "never" || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
+  const validEditRepeatInterval = !editRepeatEnabled || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
 
   const handleEditSave = useCallback(async () => {
     if (!editingTask || (editingRecurringTask && !validEditRepeatInterval)) return;
@@ -241,13 +244,15 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       });
       if (editingRecurringTask) {
         try {
-          const updatedRecurringTask = await api.updateRecurringTask(editingRecurringTask.id, {
-            enabled: editRepeatSchedule !== "never",
-            ...(editRepeatSchedule !== "never" ? {
-              interval_ms: editRepeatIntervalMs,
-              occurrence_mode: editOccurrenceMode,
-            } : {}),
-          });
+          const updatedRecurringTask = await api.updateRecurringTask(editingRecurringTask.id, recurrenceUpdateFields({
+            enabled: editRepeatEnabled,
+            schedule: editRepeatSchedule,
+            intervalValue: editRepeatIntervalValue,
+            intervalUnit: editRepeatIntervalUnit,
+            occurrenceMode: editOccurrenceMode,
+            storedIntervalMs: editingRecurringTask.interval_ms,
+            storedOccurrenceMode: editingRecurringTask.occurrence_mode,
+          }));
           setRecurringTasksById((previous) => mergeRecurringTasks(previous, [updatedRecurringTask]));
         } catch (err) {
           console.error("update recurring task:", err);
@@ -262,7 +267,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [editingTask, editingRecurringTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatSchedule, editRepeatIntervalMs, editOccurrenceMode, validEditRepeatInterval]);
+  }, [editingTask, editingRecurringTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit, editOccurrenceMode, validEditRepeatInterval]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -403,34 +408,43 @@ function InlineTaskList({ channelId }: { channelId: string }) {
           {editingRecurringTask && (
             <>
               <div>
+                <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Repeat enabled</label>
+                <Switch checked={editRepeatEnabled} onChange={setEditRepeatEnabled} size="small" />
+              </div>
+              <div>
                 <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Repeat</label>
                 <Select
                   value={editRepeatSchedule}
-                  onChange={setEditRepeatSchedule}
+                  onChange={(schedule) => {
+                    if (schedule === "never") {
+                      setEditRepeatEnabled(false);
+                      return;
+                    }
+                    setEditRepeatEnabled(true);
+                    setEditRepeatSchedule(schedule);
+                  }}
                   style={{ width: "100%" }}
                   options={REPEAT_SCHEDULE_OPTIONS}
                 />
                 {editRepeatSchedule === "custom" && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                     <span>Every</span>
-                    <InputNumber min={1} value={editRepeatIntervalValue} onChange={(value) => setEditRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
-                    <Select value={editRepeatIntervalUnit} onChange={setEditRepeatIntervalUnit} style={{ width: 120 }} options={REPEAT_INTERVAL_OPTIONS} />
+                    <InputNumber disabled={!editRepeatEnabled} min={1} value={editRepeatIntervalValue} onChange={(value) => setEditRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
+                    <Select disabled={!editRepeatEnabled} value={editRepeatIntervalUnit} onChange={setEditRepeatIntervalUnit} style={{ width: 120 }} options={REPEAT_INTERVAL_OPTIONS} />
                   </div>
                 )}
-                {editRepeatSchedule === "custom" && !validEditRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}
+                {editRepeatEnabled && editRepeatSchedule === "custom" && !validEditRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}
               </div>
-              {editRepeatSchedule !== "never" && (
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Next occurrence</label>
-                  <Radio.Group value={editOccurrenceMode} onChange={(event) => setEditOccurrenceMode(event.target.value)}>
-                    <Radio value="same_task">In this task</Radio>
-                    <Radio value="new_task">New task</Radio>
-                  </Radio.Group>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                    In this task reopens the current task and conversation. New task creates a separate task and conversation.
-                  </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Next occurrence</label>
+                <Radio.Group disabled={!editRepeatEnabled} value={editOccurrenceMode} onChange={(event) => setEditOccurrenceMode(event.target.value)}>
+                  <Radio value="same_task">In this task</Radio>
+                  <Radio value="new_task">New task</Radio>
+                </Radio.Group>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                  In this task reopens the current task and conversation. New task creates a separate task and conversation.
                 </div>
-              )}
+              </div>
             </>
           )}
           <div>

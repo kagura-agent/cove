@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeRecurringTasks, recurrenceScheduleFromInterval, recurrenceSeriesLabel, repeatScheduleIntervalMs } from "./recurrence";
+import { mergeRecurringTasks, recurrenceEditorSettingsFromTemplate, recurrenceScheduleFromInterval, recurrenceSeriesLabel, recurrenceUpdateFields, repeatScheduleIntervalMs } from "./recurrence";
 
 describe("recurrence intervals", () => {
   it("converts quick and custom schedules to milliseconds", () => {
@@ -13,6 +13,57 @@ describe("recurrence intervals", () => {
     expect(recurrenceScheduleFromInterval(3_600_000)).toEqual({ schedule: "hourly", value: 1, unit: "hours" });
     expect(recurrenceScheduleFromInterval(2 * 86_400_000)).toEqual({ schedule: "custom", value: 2, unit: "days" });
     expect(recurrenceScheduleFromInterval(90 * 60_000)).toEqual({ schedule: "custom", value: 90, unit: "minutes" });
+  });
+
+  it("retains a disabled template's cadence and occurrence mode for editing", () => {
+    expect(recurrenceEditorSettingsFromTemplate({
+      enabled: false,
+      interval_ms: 86_400_000,
+      occurrence_mode: "new_task",
+    })).toEqual({
+      enabled: false,
+      schedule: "daily",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+    });
+  });
+
+  it("patches only enabled when toggling a configured recurrence", () => {
+    expect(recurrenceUpdateFields({
+      enabled: false,
+      schedule: "daily",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+      storedIntervalMs: 86_400_000,
+      storedOccurrenceMode: "new_task",
+    })).toEqual({ enabled: false });
+    expect(recurrenceUpdateFields({
+      enabled: true,
+      schedule: "daily",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+      storedIntervalMs: 86_400_000,
+      storedOccurrenceMode: "new_task",
+    })).toEqual({ enabled: true });
+  });
+
+  it("enables and patches only repeat settings that changed", () => {
+    expect(recurrenceUpdateFields({
+      enabled: true,
+      schedule: "custom",
+      intervalValue: 2,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+      storedIntervalMs: 86_400_000,
+      storedOccurrenceMode: "same_task",
+    })).toEqual({
+      enabled: true,
+      interval_ms: 2 * 86_400_000,
+      occurrence_mode: "new_task",
+    });
   });
 
   it("labels only new-task occurrences as a series", () => {
