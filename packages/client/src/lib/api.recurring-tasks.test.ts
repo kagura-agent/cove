@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createRecurringTask,
   deleteRecurringTask,
+  fetchRecurringTask,
   fetchRecurringTasks,
   updateRecurringTask,
 } from "./api";
@@ -56,20 +57,26 @@ describe("recurring task API", () => {
     }));
   });
 
-  it("lists and manages channel recurring tasks", async () => {
+  it("loads and updates the associated recurring task settings", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse([template]))
-      .mockResolvedValueOnce(jsonResponse({ ...template, enabled: false }))
+      .mockResolvedValueOnce(jsonResponse(template))
+      .mockResolvedValueOnce(jsonResponse({ ...template, interval_ms: 2 * 86_400_000, occurrence_mode: "new_task" }))
       .mockResolvedValueOnce(jsonResponse({ deleted: true }));
 
     await expect(fetchRecurringTasks("channel-1")).resolves.toEqual([template]);
-    await updateRecurringTask("recurring-1", { enabled: false });
+    await expect(fetchRecurringTask("recurring-1")).resolves.toEqual(template);
+    await updateRecurringTask("recurring-1", {
+      interval_ms: 2 * 86_400_000,
+      occurrence_mode: "new_task",
+    });
     await expect(deleteRecurringTask("recurring-1")).resolves.toEqual({ deleted: true });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v10/recurring-tasks/recurring-1", expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v10/recurring-tasks/recurring-1", expect.objectContaining({ credentials: "include" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/v10/recurring-tasks/recurring-1", expect.objectContaining({
       method: "PATCH",
-      body: JSON.stringify({ enabled: false }),
+      body: JSON.stringify({ interval_ms: 2 * 86_400_000, occurrence_mode: "new_task" }),
     }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/v10/recurring-tasks/recurring-1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/v10/recurring-tasks/recurring-1", expect.objectContaining({ method: "DELETE" }));
   });
 });

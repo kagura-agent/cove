@@ -4,47 +4,18 @@ import { useActiveIds } from "../hooks/useActiveIds";
 import { useMemberStore } from "../stores/useMemberStore";
 import * as api from "../lib/api";
 import { HEARTBEAT_OPTIONS } from "../lib/constants";
+import {
+  REPEAT_INTERVAL_OPTIONS,
+  REPEAT_SCHEDULE_OPTIONS,
+  repeatScheduleIntervalMs,
+  type RepeatIntervalUnit,
+  type RepeatSchedule,
+} from "../lib/recurrence";
 
 interface Props {
   channelId: string;
   open: boolean;
   onClose: () => void;
-}
-
-type RepeatIntervalUnit = "minutes" | "hours" | "days" | "weeks";
-type RepeatSchedule = "never" | "hourly" | "daily" | "weekly" | "custom";
-
-const REPEAT_INTERVAL_MS: Record<RepeatIntervalUnit, number> = {
-  minutes: 60_000,
-  hours: 3_600_000,
-  days: 86_400_000,
-  weeks: 7 * 86_400_000,
-};
-
-export const REPEAT_INTERVAL_OPTIONS: Array<{ value: RepeatIntervalUnit; label: string }> = [
-  { value: "minutes", label: "minutes" },
-  { value: "hours", label: "hours" },
-  { value: "days", label: "days" },
-  { value: "weeks", label: "weeks" },
-];
-
-export const REPEAT_SCHEDULE_OPTIONS: Array<{ value: RepeatSchedule; label: string }> = [
-  { value: "never", label: "Never" },
-  { value: "hourly", label: "Every hour" },
-  { value: "daily", label: "Every day" },
-  { value: "weekly", label: "Every week" },
-  { value: "custom", label: "Custom" },
-];
-
-export function repeatIntervalMs(value: number, unit: RepeatIntervalUnit): number {
-  return value * REPEAT_INTERVAL_MS[unit];
-}
-
-export function repeatScheduleIntervalMs(schedule: RepeatSchedule, value: number, unit: RepeatIntervalUnit): number {
-  if (schedule === "hourly") return 3_600_000;
-  if (schedule === "daily") return 86_400_000;
-  if (schedule === "weekly") return 7 * 86_400_000;
-  return schedule === "custom" ? repeatIntervalMs(value, unit) : 0;
 }
 
 export function CreateTaskDialog({ channelId, open, onClose }: Props) {

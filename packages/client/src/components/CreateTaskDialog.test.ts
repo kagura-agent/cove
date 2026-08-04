@@ -4,7 +4,7 @@ import {
   REPEAT_SCHEDULE_OPTIONS,
   repeatIntervalMs,
   repeatScheduleIntervalMs,
-} from "./CreateTaskDialog";
+} from "../lib/recurrence";
 
 describe("repeatIntervalMs", () => {
   it("exposes every custom interval unit", () => {

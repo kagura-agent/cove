@@ -342,11 +342,20 @@ export interface CreateRecurringTaskFields {
 }
 
 export interface UpdateRecurringTaskFields {
+  title?: string;
+  description?: string;
+  assignee_id?: string | null;
+  interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
+  heartbeat_interval_ms?: number;
 }
 
 export function fetchRecurringTasks(channelId: string) {
   return api<RecurringTask[]>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`);
+}
+export function fetchRecurringTask(recurringTaskId: string) {
+  return api<RecurringTask>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`);
 }
 export function createRecurringTask(channelId: string, fields: CreateRecurringTaskFields) {
   return api<RecurringTask>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`, {
