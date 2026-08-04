@@ -295,6 +295,7 @@ export const TASK_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", 
 
 /** A channel-level task with a linked thread. */
 export type RecurringScheduleType = "interval" | "on_complete";
+export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
 
 /** A recurring task template that creates ordinary task occurrences. */
 export interface RecurringTask {
@@ -307,6 +308,7 @@ export interface RecurringTask {
   created_by: string;
   schedule_type: RecurringScheduleType;
   interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
   enabled: boolean;
   last_task_id: string | null;
   last_spawned_at: number;

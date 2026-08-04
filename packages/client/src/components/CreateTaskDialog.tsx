@@ -9,17 +9,16 @@ interface Props {
   channelId: string;
   open: boolean;
   onClose: () => void;
-  onCreated?: () => void;
 }
 
-export function CreateTaskDialog({ channelId, open, onClose, onCreated }: Props) {
+export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
   const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
   const [heartbeatInterval, setHeartbeatInterval] = useState(600000); // default 10min
-  const [repeatEnabled, setRepeatEnabled] = useState(false);
-  const [repeatSchedule, setRepeatSchedule] = useState<"on_complete" | "interval">("on_complete");
+  const [repeatSchedule, setRepeatSchedule] = useState<"never" | "on_complete" | "interval">("never");
+  const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("new_task");
   const [repeatIntervalValue, setRepeatIntervalValue] = useState(1);
   const [repeatIntervalUnit, setRepeatIntervalUnit] = useState<"minutes" | "hours" | "days">("days");
   const [submitting, setSubmitting] = useState(false);
@@ -31,32 +30,32 @@ export function CreateTaskDialog({ channelId, open, onClose, onCreated }: Props)
   const validRepeatInterval = Number.isFinite(repeatIntervalMs) && repeatIntervalMs > 0;
 
   async function handleCreate() {
-    if (!title.trim() || (repeatEnabled && repeatSchedule === "interval" && !validRepeatInterval)) return;
+    if (!title.trim() || (repeatSchedule === "interval" && !validRepeatInterval)) return;
     setSubmitting(true);
     try {
       const heartbeatIntervalMs = heartbeatEnabled ? heartbeatInterval : undefined;
-      if (repeatEnabled) {
+      if (repeatSchedule === "never") {
+        await api.createTask(channelId, title.trim(), assigneeId, description.trim() || undefined, heartbeatIntervalMs);
+      } else {
         await api.createRecurringTask(channelId, {
           title: title.trim(),
           ...(assigneeId ? { assignee_id: assigneeId } : {}),
           ...(description.trim() ? { description: description.trim() } : {}),
           schedule_type: repeatSchedule,
           ...(repeatSchedule === "interval" ? { interval_ms: repeatIntervalMs } : {}),
+          occurrence_mode: occurrenceMode,
           ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
         });
-      } else {
-        await api.createTask(channelId, title.trim(), assigneeId, description.trim() || undefined, heartbeatIntervalMs);
       }
       setTitle("");
       setDescription("");
       setAssigneeId(undefined);
       setHeartbeatEnabled(false);
       setHeartbeatInterval(600000);
-      setRepeatEnabled(false);
-      setRepeatSchedule("on_complete");
+      setRepeatSchedule("never");
+      setOccurrenceMode("new_task");
       setRepeatIntervalValue(1);
       setRepeatIntervalUnit("days");
-      onCreated?.();
       onClose();
     } catch (err) {
       console.error("create task:", err);
@@ -72,7 +71,7 @@ export function CreateTaskDialog({ channelId, open, onClose, onCreated }: Props)
       onCancel={onClose}
       onOk={handleCreate}
       okText="Create"
-      okButtonProps={{ disabled: !title.trim() || (repeatEnabled && repeatSchedule === "interval" && !validRepeatInterval), loading: submitting }}
+      okButtonProps={{ disabled: !title.trim() || (repeatSchedule === "interval" && !validRepeatInterval), loading: submitting }}
       destroyOnClose
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md, 12px)" }}>
@@ -119,40 +118,52 @@ export function CreateTaskDialog({ channelId, open, onClose, onCreated }: Props)
           <label style={{ fontSize: "var(--font-size-sm, 13px)", fontWeight: 500, marginBottom: 4, display: "block" }}>
             Repeat
           </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Switch checked={repeatEnabled} onChange={setRepeatEnabled} size="small" />
-            <span style={{ fontSize: 13 }}>Create a reusable task template</span>
-          </div>
-          {repeatEnabled && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+          <Select
+            value={repeatSchedule}
+            onChange={setRepeatSchedule}
+            style={{ width: "100%" }}
+            options={[
+              { value: "never", label: "Never" },
+              { value: "on_complete", label: "After completion" },
+              { value: "interval", label: "After a delay" },
+            ]}
+          />
+          {repeatSchedule === "interval" && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <InputNumber min={1} value={repeatIntervalValue} onChange={(value) => setRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
               <Select
-                value={repeatSchedule}
-                onChange={setRepeatSchedule}
+                value={repeatIntervalUnit}
+                onChange={setRepeatIntervalUnit}
+                style={{ width: 120 }}
                 options={[
-                  { value: "on_complete", label: "Immediately after completion" },
-                  { value: "interval", label: "After a delay" },
+                  { value: "minutes", label: "minutes" },
+                  { value: "hours", label: "hours" },
+                  { value: "days", label: "days" },
                 ]}
               />
-              {repeatSchedule === "interval" && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <InputNumber min={1} value={repeatIntervalValue} onChange={(value) => setRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
-                  <Select
-                    value={repeatIntervalUnit}
-                    onChange={setRepeatIntervalUnit}
-                    style={{ width: 120 }}
-                    options={[
-                      { value: "minutes", label: "minutes" },
-                      { value: "hours", label: "hours" },
-                      { value: "days", label: "days" },
-                    ]}
-                  />
-                </div>
-              )}
-              {repeatSchedule === "interval" && !validRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)" }}>Enter a positive duration.</div>}
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Your first task starts within 30 seconds. Later tasks follow the selected completion or delay schedule.</div>
             </div>
           )}
+          {repeatSchedule === "interval" && !validRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive duration.</div>}
         </div>
+        {repeatSchedule !== "never" && (
+          <div>
+            <label style={{ fontSize: "var(--font-size-sm, 13px)", fontWeight: 500, marginBottom: 4, display: "block" }}>
+              Next occurrence
+            </label>
+            <Select
+              value={occurrenceMode}
+              onChange={setOccurrenceMode}
+              style={{ width: "100%" }}
+              options={[
+                { value: "same_task", label: "Reopen this task" },
+                { value: "new_task", label: "Create a new task" },
+              ]}
+            />
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+              Reopen keeps the same task and conversation. Create a new task makes a separate task and conversation.
+            </div>
+          </div>
+        )}
         <div>
           <label style={{ fontSize: "var(--font-size-sm, 13px)", fontWeight: 500, marginBottom: 4, display: "block" }}>
             Heartbeat

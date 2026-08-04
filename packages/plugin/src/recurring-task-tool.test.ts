@@ -34,12 +34,13 @@ describe("cove_task recurring actions", () => {
       title: "Daily report",
       scheduleType: "interval",
       intervalMs: 60_000,
+      occurrenceMode: "same_task",
       assigneeId: "agent-1",
       heartbeatIntervalMs: 30_000,
     });
     expect(create.details).toMatchObject({ ok: true, action: "recurring_create" });
     expect(restClient.createRecurringTask).toHaveBeenCalledWith("channel-1", expect.objectContaining({
-      title: "Daily report", schedule_type: "interval", interval_ms: 60_000, assignee_id: "agent-1", heartbeat_interval_ms: 30_000,
+      title: "Daily report", schedule_type: "interval", interval_ms: 60_000, occurrence_mode: "same_task", assignee_id: "agent-1", heartbeat_interval_ms: 30_000,
     }));
 
     const list = await tool.execute("call-2", { action: "recurring_list", channelId: "channel-1" });

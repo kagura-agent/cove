@@ -330,12 +330,15 @@ export function deleteTask(taskId: string) {
   return api<{ deleted: boolean }>(`${API_PREFIX}/tasks/${taskId}`, { method: "DELETE" });
 }
 
+export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
+
 export interface CreateRecurringTaskFields {
   title: string;
   description?: string;
   assignee_id?: string;
   schedule_type: RecurringScheduleType;
   interval_ms?: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
   heartbeat_interval_ms?: number;
 }
 

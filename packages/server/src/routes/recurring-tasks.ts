@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../auth.js";
 import type { Repos } from "../repos/index.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
+import { createTaskOccurrence } from "../services/task-occurrence.js";
 import { parseJsonBody, validateFiniteNumber, validateString, validationError } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { PermissionBits, type RecurringScheduleType } from "@cove/shared";
+import { PermissionBits, type RecurringScheduleType, type RecurringTaskOccurrenceMode } from "@cove/shared";
 
 const VALID_SCHEDULE_TYPES = new Set<RecurringScheduleType>(["interval", "on_complete"]);
+const VALID_OCCURRENCE_MODES = new Set<RecurringTaskOccurrenceMode>(["same_task", "new_task"]);
 
 function validateSchedule(scheduleType: unknown, intervalMs: unknown): string | null {
   if (typeof scheduleType !== "string" || !VALID_SCHEDULE_TYPES.has(scheduleType as RecurringScheduleType)) {
@@ -21,7 +24,14 @@ function validateSchedule(scheduleType: unknown, intervalMs: unknown): string | 
   return null;
 }
 
-export function recurringTaskRoutes(repos: Repos): Hono<AppEnv> {
+function validateOccurrenceMode(occurrenceMode: unknown): string | null {
+  if (typeof occurrenceMode !== "string" || !VALID_OCCURRENCE_MODES.has(occurrenceMode as RecurringTaskOccurrenceMode)) {
+    return "occurrence_mode must be one of: same_task, new_task";
+  }
+  return null;
+}
+
+export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.post("/channels/:channelId/recurring-tasks", async (c) => {
@@ -30,27 +40,53 @@ export function recurringTaskRoutes(repos: Repos): Hono<AppEnv> {
     const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
     if (channel.type === 11) return c.json({ message: "Cannot create recurring tasks inside a thread", code: 50035 }, 400);
 
-    const body = await parseJsonBody<{ title: string; description?: string; assignee_id?: string; schedule_type: unknown; interval_ms?: unknown; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<{ title: string; description?: string; assignee_id?: string; schedule_type: unknown; interval_ms?: unknown; occurrence_mode?: unknown; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
     const titleError = validateString(body.title, "title", { required: true, maxLength: 200 });
     if (titleError) return validationError(c, titleError);
     const scheduleError = validateSchedule(body.schedule_type, body.interval_ms);
     if (scheduleError) return validationError(c, scheduleError);
+    const occurrenceMode = body.occurrence_mode ?? "new_task";
+    const occurrenceModeError = validateOccurrenceMode(occurrenceMode);
+    if (occurrenceModeError) return validationError(c, occurrenceModeError);
     const assigneeId = body.assignee_id ?? null;
     if (assigneeId && !repos.members.exists(channel.guild_id, assigneeId)) return c.json({ message: "Unknown Member", code: 10007 }, 404);
 
-    const recurringTask = repos.recurringTasks.create({
-      guild_id: channel.guild_id,
-      channel_id: channelId,
-      title: body.title.trim(),
-      description: body.description,
-      assignee_id: assigneeId,
-      created_by: user.id,
-      schedule_type: body.schedule_type as RecurringScheduleType,
-      interval_ms: body.interval_ms as number | undefined,
-      heartbeat_interval_ms: body.heartbeat_interval_ms,
-    });
-    return c.json(recurringTask, 201);
+    const result = repos.db.transaction(() => {
+      const recurringTask = repos.recurringTasks.create({
+        guild_id: channel.guild_id,
+        channel_id: channelId,
+        title: body.title.trim(),
+        description: body.description,
+        assignee_id: assigneeId,
+        created_by: user.id,
+        schedule_type: body.schedule_type as RecurringScheduleType,
+        interval_ms: body.interval_ms as number | undefined,
+        occurrence_mode: occurrenceMode as RecurringTaskOccurrenceMode,
+        heartbeat_interval_ms: body.heartbeat_interval_ms,
+      });
+      const occurrence = createTaskOccurrence(repos, {
+        channel,
+        creator: user,
+        title: recurringTask.title,
+        description: recurringTask.description,
+        assigneeId: recurringTask.assignee_id,
+        heartbeatIntervalMs: recurringTask.heartbeat_interval_ms,
+        recurring: { id: recurringTask.id, seq: 1 },
+      });
+      const updatedRecurringTask = repos.recurringTasks.update(recurringTask.id, {
+        last_task_id: occurrence.task.task_id,
+        last_spawned_at: Date.now(),
+      })!;
+      return { recurringTask: updatedRecurringTask, occurrence };
+    })();
+
+    dispatcher?.messageCreate(result.occurrence.cardMessage);
+    dispatcher?.threadCreate(result.occurrence.thread);
+    dispatcher?.messageCreate(result.occurrence.assignmentMessage);
+    dispatcher?.taskCreated(result.occurrence.task);
+
+    return c.json(result.recurringTask, 201);
   });
 
   app.get("/channels/:channelId/recurring-tasks", async (c) => {
@@ -72,7 +108,7 @@ export function recurringTaskRoutes(repos: Repos): Hono<AppEnv> {
     const user = c.get("botUser");
     await requireChannelPermission(repos, recurringTask.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
-    const body = await parseJsonBody<{ title?: unknown; description?: string; assignee_id?: string | null; schedule_type?: unknown; interval_ms?: unknown; enabled?: boolean; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<{ title?: unknown; description?: string; assignee_id?: string | null; schedule_type?: unknown; interval_ms?: unknown; occurrence_mode?: unknown; enabled?: boolean; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
     if (body.title !== undefined) {
       const titleError = validateString(body.title, "title", { required: true, maxLength: 200 });
@@ -84,6 +120,10 @@ export function recurringTaskRoutes(repos: Repos): Hono<AppEnv> {
       const scheduleError = validateSchedule(scheduleType, intervalMs);
       if (scheduleError) return validationError(c, scheduleError);
     }
+    if (body.occurrence_mode !== undefined) {
+      const occurrenceModeError = validateOccurrenceMode(body.occurrence_mode);
+      if (occurrenceModeError) return validationError(c, occurrenceModeError);
+    }
     if (body.assignee_id !== undefined && body.assignee_id !== null && !repos.members.exists(recurringTask.guild_id, body.assignee_id)) {
       return c.json({ message: "Unknown Member", code: 10007 }, 404);
     }
@@ -94,6 +134,7 @@ export function recurringTaskRoutes(repos: Repos): Hono<AppEnv> {
       assignee_id: body.assignee_id,
       schedule_type: body.schedule_type as RecurringScheduleType | undefined,
       interval_ms: body.interval_ms as number | undefined,
+      occurrence_mode: body.occurrence_mode as RecurringTaskOccurrenceMode | undefined,
       enabled: body.enabled,
       heartbeat_interval_ms: body.heartbeat_interval_ms,
     });

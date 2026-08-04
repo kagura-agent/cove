@@ -52,8 +52,8 @@ describe("recurring task templates API", () => {
     });
   }
 
-  it("creates a trimmed interval template and lists it for the channel", async () => {
-    const create = await createTemplate({ heartbeat_interval_ms: 15_000 });
+  it("creates a trimmed interval template with its initial ordinary task occurrence", async () => {
+    const create = await createTemplate({ heartbeat_interval_ms: 15_000, occurrence_mode: "same_task" });
     expect(create.status).toBe(201);
     const template = await create.json() as Record<string, unknown>;
     expect(template).toMatchObject({
@@ -63,8 +63,17 @@ describe("recurring task templates API", () => {
       title: "Daily standup",
       schedule_type: "interval",
       interval_ms: 60_000,
+      occurrence_mode: "same_task",
       enabled: true,
-      last_task_id: null,
+      last_task_id: expect.any(String),
+    });
+    const initialTask = repos.tasks.getById(template.last_task_id as string);
+    expect(initialTask).toMatchObject({
+      channel_id: channelId,
+      recurring_id: template.id,
+      recurring_seq: 1,
+      title: "Daily standup",
+      status: "open",
     });
 
     const list = await app.request(`${API_PREFIX}/channels/${channelId}/recurring-tasks`, { headers: headers() });
@@ -77,6 +86,7 @@ describe("recurring task templates API", () => {
       { title: "   " },
       { schedule_type: "cron", interval_ms: 60_000 },
       { schedule_type: "interval", interval_ms: 0 },
+      { occurrence_mode: "replace_task" },
     ]) {
       const response = await createTemplate(body);
       expect(response.status).toBe(400);
@@ -90,10 +100,10 @@ describe("recurring task templates API", () => {
     const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify({ title: "  Follow up  ", schedule_type: "on_complete", enabled: false }),
+      body: JSON.stringify({ title: "  Follow up  ", schedule_type: "on_complete", occurrence_mode: "same_task", enabled: false }),
     });
     expect(update.status).toBe(200);
-    expect(await update.json()).toMatchObject({ title: "Follow up", schedule_type: "on_complete", enabled: false });
+    expect(await update.json()).toMatchObject({ title: "Follow up", schedule_type: "on_complete", occurrence_mode: "same_task", enabled: false });
 
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")

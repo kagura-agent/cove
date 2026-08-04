@@ -40,7 +40,6 @@ export function ChannelView() {
   const channelsLoaded = useChannelStore((s) => s.channelsLoaded);
   const [membersOpen, setMembersOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
-  const [taskListVersion, setTaskListVersion] = useState(0);
   const setFilesStoreOpen = useChannelFilesStore((s) => s.setFilesOpen);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [resizeDragging, setResizeDragging] = useState(false);
@@ -132,7 +131,6 @@ export function ChannelView() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onNewTask={() => setCreateTaskOpen(true)}
-            taskListVersion={taskListVersion}
           />
         </div>
         {activeTab === "chat" && (
@@ -168,7 +166,6 @@ export function ChannelView() {
           channelId={channelId}
           open={createTaskOpen}
           onClose={() => setCreateTaskOpen(false)}
-          onCreated={() => setTaskListVersion((version) => version + 1)}
         />
       )}
     </>

@@ -59,6 +59,13 @@ export class RecurringTaskWorker {
         if (!latestTemplate || !latestTemplate.enabled || !this.shouldSpawn(latestTemplate, Date.now())) return null;
 
         const previous = latestTemplate.last_task_id ? this.repos.tasks.getById(latestTemplate.last_task_id) : null;
+        if (latestTemplate.occurrence_mode === "same_task" && previous) {
+          const task = this.repos.tasks.update(previous.task_id, { status: "open" });
+          if (!task) return null;
+          this.repos.recurringTasks.update(latestTemplate.id, { last_spawned_at: Date.now() });
+          return { type: "reopen" as const, task };
+        }
+
         const recurringSeq = previous ? previous.recurring_seq + 1 : 1;
         const occurrence = createTaskOccurrence(this.repos, {
           channel,
@@ -73,13 +80,17 @@ export class RecurringTaskWorker {
           last_task_id: occurrence.task.task_id,
           last_spawned_at: Date.now(),
         });
-        return occurrence;
+        return { type: "create" as const, occurrence };
       })();
       if (!result) return;
-      this.dispatcher.messageCreate(result.cardMessage);
-      this.dispatcher.threadCreate(result.thread);
-      this.dispatcher.messageCreate(result.assignmentMessage);
-      this.dispatcher.taskCreated(result.task);
+      if (result.type === "reopen") {
+        this.dispatcher.taskUpdated(result.task);
+        return;
+      }
+      this.dispatcher.messageCreate(result.occurrence.cardMessage);
+      this.dispatcher.threadCreate(result.occurrence.thread);
+      this.dispatcher.messageCreate(result.occurrence.assignmentMessage);
+      this.dispatcher.taskCreated(result.occurrence.task);
     } catch (error) {
       console.error(`Recurring task ${template.id} spawn error:`, error);
     }

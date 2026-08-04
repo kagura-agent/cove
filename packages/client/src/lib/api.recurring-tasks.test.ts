@@ -37,11 +37,12 @@ describe("recurring task API", () => {
     fetchMock.mockResolvedValue(jsonResponse(template));
   });
 
-  it("creates a recurring template with its schedule", async () => {
+  it("creates a recurring task with its schedule and occurrence mode", async () => {
     await createRecurringTask("channel-1", {
       title: "Review inbox",
       schedule_type: "interval",
       interval_ms: 3_600_000,
+      occurrence_mode: "new_task",
     });
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v10/channels/channel-1/recurring-tasks", expect.objectContaining({
@@ -51,11 +52,12 @@ describe("recurring task API", () => {
         title: "Review inbox",
         schedule_type: "interval",
         interval_ms: 3_600_000,
+        occurrence_mode: "new_task",
       }),
     }));
   });
 
-  it("lists and manages channel recurring templates", async () => {
+  it("lists and manages channel recurring tasks", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse([template]))
       .mockResolvedValueOnce(jsonResponse({ ...template, enabled: false }))

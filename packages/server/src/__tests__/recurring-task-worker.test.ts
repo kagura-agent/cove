@@ -3,7 +3,8 @@ import type Database from "better-sqlite3";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos, type Repos } from "../repos/index.js";
-import type { Channel, Message, Task } from "@cove/shared";
+import { createTaskOccurrence } from "../services/task-occurrence.js";
+import type { Channel, Message, RecurringScheduleType, RecurringTask, Task, User } from "@cove/shared";
 
 class RecordingDispatcher extends GatewayDispatcher {
   readonly events: string[] = [];
@@ -15,6 +16,7 @@ class RecordingDispatcher extends GatewayDispatcher {
   override messageCreate(_message: Message): void { this.events.push("MESSAGE_CREATE"); }
   override threadCreate(_thread: Channel): void { this.events.push("THREAD_CREATE"); }
   override taskCreated(_task: Task): void { this.events.push("TASK_CREATED"); }
+  override taskUpdated(_task: Task): void { this.events.push("TASK_UPDATED"); }
 }
 
 describe("RecurringTaskWorker", () => {
@@ -49,7 +51,11 @@ describe("RecurringTaskWorker", () => {
     return new module!.RecurringTaskWorker(repos, dispatcher) as { tick(): void };
   }
 
-  function template(scheduleType: "interval" | "on_complete", intervalMs = 1_000) {
+  function template(
+    scheduleType: RecurringScheduleType,
+    intervalMs = 1_000,
+    occurrenceMode: "same_task" | "new_task" = "new_task",
+  ) {
     return repos.recurringTasks.create({
       guild_id: guildId,
       channel_id: channelId,
@@ -57,69 +63,114 @@ describe("RecurringTaskWorker", () => {
       created_by: "creator",
       schedule_type: scheduleType,
       interval_ms: scheduleType === "interval" ? intervalMs : 0,
+      occurrence_mode: occurrenceMode,
       heartbeat_interval_ms: 20_000,
     });
   }
 
-  it("spawns an ordinary task in a fresh thread with lifecycle events and recurring linkage", async () => {
-    const recurring = template("on_complete");
-    (await worker()).tick();
+  function createInitialOccurrence(recurring: RecurringTask): Task {
+    const channel = repos.channels.getById(channelId) as Channel;
+    const creator = repos.users.getById("creator") as User;
+    return repos.db.transaction(() => {
+      const occurrence = createTaskOccurrence(repos, {
+        channel,
+        creator,
+        title: recurring.title,
+        description: recurring.description,
+        assigneeId: recurring.assignee_id,
+        heartbeatIntervalMs: recurring.heartbeat_interval_ms,
+        recurring: { id: recurring.id, seq: 1 },
+      });
+      repos.recurringTasks.update(recurring.id, {
+        last_task_id: occurrence.task.task_id,
+        last_spawned_at: Date.now(),
+      });
+      return occurrence.task;
+    })();
+  }
 
-    const tasks = repos.tasks.listByChannel(channelId);
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0]).toMatchObject({ recurring_id: recurring.id, recurring_seq: 1, created_by: "creator", heartbeat_interval_ms: 20_000 });
-    const thread = repos.channels.getById(tasks[0].thread_id);
-    expect(thread).toMatchObject({ type: 11, parent_id: channelId });
-    expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ?").get(tasks[0].thread_id)).toEqual({ count: 1 });
-    expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "THREAD_CREATE", "MESSAGE_CREATE", "TASK_CREATED"]);
-    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ last_task_id: tasks[0].task_id, last_spawned_at: expect.any(Number) });
-  });
-
-  it("does not overlap an open occurrence and spawns on completion for on_complete", async () => {
+  it("creates a new task and thread after a new_task occurrence becomes terminal", async () => {
     const recurring = template("on_complete");
+    const first = createInitialOccurrence(recurring);
     const recurringWorker = await worker();
-    recurringWorker.tick();
+
     recurringWorker.tick();
     expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
 
-    const first = repos.recurringTasks.getById(recurring.id)!;
-    repos.tasks.update(first.last_task_id!, { status: "done" });
+    repos.tasks.update(first.task_id, { status: "done" });
     recurringWorker.tick();
     const tasks = repos.tasks.listByChannel(channelId);
     expect(tasks).toHaveLength(2);
-    expect(tasks[1]).toMatchObject({ recurring_id: recurring.id, recurring_seq: 2, status: "open" });
+    expect(tasks[1]).toMatchObject({ recurring_id: recurring.id, recurring_seq: 2, created_by: "creator", heartbeat_interval_ms: 20_000, status: "open" });
+    expect(tasks[1].task_id).not.toBe(first.task_id);
+    expect(tasks[1].thread_id).not.toBe(first.thread_id);
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "THREAD_CREATE", "MESSAGE_CREATE", "TASK_CREATED"]);
+    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ last_task_id: tasks[1].task_id, last_spawned_at: expect.any(Number) });
+
+    repos.tasks.update(tasks[1].task_id, { status: "cancelled" });
+    recurringWorker.tick();
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(3);
   });
 
-  it("waits for the full interval after a long-running occurrence completes and ignores disabled templates", async () => {
+  it("reopens the same task and thread once an on_complete occurrence becomes terminal", async () => {
+    const recurring = template("on_complete", 1_000, "same_task");
+    const first = createInitialOccurrence(recurring);
+    const recurringWorker = await worker();
+
+    repos.tasks.update(first.task_id, { status: "done" });
+    recurringWorker.tick();
+
+    const tasks = repos.tasks.listByChannel(channelId);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ task_id: first.task_id, thread_id: first.thread_id, status: "open" });
+    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ last_task_id: first.task_id });
+    expect(dispatcher.events).toEqual(["TASK_UPDATED"]);
+
+    recurringWorker.tick();
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+  });
+
+  it("waits for the full interval after same_task completion before reopening it", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
-    const recurring = template("interval", 10_000);
-    const disabled = template("on_complete");
-    repos.recurringTasks.update(disabled.id, { enabled: false });
+    const recurring = template("interval", 10_000, "same_task");
+    const first = createInitialOccurrence(recurring);
     const recurringWorker = await worker();
-    recurringWorker.tick();
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
 
     vi.advanceTimersByTime(30_000);
-    const first = repos.recurringTasks.getById(recurring.id)!;
-    repos.tasks.update(first.last_task_id!, { status: "done" });
+    repos.tasks.update(first.task_id, { status: "done" });
     recurringWorker.tick();
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ status: "done" });
 
     vi.advanceTimersByTime(9_999);
     recurringWorker.tick();
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ status: "done" });
 
     vi.advanceTimersByTime(1);
     recurringWorker.tick();
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(2);
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ task_id: first.task_id, thread_id: first.thread_id, status: "open" });
   });
 
-  it("leaves the template unchanged when its creator or parent channel is missing", async () => {
-    const recurring = template("on_complete");
-    db.prepare("UPDATE recurring_tasks SET created_by = ? WHERE id = ?").run("missing-creator", recurring.id);
+  it("does nothing for disabled templates and leaves templates unchanged when their creator or parent channel is missing", async () => {
+    const disabled = template("on_complete");
+    const disabledTask = createInitialOccurrence(disabled);
+    repos.tasks.update(disabledTask.task_id, { status: "done" });
+    repos.recurringTasks.update(disabled.id, { enabled: false });
     (await worker()).tick();
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(0);
-    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ last_task_id: null, last_spawned_at: 0 });
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(disabledTask.task_id)).toMatchObject({ status: "done" });
+
+    const missingCreator = template("on_complete");
+    db.prepare("UPDATE recurring_tasks SET created_by = ? WHERE id = ?").run("missing-creator", missingCreator.id);
+    (await worker()).tick();
+    expect(repos.recurringTasks.getById(missingCreator.id)).toMatchObject({ last_task_id: null, last_spawned_at: 0 });
+
+    const missingChannel = template("on_complete");
+    db.pragma("foreign_keys = OFF");
+    db.prepare("UPDATE recurring_tasks SET channel_id = ? WHERE id = ?").run("missing-channel", missingChannel.id);
+    db.pragma("foreign_keys = ON");
+    (await worker()).tick();
+    expect(repos.recurringTasks.getById(missingChannel.id)).toMatchObject({ last_task_id: null, last_spawned_at: 0 });
   });
 });

@@ -140,7 +140,7 @@ export function createApp(
   app.route(API_PREFIX, roleRoutes(repos, dispatcher));
   app.route(API_PREFIX, incomingRoutes(repos, dispatcher));
   app.route(API_PREFIX, taskRoutes(repos, dispatcher));
-  app.route(API_PREFIX, recurringTaskRoutes(repos));
+  app.route(API_PREFIX, recurringTaskRoutes(repos, dispatcher));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";
   app.get(`${API_PREFIX}/gateway`, (c) => c.json({ url: gwUrl }));

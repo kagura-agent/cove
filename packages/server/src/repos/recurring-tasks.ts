@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { generateSnowflake, type RecurringScheduleType, type RecurringTask } from "@cove/shared";
+import { generateSnowflake, type RecurringScheduleType, type RecurringTask, type RecurringTaskOccurrenceMode } from "@cove/shared";
 
 interface RecurringTaskRow {
   id: string;
@@ -11,6 +11,7 @@ interface RecurringTaskRow {
   created_by: string;
   schedule_type: string;
   interval_ms: number;
+  occurrence_mode: string;
   enabled: number;
   last_task_id: string | null;
   last_spawned_at: number;
@@ -30,6 +31,7 @@ function toRecurringTask(row: RecurringTaskRow): RecurringTask {
     created_by: row.created_by,
     schedule_type: row.schedule_type as RecurringScheduleType,
     interval_ms: row.interval_ms,
+    occurrence_mode: row.occurrence_mode as RecurringTaskOccurrenceMode,
     enabled: row.enabled === 1,
     last_task_id: row.last_task_id,
     last_spawned_at: row.last_spawned_at,
@@ -45,6 +47,7 @@ export interface CreateRecurringTask {
   title: string;
   created_by: string;
   schedule_type: RecurringScheduleType;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
   description?: string;
   assignee_id?: string | null;
   interval_ms?: number;
@@ -57,6 +60,7 @@ export interface UpdateRecurringTask {
   assignee_id?: string | null;
   schedule_type?: RecurringScheduleType;
   interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
   last_task_id?: string | null;
   last_spawned_at?: number;
@@ -72,11 +76,12 @@ export class RecurringTasksRepo {
     const description = params.description ?? "";
     const assigneeId = params.assignee_id ?? null;
     const intervalMs = params.interval_ms ?? 0;
+    const occurrenceMode = params.occurrence_mode ?? "new_task";
     const heartbeatMs = params.heartbeat_interval_ms ?? 300000;
     this.db.prepare(
-      `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, schedule_type, interval_ms, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, 0, ?, ?, ?)`
-    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.schedule_type, intervalMs, heartbeatMs, now, now);
+      `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, schedule_type, interval_ms, occurrence_mode, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, 0, ?, ?, ?)`
+    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.schedule_type, intervalMs, occurrenceMode, heartbeatMs, now, now);
     return this.getById(id)!;
   }
 
@@ -105,6 +110,7 @@ export class RecurringTasksRepo {
     if (fields.assignee_id !== undefined) { sets.push("assignee_id = ?"); values.push(fields.assignee_id); }
     if (fields.schedule_type !== undefined) { sets.push("schedule_type = ?"); values.push(fields.schedule_type); }
     if (fields.interval_ms !== undefined) { sets.push("interval_ms = ?"); values.push(fields.interval_ms); }
+    if (fields.occurrence_mode !== undefined) { sets.push("occurrence_mode = ?"); values.push(fields.occurrence_mode); }
     if (fields.enabled !== undefined) { sets.push("enabled = ?"); values.push(fields.enabled ? 1 : 0); }
     if (fields.last_task_id !== undefined) { sets.push("last_task_id = ?"); values.push(fields.last_task_id); }
     if (fields.last_spawned_at !== undefined) { sets.push("last_spawned_at = ?"); values.push(fields.last_spawned_at); }
