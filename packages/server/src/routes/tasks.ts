@@ -4,7 +4,8 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { generateSnowflake, PermissionBits, TASK_STATUSES, type Message, type Task, type TaskStatus } from "@cove/shared";
+import { PermissionBits, TASK_STATUSES, type TaskStatus } from "@cove/shared";
+import { createTaskOccurrence } from "../services/task-occurrence.js";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
 
@@ -32,110 +33,14 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return c.json({ message: "Unknown Member", code: 10007 }, 404);
     }
 
-    const result = repos.db.transaction(() => {
-      const seq = repos.tasks.getNextSeq(channelId);
-      const now = Date.now();
-      const messageId = generateSnowflake();
-      const taskId = generateSnowflake();
-      const title = body.title.trim();
-
-      // 1. Card message — skip_agent_notify so it doesn't trigger agent sessions
-      const cardContent = JSON.stringify({ title, status: "open", assignee_id: assigneeId, seq });
-      const cardMetadata = JSON.stringify({ content_type: "task", skip_agent_notify: true });
-      repos.db.prepare(
-        "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(messageId, channelId, user.id, user.username, cardContent, now, cardMetadata, null);
-      const cardMessage: Message = {
-        id: messageId,
-        channel_id: channelId,
-        content: cardContent,
-        author: { id: user.id, username: user.username, bot: user.bot, avatar: user.avatar ?? null, discriminator: user.discriminator ?? "0", global_name: user.global_name ?? null },
-        timestamp: new Date(now).toISOString(),
-        edited_timestamp: null,
-        type: 0,
-        attachments: [],
-        embeds: [],
-        mentions: [],
-        mention_roles: [],
-        pinned: false,
-        tts: false,
-        mention_everyone: false,
-        metadata: cardMetadata,
-      };
-
-      // 2. Derive thread from card message (name: first 30 chars by codepoint)
-      const threadName = [...title].slice(0, 30).join("");
-      const thread = repos.threads.createFromMessage(
-        channel.guild_id,
-        channelId,
-        messageId,
-        threadName,
-        user.id,
-      );
-
-      // 3. Add assignee to thread members
-      if (assigneeId && assigneeId !== user.id) {
-        repos.threads.addMember(thread.id, assigneeId);
-      }
-      // Add channel owner if they are still a guild member and not already in thread
-      if (channel.owner_id && channel.owner_id !== user.id && channel.owner_id !== assigneeId) {
-        if (repos.members.exists(channel.guild_id, channel.owner_id)) {
-          repos.threads.addMember(thread.id, channel.owner_id);
-        }
-      }
-
-      // 4. Task row — written BEFORE assignment message so isTaskThread() can
-      //    find it when the agent receives the assignment. Fixes race condition
-      //    where agent message arrived before task row existed (#492).
-      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
-
-      // 5. Assignment message in thread — this is the signal that wakes the agent.
-      //    DB stores real author; WS frame rewrites to "system" (see below).
-      //    Preamble carries all instructions so agent doesn't need to understand "task".
-      const assignmentNow = Date.now();
-      const assignmentId = generateSnowflake();
-      const preamble = [
-        `This is a task assignment (task_id: ${taskId}).`,
-        `Title: ${title}`,
-        `工作属于这个 thread，就在这里做。`,
-        `开工时用 cove_task 工具设 status 为 in_progress（action: "update", taskId: "${taskId}", status: "in_progress"）。`,
-        `完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。`,
-        `不要用 curl 调 REST API，用 cove_task 工具。`,
-      ].join("\n");
-      const assignmentContent = preamble;
-      const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
-      repos.db.prepare(
-        "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(assignmentId, thread.id, user.id, user.username, assignmentContent, assignmentNow, assignmentMetadata, null);
-
-      // Build the WS frame for assignment — rewrite author to "system"
-      // so agent's self-loop filter doesn't discard it when agent assigns to itself
-      const assignmentMessage: Message = {
-        id: assignmentId,
-        channel_id: thread.id,
-        content: assignmentContent,
-        author: { id: "system", username: "System", bot: false, avatar: null, discriminator: "0", global_name: "System" },
-        timestamp: new Date(assignmentNow).toISOString(),
-        edited_timestamp: null,
-        type: 0,
-        attachments: [],
-        embeds: [],
-        mentions: [],
-        mention_roles: [],
-        pinned: false,
-        tts: false,
-        mention_everyone: false,
-        metadata: assignmentMetadata,
-      };
-
-      // Set heartbeat — default to 5 min if not specified
-      const heartbeatMs = (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) ? body.heartbeat_interval_ms : 300000;
-      repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatMs, heartbeat_last_at: Date.now() });
-      task.heartbeat_interval_ms = heartbeatMs;
-      task.heartbeat_last_at = Date.now();
-
-      return { cardMessage, thread, assignmentMessage, task };
-    })();
+    const result = repos.db.transaction(() => createTaskOccurrence(repos, {
+      channel,
+      creator: user,
+      title: body.title,
+      description: body.description,
+      assigneeId,
+      heartbeatIntervalMs: body.heartbeat_interval_ms,
+    }))();
 
     // Broadcast outside transaction
     dispatcher?.messageCreate(result.cardMessage);   // skip_agent_notify in metadata

@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, Message, Task } from "@cove/shared";
+import type { Channel, Message, RecurringTask, Task } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -254,5 +254,30 @@ export class CoveRestClient {
   /** PATCH /api/v10/tasks/:taskId — update a task. */
   async updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string }): Promise<Task> {
     return this.request("PATCH", `${API_PREFIX}/tasks/${taskId}`, fields);
+  }
+
+  /** POST /api/v10/channels/:channelId/recurring-tasks — create a template. */
+  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; schedule_type: "interval" | "on_complete"; interval_ms?: number; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/recurring-tasks`, fields);
+  }
+
+  /** GET /api/v10/channels/:channelId/recurring-tasks — list templates. */
+  async getRecurringTasks(channelId: string): Promise<RecurringTask[]> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/recurring-tasks`);
+  }
+
+  /** GET /api/v10/recurring-tasks/:id — get a template. */
+  async getRecurringTask(id: string): Promise<RecurringTask> {
+    return this.request("GET", `${API_PREFIX}/recurring-tasks/${id}`);
+  }
+
+  /** PATCH /api/v10/recurring-tasks/:id — update a template. */
+  async updateRecurringTask(id: string, fields: { title?: string; description?: string; assignee_id?: string | null; schedule_type?: "interval" | "on_complete"; interval_ms?: number; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+    return this.request("PATCH", `${API_PREFIX}/recurring-tasks/${id}`, fields);
+  }
+
+  /** DELETE /api/v10/recurring-tasks/:id — delete a template. */
+  async deleteRecurringTask(id: string): Promise<void> {
+    return this.requestVoid("DELETE", `${API_PREFIX}/recurring-tasks/${id}`);
   }
 }

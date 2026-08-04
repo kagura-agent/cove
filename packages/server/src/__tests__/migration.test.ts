@@ -11,10 +11,18 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 22", () => {
+  it("fresh DB gets user_version = 29 and recurring task schema", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(28);
+    expect(version).toBe(29);
+
+    const recurringColumns = db.prepare("PRAGMA table_info(recurring_tasks)").all() as Array<{ name: string }>;
+    expect(recurringColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      "id", "channel_id", "guild_id", "created_by", "title", "schedule_type",
+      "interval_ms", "enabled", "assignee_id", "heartbeat_interval_ms", "last_task_id", "last_spawned_at",
+    ]));
+    const taskColumns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>;
+    expect(taskColumns.map((column) => column.name)).toEqual(expect.arrayContaining(["recurring_id", "recurring_seq"]));
     db.close();
   });
 
@@ -108,7 +116,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(28);
+      expect(version).toBe(29);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -179,7 +187,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(28);
+      expect(version).toBe(29);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -205,7 +213,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(28);
+      expect(version).toBe(29);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -327,7 +335,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(28);
+      expect(version).toBe(29);
 
       db2.close();
     } finally {
@@ -399,7 +407,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(28);
+      expect(db.pragma("user_version", { simple: true })).toBe(29);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -577,7 +585,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(28);
+      expect(version).toBe(29);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -629,7 +637,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(28);
+      expect(db2.pragma("user_version", { simple: true })).toBe(29);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
