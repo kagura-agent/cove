@@ -6,7 +6,7 @@ import { useTaskStore } from "../stores/useTaskStore";
 import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { Typography, Button, Popconfirm, Table, Tag, Space, Input, InputNumber, Radio, Select, Modal, Switch } from "antd";
-import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined } from "@ant-design/icons";
+import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined, RetweetOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
@@ -290,15 +290,15 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       key: "title",
       ellipsis: true,
       width: 300,
-    },
-    {
-      title: "Series",
-      key: "series",
-      width: 100,
-      render: (_, task) => {
+      render: (title: string, task) => {
         const recurringTask = task.recurring_id ? recurringTasksById[task.recurring_id] : undefined;
         const seriesLabel = recurrenceSeriesLabel(task.recurring_seq, recurringTask);
-        return seriesLabel ? <Tag>{seriesLabel}</Tag> : "—";
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0 }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+            {seriesLabel && <Tag icon={<RetweetOutlined />} style={{ flexShrink: 0 }}>{seriesLabel}</Tag>}
+          </div>
+        );
       },
     },
     {
