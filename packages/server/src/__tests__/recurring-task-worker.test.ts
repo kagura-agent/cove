@@ -124,12 +124,46 @@ describe("RecurringTaskWorker", () => {
     expect(nextRunAt(recurring.id)).toBe(firstDue + day);
   });
 
-  it.each([
-    ["same_task", "done"],
-    ["same_task", "cancelled"],
-    ["new_task", "done"],
-    ["new_task", "cancelled"],
-  ] as const)("stops a %s recurrence when its prior occurrence is %s", async (occurrenceMode, status) => {
+  it("reassigns a completed same-task occurrence in its existing thread", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const day = 24 * 60 * 60 * 1_000;
+    const recurring = template(day, "same_task");
+    const firstDue = nextRunAt(recurring.id);
+    const first = createInitialOccurrence(recurring);
+    repos.tasks.update(first.task_id, { status: "done" });
+
+    vi.advanceTimersByTime(day);
+    (await worker()).tick();
+
+    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ enabled: true, next_run_at: firstDue + day });
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status: "open" });
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE"]);
+    expect(dispatcher.messages[0]).toMatchObject({ channel_id: first.thread_id, metadata: expect.stringContaining("task_assignment") });
+  });
+
+  it("creates a new task for a completed new-task occurrence", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const day = 24 * 60 * 60 * 1_000;
+    const recurring = template(day, "new_task");
+    const firstDue = nextRunAt(recurring.id);
+    const first = createInitialOccurrence(recurring);
+    repos.tasks.update(first.task_id, { status: "done" });
+
+    vi.advanceTimersByTime(day);
+    (await worker()).tick();
+
+    const tasks = repos.tasks.listByChannel(channelId);
+    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ enabled: true, next_run_at: firstDue + day, last_task_id: tasks[1].task_id });
+    expect(tasks).toHaveLength(2);
+    expect(tasks[1]).toMatchObject({ recurring_id: recurring.id, recurring_seq: 2, status: "open" });
+    expect(tasks[1].thread_id).not.toBe(first.thread_id);
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "THREAD_CREATE", "MESSAGE_CREATE", "TASK_CREATED"]);
+  });
+
+  it.each(["same_task", "new_task"] as const)("stops a %s recurrence when its prior occurrence is cancelled", async (occurrenceMode) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
     const day = 24 * 60 * 60 * 1_000;
@@ -138,14 +172,14 @@ describe("RecurringTaskWorker", () => {
     const taskCount = repos.tasks.listByChannel(channelId).length;
     const threadCount = (db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count;
     const messageCount = (db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number }).count;
-    repos.tasks.update(first.task_id, { status });
+    repos.tasks.update(first.task_id, { status: "cancelled" });
 
     vi.advanceTimersByTime(day);
     (await worker()).tick();
 
     expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ enabled: false, next_run_at: 0 });
     expect(repos.tasks.listByChannel(channelId)).toHaveLength(taskCount);
-    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status });
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status: "cancelled" });
     expect((db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count).toBe(threadCount);
     expect((db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number }).count).toBe(messageCount);
     expect(dispatcher.events).toEqual([]);

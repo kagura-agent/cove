@@ -63,7 +63,7 @@ export class RecurringTaskWorker {
           this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
           return null;
         }
-        if (previous.status === "done" || previous.status === "cancelled") {
+        if (previous.status === "cancelled") {
           this.repos.recurringTasks.update(latestTemplate.id, { enabled: false, next_run_at: 0 });
           return null;
         }
