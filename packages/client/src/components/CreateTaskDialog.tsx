@@ -12,6 +12,7 @@ interface Props {
 }
 
 type RepeatIntervalUnit = "minutes" | "hours" | "days" | "weeks";
+type RepeatSchedule = "never" | "hourly" | "daily" | "weekly" | "custom";
 
 const REPEAT_INTERVAL_MS: Record<RepeatIntervalUnit, number> = {
   minutes: 60_000,
@@ -27,8 +28,23 @@ export const REPEAT_INTERVAL_OPTIONS: Array<{ value: RepeatIntervalUnit; label: 
   { value: "weeks", label: "weeks" },
 ];
 
+export const REPEAT_SCHEDULE_OPTIONS: Array<{ value: RepeatSchedule; label: string }> = [
+  { value: "never", label: "Never" },
+  { value: "hourly", label: "Every hour" },
+  { value: "daily", label: "Every day" },
+  { value: "weekly", label: "Every week" },
+  { value: "custom", label: "Custom" },
+];
+
 export function repeatIntervalMs(value: number, unit: RepeatIntervalUnit): number {
   return value * REPEAT_INTERVAL_MS[unit];
+}
+
+export function repeatScheduleIntervalMs(schedule: RepeatSchedule, value: number, unit: RepeatIntervalUnit): number {
+  if (schedule === "hourly") return 3_600_000;
+  if (schedule === "daily") return 86_400_000;
+  if (schedule === "weekly") return 7 * 86_400_000;
+  return schedule === "custom" ? repeatIntervalMs(value, unit) : 0;
 }
 
 export function CreateTaskDialog({ channelId, open, onClose }: Props) {
@@ -37,7 +53,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
   const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
   const [heartbeatInterval, setHeartbeatInterval] = useState(600000); // default 10min
-  const [repeatSchedule, setRepeatSchedule] = useState<"never" | "daily" | "weekly" | "custom">("never");
+  const [repeatSchedule, setRepeatSchedule] = useState<RepeatSchedule>("never");
   const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("same_task");
   const [repeatIntervalValue, setRepeatIntervalValue] = useState(1);
   const [repeatIntervalUnit, setRepeatIntervalUnit] = useState<RepeatIntervalUnit>("days");
@@ -46,11 +62,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
 
-  const intervalMs = repeatSchedule === "daily"
-    ? 86_400_000
-    : repeatSchedule === "weekly"
-      ? 7 * 86_400_000
-      : repeatIntervalMs(repeatIntervalValue, repeatIntervalUnit);
+  const intervalMs = repeatScheduleIntervalMs(repeatSchedule, repeatIntervalValue, repeatIntervalUnit);
   const validRepeatInterval = Number.isFinite(intervalMs) && intervalMs > 0;
 
   async function handleCreate() {
@@ -145,12 +157,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
             value={repeatSchedule}
             onChange={setRepeatSchedule}
             style={{ width: "100%" }}
-            options={[
-              { value: "never", label: "Never" },
-              { value: "daily", label: "Every day" },
-              { value: "weekly", label: "Every week" },
-              { value: "custom", label: "Custom" },
-            ]}
+            options={REPEAT_SCHEDULE_OPTIONS}
           />
           {repeatSchedule === "custom" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
