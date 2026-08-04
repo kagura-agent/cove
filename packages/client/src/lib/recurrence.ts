@@ -75,7 +75,7 @@ export function recurrenceEditorSettingsFromTemplate(template: { enabled: boolea
   };
 }
 
-export function recurrenceUpdateFields(settings: {
+type RecurrenceEditorSaveSettings = {
   enabled: boolean;
   schedule: RepeatSchedule;
   intervalValue: number;
@@ -83,8 +83,10 @@ export function recurrenceUpdateFields(settings: {
   occurrenceMode: RecurrenceOccurrenceMode;
   storedIntervalMs: number;
   storedOccurrenceMode: RecurrenceOccurrenceMode;
-}): { enabled: boolean; interval_ms?: number; occurrence_mode?: RecurrenceOccurrenceMode } {
-  if (!settings.enabled || settings.schedule === "never") return { enabled: false };
+};
+
+export function recurrenceUpdateFields(settings: RecurrenceEditorSaveSettings): { enabled: boolean; interval_ms?: number; occurrence_mode?: RecurrenceOccurrenceMode } {
+  if (!settings.enabled) return { enabled: false };
 
   const intervalMs = repeatScheduleIntervalMs(settings.schedule, settings.intervalValue, settings.intervalUnit);
   return {
@@ -92,4 +94,11 @@ export function recurrenceUpdateFields(settings: {
     ...(intervalMs !== settings.storedIntervalMs ? { interval_ms: intervalMs } : {}),
     ...(settings.occurrenceMode !== settings.storedOccurrenceMode ? { occurrence_mode: settings.occurrenceMode } : {}),
   };
+}
+
+export function recurrenceSaveAction(settings: RecurrenceEditorSaveSettings):
+  | { type: "delete" }
+  | { type: "update"; fields: ReturnType<typeof recurrenceUpdateFields> } {
+  if (settings.schedule === "never") return { type: "delete" };
+  return { type: "update", fields: recurrenceUpdateFields(settings) };
 }

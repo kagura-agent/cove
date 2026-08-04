@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeRecurringTasks, recurrenceEditorSettingsFromTemplate, recurrenceScheduleFromInterval, recurrenceSeriesLabel, recurrenceUpdateFields, repeatScheduleIntervalMs } from "./recurrence";
+import { mergeRecurringTasks, recurrenceEditorSettingsFromTemplate, recurrenceSaveAction, recurrenceScheduleFromInterval, recurrenceSeriesLabel, recurrenceUpdateFields, repeatScheduleIntervalMs } from "./recurrence";
 
 describe("recurrence intervals", () => {
   it("converts quick and custom schedules to milliseconds", () => {
@@ -64,6 +64,22 @@ describe("recurrence intervals", () => {
       interval_ms: 2 * 86_400_000,
       occurrence_mode: "new_task",
     });
+  });
+
+  it("deletes recurrence configuration only when Never is selected", () => {
+    const settings = {
+      intervalValue: 1,
+      intervalUnit: "days" as const,
+      occurrenceMode: "new_task" as const,
+      storedIntervalMs: 86_400_000,
+      storedOccurrenceMode: "new_task" as const,
+    };
+
+    expect(recurrenceSaveAction({ ...settings, enabled: false, schedule: "daily" })).toEqual({
+      type: "update",
+      fields: { enabled: false },
+    });
+    expect(recurrenceSaveAction({ ...settings, enabled: false, schedule: "never" })).toEqual({ type: "delete" });
   });
 
   it("labels only new-task occurrences as a series", () => {

@@ -57,6 +57,17 @@ describe("recurring task API", () => {
     }));
   });
 
+  it("deletes recurrence configuration with a DELETE request", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ deleted: true }));
+
+    await expect(deleteRecurringTask("recurring-1")).resolves.toEqual({ deleted: true });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/v10/recurring-tasks/recurring-1", expect.objectContaining({
+      method: "DELETE",
+      credentials: "include",
+    }));
+  });
+
   it("loads and updates the associated recurring task settings", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse([template]))

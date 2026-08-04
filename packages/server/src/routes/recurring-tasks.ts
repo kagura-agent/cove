@@ -143,7 +143,10 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
         return c.json({ message: "Missing Permissions", code: 50013 }, 403);
       }
     }
-    repos.recurringTasks.delete(recurringTask.id);
+    repos.db.transaction(() => {
+      repos.tasks.clearRecurrenceAssociation(recurringTask.id);
+      repos.recurringTasks.delete(recurringTask.id);
+    })();
     return c.json({ deleted: true });
   });
 

@@ -24,8 +24,8 @@ import {
   REPEAT_SCHEDULE_OPTIONS,
   mergeRecurringTasks,
   recurrenceEditorSettingsFromTemplate,
+  recurrenceSaveAction,
   recurrenceSeriesLabel,
-  recurrenceUpdateFields,
   repeatScheduleIntervalMs,
   type RepeatIntervalUnit,
   type RepeatSchedule,
@@ -244,7 +244,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       });
       if (editingRecurringTask) {
         try {
-          const updatedRecurringTask = await api.updateRecurringTask(editingRecurringTask.id, recurrenceUpdateFields({
+          const recurrenceSave = recurrenceSaveAction({
             enabled: editRepeatEnabled,
             schedule: editRepeatSchedule,
             intervalValue: editRepeatIntervalValue,
@@ -252,10 +252,17 @@ function InlineTaskList({ channelId }: { channelId: string }) {
             occurrenceMode: editOccurrenceMode,
             storedIntervalMs: editingRecurringTask.interval_ms,
             storedOccurrenceMode: editingRecurringTask.occurrence_mode,
-          }));
-          setRecurringTasksById((previous) => mergeRecurringTasks(previous, [updatedRecurringTask]));
+          });
+          if (recurrenceSave.type === "delete") {
+            await api.deleteRecurringTask(editingRecurringTask.id);
+            setRecurringTasksById(({ [editingRecurringTask.id]: _, ...remaining }) => remaining);
+            await fetchTasks(channelId);
+          } else {
+            const updatedRecurringTask = await api.updateRecurringTask(editingRecurringTask.id, recurrenceSave.fields);
+            setRecurringTasksById((previous) => mergeRecurringTasks(previous, [updatedRecurringTask]));
+          }
         } catch (err) {
-          console.error("update recurring task:", err);
+          console.error("save recurring task:", err);
           setSaveError("Task saved, but recurrence settings could not be saved.");
           return;
         }
@@ -267,7 +274,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [editingTask, editingRecurringTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit, editOccurrenceMode, validEditRepeatInterval]);
+  }, [editingTask, editingRecurringTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit, editOccurrenceMode, validEditRepeatInterval, channelId, fetchTasks]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -416,12 +423,8 @@ function InlineTaskList({ channelId }: { channelId: string }) {
                 <Select
                   value={editRepeatSchedule}
                   onChange={(schedule) => {
-                    if (schedule === "never") {
-                      setEditRepeatEnabled(false);
-                      return;
-                    }
-                    setEditRepeatEnabled(true);
                     setEditRepeatSchedule(schedule);
+                    setEditRepeatEnabled(schedule !== "never");
                   }}
                   style={{ width: "100%" }}
                   options={REPEAT_SCHEDULE_OPTIONS}

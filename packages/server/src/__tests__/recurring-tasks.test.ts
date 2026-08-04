@@ -161,6 +161,45 @@ describe("recurring task templates API", () => {
     expect(await remove.json()).toEqual({ deleted: true });
   });
 
+  it("deletes a template and clears recurrence associations from every occurrence", async () => {
+    const created = await createTemplate();
+    const template = await created.json() as { id: string; last_task_id: string };
+    const firstOccurrence = repos.tasks.getById(template.last_task_id)!;
+    const secondCreate = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Follow-up occurrence", description: "Keep this description" }),
+    });
+    const secondOccurrence = await secondCreate.json() as { task_id: string; thread_id: string };
+    db.prepare("UPDATE tasks SET recurring_id = ?, recurring_seq = ? WHERE task_id = ?").run(template.id, 2, secondOccurrence.task_id);
+    repos.tasks.update(secondOccurrence.task_id, { status: "in_progress" });
+
+    const remove = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+
+    expect(remove.status).toBe(200);
+    expect(repos.recurringTasks.getById(template.id)).toBeNull();
+    expect(repos.tasks.getById(firstOccurrence.task_id)).toMatchObject({
+      task_id: firstOccurrence.task_id,
+      title: firstOccurrence.title,
+      status: firstOccurrence.status,
+      thread_id: firstOccurrence.thread_id,
+      recurring_id: null,
+      recurring_seq: 0,
+    });
+    expect(repos.tasks.getById(secondOccurrence.task_id)).toMatchObject({
+      task_id: secondOccurrence.task_id,
+      title: "Follow-up occurrence",
+      description: "Keep this description",
+      status: "in_progress",
+      thread_id: secondOccurrence.thread_id,
+      recurring_id: null,
+      recurring_seq: 0,
+    });
+  });
+
   it("does not create templates inside a task thread", async () => {
     const task = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
       method: "POST",

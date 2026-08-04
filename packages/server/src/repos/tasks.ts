@@ -117,6 +117,10 @@ export class TasksRepo {
     return (row?.max_seq ?? 0) + 1;
   }
 
+  clearRecurrenceAssociation(recurringId: string): void {
+    this.db.prepare("UPDATE tasks SET recurring_id = NULL, recurring_seq = 0, updated_at = ? WHERE recurring_id = ?").run(Date.now(), recurringId);
+  }
+
   delete(taskId: string): void {
     this.db.prepare("DELETE FROM tasks WHERE task_id = ?").run(taskId);
   }
