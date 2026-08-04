@@ -124,21 +124,31 @@ describe("RecurringTaskWorker", () => {
     expect(nextRunAt(recurring.id)).toBe(firstDue + day);
   });
 
-  it.each(["done", "cancelled"] as const)("reassigns a due same_task occurrence after it is %s", async (status) => {
+  it.each([
+    ["same_task", "done"],
+    ["same_task", "cancelled"],
+    ["new_task", "done"],
+    ["new_task", "cancelled"],
+  ] as const)("stops a %s recurrence when its prior occurrence is %s", async (occurrenceMode, status) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
     const day = 24 * 60 * 60 * 1_000;
-    const recurring = template(day, "same_task");
+    const recurring = template(day, occurrenceMode);
     const first = createInitialOccurrence(recurring);
+    const taskCount = repos.tasks.listByChannel(channelId).length;
+    const threadCount = (db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count;
+    const messageCount = (db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number }).count;
     repos.tasks.update(first.task_id, { status });
 
     vi.advanceTimersByTime(day);
     (await worker()).tick();
 
-    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
-    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status: "open" });
-    expect(dispatcher.messages).toHaveLength(1);
-    expect(dispatcher.messages[0]).toMatchObject({ channel_id: first.thread_id, metadata: expect.stringContaining("task_assignment") });
+    expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ enabled: false, next_run_at: 0 });
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(taskCount);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status });
+    expect((db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count).toBe(threadCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number }).count).toBe(messageCount);
+    expect(dispatcher.events).toEqual([]);
   });
 
   it.each(["open", "in_progress"] as const)("skips a due same_task occurrence while the prior task is %s", async (status) => {
@@ -166,7 +176,7 @@ describe("RecurringTaskWorker", () => {
     const recurring = template(everyTwoDays, "new_task");
     const firstDue = nextRunAt(recurring.id);
     const first = createInitialOccurrence(recurring);
-    repos.tasks.update(first.task_id, { status: "done" });
+    repos.tasks.update(first.task_id, { status: "in_review" });
 
     vi.advanceTimersByTime(7 * 24 * 60 * 60 * 1_000);
     (await worker()).tick();
@@ -179,7 +189,7 @@ describe("RecurringTaskWorker", () => {
     expect(nextRunAt(recurring.id)).toBe(firstDue + 3 * everyTwoDays);
   });
 
-  it("skips a due new_task occurrence while the prior occurrence remains open", async () => {
+  it.each(["open", "in_progress"] as const)("skips a due new_task occurrence while the prior occurrence is %s", async (status) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
     const day = 24 * 60 * 60 * 1_000;
@@ -187,13 +197,14 @@ describe("RecurringTaskWorker", () => {
     const firstDue = nextRunAt(recurring.id);
     const first = createInitialOccurrence(recurring);
     const threadCount = (db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count;
+    repos.tasks.update(first.task_id, { status });
 
     vi.advanceTimersByTime(day);
     (await worker()).tick();
 
     expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
     expect((db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count).toBe(threadCount);
-    expect(repos.tasks.getById(first.task_id)).toMatchObject({ status: "open" });
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ status });
     expect(nextRunAt(recurring.id)).toBe(firstDue + day);
     expect(dispatcher.events).toEqual([]);
   });
