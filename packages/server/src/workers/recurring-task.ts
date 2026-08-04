@@ -1,6 +1,6 @@
 import type { RecurringTask } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
-import { createTaskOccurrence } from "../services/task-occurrence.js";
+import { createTaskAssignmentMessage, createTaskOccurrence } from "../services/task-occurrence.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const TICK_MS = parseInt(process.env["RECURRING_TASK_TICK_MS"] ?? "30000", 10);
@@ -59,7 +59,7 @@ export class RecurringTaskWorker {
 
         const nextRunAt = this.nextCalendarRun(latestTemplate, now);
         const previous = latestTemplate.last_task_id ? this.repos.tasks.getById(latestTemplate.last_task_id) : null;
-        if (!previous || (previous.status !== "done" && previous.status !== "cancelled")) {
+        if (!previous || previous.status === "open" || previous.status === "in_progress") {
           this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
           return null;
         }
@@ -75,8 +75,14 @@ export class RecurringTaskWorker {
         if (latestTemplate.occurrence_mode === "same_task") {
           const task = this.repos.tasks.update(previous.task_id, { status: "open" });
           if (!task) return null;
+          const assignmentMessage = createTaskAssignmentMessage(this.repos, {
+            threadId: task.thread_id,
+            creator,
+            taskId: task.task_id,
+            title: task.title,
+          });
           this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt, last_spawned_at: now });
-          return { type: "reopen" as const, task };
+          return { type: "reassign" as const, assignmentMessage };
         }
 
         const recurringSeq = previous.recurring_seq + 1;
@@ -97,8 +103,8 @@ export class RecurringTaskWorker {
         return { type: "create" as const, occurrence };
       })();
       if (!result) return;
-      if (result.type === "reopen") {
-        this.dispatcher.taskUpdated(result.task);
+      if (result.type === "reassign") {
+        this.dispatcher.messageCreate(result.assignmentMessage);
         return;
       }
       this.dispatcher.messageCreate(result.occurrence.cardMessage);

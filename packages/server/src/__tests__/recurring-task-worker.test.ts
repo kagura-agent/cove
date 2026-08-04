@@ -8,12 +8,16 @@ import type { Channel, Message, RecurringTask, Task, User } from "@cove/shared";
 
 class RecordingDispatcher extends GatewayDispatcher {
   readonly events: string[] = [];
+  readonly messages: Message[] = [];
 
   constructor(repos: Repos) {
     super(repos.channels, repos.guilds);
   }
 
-  override messageCreate(_message: Message): void { this.events.push("MESSAGE_CREATE"); }
+  override messageCreate(message: Message): void {
+    this.events.push("MESSAGE_CREATE");
+    this.messages.push(message);
+  }
   override threadCreate(_thread: Channel): void { this.events.push("THREAD_CREATE"); }
   override taskCreated(_task: Task): void { this.events.push("TASK_CREATED"); }
   override taskUpdated(_task: Task): void { this.events.push("TASK_UPDATED"); }
@@ -88,22 +92,71 @@ describe("RecurringTaskWorker", () => {
     })();
   }
 
-  it("reopens a completed task at its calendar due time", async () => {
+  it("reassigns an in-review same-task occurrence in its existing thread", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
     const day = 24 * 60 * 60 * 1_000;
     const recurring = template(day, "same_task");
     const firstDue = nextRunAt(recurring.id);
     const first = createInitialOccurrence(recurring);
-    repos.tasks.update(first.task_id, { status: "done" });
+    const threadCount = (db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count;
+    const assignmentCount = (db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(first.thread_id) as { count: number }).count;
+    const initialAssignment = db.prepare("SELECT content FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(first.thread_id) as { content: string };
+    repos.tasks.update(first.task_id, { status: "in_review" });
 
     vi.advanceTimersByTime(day);
     (await worker()).tick();
 
     expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
     expect(repos.tasks.getById(first.task_id)).toMatchObject({ task_id: first.task_id, thread_id: first.thread_id, status: "open" });
+    expect((db.prepare("SELECT COUNT(*) AS count FROM channels WHERE parent_id = ?").get(channelId) as { count: number }).count).toBe(threadCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(first.thread_id) as { count: number }).count).toBe(assignmentCount + 1);
+    expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(first.thread_id)).toEqual({
+      content: initialAssignment.content,
+      metadata: JSON.stringify({ content_type: "task_assignment" }),
+    });
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE"]);
+    expect(dispatcher.messages[0]).toMatchObject({
+      channel_id: first.thread_id,
+      content: initialAssignment.content,
+      metadata: expect.stringContaining("task_assignment"),
+    });
     expect(nextRunAt(recurring.id)).toBe(firstDue + day);
-    expect(dispatcher.events).toEqual(["TASK_UPDATED"]);
+  });
+
+  it.each(["done", "cancelled"] as const)("reassigns a due same_task occurrence after it is %s", async (status) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const day = 24 * 60 * 60 * 1_000;
+    const recurring = template(day, "same_task");
+    const first = createInitialOccurrence(recurring);
+    repos.tasks.update(first.task_id, { status });
+
+    vi.advanceTimersByTime(day);
+    (await worker()).tick();
+
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status: "open" });
+    expect(dispatcher.messages).toHaveLength(1);
+    expect(dispatcher.messages[0]).toMatchObject({ channel_id: first.thread_id, metadata: expect.stringContaining("task_assignment") });
+  });
+
+  it.each(["open", "in_progress"] as const)("skips a due same_task occurrence while the prior task is %s", async (status) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const day = 24 * 60 * 60 * 1_000;
+    const recurring = template(day, "same_task");
+    const firstDue = nextRunAt(recurring.id);
+    const first = createInitialOccurrence(recurring);
+    repos.tasks.update(first.task_id, { status });
+
+    vi.advanceTimersByTime(day);
+    (await worker()).tick();
+
+    expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
+    expect(repos.tasks.getById(first.task_id)).toMatchObject({ status });
+    expect(dispatcher.events).toEqual([]);
+    expect(nextRunAt(recurring.id)).toBe(firstDue + day);
   });
 
   it("creates one task for a delayed due time and skips missed intervals", async () => {

@@ -18,6 +18,47 @@ export interface TaskOccurrence {
   task: Task;
 }
 
+export interface CreateTaskAssignmentInput {
+  threadId: string;
+  creator: User;
+  taskId: string;
+  title: string;
+}
+
+export function createTaskAssignmentMessage(repos: Repos, input: CreateTaskAssignmentInput): Message {
+  const assignmentNow = Date.now();
+  const assignmentId = generateSnowflake();
+  const assignmentContent = [
+    `This is a task assignment (task_id: ${input.taskId}).`,
+    `Title: ${input.title}`,
+    "工作属于这个 thread，就在这里做。",
+    `开工时用 cove_task 工具设 status 为 in_progress（action: \"update\", taskId: \"${input.taskId}\", status: \"in_progress\"）。`,
+    "完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。",
+    "不要用 curl 调 REST API，用 cove_task 工具。",
+  ].join("\n");
+  const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
+  repos.db.prepare(
+    "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(assignmentId, input.threadId, input.creator.id, input.creator.username, assignmentContent, assignmentNow, assignmentMetadata, null);
+  return {
+    id: assignmentId,
+    channel_id: input.threadId,
+    content: assignmentContent,
+    author: { id: "system", username: "System", bot: false, avatar: null, discriminator: "0", global_name: "System" },
+    timestamp: new Date(assignmentNow).toISOString(),
+    edited_timestamp: null,
+    type: 0,
+    attachments: [],
+    embeds: [],
+    mentions: [],
+    mention_roles: [],
+    pinned: false,
+    tts: false,
+    mention_everyone: false,
+    metadata: assignmentMetadata,
+  };
+}
+
 /**
  * Creates an ordinary task's durable records. Call this inside the caller's
  * transaction; callers dispatch the returned records only after it commits.
@@ -70,37 +111,12 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
     recurring_seq: input.recurring?.seq ?? 0,
   });
 
-  const assignmentNow = Date.now();
-  const assignmentId = generateSnowflake();
-  const assignmentContent = [
-    `This is a task assignment (task_id: ${taskId}).`,
-    `Title: ${title}`,
-    "工作属于这个 thread，就在这里做。",
-    `开工时用 cove_task 工具设 status 为 in_progress（action: \"update\", taskId: \"${taskId}\", status: \"in_progress\"）。`,
-    "完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。",
-    "不要用 curl 调 REST API，用 cove_task 工具。",
-  ].join("\n");
-  const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
-  repos.db.prepare(
-    "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(assignmentId, thread.id, creator.id, creator.username, assignmentContent, assignmentNow, assignmentMetadata, null);
-  const assignmentMessage: Message = {
-    id: assignmentId,
-    channel_id: thread.id,
-    content: assignmentContent,
-    author: { id: "system", username: "System", bot: false, avatar: null, discriminator: "0", global_name: "System" },
-    timestamp: new Date(assignmentNow).toISOString(),
-    edited_timestamp: null,
-    type: 0,
-    attachments: [],
-    embeds: [],
-    mentions: [],
-    mention_roles: [],
-    pinned: false,
-    tts: false,
-    mention_everyone: false,
-    metadata: assignmentMetadata,
-  };
+  const assignmentMessage = createTaskAssignmentMessage(repos, {
+    threadId: thread.id,
+    creator,
+    taskId,
+    title,
+  });
 
   const heartbeatIntervalMs = input.heartbeatIntervalMs && input.heartbeatIntervalMs > 0 ? input.heartbeatIntervalMs : 300_000;
   const heartbeatLastAt = Date.now();
