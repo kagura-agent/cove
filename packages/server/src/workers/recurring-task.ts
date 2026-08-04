@@ -37,36 +37,49 @@ export class RecurringTaskWorker {
     }
   }
 
+  private isCalendarSchedule(template: RecurringTask): boolean {
+    return template.interval_ms > 0 && template.next_run_at > 0;
+  }
+
+  private nextCalendarRun(template: RecurringTask, now: number): number {
+    const elapsedIntervals = Math.floor((now - template.next_run_at) / template.interval_ms) + 1;
+    return template.next_run_at + elapsedIntervals * template.interval_ms;
+  }
+
   private shouldSpawn(template: RecurringTask, now: number): boolean {
-    if (!template.last_task_id) return true;
-    const lastTask = this.repos.tasks.getById(template.last_task_id);
-    if (!lastTask || (lastTask.status !== "done" && lastTask.status !== "cancelled")) return false;
-    if (template.schedule_type === "on_complete") return true;
-    return lastTask.updated_at + template.interval_ms <= now;
+    return this.isCalendarSchedule(template) && template.next_run_at <= now;
   }
 
   private spawnTask(template: RecurringTask): void {
-    const channel = this.repos.channels.getById(template.channel_id);
-    const creator = this.repos.users.getById(template.created_by);
-    if (!channel || !creator || !this.repos.members.exists(channel.guild_id, creator.id)) {
-      console.error(`Recurring task ${template.id} cannot spawn because its channel or creator is unavailable`);
-      return;
-    }
-
     try {
       const result = this.repos.db.transaction(() => {
         const latestTemplate = this.repos.recurringTasks.getById(template.id);
-        if (!latestTemplate || !latestTemplate.enabled || !this.shouldSpawn(latestTemplate, Date.now())) return null;
+        const now = Date.now();
+        if (!latestTemplate || !latestTemplate.enabled || !this.shouldSpawn(latestTemplate, now)) return null;
 
+        const nextRunAt = this.nextCalendarRun(latestTemplate, now);
         const previous = latestTemplate.last_task_id ? this.repos.tasks.getById(latestTemplate.last_task_id) : null;
-        if (latestTemplate.occurrence_mode === "same_task" && previous) {
+        if (!previous || (previous.status !== "done" && previous.status !== "cancelled")) {
+          this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          return null;
+        }
+
+        const channel = this.repos.channels.getById(latestTemplate.channel_id);
+        const creator = this.repos.users.getById(latestTemplate.created_by);
+        if (!channel || !creator || !this.repos.members.exists(channel.guild_id, creator.id)) {
+          this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          console.error(`Recurring task ${latestTemplate.id} cannot spawn because its channel or creator is unavailable`);
+          return null;
+        }
+
+        if (latestTemplate.occurrence_mode === "same_task") {
           const task = this.repos.tasks.update(previous.task_id, { status: "open" });
           if (!task) return null;
-          this.repos.recurringTasks.update(latestTemplate.id, { last_spawned_at: Date.now() });
+          this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt, last_spawned_at: now });
           return { type: "reopen" as const, task };
         }
 
-        const recurringSeq = previous ? previous.recurring_seq + 1 : 1;
+        const recurringSeq = previous.recurring_seq + 1;
         const occurrence = createTaskOccurrence(this.repos, {
           channel,
           creator,
@@ -77,8 +90,9 @@ export class RecurringTaskWorker {
           recurring: { id: latestTemplate.id, seq: recurringSeq },
         });
         this.repos.recurringTasks.update(latestTemplate.id, {
+          next_run_at: nextRunAt,
           last_task_id: occurrence.task.task_id,
-          last_spawned_at: Date.now(),
+          last_spawned_at: now,
         });
         return { type: "create" as const, occurrence };
       })();

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import { API_PREFIX, type Channel } from "@cove/shared";
 import { createApp } from "../app.js";
@@ -30,6 +30,7 @@ describe("recurring task templates API", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     delete process.env.RATE_LIMIT_ENABLED;
     db.close();
   });
@@ -45,15 +46,17 @@ describe("recurring task templates API", () => {
       headers: headers(),
       body: JSON.stringify({
         title: "  Daily standup  ",
-        schedule_type: "interval",
         interval_ms: 60_000,
         ...body,
       }),
     });
   }
 
-  it("creates a trimmed interval template with its initial ordinary task occurrence", async () => {
-    const create = await createTemplate({ heartbeat_interval_ms: 15_000, occurrence_mode: "same_task" });
+  it("creates an immediate calendar template with the first due time after its interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+
+    const create = await createTemplate({ heartbeat_interval_ms: 15_000 });
     expect(create.status).toBe(201);
     const template = await create.json() as Record<string, unknown>;
     expect(template).toMatchObject({
@@ -61,9 +64,9 @@ describe("recurring task templates API", () => {
       guild_id: guildId,
       created_by: "owner",
       title: "Daily standup",
-      schedule_type: "interval",
       interval_ms: 60_000,
       occurrence_mode: "same_task",
+      next_run_at: new Date("2026-08-04T12:01:00.000Z").getTime(),
       enabled: true,
       last_task_id: expect.any(String),
     });
@@ -81,11 +84,11 @@ describe("recurring task templates API", () => {
     expect(await list.json()).toEqual([template]);
   });
 
-  it("rejects blank titles, invalid schedules, and interval schedules without a positive interval", async () => {
+  it("rejects missing or non-positive calendar intervals and invalid occurrence modes", async () => {
     for (const body of [
       { title: "   " },
-      { schedule_type: "cron", interval_ms: 60_000 },
-      { schedule_type: "interval", interval_ms: 0 },
+      { interval_ms: undefined },
+      { interval_ms: 0 },
       { occurrence_mode: "replace_task" },
     ]) {
       const response = await createTemplate(body);
@@ -100,10 +103,10 @@ describe("recurring task templates API", () => {
     const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify({ title: "  Follow up  ", schedule_type: "on_complete", occurrence_mode: "same_task", enabled: false }),
+      body: JSON.stringify({ title: "  Follow up  ", interval_ms: 120_000, occurrence_mode: "new_task", enabled: false }),
     });
     expect(update.status).toBe(200);
-    expect(await update.json()).toMatchObject({ title: "Follow up", schedule_type: "on_complete", occurrence_mode: "same_task", enabled: false });
+    expect(await update.json()).toMatchObject({ title: "Follow up", interval_ms: 120_000, occurrence_mode: "new_task", enabled: false });
 
     const now = Date.now();
     db.prepare("INSERT INTO users (id, username, avatar, bot, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -138,7 +141,7 @@ describe("recurring task templates API", () => {
     const response = await app.request(`${API_PREFIX}/channels/${threadId}/recurring-tasks`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ title: "Nested", schedule_type: "on_complete" }),
+      body: JSON.stringify({ title: "Nested", interval_ms: 60_000 }),
     });
     expect(response.status).toBe(400);
   });

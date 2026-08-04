@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { RecurringScheduleType, RecurringTask, Role, Task, Webhook } from "@cove/shared";
+import type { RecurringTask, Role, Task, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -336,8 +336,7 @@ export interface CreateRecurringTaskFields {
   title: string;
   description?: string;
   assignee_id?: string;
-  schedule_type: RecurringScheduleType;
-  interval_ms?: number;
+  interval_ms: number;
   occurrence_mode: RecurringTaskOccurrenceMode;
   heartbeat_interval_ms?: number;
 }

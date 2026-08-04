@@ -1,11 +1,3 @@
-/**
- * Cove Task tool — standalone agent tool for task operations.
- *
- * Registered via registerFull hook, NOT as a message action.
- * Host message action vocabulary is closed; custom actions get rejected.
- * This tool owns its own JSON Schema and routes through the plugin's REST client.
- */
-
 import { Type } from "typebox";
 import { resolveAccount, getRestClient } from "./channel.js";
 
@@ -23,8 +15,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       channelId: Type.Optional(Type.String({ description: "Channel ID (required for create, list, recurring_create, recurring_list)" })),
       taskId: Type.Optional(Type.String({ description: "Task ID (required for get, update)" })),
       recurringTaskId: Type.Optional(Type.String({ description: "Recurring task template ID (required for recurring_get, recurring_update, recurring_delete)" })),
-      scheduleType: Type.Optional(Type.String({ description: "Recurring schedule type: interval or on_complete" })),
-      intervalMs: Type.Optional(Type.Number({ description: "Recurring interval in ms (required for interval schedules)" })),
+      intervalMs: Type.Optional(Type.Number({ description: "Recurring calendar interval in ms (required for recurring_create)" })),
       occurrenceMode: Type.Optional(Type.String({ description: "Recurring occurrence mode: same_task or new_task" })),
       enabled: Type.Optional(Type.Boolean({ description: "Whether a recurring template is enabled" })),
       title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
@@ -42,7 +33,6 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       const assigneeId = rawParams.assigneeId as string | undefined;
       const status = rawParams.status as string | undefined;
       const description = rawParams.description as string | undefined;
-      const scheduleType = rawParams.scheduleType as "interval" | "on_complete" | undefined;
       const intervalMs = rawParams.intervalMs as number | undefined;
       const occurrenceMode = rawParams.occurrenceMode as "same_task" | "new_task" | undefined;
       const enabled = rawParams.enabled as boolean | undefined;
@@ -92,14 +82,12 @@ export function createCoveTaskTool(opts: { cfg: any }) {
         case "recurring_create": {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for recurring_create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for recurring_create" });
-          if (scheduleType !== "interval" && scheduleType !== "on_complete") return jsonResult({ ok: false, error: "scheduleType must be interval or on_complete for recurring_create" });
+          if (!intervalMs || intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive for recurring_create" });
           if (occurrenceMode !== undefined && occurrenceMode !== "same_task" && occurrenceMode !== "new_task") return jsonResult({ ok: false, error: "occurrenceMode must be same_task or new_task for recurring_create" });
-          if (scheduleType === "interval" && (!intervalMs || intervalMs <= 0)) return jsonResult({ ok: false, error: "intervalMs must be positive for interval schedules" });
           const recurringTask = await client.createRecurringTask(channelId, {
             title,
             description,
             assignee_id: assigneeId,
-            schedule_type: scheduleType,
             interval_ms: intervalMs,
             occurrence_mode: occurrenceMode,
             heartbeat_interval_ms: heartbeatIntervalMs,
@@ -118,14 +106,12 @@ export function createCoveTaskTool(opts: { cfg: any }) {
         }
         case "recurring_update": {
           if (!recurringTaskId) return jsonResult({ ok: false, error: "recurringTaskId is required for recurring_update" });
-          if (scheduleType !== undefined && scheduleType !== "interval" && scheduleType !== "on_complete") return jsonResult({ ok: false, error: "scheduleType must be interval or on_complete" });
           if (occurrenceMode !== undefined && occurrenceMode !== "same_task" && occurrenceMode !== "new_task") return jsonResult({ ok: false, error: "occurrenceMode must be same_task or new_task" });
           if (intervalMs !== undefined && intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive" });
           const fields: Record<string, unknown> = {};
           if (title !== undefined) fields.title = title;
           if (description !== undefined) fields.description = description;
           if (assigneeId !== undefined) fields.assignee_id = assigneeId;
-          if (scheduleType !== undefined) fields.schedule_type = scheduleType;
           if (intervalMs !== undefined) fields.interval_ms = intervalMs;
           if (occurrenceMode !== undefined) fields.occurrence_mode = occurrenceMode;
           if (enabled !== undefined) fields.enabled = enabled;

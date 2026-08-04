@@ -5,21 +5,15 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { createTaskOccurrence } from "../services/task-occurrence.js";
 import { parseJsonBody, validateFiniteNumber, validateString, validationError } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { PermissionBits, type RecurringScheduleType, type RecurringTaskOccurrenceMode } from "@cove/shared";
+import { PermissionBits, type RecurringTaskOccurrenceMode } from "@cove/shared";
 
-const VALID_SCHEDULE_TYPES = new Set<RecurringScheduleType>(["interval", "on_complete"]);
 const VALID_OCCURRENCE_MODES = new Set<RecurringTaskOccurrenceMode>(["same_task", "new_task"]);
 
-function validateSchedule(scheduleType: unknown, intervalMs: unknown): string | null {
-  if (typeof scheduleType !== "string" || !VALID_SCHEDULE_TYPES.has(scheduleType as RecurringScheduleType)) {
-    return "schedule_type must be one of: interval, on_complete";
-  }
-  if (scheduleType === "interval") {
-    const numberError = validateFiniteNumber(intervalMs, "interval_ms");
-    if (numberError) return numberError;
-    if (typeof intervalMs !== "number" || intervalMs <= 0) {
-      return "interval_ms must be a positive number for interval schedule type";
-    }
+function validateInterval(intervalMs: unknown): string | null {
+  const numberError = validateFiniteNumber(intervalMs, "interval_ms");
+  if (numberError) return numberError;
+  if (typeof intervalMs !== "number" || intervalMs <= 0) {
+    return "interval_ms must be a positive number";
   }
   return null;
 }
@@ -40,13 +34,13 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
     const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
     if (channel.type === 11) return c.json({ message: "Cannot create recurring tasks inside a thread", code: 50035 }, 400);
 
-    const body = await parseJsonBody<{ title: string; description?: string; assignee_id?: string; schedule_type: unknown; interval_ms?: unknown; occurrence_mode?: unknown; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<{ title: string; description?: string; assignee_id?: string; interval_ms?: unknown; occurrence_mode?: unknown; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
     const titleError = validateString(body.title, "title", { required: true, maxLength: 200 });
     if (titleError) return validationError(c, titleError);
-    const scheduleError = validateSchedule(body.schedule_type, body.interval_ms);
-    if (scheduleError) return validationError(c, scheduleError);
-    const occurrenceMode = body.occurrence_mode ?? "new_task";
+    const intervalError = validateInterval(body.interval_ms);
+    if (intervalError) return validationError(c, intervalError);
+    const occurrenceMode = body.occurrence_mode ?? "same_task";
     const occurrenceModeError = validateOccurrenceMode(occurrenceMode);
     if (occurrenceModeError) return validationError(c, occurrenceModeError);
     const assigneeId = body.assignee_id ?? null;
@@ -60,8 +54,7 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
         description: body.description,
         assignee_id: assigneeId,
         created_by: user.id,
-        schedule_type: body.schedule_type as RecurringScheduleType,
-        interval_ms: body.interval_ms as number | undefined,
+        interval_ms: body.interval_ms as number,
         occurrence_mode: occurrenceMode as RecurringTaskOccurrenceMode,
         heartbeat_interval_ms: body.heartbeat_interval_ms,
       });
@@ -108,17 +101,15 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
     const user = c.get("botUser");
     await requireChannelPermission(repos, recurringTask.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
-    const body = await parseJsonBody<{ title?: unknown; description?: string; assignee_id?: string | null; schedule_type?: unknown; interval_ms?: unknown; occurrence_mode?: unknown; enabled?: boolean; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<{ title?: unknown; description?: string; assignee_id?: string | null; interval_ms?: unknown; occurrence_mode?: unknown; enabled?: boolean; heartbeat_interval_ms?: number }>(c);
     if (!body) return validationError(c, "Invalid JSON");
     if (body.title !== undefined) {
       const titleError = validateString(body.title, "title", { required: true, maxLength: 200 });
       if (titleError) return validationError(c, titleError);
     }
-    const scheduleType = body.schedule_type ?? recurringTask.schedule_type;
-    const intervalMs = body.interval_ms ?? recurringTask.interval_ms;
-    if (body.schedule_type !== undefined || body.interval_ms !== undefined) {
-      const scheduleError = validateSchedule(scheduleType, intervalMs);
-      if (scheduleError) return validationError(c, scheduleError);
+    if (body.interval_ms !== undefined) {
+      const intervalError = validateInterval(body.interval_ms);
+      if (intervalError) return validationError(c, intervalError);
     }
     if (body.occurrence_mode !== undefined) {
       const occurrenceModeError = validateOccurrenceMode(body.occurrence_mode);
@@ -132,7 +123,6 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
       title: typeof body.title === "string" ? body.title.trim() : undefined,
       description: body.description,
       assignee_id: body.assignee_id,
-      schedule_type: body.schedule_type as RecurringScheduleType | undefined,
       interval_ms: body.interval_ms as number | undefined,
       occurrence_mode: body.occurrence_mode as RecurringTaskOccurrenceMode | undefined,
       enabled: body.enabled,

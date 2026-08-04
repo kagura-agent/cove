@@ -17,8 +17,9 @@ const template = {
   description: "",
   assignee_id: null,
   created_by: "user-1",
-  schedule_type: "interval" as const,
   interval_ms: 3_600_000,
+  occurrence_mode: "same_task" as const,
+  next_run_at: 3_600_000,
   enabled: true,
   last_task_id: null,
   last_spawned_at: 0,
@@ -37,12 +38,11 @@ describe("recurring task API", () => {
     fetchMock.mockResolvedValue(jsonResponse(template));
   });
 
-  it("creates a recurring task with its schedule and occurrence mode", async () => {
+  it("creates a calendar recurring task with its interval and same-task occurrence mode", async () => {
     await createRecurringTask("channel-1", {
       title: "Review inbox",
-      schedule_type: "interval",
       interval_ms: 3_600_000,
-      occurrence_mode: "new_task",
+      occurrence_mode: "same_task",
     });
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v10/channels/channel-1/recurring-tasks", expect.objectContaining({
@@ -50,9 +50,8 @@ describe("recurring task API", () => {
       credentials: "include",
       body: JSON.stringify({
         title: "Review inbox",
-        schedule_type: "interval",
         interval_ms: 3_600_000,
-        occurrence_mode: "new_task",
+        occurrence_mode: "same_task",
       }),
     }));
   });

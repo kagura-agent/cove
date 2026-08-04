@@ -17,20 +17,24 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
   const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
   const [heartbeatInterval, setHeartbeatInterval] = useState(600000); // default 10min
-  const [repeatSchedule, setRepeatSchedule] = useState<"never" | "on_complete" | "interval">("never");
-  const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("new_task");
+  const [repeatSchedule, setRepeatSchedule] = useState<"never" | "daily" | "weekly" | "custom">("never");
+  const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("same_task");
   const [repeatIntervalValue, setRepeatIntervalValue] = useState(1);
-  const [repeatIntervalUnit, setRepeatIntervalUnit] = useState<"minutes" | "hours" | "days">("days");
+  const [repeatIntervalUnit, setRepeatIntervalUnit] = useState<"days" | "weeks">("days");
   const [submitting, setSubmitting] = useState(false);
   const { guildId } = useActiveIds();
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
 
-  const repeatIntervalMs = repeatIntervalValue * ({ minutes: 60_000, hours: 3_600_000, days: 86_400_000 }[repeatIntervalUnit]);
+  const repeatIntervalMs = repeatSchedule === "daily"
+    ? 86_400_000
+    : repeatSchedule === "weekly"
+      ? 7 * 86_400_000
+      : repeatIntervalValue * ({ days: 86_400_000, weeks: 7 * 86_400_000 }[repeatIntervalUnit]);
   const validRepeatInterval = Number.isFinite(repeatIntervalMs) && repeatIntervalMs > 0;
 
   async function handleCreate() {
-    if (!title.trim() || (repeatSchedule === "interval" && !validRepeatInterval)) return;
+    if (!title.trim() || (repeatSchedule === "custom" && !validRepeatInterval)) return;
     setSubmitting(true);
     try {
       const heartbeatIntervalMs = heartbeatEnabled ? heartbeatInterval : undefined;
@@ -41,8 +45,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
           title: title.trim(),
           ...(assigneeId ? { assignee_id: assigneeId } : {}),
           ...(description.trim() ? { description: description.trim() } : {}),
-          schedule_type: repeatSchedule,
-          ...(repeatSchedule === "interval" ? { interval_ms: repeatIntervalMs } : {}),
+          interval_ms: repeatIntervalMs,
           occurrence_mode: occurrenceMode,
           ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
         });
@@ -53,7 +56,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       setHeartbeatEnabled(false);
       setHeartbeatInterval(600000);
       setRepeatSchedule("never");
-      setOccurrenceMode("new_task");
+      setOccurrenceMode("same_task");
       setRepeatIntervalValue(1);
       setRepeatIntervalUnit("days");
       onClose();
@@ -71,7 +74,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       onCancel={onClose}
       onOk={handleCreate}
       okText="Create"
-      okButtonProps={{ disabled: !title.trim() || (repeatSchedule === "interval" && !validRepeatInterval), loading: submitting }}
+      okButtonProps={{ disabled: !title.trim() || (repeatSchedule === "custom" && !validRepeatInterval), loading: submitting }}
       destroyOnClose
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md, 12px)" }}>
@@ -124,26 +127,27 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
             style={{ width: "100%" }}
             options={[
               { value: "never", label: "Never" },
-              { value: "on_complete", label: "After completion" },
-              { value: "interval", label: "After a delay" },
+              { value: "daily", label: "Every day" },
+              { value: "weekly", label: "Every week" },
+              { value: "custom", label: "Custom" },
             ]}
           />
-          {repeatSchedule === "interval" && (
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          {repeatSchedule === "custom" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <span>Every</span>
               <InputNumber min={1} value={repeatIntervalValue} onChange={(value) => setRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
               <Select
                 value={repeatIntervalUnit}
                 onChange={setRepeatIntervalUnit}
                 style={{ width: 120 }}
                 options={[
-                  { value: "minutes", label: "minutes" },
-                  { value: "hours", label: "hours" },
                   { value: "days", label: "days" },
+                  { value: "weeks", label: "weeks" },
                 ]}
               />
             </div>
           )}
-          {repeatSchedule === "interval" && !validRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive duration.</div>}
+          {repeatSchedule === "custom" && !validRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}
         </div>
         {repeatSchedule !== "never" && (
           <div>
@@ -155,12 +159,12 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
               onChange={setOccurrenceMode}
               style={{ width: "100%" }}
               options={[
-                { value: "same_task", label: "Reopen this task" },
-                { value: "new_task", label: "Create a new task" },
+                { value: "same_task", label: "In this task" },
+                { value: "new_task", label: "New task" },
               ]}
             />
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-              Reopen keeps the same task and conversation. Create a new task makes a separate task and conversation.
+              In this task reopens the current task and conversation. New task creates a separate task and conversation.
             </div>
           </div>
         )}

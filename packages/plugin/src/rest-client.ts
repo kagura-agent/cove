@@ -257,7 +257,7 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:channelId/recurring-tasks — create a template. */
-  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; schedule_type: "interval" | "on_complete"; interval_ms?: number; occurrence_mode?: RecurringTaskOccurrenceMode; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; interval_ms: number; occurrence_mode?: RecurringTaskOccurrenceMode; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
     return this.request("POST", `${API_PREFIX}/channels/${channelId}/recurring-tasks`, fields);
   }
 
@@ -272,7 +272,7 @@ export class CoveRestClient {
   }
 
   /** PATCH /api/v10/recurring-tasks/:id — update a template. */
-  async updateRecurringTask(id: string, fields: { title?: string; description?: string; assignee_id?: string | null; schedule_type?: "interval" | "on_complete"; interval_ms?: number; occurrence_mode?: RecurringTaskOccurrenceMode; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+  async updateRecurringTask(id: string, fields: { title?: string; description?: string; assignee_id?: string | null; interval_ms?: number; occurrence_mode?: RecurringTaskOccurrenceMode; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
     return this.request("PATCH", `${API_PREFIX}/recurring-tasks/${id}`, fields);
   }
 
