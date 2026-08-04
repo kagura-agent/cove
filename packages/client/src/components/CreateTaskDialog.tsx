@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Modal, Input, InputNumber, Select, Switch } from "antd";
+import { Modal, Input, InputNumber, Radio, Select, Switch } from "antd";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useMemberStore } from "../stores/useMemberStore";
 import * as api from "../lib/api";
@@ -178,15 +178,10 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
             <label style={{ fontSize: "var(--font-size-sm, 13px)", fontWeight: 500, marginBottom: 4, display: "block" }}>
               Next occurrence
             </label>
-            <Select
-              value={occurrenceMode}
-              onChange={setOccurrenceMode}
-              style={{ width: "100%" }}
-              options={[
-                { value: "same_task", label: "In this task" },
-                { value: "new_task", label: "New task" },
-              ]}
-            />
+            <Radio.Group value={occurrenceMode} onChange={(event) => setOccurrenceMode(event.target.value)}>
+              <Radio value="same_task">In this task</Radio>
+              <Radio value="new_task">New task</Radio>
+            </Radio.Group>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
               In this task reopens the current task and conversation. New task creates a separate task and conversation.
             </div>
