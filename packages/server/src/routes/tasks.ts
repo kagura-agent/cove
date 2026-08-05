@@ -13,7 +13,7 @@ import {
   type UpdateTaskFields,
   type UpdateTaskRecurrence,
 } from "@cove/shared";
-import { createTaskOccurrence } from "../services/task-occurrence.js";
+import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
 import { createRecurringTaskOccurrence, validateTaskRecurrence } from "../services/task-recurrence.js";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
@@ -76,7 +76,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     dispatcher?.messageCreate(result.cardMessage);
     dispatcher?.threadCreate(result.thread);
-    dispatcher?.messageCreate(result.assignmentMessage);
+    if (result.assignmentMessage) dispatcher?.messageCreate(result.assignmentMessage);
     dispatcher?.taskCreated(result.task);
 
     return c.json(result.task, 201);
@@ -151,36 +151,67 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return validationError(c, "recurrence must be updated through its root task");
     }
 
+    const assigneeChanged = body.assignee_id !== undefined && body.assignee_id !== task.assignee_id;
+    const assigneeId = body.assignee_id === undefined ? task.assignee_id : body.assignee_id;
+    const heartbeatFields: { heartbeat_interval_ms?: number; heartbeat_last_at?: number } = assigneeId === null
+      ? task.heartbeat_interval_ms === 0 && task.heartbeat_last_at === 0
+        ? {}
+        : { heartbeat_interval_ms: 0, heartbeat_last_at: 0 }
+      : assigneeChanged
+        ? {
+            heartbeat_interval_ms: body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0
+              ? body.heartbeat_interval_ms
+              : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS,
+            heartbeat_last_at: Date.now(),
+          }
+        : body.heartbeat_interval_ms !== undefined
+          ? { heartbeat_interval_ms: body.heartbeat_interval_ms }
+          : {};
     const taskFields = {
       status: body.status,
       assignee_id: body.assignee_id,
       title: body.title?.trim(),
       description: body.description,
-      heartbeat_interval_ms: body.heartbeat_interval_ms,
+      ...heartbeatFields,
     };
     const templateFields = {
       ...(body.title !== undefined ? { title: body.title.trim() } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.assignee_id !== undefined ? { assignee_id: body.assignee_id } : {}),
-      ...(body.heartbeat_interval_ms !== undefined ? { heartbeat_interval_ms: body.heartbeat_interval_ms } : {}),
+      ...(heartbeatFields.heartbeat_interval_ms !== undefined ? { heartbeat_interval_ms: heartbeatFields.heartbeat_interval_ms } : {}),
     };
 
     const result = repos.db.transaction(() => {
       const updatedTask = repos.tasks.update(taskId, taskFields)!;
+      let assignmentMessage: ReturnType<typeof createTaskAssignmentMessage> | undefined;
+      if (assigneeChanged && updatedTask.assignee_id) {
+        const channel = repos.channels.getById(updatedTask.channel_id);
+        const creator = repos.users.getById(updatedTask.created_by);
+        if (channel && creator) {
+          repos.threads.addMember(updatedTask.thread_id, updatedTask.assignee_id);
+          assignmentMessage = createTaskAssignmentMessage(repos, {
+            threadId: updatedTask.thread_id,
+            creator,
+            taskId: updatedTask.task_id,
+            title: updatedTask.title,
+            assigneeId: updatedTask.assignee_id,
+          });
+        }
+      }
       const linkedRecurrence = task.recurrence;
 
       if (!hasRecurrence) {
         if (linkedRecurrence && linkedRecurrence.root_task_id === taskId) repos.recurringTasks.update(linkedRecurrence.id, templateFields);
-        return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!] };
+        return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!], assignmentMessage };
       }
 
       if (recurrence === null) {
-        if (!linkedRecurrence) return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!] };
+        if (!linkedRecurrence) return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!], assignmentMessage };
         const affectedTaskIds = repos.tasks.listByRecurringId(linkedRecurrence.id).map((occurrence) => occurrence.task_id);
         repos.tasks.clearRecurrenceAssociation(linkedRecurrence.id);
         repos.recurringTasks.delete(linkedRecurrence.id);
         const affected = affectedTaskIds.map((occurrenceId) => repos.tasks.getById(occurrenceId)!).filter(Boolean);
-        return { task: repos.tasks.getById(taskId)!, affected };
+        return { task: repos.tasks.getById(taskId)!, affected, assignmentMessage };
       }
 
       const recurrenceFields = recurrence as UpdateTaskRecurrence;
@@ -208,9 +239,10 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         recurrenceId = template.id;
       }
       const affected = repos.tasks.listByRecurringId(recurrenceId);
-      return { task: repos.tasks.getById(taskId)!, affected };
+      return { task: repos.tasks.getById(taskId)!, affected, assignmentMessage };
     })();
 
+    if (result.assignmentMessage) dispatcher?.messageCreate(result.assignmentMessage);
     for (const affectedTask of result.affected) dispatcher?.taskUpdated(affectedTask);
     return c.json(result.task);
   });

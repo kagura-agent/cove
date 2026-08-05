@@ -40,6 +40,10 @@ describe("RecurringTaskWorker", () => {
       .run("creator", "Creator", null, 1, now, now);
     db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
       .run(guildId, "creator", null, "[]", now);
+    db.prepare("INSERT INTO users (id, username, avatar, bot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("assignee", "Assignee", null, 1, now, now);
+    db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+      .run(guildId, "assignee", null, "[]", now);
     repos = createRepos(db);
     dispatcher = new RecordingDispatcher(repos);
   });
@@ -61,6 +65,7 @@ describe("RecurringTaskWorker", () => {
       channel_id: channelId,
       title: "Recurring report",
       created_by: "creator",
+      assignee_id: "assignee",
       interval_ms: intervalMs,
       occurrence_mode: occurrenceMode,
       heartbeat_interval_ms: 20_000,
@@ -113,7 +118,7 @@ describe("RecurringTaskWorker", () => {
     expect((db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(first.thread_id) as { count: number }).count).toBe(assignmentCount + 1);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(first.thread_id)).toEqual({
       content: initialAssignment.content,
-      metadata: JSON.stringify({ content_type: "task_assignment" }),
+      metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee" }),
     });
     expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "TASK_UPDATED"]);
     expect(dispatcher.messages[0]).toMatchObject({

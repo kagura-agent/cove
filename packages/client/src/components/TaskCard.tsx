@@ -150,7 +150,8 @@ export function parseTaskTitle(content: string): string {
 
 export function taskAssignmentSummary(content: string): string {
   const title = content.match(/Title:\s*(.+)/)?.[1]?.trim() || "Task";
-  return `${title} — assigned`;
+  const assignee = content.match(/Assigned to:\s*(.+)/)?.[1]?.trim();
+  return assignee ? `${title} — assigned to ${assignee}` : `${title} — assigned`;
 }
 
 export function TaskAssignmentMessage({ message }: { message: Message }) {

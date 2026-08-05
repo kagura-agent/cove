@@ -14,7 +14,7 @@ export interface CreateTaskOccurrenceInput {
 export interface TaskOccurrence {
   cardMessage: Message;
   thread: Channel;
-  assignmentMessage: Message;
+  assignmentMessage?: Message;
   task: Task;
 }
 
@@ -23,20 +23,26 @@ export interface CreateTaskAssignmentInput {
   creator: User;
   taskId: string;
   title: string;
+  assigneeId: string;
 }
+
+export const DEFAULT_TASK_HEARTBEAT_INTERVAL_MS = 300_000;
 
 export function createTaskAssignmentMessage(repos: Repos, input: CreateTaskAssignmentInput): Message {
   const assignmentNow = Date.now();
   const assignmentId = generateSnowflake();
+  const assignee = repos.users.getById(input.assigneeId);
+  const assigneeName = assignee?.global_name ?? assignee?.username ?? input.assigneeId;
   const assignmentContent = [
     `This is a task assignment (task_id: ${input.taskId}).`,
     `Title: ${input.title}`,
+    `Assigned to: ${assigneeName}`,
     "工作属于这个 thread，就在这里做。",
     `开工时用 cove_task 工具设 status 为 in_progress（action: \"update\", taskId: \"${input.taskId}\", status: \"in_progress\"）。`,
     "完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。",
     "不要用 curl 调 REST API，用 cove_task 工具。",
   ].join("\n");
-  const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
+  const assignmentMetadata = JSON.stringify({ content_type: "task_assignment", assignee_id: input.assigneeId });
   repos.db.prepare(
     "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(assignmentId, input.threadId, input.creator.id, input.creator.username, assignmentContent, assignmentNow, assignmentMetadata, null);
@@ -111,16 +117,22 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
     recurring_seq: input.recurring?.seq ?? 0,
   });
 
-  const assignmentMessage = createTaskAssignmentMessage(repos, {
-    threadId: thread.id,
-    creator,
-    taskId,
-    title,
-  });
+  const assignmentMessage = assigneeId
+    ? createTaskAssignmentMessage(repos, {
+        threadId: thread.id,
+        creator,
+        taskId,
+        title,
+        assigneeId,
+      })
+    : undefined;
 
-  const heartbeatIntervalMs = input.heartbeatIntervalMs && input.heartbeatIntervalMs > 0 ? input.heartbeatIntervalMs : 300_000;
-  const heartbeatLastAt = Date.now();
-  task = repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatIntervalMs, heartbeat_last_at: heartbeatLastAt })!;
+  if (assigneeId) {
+    const heartbeatIntervalMs = input.heartbeatIntervalMs && input.heartbeatIntervalMs > 0
+      ? input.heartbeatIntervalMs
+      : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS;
+    task = repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatIntervalMs, heartbeat_last_at: Date.now() })!;
+  }
 
   return { cardMessage, thread, assignmentMessage, task };
 }

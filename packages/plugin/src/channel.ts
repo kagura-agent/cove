@@ -12,6 +12,7 @@ import { mergeAbortSignals } from "./utils.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
+import type { Message } from "@cove/shared";
 
 const { listAccountIds: listCoveAccountIds, resolveDefaultAccountId: resolveDefaultCoveAccountId } = createAccountListHelpers("cove");
 
@@ -25,6 +26,18 @@ class SentMessageTracker {
     this.ids.add(id);
   }
   has(id: string): boolean { return this.ids.has(id); }
+}
+
+export function shouldNotifyAgentForMessage(message: Pick<Message, "metadata">, agentId: string, botUserId?: string): boolean {
+  if (!message.metadata) return true;
+  try {
+    const metadata = JSON.parse(message.metadata) as { skip_agent_notify?: boolean; content_type?: string; assignee_id?: string };
+    if (metadata.skip_agent_notify) return false;
+    if (metadata.content_type !== "task_assignment" && metadata.content_type !== "task_heartbeat") return true;
+    return typeof metadata.assignee_id === "string" && (metadata.assignee_id === agentId || metadata.assignee_id === botUserId);
+  } catch {
+    return true;
+  }
 }
 
 const restClients = new Map<string, CoveRestClient>();
@@ -244,12 +257,9 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
 
         gatewayClient.on("messageCreate", async (message) => {
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
-          // Skip card messages with skip_agent_notify (task cards in parent channel)
-          if (message.metadata) {
-            try {
-              const meta = JSON.parse(message.metadata);
-              if (meta.skip_agent_notify) { log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (skip_agent_notify)`); return; }
-            } catch {}
+          if (!shouldNotifyAgentForMessage(message, account.agentId, gatewayClient.botUser?.id)) {
+            log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (not targeted to this agent)`);
+            return;
           }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
