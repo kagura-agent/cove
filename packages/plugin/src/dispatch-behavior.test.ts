@@ -41,7 +41,12 @@ vi.mock("openclaw/plugin-sdk/channel-message", async () => {
   const real = await vi.importActual<typeof import("openclaw/plugin-sdk/channel-message")>("openclaw/plugin-sdk/channel-message");
   return {
     createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
-    sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
+    sendDurableMessageBatch: vi.fn(async () => ({
+      status: "sent",
+      payloadOutcomes: [{ index: 0, status: "sent", results: [{ channel: "cove", messageId: "final-1" }] }],
+      results: [{ channel: "cove", messageId: "final-1" }],
+      receipt: { platformMessageIds: ["final-1"], parts: [], sentAt: Date.now() },
+    })),
     deliverWithFinalizableLivePreviewAdapter: real.deliverWithFinalizableLivePreviewAdapter,
     defineFinalizableLivePreviewAdapter: real.defineFinalizableLivePreviewAdapter,
   };
@@ -215,7 +220,7 @@ describe("A. Draft Streaming Lifecycle", () => {
 describe("B. Final Delivery", () => {
   beforeEach(resetState);
 
-  it("B1: Final edit when draft active", async () => {
+  it("B1: Final edit when draft active keeps exactly the preview as the final message", async () => {
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
@@ -223,10 +228,11 @@ describe("B. Final Delivery", () => {
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Final" }, { kind: "final" });
     expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Final");
+    expect(sendDurableMessageBatch).not.toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
-  it("B2: Fallback on final edit failure", async () => {
+  it("B2: final PATCH failure falls back to one confirmed visible final send", async () => {
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
@@ -235,6 +241,47 @@ describe("B. Final Delivery", () => {
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fallback" }, { kind: "final" });
     expect(restClient.deleteMessage).toHaveBeenCalled();
+    expect(sendDurableMessageBatch).toHaveBeenCalledTimes(1);
+    blocker.resolve(); await p;
+  });
+
+  it("B2a: final PATCH failure plus failed fallback is observable and cleans the stale preview", async () => {
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: new Error("send failed") } as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
+    restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    let deliveryError: unknown;
+    try {
+      await deliver({ text: "Final that must be recoverable" }, { kind: "final" });
+    } catch (error) {
+      deliveryError = error;
+    }
+
+    expect(deliveryError).toMatchObject({ coveFinalPayload: "Final that must be recoverable" });
+    expect(deliveryError).toBeInstanceOf(Error);
+    expect((deliveryError as Error).message).toContain("status: failed");
+    expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+    blocker.resolve(); await p;
+    expect(opts.log?.warn).toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
+  });
+
+  it.each([
+    ["partial failure", { status: "partial_failed", error: new Error("partial"), sentBeforeError: true }],
+    ["malformed sent result", { status: "sent", payloadOutcomes: [] }],
+    ["unknown result", { status: "mystery" }],
+  ])("B2b: rejects a %s durable outcome", async (_name, result) => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce(result as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Must not be reported as delivered" }, { kind: "final" })).rejects.toThrow();
+
     blocker.resolve(); await p;
   });
 

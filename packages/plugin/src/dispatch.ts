@@ -43,6 +43,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let lastSentText = "";
     let finalReplyDelivered = false;
     let finalizedViaPreviewMessage = false;
+    let undeliveredFinalPayload: string | undefined;
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
     let warnedSendOrEditAborted = false;
@@ -121,6 +122,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       try {
         await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
       } catch (e: any) {
+        // Keep the payload on the failure object so the dispatcher/kernel can
+        // retain it for recovery without claiming the reply was delivered.
+        undeliveredFinalPayload = text;
+        if (e && typeof e === "object") (e as { coveFinalPayload?: string }).coveFinalPayload = text;
         log?.warn?.(`cove: freshSend sendText failed for [${channelId}] (message: ${message.id}): ${e.message}`);
         throw e;
       }
@@ -344,6 +349,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
           log?.warn?.(`cove: failed to delete orphaned draft (message: ${message.id}): ${e.message}`)
         );
+      }
+      if (undeliveredFinalPayload) {
+        log?.warn?.(`cove: final reply remains recoverable after failed delivery in [${channelId}] (message: ${message.id}, ${undeliveredFinalPayload.length} chars)`);
       }
     }
   } catch (err: any) {
