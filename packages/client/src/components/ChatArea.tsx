@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
@@ -11,7 +11,7 @@ import { MessageList } from "./MessageList";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
-import type { RecurringTask, Task, TaskStatus } from "@cove/shared";
+import type { Task, TaskStatus } from "@cove/shared";
 import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ThreadIcon } from "./ThreadIcon";
@@ -22,9 +22,7 @@ import { HEARTBEAT_OPTIONS } from "../lib/constants";
 import {
   REPEAT_INTERVAL_OPTIONS,
   REPEAT_SCHEDULE_OPTIONS,
-  mergeRecurringTasks,
   recurrenceEditorSettingsFromTemplate,
-  recurrenceSaveAction,
   recurrenceSeriesLabel,
   repeatScheduleIntervalMs,
   type RepeatIntervalUnit,
@@ -118,16 +116,13 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [editAssigneeId, setEditAssigneeId] = useState<string | undefined>(undefined);
   const [editHeartbeatEnabled, setEditHeartbeatEnabled] = useState(false);
   const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(600000);
-  const [editingRecurringTask, setEditingRecurringTask] = useState<RecurringTask | null>(null);
+  const [editingRecurrence, setEditingRecurrence] = useState<Task["recurrence"]>(undefined);
   const [editRepeatEnabled, setEditRepeatEnabled] = useState(false);
   const [editRepeatSchedule, setEditRepeatSchedule] = useState<RepeatSchedule>("never");
   const [editOccurrenceMode, setEditOccurrenceMode] = useState<api.RecurringTaskOccurrenceMode>("same_task");
   const [editRepeatIntervalValue, setEditRepeatIntervalValue] = useState(1);
   const [editRepeatIntervalUnit, setEditRepeatIntervalUnit] = useState<RepeatIntervalUnit>("days");
-  const [recurringTasksById, setRecurringTasksById] = useState<Record<string, RecurringTask>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
-  const recurrenceFetchIds = useRef(new Set<string>());
-  const editRequestId = useRef(0);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -149,29 +144,9 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   }, [members]);
 
   useEffect(() => {
-    let cancelled = false;
     setLoading(true);
     fetchTasks(channelId).finally(() => setLoading(false));
-    api.fetchRecurringTasks(channelId).then((recurringTasks) => {
-      if (!cancelled) {
-        setRecurringTasksById((previous) => mergeRecurringTasks(previous, recurringTasks));
-      }
-    }).catch((err) => console.error("fetch recurring tasks:", err));
-    return () => { cancelled = true; };
   }, [channelId, fetchTasks]);
-
-  useEffect(() => {
-    const unknownRecurringIds = Array.from(new Set(tasks.flatMap((task) => task.recurring_id && !recurringTasksById[task.recurring_id] && !recurrenceFetchIds.current.has(task.recurring_id) ? [task.recurring_id] : [])));
-    for (const recurringId of unknownRecurringIds) {
-      recurrenceFetchIds.current.add(recurringId);
-      api.fetchRecurringTask(recurringId).then((recurringTask) => {
-        setRecurringTasksById((previous) => mergeRecurringTasks(previous, [recurringTask]));
-      }).catch((err) => {
-        recurrenceFetchIds.current.delete(recurringId);
-        console.error("fetch recurring task:", err);
-      });
-    }
-  }, [tasks, recurringTasksById]);
 
   const handleOpenThread = useCallback((task: Task) => {
     if (guildId) {
@@ -197,8 +172,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     }
   }, []);
 
-  const handleEditOpen = useCallback(async (task: Task) => {
-    const requestId = ++editRequestId.current;
+  const handleEditOpen = useCallback((task: Task) => {
     setEditingTask(task);
     setEditTitle(task.title);
     setEditDescription(task.description ?? "");
@@ -206,67 +180,49 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     setEditAssigneeId(task.assignee_id ?? undefined);
     setEditHeartbeatEnabled((task.heartbeat_interval_ms ?? 0) > 0);
     setEditHeartbeatInterval(task.heartbeat_interval_ms > 0 ? task.heartbeat_interval_ms : 600000);
-    setEditingRecurringTask(null);
+    setEditingRecurrence(task.recurrence);
     setSaveError(null);
 
-    if (task.recurring_id) {
-      try {
-        const recurringTask = await api.fetchRecurringTask(task.recurring_id);
-        if (requestId !== editRequestId.current) return;
-        const settings = recurrenceEditorSettingsFromTemplate(recurringTask);
-        setRecurringTasksById((previous) => mergeRecurringTasks(previous, [recurringTask]));
-        setEditingRecurringTask(recurringTask);
-        setEditRepeatEnabled(settings.enabled);
-        setEditRepeatSchedule(settings.schedule);
-        setEditRepeatIntervalValue(settings.intervalValue);
-        setEditRepeatIntervalUnit(settings.intervalUnit);
-        setEditOccurrenceMode(settings.occurrenceMode);
-      } catch (err) {
-        if (requestId === editRequestId.current) console.error("fetch recurring task:", err);
-      }
+    if (task.recurrence) {
+      const settings = recurrenceEditorSettingsFromTemplate(task.recurrence);
+      setEditRepeatEnabled(settings.enabled);
+      setEditRepeatSchedule(settings.schedule);
+      setEditRepeatIntervalValue(settings.intervalValue);
+      setEditRepeatIntervalUnit(settings.intervalUnit);
+      setEditOccurrenceMode(settings.occurrenceMode);
+    } else {
+      setEditRepeatEnabled(false);
+      setEditRepeatSchedule("never");
+      setEditRepeatIntervalValue(1);
+      setEditRepeatIntervalUnit("days");
+      setEditOccurrenceMode("same_task");
     }
   }, []);
 
   const editRepeatIntervalMs = repeatScheduleIntervalMs(editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit);
-  const validEditRepeatInterval = !editRepeatEnabled || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
+  const canEditRecurrence = !editingRecurrence || editingRecurrence.root_task_id === editingTask?.task_id;
+  const validEditRepeatInterval = editRepeatSchedule === "never" || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
 
   const handleEditSave = useCallback(async () => {
-    if (!editingTask || (editingRecurringTask && !validEditRepeatInterval)) return;
+    if (!editingTask || (canEditRecurrence && !validEditRepeatInterval)) return;
     setSaving(true);
     setSaveError(null);
     try {
+      const recurrence = !canEditRecurrence ? undefined : editRepeatSchedule === "never"
+        ? (editingRecurrence ? null : undefined)
+        : {
+            interval_ms: editRepeatIntervalMs,
+            occurrence_mode: editOccurrenceMode,
+            enabled: editRepeatEnabled,
+          };
       await api.updateTask(editingTask.task_id, {
         title: editTitle.trim(),
         description: editDescription.trim(),
         status: editStatus,
         assignee_id: editAssigneeId ?? null,
         heartbeat_interval_ms: editHeartbeatEnabled ? editHeartbeatInterval : 0,
+        ...(recurrence !== undefined ? { recurrence } : {}),
       });
-      if (editingRecurringTask) {
-        try {
-          const recurrenceSave = recurrenceSaveAction({
-            enabled: editRepeatEnabled,
-            schedule: editRepeatSchedule,
-            intervalValue: editRepeatIntervalValue,
-            intervalUnit: editRepeatIntervalUnit,
-            occurrenceMode: editOccurrenceMode,
-            storedIntervalMs: editingRecurringTask.interval_ms,
-            storedOccurrenceMode: editingRecurringTask.occurrence_mode,
-          });
-          if (recurrenceSave.type === "delete") {
-            await api.deleteRecurringTask(editingRecurringTask.id);
-            setRecurringTasksById(({ [editingRecurringTask.id]: _, ...remaining }) => remaining);
-            await fetchTasks(channelId);
-          } else {
-            const updatedRecurringTask = await api.updateRecurringTask(editingRecurringTask.id, recurrenceSave.fields);
-            setRecurringTasksById((previous) => mergeRecurringTasks(previous, [updatedRecurringTask]));
-          }
-        } catch (err) {
-          console.error("save recurring task:", err);
-          setSaveError("Task saved, but recurrence settings could not be saved.");
-          return;
-        }
-      }
       setEditingTask(null);
     } catch (err) {
       console.error("update task:", err);
@@ -274,7 +230,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [editingTask, editingRecurringTask, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit, editOccurrenceMode, validEditRepeatInterval, channelId, fetchTasks]);
+  }, [editingTask, editingRecurrence, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalMs, editOccurrenceMode, canEditRecurrence, validEditRepeatInterval]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -291,8 +247,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       ellipsis: true,
       width: 300,
       render: (title: string, task) => {
-        const recurringTask = task.recurring_id ? recurringTasksById[task.recurring_id] : undefined;
-        const seriesLabel = recurrenceSeriesLabel(task.recurring_seq, recurringTask);
+        const seriesLabel = recurrenceSeriesLabel(task.recurring_seq, task.recurrence);
         return (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
@@ -370,13 +325,12 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         title="Edit Task"
         open={!!editingTask}
         onCancel={() => {
-          editRequestId.current += 1;
           setEditingTask(null);
           setSaveError(null);
         }}
         onOk={handleEditSave}
         okText="Save"
-        okButtonProps={{ loading: saving, disabled: !editTitle.trim() || (editingRecurringTask !== null && !validEditRepeatInterval) }}
+        okButtonProps={{ loading: saving, disabled: !editTitle.trim() || (canEditRecurrence && !validEditRepeatInterval) }}
         destroyOnClose
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -412,7 +366,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
               }))}
             />
           </div>
-          {editingRecurringTask && (
+          {canEditRecurrence && (
             <>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Repeat enabled</label>

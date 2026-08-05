@@ -41,22 +41,23 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
     setSubmitting(true);
     try {
       const heartbeatIntervalMs = heartbeatEnabled ? heartbeatInterval : undefined;
-      if (repeatSchedule === "never") {
-        await api.createTask(channelId, title.trim(), assigneeId, description.trim() || undefined, heartbeatIntervalMs);
-      } else {
-        await api.createRecurringTask(channelId, {
-          title: title.trim(),
-          ...(assigneeId ? { assignee_id: assigneeId } : {}),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          interval_ms: intervalMs,
-          occurrence_mode: occurrenceMode,
-          ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
-        });
-      }
+      await api.createTask(channelId, {
+        title: title.trim(),
+        ...(assigneeId ? { assignee_id: assigneeId } : {}),
+        ...(description.trim() ? { description: description.trim() } : {}),
+        ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
+        ...(repeatSchedule === "never" ? {} : {
+          recurrence: {
+            interval_ms: intervalMs,
+            occurrence_mode: occurrenceMode,
+            enabled: true,
+          },
+        }),
+      });
       setTitle("");
       setDescription("");
       setAssigneeId(undefined);
-      setHeartbeatEnabled(false);
+      setHeartbeatEnabled(true);
       setHeartbeatInterval(600000);
       setRepeatSchedule("never");
       setOccurrenceMode("same_task");

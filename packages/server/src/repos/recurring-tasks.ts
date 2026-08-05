@@ -48,6 +48,7 @@ export interface CreateRecurringTask {
   created_by: string;
   interval_ms: number;
   occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
   description?: string;
   assignee_id?: string | null;
   heartbeat_interval_ms?: number;
@@ -76,11 +77,12 @@ export class RecurringTasksRepo {
     const assigneeId = params.assignee_id ?? null;
     const occurrenceMode = params.occurrence_mode ?? "same_task";
     const nextRunAt = now + params.interval_ms;
+    const enabled = params.enabled ?? true;
     const heartbeatMs = params.heartbeat_interval_ms ?? 300000;
     this.db.prepare(
       `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, interval_ms, occurrence_mode, next_run_at, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, 0, ?, ?, ?)`
-    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.interval_ms, occurrenceMode, nextRunAt, heartbeatMs, now, now);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)`
+    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.interval_ms, occurrenceMode, nextRunAt, enabled ? 1 : 0, heartbeatMs, now, now);
     return this.getById(id)!;
   }
 
@@ -110,7 +112,7 @@ export class RecurringTasksRepo {
     if (fields.interval_ms !== undefined) {
       sets.push("interval_ms = ?");
       values.push(fields.interval_ms);
-      if (fields.next_run_at === undefined) {
+      if (fields.interval_ms !== existing.interval_ms && fields.next_run_at === undefined) {
         sets.push("next_run_at = ?");
         values.push(Date.now() + fields.interval_ms);
       }

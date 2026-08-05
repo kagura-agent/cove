@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, Message, RecurringTask, RecurringTaskOccurrenceMode, Task } from "@cove/shared";
+import type { Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, UpdateTaskFields } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -228,12 +228,8 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:channelId/tasks — create a task. */
-  async createTask(channelId: string, title: string, assigneeId?: string, description?: string): Promise<Task> {
-    return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, {
-      title,
-      ...(assigneeId ? { assignee_id: assigneeId } : {}),
-      ...(description ? { description } : {}),
-    });
+  async createTask(channelId: string, fields: CreateTaskFields): Promise<Task> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, fields);
   }
 
   /** GET /api/v10/channels/:channelId/tasks — list tasks in a channel. */
@@ -252,12 +248,12 @@ export class CoveRestClient {
   }
 
   /** PATCH /api/v10/tasks/:taskId — update a task. */
-  async updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string }): Promise<Task> {
+  async updateTask(taskId: string, fields: UpdateTaskFields): Promise<Task> {
     return this.request("PATCH", `${API_PREFIX}/tasks/${taskId}`, fields);
   }
 
   /** POST /api/v10/channels/:channelId/recurring-tasks — create a template. */
-  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; interval_ms: number; occurrence_mode?: RecurringTaskOccurrenceMode; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; interval_ms: number; occurrence_mode?: RecurringTaskOccurrenceMode; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
     return this.request("POST", `${API_PREFIX}/channels/${channelId}/recurring-tasks`, fields);
   }
 

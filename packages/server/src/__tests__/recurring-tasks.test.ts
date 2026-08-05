@@ -116,6 +116,28 @@ describe("recurring task templates API", () => {
     });
   });
 
+  it("preserves the next run when an update resends the unchanged interval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));
+    const created = await createTemplate();
+    const template = await created.json() as { id: string; next_run_at: number };
+
+    vi.setSystemTime(new Date("2026-08-04T12:00:30.000Z"));
+    const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ interval_ms: 60_000, title: "Follow up", enabled: false }),
+    });
+
+    expect(update.status).toBe(200);
+    expect(await update.json()).toMatchObject({
+      title: "Follow up",
+      interval_ms: 60_000,
+      enabled: false,
+      next_run_at: template.next_run_at,
+    });
+  });
+
   it("preserves the next run when updating a template without an interval", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-04T12:00:00.000Z"));

@@ -246,7 +246,27 @@ describe("sendTyping timeout", () => {
   });
 });
 
-describe("recurring task endpoints", () => {
+describe("task recurrence endpoints", () => {
+  it("maps recurrence fields on task creation and update", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(201, { task_id: "task-1" }))
+      .mockResolvedValueOnce(mockResponse(200, { task_id: "task-1" }));
+
+    await client.createTask("channel-1", {
+      title: "Daily",
+      recurrence: { interval_ms: 60_000, occurrence_mode: "new_task", enabled: true },
+    });
+    await client.updateTask("task-1", {
+      description: "Updated description",
+      recurrence: { enabled: false },
+    });
+
+    expect(mockFetch.mock.calls.map(([url, options]) => [url, (options as RequestInit).method, (options as RequestInit).body])).toEqual([
+      ["https://cove.test/api/v10/channels/channel-1/tasks", "POST", JSON.stringify({ title: "Daily", recurrence: { interval_ms: 60_000, occurrence_mode: "new_task", enabled: true } })],
+      ["https://cove.test/api/v10/tasks/task-1", "PATCH", JSON.stringify({ description: "Updated description", recurrence: { enabled: false } })],
+    ]);
+  });
+
   it("maps create, list, get, update, and delete to recurring task routes", async () => {
     mockFetch
       .mockResolvedValueOnce(mockResponse(201, { id: "recurring-1" }))
