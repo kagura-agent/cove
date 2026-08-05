@@ -94,6 +94,7 @@ export class RecurringTaskWorker {
                 creator,
                 taskId: reopenedTask.task_id,
                 title: reopenedTask.title,
+                description: reopenedTask.description,
                 assigneeId: reopenedTask.assignee_id,
               })
             : undefined;

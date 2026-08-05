@@ -1163,4 +1163,31 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
     expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
   });
+
+  it("J5: task assignment descriptions reach the agent's first inbound payload", async () => {
+    const description = "Run the focused server and plugin tests.";
+    const assignmentContent = [
+      "This is a task assignment (task_id: task-1).",
+      "Title: Include complete task context",
+      "Assigned to: Test Agent",
+      "",
+      "Description:",
+      description,
+      "",
+      "工作属于这个 thread，就在这里做。",
+    ].join("\n");
+    const opts = createBaseOpts({ message: createTestMessage({ content: assignmentContent }) });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "task-1" });
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      Body: assignmentContent,
+      BodyForAgent: assignmentContent,
+      ChatType: "direct",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.Body).toContain(`Description:\n${description}`);
+  });
 });
