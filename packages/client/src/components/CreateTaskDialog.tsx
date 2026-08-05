@@ -57,7 +57,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       setTitle("");
       setDescription("");
       setAssigneeId(undefined);
-      setHeartbeatEnabled(false);
+      setHeartbeatEnabled(true);
       setHeartbeatInterval(600000);
       setRepeatSchedule("never");
       setOccurrenceMode("same_task");

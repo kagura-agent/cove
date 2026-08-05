@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { CreateTaskFields, RecurringTask, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
+import type { CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -329,7 +329,7 @@ export function deleteTask(taskId: string) {
   return api<{ deleted: boolean }>(`${API_PREFIX}/tasks/${taskId}`, { method: "DELETE" });
 }
 
-export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
+export type { RecurringTaskOccurrenceMode } from "@cove/shared";
 
 export interface CreateRecurringTaskFields {
   title: string;

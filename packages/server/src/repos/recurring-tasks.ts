@@ -112,7 +112,7 @@ export class RecurringTasksRepo {
     if (fields.interval_ms !== undefined) {
       sets.push("interval_ms = ?");
       values.push(fields.interval_ms);
-      if (fields.next_run_at === undefined) {
+      if (fields.interval_ms !== existing.interval_ms && fields.next_run_at === undefined) {
         sets.push("next_run_at = ?");
         values.push(Date.now() + fields.interval_ms);
       }
