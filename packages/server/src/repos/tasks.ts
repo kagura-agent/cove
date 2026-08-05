@@ -151,7 +151,7 @@ export class TasksRepo {
   listDueForHeartbeat(): Task[] {
     const now = Date.now();
     const rows = this.db.prepare(
-      `${TASK_SELECT} WHERE t.heartbeat_interval_ms > 0 AND t.thread_id IS NOT NULL AND t.thread_id != '' AND t.status NOT IN ('done', 'cancelled') AND (t.heartbeat_last_at + t.heartbeat_interval_ms) <= ?`
+      `${TASK_SELECT} WHERE t.assignee_id IS NOT NULL AND t.heartbeat_interval_ms > 0 AND t.thread_id IS NOT NULL AND t.thread_id != '' AND t.status NOT IN ('done', 'cancelled') AND (t.heartbeat_last_at + t.heartbeat_interval_ms) <= ?`
     ).all(now) as TaskRow[];
     return rows.map(toTask);
   }

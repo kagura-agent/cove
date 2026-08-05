@@ -45,7 +45,7 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
 
     dispatcher?.messageCreate(result.occurrence.cardMessage);
     dispatcher?.threadCreate(result.occurrence.thread);
-    dispatcher?.messageCreate(result.occurrence.assignmentMessage);
+    if (result.occurrence.assignmentMessage) dispatcher?.messageCreate(result.occurrence.assignmentMessage);
     dispatcher?.taskCreated(result.occurrence.task);
 
     return c.json(result.recurringTask, 201);

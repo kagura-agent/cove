@@ -222,6 +222,67 @@ describe("recurring task templates API", () => {
     });
   });
 
+  it("separates thread membership from assignment and heartbeat execution", async () => {
+    const now = Date.now();
+    for (const [id, token] of [["assignee-a", "assignee-a-token"], ["assignee-b", "assignee-b-token"]]) {
+      db.prepare("INSERT INTO users (id, username, avatar, bot, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(id, id, null, 1, token, now, now);
+      db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
+        .run(guildId, id, null, "[]", now);
+    }
+
+    const initiallyAssigned = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Assigned immediately", assignee_id: "assignee-a" }),
+    });
+    const initialTask = await initiallyAssigned.json() as { thread_id: string; heartbeat_interval_ms: number };
+    expect(initialTask.heartbeat_interval_ms).toBe(300_000);
+    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(initialTask.thread_id)).toEqual({
+      metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
+    });
+
+    const created = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Unassigned backlog" }),
+    });
+    const task = await created.json() as { task_id: string; thread_id: string; heartbeat_interval_ms: number; heartbeat_last_at: number };
+    expect(task).toMatchObject({ heartbeat_interval_ms: 0, heartbeat_last_at: 0 });
+    expect(repos.threads.isMember(task.thread_id, "assignee-a")).toBe(false);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(task.thread_id)).toEqual({ count: 0 });
+
+    const assigned = await app.request(`${API_PREFIX}/tasks/${task.task_id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ assignee_id: "assignee-a" }),
+    });
+    expect(await assigned.json()).toMatchObject({ assignee_id: "assignee-a", heartbeat_interval_ms: 300_000 });
+    expect(repos.threads.isMember(task.thread_id, "assignee-a")).toBe(true);
+    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+      metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
+    });
+
+    const reassigned = await app.request(`${API_PREFIX}/tasks/${task.task_id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ assignee_id: "assignee-b" }),
+    });
+    expect(await reassigned.json()).toMatchObject({ assignee_id: "assignee-b", heartbeat_interval_ms: 300_000 });
+    expect(repos.threads.isMember(task.thread_id, "assignee-b")).toBe(true);
+    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+      metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-b" }),
+    });
+
+    const unassigned = await app.request(`${API_PREFIX}/tasks/${task.task_id}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ assignee_id: null }),
+    });
+    expect(await unassigned.json()).toMatchObject({ assignee_id: null, heartbeat_interval_ms: 0, heartbeat_last_at: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(task.thread_id)).toEqual({ count: 2 });
+  });
+
   it("does not create templates inside a task thread", async () => {
     const task = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
       method: "POST",

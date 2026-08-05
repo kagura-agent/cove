@@ -46,7 +46,7 @@ export class TaskHeartbeatWorker {
           this.repos.tasks.update(task.task_id, { heartbeat_last_at: now });
         } else {
           // Thread is silent — send heartbeat message
-          this.sendHeartbeat(task.task_id, task.thread_id, task.created_by, task.seq);
+          this.sendHeartbeat(task.task_id, task.thread_id, task.created_by, task.assignee_id!, task.seq);
           this.repos.tasks.update(task.task_id, { heartbeat_last_at: now });
         }
       }
@@ -55,9 +55,9 @@ export class TaskHeartbeatWorker {
     }
   }
 
-  private sendHeartbeat(taskId: string, threadId: string, createdBy: string, seq: number): void {
+  private sendHeartbeat(taskId: string, threadId: string, createdBy: string, assigneeId: string, seq: number): void {
     const content = `${AGENT_PREAMBLE}\n\n${VISIBLE_TEXT}`;
-    const metadata = JSON.stringify({ content_type: "task_heartbeat" });
+    const metadata = JSON.stringify({ content_type: "task_heartbeat", assignee_id: assigneeId });
 
     const creator = this.repos.users.getById(createdBy);
     const senderName = creator?.username ?? "System";

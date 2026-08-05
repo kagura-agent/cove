@@ -1,6 +1,6 @@
 import type { RecurringTask } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
-import { createTaskAssignmentMessage, createTaskOccurrence } from "../services/task-occurrence.js";
+import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const TICK_MS = parseInt(process.env["RECURRING_TASK_TICK_MS"] ?? "30000", 10);
@@ -77,14 +77,26 @@ export class RecurringTaskWorker {
         }
 
         if (latestTemplate.occurrence_mode === "same_task") {
-          const reopenedTask = this.repos.tasks.update(previous.task_id, { status: "open" });
-          if (!reopenedTask) return null;
-          const assignmentMessage = createTaskAssignmentMessage(this.repos, {
-            threadId: reopenedTask.thread_id,
-            creator,
-            taskId: reopenedTask.task_id,
-            title: reopenedTask.title,
+          const heartbeatIntervalMs = previous.assignee_id
+            ? previous.heartbeat_interval_ms > 0
+              ? previous.heartbeat_interval_ms
+              : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS
+            : 0;
+          const reopenedTask = this.repos.tasks.update(previous.task_id, {
+            status: "open",
+            heartbeat_interval_ms: heartbeatIntervalMs,
+            heartbeat_last_at: previous.assignee_id ? now : 0,
           });
+          if (!reopenedTask) return null;
+          const assignmentMessage = reopenedTask.assignee_id
+            ? createTaskAssignmentMessage(this.repos, {
+                threadId: reopenedTask.thread_id,
+                creator,
+                taskId: reopenedTask.task_id,
+                title: reopenedTask.title,
+                assigneeId: reopenedTask.assignee_id,
+              })
+            : undefined;
           this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt, last_spawned_at: now });
           return { type: "reassign" as const, assignmentMessage, task: this.repos.tasks.getById(reopenedTask.task_id)! };
         }
@@ -108,13 +120,13 @@ export class RecurringTaskWorker {
       })();
       if (!result) return;
       if (result.type === "reassign") {
-        this.dispatcher.messageCreate(result.assignmentMessage);
+        if (result.assignmentMessage) this.dispatcher.messageCreate(result.assignmentMessage);
         this.dispatcher.taskUpdated(result.task);
         return;
       }
       this.dispatcher.messageCreate(result.occurrence.cardMessage);
       this.dispatcher.threadCreate(result.occurrence.thread);
-      this.dispatcher.messageCreate(result.occurrence.assignmentMessage);
+      if (result.occurrence.assignmentMessage) this.dispatcher.messageCreate(result.occurrence.assignmentMessage);
       this.dispatcher.taskCreated(result.occurrence.task);
     } catch (error) {
       console.error(`Recurring task ${template.id} spawn error:`, error);
