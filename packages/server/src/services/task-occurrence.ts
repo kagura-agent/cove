@@ -31,9 +31,12 @@ export const DEFAULT_TASK_HEARTBEAT_INTERVAL_MS = 300_000;
 export function createTaskAssignmentMessage(repos: Repos, input: CreateTaskAssignmentInput): Message {
   const assignmentNow = Date.now();
   const assignmentId = generateSnowflake();
+  const assignee = repos.users.getById(input.assigneeId);
+  const assigneeName = assignee?.global_name ?? assignee?.username ?? input.assigneeId;
   const assignmentContent = [
     `This is a task assignment (task_id: ${input.taskId}).`,
     `Title: ${input.title}`,
+    `Assigned to: ${assigneeName}`,
     "工作属于这个 thread，就在这里做。",
     `开工时用 cove_task 工具设 status 为 in_progress（action: \"update\", taskId: \"${input.taskId}\", status: \"in_progress\"）。`,
     "完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。",

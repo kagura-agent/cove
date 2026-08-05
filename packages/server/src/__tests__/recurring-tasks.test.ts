@@ -224,9 +224,9 @@ describe("recurring task templates API", () => {
 
   it("separates thread membership from assignment and heartbeat execution", async () => {
     const now = Date.now();
-    for (const [id, token] of [["assignee-a", "assignee-a-token"], ["assignee-b", "assignee-b-token"]]) {
+    for (const [id, username, token] of [["assignee-a", "Agent A", "assignee-a-token"], ["assignee-b", "Agent B", "assignee-b-token"]]) {
       db.prepare("INSERT INTO users (id, username, avatar, bot, token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(id, id, null, 1, token, now, now);
+        .run(id, username, null, 1, token, now, now);
       db.prepare("INSERT INTO guild_members (guild_id, user_id, nick, roles, joined_at) VALUES (?, ?, ?, ?, ?)")
         .run(guildId, id, null, "[]", now);
     }
@@ -238,7 +238,8 @@ describe("recurring task templates API", () => {
     });
     const initialTask = await initiallyAssigned.json() as { thread_id: string; heartbeat_interval_ms: number };
     expect(initialTask.heartbeat_interval_ms).toBe(300_000);
-    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(initialTask.thread_id)).toEqual({
+    expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(initialTask.thread_id)).toEqual({
+      content: expect.stringContaining("Assigned to: Agent A"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
     });
 
@@ -259,7 +260,8 @@ describe("recurring task templates API", () => {
     });
     expect(await assigned.json()).toMatchObject({ assignee_id: "assignee-a", heartbeat_interval_ms: 300_000 });
     expect(repos.threads.isMember(task.thread_id, "assignee-a")).toBe(true);
-    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+    expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+      content: expect.stringContaining("Assigned to: Agent A"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
     });
 
@@ -270,7 +272,8 @@ describe("recurring task templates API", () => {
     });
     expect(await reassigned.json()).toMatchObject({ assignee_id: "assignee-b", heartbeat_interval_ms: 300_000 });
     expect(repos.threads.isMember(task.thread_id, "assignee-b")).toBe(true);
-    expect(db.prepare("SELECT metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+    expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
+      content: expect.stringContaining("Assigned to: Agent B"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-b" }),
     });
 
