@@ -194,6 +194,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
             creator,
             taskId: updatedTask.task_id,
             title: updatedTask.title,
+            description: updatedTask.description,
             assigneeId: updatedTask.assignee_id,
           });
         }

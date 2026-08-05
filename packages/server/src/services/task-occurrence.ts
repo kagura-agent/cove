@@ -23,6 +23,7 @@ export interface CreateTaskAssignmentInput {
   creator: User;
   taskId: string;
   title: string;
+  description: string;
   assigneeId: string;
 }
 
@@ -37,6 +38,7 @@ export function createTaskAssignmentMessage(repos: Repos, input: CreateTaskAssig
     `This is a task assignment (task_id: ${input.taskId}).`,
     `Title: ${input.title}`,
     `Assigned to: ${assigneeName}`,
+    ...(input.description.trim() ? ["", "Description:", input.description, ""] : []),
     "工作属于这个 thread，就在这里做。",
     `开工时用 cove_task 工具设 status 为 in_progress（action: \"update\", taskId: \"${input.taskId}\", status: \"in_progress\"）。`,
     "完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。",
@@ -123,6 +125,7 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
         creator,
         taskId,
         title,
+        description: task.description,
         assigneeId,
       })
     : undefined;

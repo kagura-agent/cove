@@ -234,19 +234,29 @@ describe("recurring task templates API", () => {
     const initiallyAssigned = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ title: "Assigned immediately", assignee_id: "assignee-a" }),
+      body: JSON.stringify({ title: "Assigned immediately", description: "Initial implementation scope", assignee_id: "assignee-a" }),
     });
     const initialTask = await initiallyAssigned.json() as { thread_id: string; heartbeat_interval_ms: number };
     expect(initialTask.heartbeat_interval_ms).toBe(300_000);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(initialTask.thread_id)).toEqual({
-      content: expect.stringContaining("Assigned to: Agent A"),
+      content: expect.stringContaining("Description:\nInitial implementation scope\n\n工作属于这个 thread，就在这里做。"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
     });
+
+    const compactlyAssigned = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Compact assignment", assignee_id: "assignee-a" }),
+    });
+    const compactTask = await compactlyAssigned.json() as { thread_id: string };
+    const compactAssignment = db.prepare("SELECT content FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(compactTask.thread_id) as { content: string };
+    expect(compactAssignment.content).not.toContain("Description:");
+    expect(compactAssignment.content).toContain("Assigned to: Agent A\n工作属于这个 thread，就在这里做。");
 
     const created = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ title: "Unassigned backlog" }),
+      body: JSON.stringify({ title: "Unassigned backlog", description: "Canonical reassignment scope" }),
     });
     const task = await created.json() as { task_id: string; thread_id: string; heartbeat_interval_ms: number; heartbeat_last_at: number };
     expect(task).toMatchObject({ heartbeat_interval_ms: 0, heartbeat_last_at: 0 });
@@ -261,7 +271,7 @@ describe("recurring task templates API", () => {
     expect(await assigned.json()).toMatchObject({ assignee_id: "assignee-a", heartbeat_interval_ms: 300_000 });
     expect(repos.threads.isMember(task.thread_id, "assignee-a")).toBe(true);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
-      content: expect.stringContaining("Assigned to: Agent A"),
+      content: expect.stringContaining("Description:\nCanonical reassignment scope\n\n工作属于这个 thread，就在这里做。"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
     });
 
@@ -273,7 +283,7 @@ describe("recurring task templates API", () => {
     expect(await reassigned.json()).toMatchObject({ assignee_id: "assignee-b", heartbeat_interval_ms: 300_000 });
     expect(repos.threads.isMember(task.thread_id, "assignee-b")).toBe(true);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
-      content: expect.stringContaining("Assigned to: Agent B"),
+      content: expect.stringContaining("Description:\nCanonical reassignment scope\n\n工作属于这个 thread，就在这里做。"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-b" }),
     });
 
