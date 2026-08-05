@@ -316,6 +316,47 @@ export interface RecurringTask {
   updated_at: number;
 }
 
+export interface TaskRecurrence {
+  /** Stable task ID that owns this recurrence configuration. */
+  root_task_id: string;
+  id: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  next_run_at: number;
+  enabled: boolean;
+  last_task_id: string | null;
+  last_spawned_at: number;
+}
+
+export interface CreateTaskRecurrence {
+  interval_ms: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+}
+
+export interface UpdateTaskRecurrence {
+  interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+}
+
+export interface CreateTaskFields {
+  title: string;
+  assignee_id?: string;
+  description?: string;
+  heartbeat_interval_ms?: number;
+  recurrence?: CreateTaskRecurrence;
+}
+
+export interface UpdateTaskFields {
+  status?: TaskStatus;
+  assignee_id?: string | null;
+  title?: string;
+  description?: string;
+  heartbeat_interval_ms?: number;
+  recurrence?: UpdateTaskRecurrence | null;
+}
+
 export interface Task {
   task_id: string;
   channel_id: string;
@@ -332,6 +373,7 @@ export interface Task {
   heartbeat_last_at: number;
   recurring_id: string | null;
   recurring_seq: number;
+  recurrence?: TaskRecurrence;
   created_at: number;
   updated_at: number;
 }

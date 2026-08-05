@@ -22,6 +22,14 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       assigneeId: Type.Optional(Type.String({ description: "User ID to assign the task to" })),
       status: Type.Optional(Type.String({ description: "Task status: open, in_progress, in_review, done, cancelled (for update)" })),
       heartbeatIntervalMs: Type.Optional(Type.Number({ description: "Heartbeat interval in ms. 0 = disabled (for update)" })),
+      recurrence: Type.Optional(Type.Union([
+        Type.Object({
+          intervalMs: Type.Optional(Type.Number({ description: "Recurrence interval in ms (required when adding recurrence to a task)" })),
+          occurrenceMode: Type.Optional(Type.String({ description: "Recurrence occurrence mode: same_task or new_task" })),
+          enabled: Type.Optional(Type.Boolean({ description: "Whether recurrence is enabled" })),
+        }, { additionalProperties: false }),
+        Type.Null({ description: "Remove recurrence from a task (update only)" }),
+      ], { description: "Task recurrence configuration (for create and update)" })),
       description: Type.Optional(Type.String({ description: "Task description (optional for create)" })),
     }, { additionalProperties: false }),
     execute: async (_toolCallId: string, rawParams: Record<string, unknown>) => {
@@ -37,6 +45,27 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       const occurrenceMode = rawParams.occurrenceMode as "same_task" | "new_task" | undefined;
       const enabled = rawParams.enabled as boolean | undefined;
       const heartbeatIntervalMs = rawParams.heartbeatIntervalMs as number | undefined;
+      const recurrence = rawParams.recurrence as {
+        intervalMs?: number;
+        occurrenceMode?: "same_task" | "new_task";
+        enabled?: boolean;
+      } | null | undefined;
+      const recurrenceFields = recurrence === undefined
+        ? undefined
+        : recurrence === null
+          ? null
+          : {
+              ...(recurrence.intervalMs !== undefined ? { interval_ms: recurrence.intervalMs } : {}),
+              ...(recurrence.occurrenceMode !== undefined ? { occurrence_mode: recurrence.occurrenceMode } : {}),
+              ...(recurrence.enabled !== undefined ? { enabled: recurrence.enabled } : {}),
+            };
+      const createRecurrenceFields = recurrence === undefined || recurrence === null || recurrence.intervalMs === undefined
+        ? undefined
+        : {
+            interval_ms: recurrence.intervalMs,
+            ...(recurrence.occurrenceMode !== undefined ? { occurrence_mode: recurrence.occurrenceMode } : {}),
+            ...(recurrence.enabled !== undefined ? { enabled: recurrence.enabled } : {}),
+          };
 
       let account;
       try {
@@ -50,7 +79,14 @@ export function createCoveTaskTool(opts: { cfg: any }) {
         case "create": {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for create" });
-          const task = await client.createTask(channelId, title, assigneeId, description);
+          if (recurrence === null) return jsonResult({ ok: false, error: "recurrence cannot be null for create" });
+          if (recurrence !== undefined && !createRecurrenceFields) return jsonResult({ ok: false, error: "recurrence.intervalMs is required for create" });
+          const task = await client.createTask(channelId, {
+            title,
+            ...(assigneeId ? { assignee_id: assigneeId } : {}),
+            ...(description ? { description } : {}),
+            ...(createRecurrenceFields ? { recurrence: createRecurrenceFields } : {}),
+          });
           return jsonResult({
             ok: true,
             action: "create",
@@ -76,6 +112,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           if (title) fields.title = title;
           if (description !== undefined) fields.description = description;
           if (heartbeatIntervalMs !== undefined) fields.heartbeat_interval_ms = heartbeatIntervalMs;
+          if (recurrenceFields !== undefined) fields.recurrence = recurrenceFields;
           const task = await client.updateTask(taskId, fields as any);
           return jsonResult({ ok: true, action: "update", task });
         }

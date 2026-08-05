@@ -103,7 +103,7 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
     repos.threads.addMember(thread.id, channel.owner_id);
   }
 
-  const task = repos.tasks.create(taskId, channel.id, thread.id, messageId, assigneeId, title, seq, {
+  let task = repos.tasks.create(taskId, channel.id, thread.id, messageId, assigneeId, title, seq, {
     guild_id: channel.guild_id,
     description: input.description ?? "",
     created_by: creator.id,
@@ -120,9 +120,7 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
 
   const heartbeatIntervalMs = input.heartbeatIntervalMs && input.heartbeatIntervalMs > 0 ? input.heartbeatIntervalMs : 300_000;
   const heartbeatLastAt = Date.now();
-  repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatIntervalMs, heartbeat_last_at: heartbeatLastAt });
-  task.heartbeat_interval_ms = heartbeatIntervalMs;
-  task.heartbeat_last_at = heartbeatLastAt;
+  task = repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatIntervalMs, heartbeat_last_at: heartbeatLastAt })!;
 
   return { cardMessage, thread, assignmentMessage, task };
 }

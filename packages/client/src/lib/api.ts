@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { RecurringTask, Role, Task, Webhook } from "@cove/shared";
+import type { CreateTaskFields, RecurringTask, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -315,13 +315,12 @@ export function deleteGuild(guildId: string) {
 export function fetchTasks(channelId: string) {
   return api<Task[]>(`${API_PREFIX}/channels/${channelId}/tasks`);
 }
-export function createTask(channelId: string, title: string, assigneeId?: string, description?: string, heartbeatIntervalMs?: number) {
-  return api<any>(`${API_PREFIX}/channels/${channelId}/tasks`, {
-    method: "POST",
-    body: JSON.stringify({ title, ...(assigneeId ? { assignee_id: assigneeId } : {}), ...(description ? { description } : {}), ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}) }),
+export function createTask(channelId: string, fields: CreateTaskFields) {
+  return api<Task>(`${API_PREFIX}/channels/${channelId}/tasks`, {
+    method: "POST", body: JSON.stringify(fields),
   });
 }
-export function updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }) {
+export function updateTask(taskId: string, fields: UpdateTaskFields) {
   return api<Task>(`${API_PREFIX}/tasks/${taskId}`, {
     method: "PATCH", body: JSON.stringify(fields),
   });

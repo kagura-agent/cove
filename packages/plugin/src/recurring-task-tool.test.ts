@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { restClient } = vi.hoisted(() => ({
   restClient: {
+    createTask: vi.fn(),
+    updateTask: vi.fn(),
     createRecurringTask: vi.fn(),
     getRecurringTasks: vi.fn(),
     getRecurringTask: vi.fn(),
@@ -19,6 +21,34 @@ import { createCoveTaskTool } from "./cove-task-tool.js";
 
 describe("cove_task recurring actions", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("exposes and maps recurrence settings through normal task actions", async () => {
+    restClient.createTask.mockResolvedValue({ task_id: "task-1" });
+    restClient.updateTask.mockResolvedValue({ task_id: "task-1" });
+    const tool = createCoveTaskTool({ cfg: {} });
+
+    expect(tool.parameters.properties.recurrence).toBeDefined();
+
+    const create = await tool.execute("call-1", {
+      action: "create",
+      channelId: "channel-1",
+      title: "Daily report",
+      recurrence: { intervalMs: 60_000, occurrenceMode: "new_task", enabled: true },
+    });
+    expect(create.details).toMatchObject({ ok: true, action: "create" });
+    expect(restClient.createTask).toHaveBeenCalledWith("channel-1", {
+      title: "Daily report",
+      recurrence: { interval_ms: 60_000, occurrence_mode: "new_task", enabled: true },
+    });
+
+    const update = await tool.execute("call-2", {
+      action: "update",
+      taskId: "task-1",
+      recurrence: { enabled: false },
+    });
+    expect(update.details).toMatchObject({ ok: true, action: "update" });
+    expect(restClient.updateTask).toHaveBeenCalledWith("task-1", { recurrence: { enabled: false } });
+  });
 
   it("maps interval-only recurring actions to recurring REST methods", async () => {
     restClient.createRecurringTask.mockResolvedValue({ id: "recurring-1" });

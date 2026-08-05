@@ -115,7 +115,7 @@ describe("RecurringTaskWorker", () => {
       content: initialAssignment.content,
       metadata: JSON.stringify({ content_type: "task_assignment" }),
     });
-    expect(dispatcher.events).toEqual(["MESSAGE_CREATE"]);
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "TASK_UPDATED"]);
     expect(dispatcher.messages[0]).toMatchObject({
       channel_id: first.thread_id,
       content: initialAssignment.content,
@@ -139,7 +139,7 @@ describe("RecurringTaskWorker", () => {
     expect(repos.recurringTasks.getById(recurring.id)).toMatchObject({ enabled: true, next_run_at: firstDue + day });
     expect(repos.tasks.listByChannel(channelId)).toHaveLength(1);
     expect(repos.tasks.getById(first.task_id)).toMatchObject({ thread_id: first.thread_id, status: "open" });
-    expect(dispatcher.events).toEqual(["MESSAGE_CREATE"]);
+    expect(dispatcher.events).toEqual(["MESSAGE_CREATE", "TASK_UPDATED"]);
     expect(dispatcher.messages[0]).toMatchObject({ channel_id: first.thread_id, metadata: expect.stringContaining("task_assignment") });
   });
 

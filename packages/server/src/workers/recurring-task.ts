@@ -77,16 +77,16 @@ export class RecurringTaskWorker {
         }
 
         if (latestTemplate.occurrence_mode === "same_task") {
-          const task = this.repos.tasks.update(previous.task_id, { status: "open" });
-          if (!task) return null;
+          const reopenedTask = this.repos.tasks.update(previous.task_id, { status: "open" });
+          if (!reopenedTask) return null;
           const assignmentMessage = createTaskAssignmentMessage(this.repos, {
-            threadId: task.thread_id,
+            threadId: reopenedTask.thread_id,
             creator,
-            taskId: task.task_id,
-            title: task.title,
+            taskId: reopenedTask.task_id,
+            title: reopenedTask.title,
           });
           this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt, last_spawned_at: now });
-          return { type: "reassign" as const, assignmentMessage };
+          return { type: "reassign" as const, assignmentMessage, task: this.repos.tasks.getById(reopenedTask.task_id)! };
         }
 
         const recurringSeq = previous.recurring_seq + 1;
@@ -104,11 +104,12 @@ export class RecurringTaskWorker {
           last_task_id: occurrence.task.task_id,
           last_spawned_at: now,
         });
-        return { type: "create" as const, occurrence };
+        return { type: "create" as const, occurrence: { ...occurrence, task: this.repos.tasks.getById(occurrence.task.task_id)! } };
       })();
       if (!result) return;
       if (result.type === "reassign") {
         this.dispatcher.messageCreate(result.assignmentMessage);
+        this.dispatcher.taskUpdated(result.task);
         return;
       }
       this.dispatcher.messageCreate(result.occurrence.cardMessage);
