@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { Role, Task, Webhook } from "@cove/shared";
+import type { RecurringTask, Role, Task, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -328,4 +328,45 @@ export function updateTask(taskId: string, fields: { status?: string; assignee_i
 }
 export function deleteTask(taskId: string) {
   return api<{ deleted: boolean }>(`${API_PREFIX}/tasks/${taskId}`, { method: "DELETE" });
+}
+
+export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
+
+export interface CreateRecurringTaskFields {
+  title: string;
+  description?: string;
+  assignee_id?: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  heartbeat_interval_ms?: number;
+}
+
+export interface UpdateRecurringTaskFields {
+  title?: string;
+  description?: string;
+  assignee_id?: string | null;
+  interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+  heartbeat_interval_ms?: number;
+}
+
+export function fetchRecurringTasks(channelId: string) {
+  return api<RecurringTask[]>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`);
+}
+export function fetchRecurringTask(recurringTaskId: string) {
+  return api<RecurringTask>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`);
+}
+export function createRecurringTask(channelId: string, fields: CreateRecurringTaskFields) {
+  return api<RecurringTask>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`, {
+    method: "POST", body: JSON.stringify(fields),
+  });
+}
+export function updateRecurringTask(recurringTaskId: string, fields: UpdateRecurringTaskFields) {
+  return api<RecurringTask>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, {
+    method: "PATCH", body: JSON.stringify(fields),
+  });
+}
+export function deleteRecurringTask(recurringTaskId: string) {
+  return api<{ deleted: boolean }>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, { method: "DELETE" });
 }

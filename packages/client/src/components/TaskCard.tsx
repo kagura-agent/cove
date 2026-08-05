@@ -148,12 +148,12 @@ export function parseTaskTitle(content: string): string {
   }
 }
 
-export function TaskAssignmentMessage({ message }: { message: Message }) {
-  // Extract task_id and title from preamble for short display
-  const taskIdMatch = message.content.match(/task_id:\s*([\w-]+)/);
-  const titleMatch = message.content.match(/Title:\s*(.+)/);
-  const title = titleMatch?.[1]?.trim() ?? "Task";
+export function taskAssignmentSummary(content: string): string {
+  const title = content.match(/Title:\s*(.+)/)?.[1]?.trim() || "Task";
+  return `${title} — assigned`;
+}
 
+export function TaskAssignmentMessage({ message }: { message: Message }) {
   return (
     <div style={{
       textAlign: "center",
@@ -162,7 +162,7 @@ export function TaskAssignmentMessage({ message }: { message: Message }) {
       color: "var(--text-muted)",
       fontStyle: "italic",
     }}>
-      📋 {title} — assigned
+      {taskAssignmentSummary(message.content)}
     </div>
   );
 }

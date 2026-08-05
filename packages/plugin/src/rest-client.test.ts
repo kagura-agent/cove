@@ -245,3 +245,28 @@ describe("sendTyping timeout", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 });
+
+describe("recurring task endpoints", () => {
+  it("maps create, list, get, update, and delete to recurring task routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(201, { id: "recurring-1" }))
+      .mockResolvedValueOnce(mockResponse(200, [{ id: "recurring-1" }]))
+      .mockResolvedValueOnce(mockResponse(200, { id: "recurring-1" }))
+      .mockResolvedValueOnce(mockResponse(200, { id: "recurring-1", enabled: false }))
+      .mockResolvedValueOnce(mockResponse(204));
+
+    await client.createRecurringTask("channel-1", { title: "Daily", interval_ms: 60_000 });
+    await client.getRecurringTasks("channel-1");
+    await client.getRecurringTask("recurring-1");
+    await client.updateRecurringTask("recurring-1", { enabled: false });
+    await client.deleteRecurringTask("recurring-1");
+
+    expect(mockFetch.mock.calls.map(([url, options]) => [url, (options as RequestInit).method, (options as RequestInit).body])).toEqual([
+      ["https://cove.test/api/v10/channels/channel-1/recurring-tasks", "POST", JSON.stringify({ title: "Daily", interval_ms: 60_000 })],
+      ["https://cove.test/api/v10/channels/channel-1/recurring-tasks", "GET", undefined],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "GET", undefined],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "PATCH", JSON.stringify({ enabled: false })],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "DELETE", undefined],
+    ]);
+  });
+});

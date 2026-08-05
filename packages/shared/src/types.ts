@@ -294,6 +294,28 @@ export type TaskStatus = "open" | "in_progress" | "in_review" | "done" | "cancel
 export const TASK_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", "done", "cancelled"];
 
 /** A channel-level task with a linked thread. */
+export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
+
+/** A recurring task template that creates ordinary task occurrences. */
+export interface RecurringTask {
+  id: string;
+  guild_id: string;
+  channel_id: string;
+  title: string;
+  description: string;
+  assignee_id: string | null;
+  created_by: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  next_run_at: number;
+  enabled: boolean;
+  last_task_id: string | null;
+  last_spawned_at: number;
+  heartbeat_interval_ms: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface Task {
   task_id: string;
   channel_id: string;
@@ -308,6 +330,8 @@ export interface Task {
   created_by: string;
   heartbeat_interval_ms: number;
   heartbeat_last_at: number;
+  recurring_id: string | null;
+  recurring_seq: number;
   created_at: number;
   updated_at: number;
 }

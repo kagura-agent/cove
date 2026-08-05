@@ -13,8 +13,9 @@ import { ThreadsRepo } from "./threads.js";
 import { AttachmentRepo } from "./attachments.js";
 import { RolesRepo } from "./roles.js";
 import { TasksRepo } from "./tasks.js";
+import { RecurringTasksRepo } from "./recurring-tasks.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo, RolesRepo, TasksRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo, RolesRepo, TasksRepo, RecurringTasksRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -32,6 +33,7 @@ export interface Repos {
   attachments: AttachmentRepo;
   roles: RolesRepo;
   tasks: TasksRepo;
+  recurringTasks: RecurringTasksRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -55,5 +57,6 @@ export function createRepos(db: Database.Database): Repos {
     attachments: new AttachmentRepo(db),
     roles: new RolesRepo(db),
     tasks: new TasksRepo(db),
+    recurringTasks: new RecurringTasksRepo(db),
   };
 }
