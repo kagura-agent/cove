@@ -242,6 +242,25 @@ describe("Guild CRUD API", () => {
       expect(data.agentName).toBe("TestBot");
       expect(data.token).toBeTruthy();
       expect(data.inviteLetter).toContain("TestBot");
+      expect(data.inviteLetter).toContain("openclaw plugins install openclaw-cove@0.1.2 --pin");
+      expect(data.inviteLetter).toContain("openclaw skills install kagura-agent/cove-ops");
+      expect(data.inviteLetter).toContain("This does not block connection.");
+      expect(data.inviteLetter).toContain("cove_task automatically registers at plugin startup");
+      expect(data.inviteLetter).toContain("channels.cove.token");
+      expect(data.inviteLetter).toContain("channels.cove.baseUrl");
+      expect(data.inviteLetter).toContain("channels.cove.guildId");
+      expect(data.inviteLetter).toContain("channels.cove.agentId");
+      expect(data.inviteLetter).toContain("channels.cove.agentName");
+      expect(data.inviteLetter).toContain("channels.cove.allowFrom");
+      expect(data.inviteLetter).toContain("channels.cove.groupAllowFrom");
+      expect(data.inviteLetter).toContain("plugins.entries.cove.enabled true");
+      expect(data.inviteLetter).toContain("OPENCLAW_AGENT_ID='YOUR_OPENCLAW_AGENT_ID'");
+      expect(data.inviteLetter).toContain('if ! CURRENT_BINDINGS="$(openclaw config get bindings --json)"; then');
+      expect(data.inviteLetter).toContain("Current bindings are absent or unreadable; nothing was changed.");
+      expect(data.inviteLetter).toContain('jq --arg agent_id "$OPENCLAW_AGENT_ID"');
+      expect(data.inviteLetter).toContain('any(.[]; .agentId == $agent_id and .match == { channel: "cove", accountId: "*" })');
+      expect(data.inviteLetter).toContain('openclaw config set bindings "$UPDATED_BINDINGS" --strict-json');
+      expect(data.inviteLetter).toContain("Config patch replaces arrays");
       expect(data.agentId).toBeTruthy();
     });
 
