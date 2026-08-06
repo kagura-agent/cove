@@ -41,8 +41,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const draftState = { stopped: false, final: false };
     let draftMessageId: string | undefined;
     let lastSentText = "";
-    let finalReplyDelivered = false;
     let finalizedViaPreviewMessage = false;
+    let undeliveredFinalPayload: string | undefined;
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
     let warnedSendOrEditAborted = false;
@@ -112,19 +112,25 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         return;
       }
       if (draftMessageId) {
-        try { await restClient.deleteMessage(channelId, draftMessageId); }
-        catch (e: any) { log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`); }
-        draftMessageId = undefined;
+        try {
+          await restClient.deleteMessage(channelId, draftMessageId);
+          draftMessageId = undefined;
+        } catch (e: any) {
+          log?.warn?.(`cove: failed to delete draft ${draftMessageId}: ${e.message}`);
+        }
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
       if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
       try {
         await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
       } catch (e: any) {
+        // Keep the payload on the failure object so the dispatcher/kernel can
+        // retain it for recovery without claiming the reply was delivered.
+        undeliveredFinalPayload = text;
+        if (e && typeof e === "object") (e as { coveFinalPayload?: string }).coveFinalPayload = text;
         log?.warn?.(`cove: freshSend sendText failed for [${channelId}] (message: ${message.id}): ${e.message}`);
         throw e;
       }
-      finalReplyDelivered = true;
     };
 
     const adapter = defineFinalizableLivePreviewAdapter<{ text: string }, string, string>({
@@ -186,7 +192,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           adapter,
           deliverNormally: (p) => freshSend(p.text),
         });
-        finalReplyDelivered = true;
       },
     };
 
@@ -336,14 +341,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       } else { throw err; }
     } finally {
       // Orphaned draft cleanup (Discord parity)
-      // Runs when final delivery never happened — delete stale progress preview
-      // so user doesn't see it frozen. Runs regardless of abort state.
-      if (!finalReplyDelivered && !finalizedViaPreviewMessage && draftMessageId) {
+      // Retry any preview that could not be deleted before non-in-place finalization.
+      // Runs regardless of abort state.
+      if (!finalizedViaPreviewMessage && draftMessageId) {
         log?.warn?.(`cove: cleaning up orphaned draft ${draftMessageId} in [${channelId}] (message: ${message.id}, aborted: ${isAborted()})`);
         await draft.discardPending();
         await restClient.deleteMessage(channelId, draftMessageId).catch((e: any) =>
           log?.warn?.(`cove: failed to delete orphaned draft (message: ${message.id}): ${e.message}`)
         );
+      }
+      if (undeliveredFinalPayload) {
+        log?.warn?.(`cove: final reply remains recoverable after failed delivery in [${channelId}] (message: ${message.id}, ${undeliveredFinalPayload.length} chars)`);
       }
     }
   } catch (err: any) {

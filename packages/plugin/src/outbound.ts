@@ -21,9 +21,56 @@ export interface CoveOutboundAdapterContext {
   log?: { warn?: (...a: any[]) => void; info?: (...a: any[]) => void };
 }
 
+type DurableBatchResult = Awaited<ReturnType<typeof sendDurableMessageBatch>>;
+
+/**
+ * Durable sends may resolve with a failed or incomplete outcome instead of
+ * throwing. A final reply is delivered only when every requested payload has
+ * a visible platform message ID; anything else must remain retryable.
+ */
+function assertConfirmedVisibleDelivery(result: DurableBatchResult, payloadCount: number): void {
+  if (result.status === "suppressed") return;
+
+  if (result.status !== "sent") {
+    const cause = "error" in result ? result.error : undefined;
+    throw cause === undefined
+      ? new Error(`cove: durable send was not confirmed (status: ${result.status})`)
+      : new Error(`cove: durable send was not confirmed (status: ${result.status})`, { cause });
+  }
+
+  const outcomes = result.payloadOutcomes;
+  if (outcomes !== undefined) {
+    if (!Array.isArray(outcomes) || outcomes.length !== payloadCount) {
+      throw new Error("cove: durable send returned malformed payload outcomes");
+    }
+
+    const confirmed = outcomes.every((outcome, index) =>
+      outcome?.index === index
+      && outcome.status === "sent"
+      && Array.isArray(outcome.results)
+      && outcome.results.length > 0
+      && outcome.results.every((delivery) => typeof delivery?.messageId === "string" && delivery.messageId.length > 0),
+    );
+    if (!confirmed) {
+      throw new Error("cove: durable send returned an unconfirmed visible outcome");
+    }
+    return;
+  }
+
+  const hasReceipt = result.receipt?.platformMessageIds.some((messageId) =>
+    typeof messageId === "string" && messageId.length > 0,
+  );
+  const hasResult = result.results?.some((delivery) =>
+    typeof delivery?.messageId === "string" && delivery.messageId.length > 0,
+  );
+  if (!hasReceipt && !hasResult) {
+    throw new Error("cove: durable send returned no visible delivery confirmation");
+  }
+}
+
 /** Shared helper — sends a text payload via sendDurableMessageBatch with Cove defaults. */
 async function sendCoveDurableBatch(opts: { cfg: unknown; to: string; accountId?: string | null; text: string; agentId: string }) {
-  await sendDurableMessageBatch({
+  const result = await sendDurableMessageBatch({
     cfg: opts.cfg as any,
     channel: "cove",
     to: opts.to,
@@ -33,6 +80,7 @@ async function sendCoveDurableBatch(opts: { cfg: unknown; to: string; accountId?
     durability: "best_effort",
     session: { key: `agent:${opts.agentId}:cove:group:${opts.to}` },
   });
+  assertConfirmedVisibleDelivery(result, 1);
 }
 
 /**
