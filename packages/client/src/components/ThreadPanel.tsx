@@ -11,17 +11,14 @@ import { MessageItem } from "./MessageItem";
 import { TaskBadge } from "./TaskBadge";
 import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
-import { TeamOutlined } from "@ant-design/icons";
 import { ThreadIcon } from "./ThreadIcon";
 
 interface ThreadPanelProps {
   threadId: string;
   onClose: () => void;
-  onMembersClick: () => void;
-  membersOpen: boolean;
 }
 
-export function ThreadPanel({ threadId, onClose, onMembersClick, membersOpen }: ThreadPanelProps) {
+export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const [thread, setThread] = useState<Channel | null>(null);
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -206,23 +203,6 @@ export function ThreadPanel({ threadId, onClose, onMembersClick, membersOpen }: 
             }}
           />
         )}
-        <button
-          type="button"
-          aria-label="Toggle members"
-          aria-pressed={membersOpen}
-          title={membersOpen ? "Hide members" : "Show members"}
-          onClick={onMembersClick}
-          style={{
-            background: membersOpen ? "var(--bg-modifier-active)" : "none",
-            border: "none",
-            borderRadius: "var(--space-xs)",
-            color: membersOpen ? "var(--header-primary)" : "var(--text-muted)",
-            cursor: "pointer",
-            fontSize: "var(--font-size-lg)",
-            padding: "var(--space-xs)",
-            lineHeight: 1,
-          }}
-        ><TeamOutlined /></button>
         <div style={{ position: "relative" }}>
           <button
             ref={menuBtnRef}

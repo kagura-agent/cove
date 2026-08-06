@@ -171,7 +171,7 @@ export function ChannelView() {
             onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
           />
           <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
-            <ThreadPanel threadId={threadId} onClose={closeThread} onMembersClick={toggleMembers} membersOpen={membersOpen} />
+            <ThreadPanel threadId={threadId} onClose={closeThread} />
           </div>
         </>
       )}
