@@ -43,7 +43,6 @@ vi.mock("openclaw/plugin-sdk/channel-message", async () => {
     createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
     sendDurableMessageBatch: vi.fn(async () => ({
       status: "sent",
-      payloadOutcomes: [{ index: 0, status: "sent", results: [{ channel: "cove", messageId: "final-1" }] }],
       results: [{ channel: "cove", messageId: "final-1" }],
       receipt: { platformMessageIds: ["final-1"], parts: [], sentAt: Date.now() },
     })),
@@ -245,35 +244,123 @@ describe("B. Final Delivery", () => {
     blocker.resolve(); await p;
   });
 
-  it("B2a: final PATCH failure plus failed fallback is observable and cleans the stale preview", async () => {
+  it("B2a: dispatchMessage preserves a failed fallback for recovery", async () => {
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
-    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: new Error("send failed") } as any);
+    const sendFailure = new Error("send failed");
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: sendFailure } as any);
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    let deliveryError: unknown;
+
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (!capturedSendOrEdit) throw new Error("Expected draft sender");
+      await capturedSendOrEdit("Draft");
+      restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+      try {
+        await params.dispatcherOptions.deliver({ text: "Final that must be recoverable" }, { kind: "final" });
+      } catch (error) {
+        deliveryError = error;
+        throw error;
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect(deliveryError).toBeInstanceOf(Error);
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect((deliveryError as Error & { coveFinalPayload?: string }).coveFinalPayload).toBe("Final that must be recoverable");
+    expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+    expect(opts.log?.warn).toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
+  });
+
+  it("B2b: failed fallback retries preview cleanup when its first deletion fails", async () => {
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+    const sendFailure = new Error("send failed");
+    const deleteFailure = new Error("delete failed");
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: sendFailure } as any);
+    restClient.deleteMessage.mockRejectedValueOnce(deleteFailure).mockResolvedValueOnce(undefined);
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    let deliveryError: unknown;
+
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (!capturedSendOrEdit) throw new Error("Expected draft sender");
+      await capturedSendOrEdit("Draft");
+      restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+      try {
+        await params.dispatcherOptions.deliver({ text: "Recoverable final" }, { kind: "final" });
+      } catch (error) {
+        deliveryError = error;
+        throw error;
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect(restClient.deleteMessage).toHaveBeenCalledTimes(2);
+    expect(restClient.deleteMessage).toHaveBeenNthCalledWith(1, "ch-1", "msg-draft-1");
+    expect(restClient.deleteMessage).toHaveBeenNthCalledWith(2, "ch-1", "msg-draft-1");
+  });
+
+  it("B2c: treats a suppressed durable outcome as handled no-send", async () => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "suppressed" } as any);
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
-    if (capturedSendOrEdit) await capturedSendOrEdit("Draft");
-    restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Suppressed final" }, { kind: "final" })).resolves.toBeUndefined();
+
+    expect(opts.log?.warn).not.toHaveBeenCalledWith(expect.stringContaining("freshSend sendText failed"));
+    blocker.resolve(); await p;
+    expect(opts.log?.warn).not.toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
+  });
+
+  it.each([
+    ["receipt", { status: "sent", receipt: { platformMessageIds: ["final-1"] } }],
+    ["result", { status: "sent", results: [{ channel: "cove", messageId: "final-1" }] }],
+  ])("B2d: accepts a sent result with visible aggregate %s and no payload outcomes", async (_name, result) => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce(result as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Legacy confirmation" }, { kind: "final" })).resolves.toBeUndefined();
+
+    blocker.resolve(); await p;
+  });
+
+  it.each(["failed", "partial_failed"] as const)("B2e: preserves the original %s error as the cause", async (status) => {
+    const opts = createBaseOpts();
+    const sendFailure = new Error(`${status} send`);
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status, error: sendFailure, sentBeforeError: true } as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
 
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     let deliveryError: unknown;
     try {
-      await deliver({ text: "Final that must be recoverable" }, { kind: "final" });
+      await deliver({ text: "Must remain recoverable" }, { kind: "final" });
     } catch (error) {
       deliveryError = error;
     }
 
-    expect(deliveryError).toMatchObject({ coveFinalPayload: "Final that must be recoverable" });
-    expect(deliveryError).toBeInstanceOf(Error);
-    expect((deliveryError as Error).message).toContain("status: failed");
-    expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect((deliveryError as Error & { coveFinalPayload?: string }).coveFinalPayload).toBe("Must remain recoverable");
     blocker.resolve(); await p;
-    expect(opts.log?.warn).toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
   });
 
   it.each([
-    ["partial failure", { status: "partial_failed", error: new Error("partial"), sentBeforeError: true }],
-    ["malformed sent result", { status: "sent", payloadOutcomes: [] }],
+    ["sent result without visible confirmation", { status: "sent" }],
+    ["sent result with malformed payload outcomes despite a receipt", {
+      status: "sent",
+      payloadOutcomes: [],
+      receipt: { platformMessageIds: ["final-1"] },
+    }],
     ["unknown result", { status: "mystery" }],
-  ])("B2b: rejects a %s durable outcome", async (_name, result) => {
+  ])("B2f: rejects a %s durable outcome", async (_name, result) => {
     const opts = createBaseOpts();
     vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce(result as any);
     const blocker = createDispatchBlocker();

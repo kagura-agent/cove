@@ -29,24 +29,42 @@ type DurableBatchResult = Awaited<ReturnType<typeof sendDurableMessageBatch>>;
  * a visible platform message ID; anything else must remain retryable.
  */
 function assertConfirmedVisibleDelivery(result: DurableBatchResult, payloadCount: number): void {
+  if (result.status === "suppressed") return;
+
   if (result.status !== "sent") {
-    throw new Error(`cove: durable send was not confirmed (status: ${result.status})`);
+    const cause = "error" in result ? result.error : undefined;
+    throw cause === undefined
+      ? new Error(`cove: durable send was not confirmed (status: ${result.status})`)
+      : new Error(`cove: durable send was not confirmed (status: ${result.status})`, { cause });
   }
 
   const outcomes = result.payloadOutcomes;
-  if (!Array.isArray(outcomes) || outcomes.length !== payloadCount) {
-    throw new Error("cove: durable send returned malformed payload outcomes");
+  if (outcomes !== undefined) {
+    if (!Array.isArray(outcomes) || outcomes.length !== payloadCount) {
+      throw new Error("cove: durable send returned malformed payload outcomes");
+    }
+
+    const confirmed = outcomes.every((outcome, index) =>
+      outcome?.index === index
+      && outcome.status === "sent"
+      && Array.isArray(outcome.results)
+      && outcome.results.length > 0
+      && outcome.results.every((delivery) => typeof delivery?.messageId === "string" && delivery.messageId.length > 0),
+    );
+    if (!confirmed) {
+      throw new Error("cove: durable send returned an unconfirmed visible outcome");
+    }
+    return;
   }
 
-  const confirmed = outcomes.every((outcome, index) =>
-    outcome?.index === index
-    && outcome.status === "sent"
-    && Array.isArray(outcome.results)
-    && outcome.results.length > 0
-    && outcome.results.every((delivery) => typeof delivery?.messageId === "string" && delivery.messageId.length > 0),
+  const hasReceipt = result.receipt?.platformMessageIds.some((messageId) =>
+    typeof messageId === "string" && messageId.length > 0,
   );
-  if (!confirmed) {
-    throw new Error("cove: durable send returned an unconfirmed visible outcome");
+  const hasResult = result.results?.some((delivery) =>
+    typeof delivery?.messageId === "string" && delivery.messageId.length > 0,
+  );
+  if (!hasReceipt && !hasResult) {
+    throw new Error("cove: durable send returned no visible delivery confirmation");
   }
 }
 
