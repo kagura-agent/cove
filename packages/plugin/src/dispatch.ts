@@ -5,11 +5,16 @@ import type { Message } from "@cove/shared";
 import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
+import { defineStableChannelIngressIdentity, resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
+import { hasControlCommand, shouldComputeCommandAuthorized } from "openclaw/plugin-sdk/command-detection";
+import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveThreadContext, isTaskThread, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
+const coveIngressIdentity = defineStableChannelIngressIdentity();
+
 export interface DispatchMessageOptions {
   message: Message; account: CoveAccount;
   restClient: CoveRestClient; channelRuntime: any; cfg: any;
@@ -34,7 +39,38 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
   try { // typing lifecycle: finally guarantees cleanup on all exit paths
     const { runInboundReplyTurn } = await loadInbound();
-    const targetAgent = account.agentId;
+    const { coveMdChannelId, channel } = await resolveThreadContext(restClient, channelId);
+    const taskThread = await isTaskThread(restClient, channelId, channel);
+    const routePeer = { kind: taskThread ? "direct" as const : "channel" as const, id: channelId };
+    const route = channelRuntime.routing?.resolveAgentRoute?.({
+      cfg,
+      channel: "cove",
+      accountId,
+      peer: routePeer,
+      ...(channel?.type === 11 && channel.parent_id ? {
+        parentPeer: { kind: "channel" as const, id: channel.parent_id },
+      } : {}),
+    }) ?? {
+      agentId: account.agentId,
+      sessionKey: `agent:${account.agentId}:cove:${routePeer.kind}:${channelId}`,
+      mainSessionKey: `agent:${account.agentId}:main`,
+    };
+    const parentRoute = taskThread && channel?.parent_id
+      ? channelRuntime.routing?.resolveAgentRoute?.({
+        cfg,
+        channel: "cove",
+        accountId,
+        peer: { kind: "channel" as const, id: channel.parent_id },
+      })
+      : undefined;
+    const threadSession = taskThread
+      ? resolveThreadSessionKeys({
+        baseSessionKey: route.sessionKey,
+        threadId: channelId,
+        parentSessionKey: parentRoute?.sessionKey ?? route.mainSessionKey,
+      })
+      : { sessionKey: route.sessionKey, parentSessionKey: undefined };
+    const targetAgent = route.agentId;
     const originalDispatcher = channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher;
     const recordInboundSession = channelRuntime.session.recordInboundSession.bind(channelRuntime.session);
 
@@ -284,13 +320,40 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
-    const { coveMdChannelId, channel } = await resolveThreadContext(restClient, channelId);
-    const taskThread = await isTaskThread(restClient, channelId, channel);
     const chatType = taskThread ? "direct" : "channel";
-    const sessionType = taskThread ? "task" : "group";
     const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
     const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
     const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
+    const controlCommand = hasControlCommand(message.content, cfg);
+    const ingress = await resolveChannelMessageIngress({
+      channelId: "cove",
+      accountId,
+      identity: coveIngressIdentity,
+      subject: { stableId: senderId },
+      conversation: { kind: "channel", id: channelId, ...(channel?.parent_id ? { parentId: channel.parent_id } : {}) },
+      event: { kind: "message", authMode: "inbound", mayPair: false },
+      policy: {
+        dmPolicy: account.dmPolicy === "pairing" || account.dmPolicy === "allowlist" || account.dmPolicy === "disabled" ? account.dmPolicy : "open",
+        groupPolicy: account.groupPolicy === "allowlist" || account.groupPolicy === "disabled" ? account.groupPolicy : "open",
+      },
+      allowFrom: account.allowFrom,
+      groupAllowFrom: account.groupAllowFrom,
+      command: {
+        allowTextCommands: true,
+        hasControlCommand: controlCommand,
+        useAccessGroups: cfg?.commands?.useAccessGroups !== false,
+        commandOwnerAllowFrom: account.allowFrom,
+        commandGroupAllowFromFallbackToAllowFrom: true,
+      },
+      accessGroups: cfg?.accessGroups,
+    });
+    if (ingress.ingress.admission !== "dispatch") {
+      log?.info?.(`cove: dropping inbound message in [${channelId}] (${ingress.ingress.reasonCode})`);
+      return;
+    }
+    const commandAuthorized = shouldComputeCommandAuthorized(message.content, cfg)
+      ? ingress.commandAccess.authorized
+      : false;
 
     try {
       const messageId = message.id ?? `cove-${Date.now()}`;
@@ -298,10 +361,14 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         Body: message.content, BodyForAgent: bodyForAgent,
         CommandBody: message.content, RawBody: message.content,
         From: senderId, To: channelId, ChannelId: channelId,
-        SessionKey: `agent:${targetAgent}:cove:${sessionType}:${channelId}`,
+        SessionKey: threadSession.sessionKey,
         AgentId: targetAgent, AccountId: accountId, MessageSid: messageId,
         Provider: "cove", Surface: "cove", ChatType: chatType,
-        SenderId: senderId, SenderName: senderName, CommandAuthorized: false,
+        SenderId: senderId, SenderName: senderName, CommandAuthorized: commandAuthorized,
+        ...(taskThread ? {
+          MessageThreadId: channelId,
+          ParentSessionKey: threadSession.parentSessionKey,
+        } : {}),
         ...((message as any).batchMeta ? {
           MessageSids: (message as any).batchMeta.MessageSids,
           MessageSidFirst: (message as any).batchMeta.MessageSidFirst,
@@ -325,7 +392,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           }),
           resolveTurn: () => ({
             channel: "cove", accountId, agentId: targetAgent,
-            routeSessionKey: `agent:${targetAgent}:cove:${sessionType}:${channelId}`,
+            routeSessionKey: threadSession.sessionKey,
             storePath: "", ctxPayload, recordInboundSession,
             runDispatch: async () => {
               await typingCallbacks.onReplyStart?.();

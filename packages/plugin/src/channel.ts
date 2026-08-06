@@ -57,7 +57,18 @@ function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
   if (!token) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing token — set channels.cove.accounts.<id>.token`);
   const agentId = merged?.agentId;
   if (!agentId) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing agentId — set channels.cove.accounts.<id>.agentId`);
-  return { accountId: accountId ?? null, token, baseUrl: merged?.baseUrl ?? "http://localhost:3400", guildId: merged?.guildId ?? null, agentId, agentName: merged?.agentName ?? agentId, allowFrom: merged?.allowFrom ?? [], dmPolicy: merged?.dmSecurity };
+  return {
+    accountId: accountId ?? null,
+    token,
+    baseUrl: merged?.baseUrl ?? "http://localhost:3400",
+    guildId: merged?.guildId ?? null,
+    agentId,
+    agentName: merged?.agentName ?? agentId,
+    allowFrom: merged?.allowFrom ?? [],
+    groupAllowFrom: merged?.groupAllowFrom ?? [],
+    dmPolicy: merged?.dmSecurity,
+    groupPolicy: merged?.groupPolicy,
+  };
 }
 
 async function coveSendText(ctx: any): Promise<{ messageId: string }> {

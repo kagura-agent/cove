@@ -23,6 +23,16 @@ function createDispatchBlocker() {
   return dispatchBlocker;
 }
 
+const defaultIngress = () => ({
+  ingress: { admission: "dispatch", reasonCode: "allowed" },
+  commandAccess: { authorized: true },
+});
+
+vi.mock("openclaw/plugin-sdk/channel-ingress-runtime", () => ({
+  defineStableChannelIngressIdentity: vi.fn(() => ({})),
+  resolveChannelMessageIngress: vi.fn(async () => defaultIngress()),
+}));
+
 vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
   runInboundReplyTurn: vi.fn(async (params: any) => {
     // Mimic the kernel: call ingest, then resolveTurn, then runDispatch.
@@ -115,6 +125,7 @@ import { createTypingCallbacks, sendDurableMessageBatch } from "openclaw/plugin-
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { getCoveMd } from "./cove-md-cache.js";
 import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channel-outbound";
+import { resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
@@ -131,7 +142,11 @@ const createMockRestClient = (): MockRestClient => ({
 });
 
 const createMockChannelRuntime = () => ({
-  routing: { resolveAgentRoute: vi.fn().mockReturnValue({ agentId: "original-agent", sessionKey: "agent:original-agent:cove:group:ch-1" }) },
+  routing: { resolveAgentRoute: vi.fn((params: any) => ({
+    agentId: "routed-agent",
+    sessionKey: `agent:routed-agent:cove:${params.peer.kind}:${params.peer.id}`,
+    mainSessionKey: "agent:routed-agent:main",
+  })) },
   reply: { dispatchReplyWithBufferedBlockDispatcher: vi.fn((params: any) => { capturedDispatcherParams = params; return Promise.resolve(); }) },
   session: { recordInboundSession: vi.fn(async () => ({})) },
 });
@@ -145,7 +160,7 @@ const createTestMessage = (overrides: Partial<any> = {}): any => ({
 const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): DispatchMessageOptions => ({
   message: createTestMessage(),
   account: { accountId: "test-account", token: "test-token", baseUrl: "http://localhost:3400",
-             guildId: "guild-1", agentId: "test-agent", agentName: "Test Agent", allowFrom: [], dmPolicy: undefined },
+             guildId: "guild-1", agentId: "test-agent", agentName: "Test Agent", allowFrom: [], groupAllowFrom: [], dmPolicy: undefined, groupPolicy: undefined },
   restClient: createMockRestClient() as any, channelRuntime: createMockChannelRuntime(),
   cfg: { channels: { cove: {} } }, accountId: "test-account",
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
@@ -406,6 +421,41 @@ describe("B. Final Delivery", () => {
     if (deliver) await deliver({ text: "" }, { kind: "final" });
     expect(restClient.editMessage).not.toHaveBeenCalled();
     blocker.resolve(); await p;
+  });
+});
+
+describe("C. Text Command Authorization (#426)", () => {
+  beforeEach(resetState);
+
+  it("C1: forwards an allowlisted /new with command authorization", async () => {
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "/new" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(resolveChannelMessageIngress).toHaveBeenCalledWith(expect.objectContaining({
+      subject: { stableId: "user-1" },
+      allowFrom: ["user-1"],
+      command: expect.objectContaining({ allowTextCommands: true, hasControlCommand: true }),
+    }));
+    expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(true);
+  });
+
+  it("C2: drops an unauthorized /new before dispatching a turn", async () => {
+    vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
+      ingress: { admission: "drop", reasonCode: "control_command_unauthorized" },
+      commandAccess: { authorized: false, shouldBlockControlCommand: true },
+    } as any);
+    const opts = createBaseOpts({ message: createTestMessage({ content: "/new" }) });
+    const { runInboundReplyTurn } = await loadInbound();
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn).toBeNull();
+    expect(runInboundReplyTurn).not.toHaveBeenCalled();
+    expect(opts.log?.info).toHaveBeenCalledWith(expect.stringContaining("control_command_unauthorized"));
   });
 });
 
@@ -1264,29 +1314,86 @@ describe("J. Task Thread Direct Policy (#473)", () => {
   it("J1: Regular channel uses ChatType 'channel'", async () => {
     await dispatchMessage(createBaseOpts());
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
-    expect(capturedResolvedTurn?.routeSessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":channel:");
   });
 
-  it("J2: Task thread uses ChatType 'direct'", async () => {
+  it("J2: Task thread uses the routed canonical thread session", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
+    const resolveAgentRoute = (opts.channelRuntime as any).routing.resolveAgentRoute as Mock;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
     restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "t1" });
+
     await dispatchMessage(opts);
-    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");
-    expect(capturedResolvedTurn?.routeSessionKey).toContain(":task:");
+
+    expect(resolveAgentRoute).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      peer: { kind: "direct", id: "ch-1" },
+      parentPeer: { kind: "channel", id: "parent-ch" },
+    }));
+    expect(resolveAgentRoute).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      peer: { kind: "channel", id: "parent-ch" },
+    }));
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      AgentId: "routed-agent",
+      ChatType: "direct",
+      MessageThreadId: "ch-1",
+      ParentSessionKey: "agent:routed-agent:cove:channel:parent-ch",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    expect(capturedResolvedTurn?.routeSessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    // OpenClaw recognizes this as a thread reset because both canonical
+    // thread key syntax and parent/thread metadata are supplied above.
   });
 
-  it("J3: Thread without task stays as 'channel'", async () => {
+  it("J3: authorized /reset in a task thread targets its canonical session, delivers confirmation, and preserves it for the next message", async () => {
+    const resetConfirmation = "Reset the task session.";
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "/reset" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "t1" });
+
+    let resetTargetSessionKey: string | undefined;
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (params.ctx.Body === "/reset") {
+        expect(params.ctx.CommandAuthorized).toBe(true);
+        resetTargetSessionKey = params.ctx.SessionKey;
+        await params.dispatcherOptions.deliver({ text: resetConfirmation }, { kind: "final" });
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect(resetTargetSessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    expect(sendDurableMessageBatch).toHaveBeenCalledOnce();
+    expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+      to: "ch-1",
+      payloads: [{ text: resetConfirmation }],
+    }));
+
+    await dispatchMessage({
+      ...opts,
+      message: createTestMessage({ id: "msg-2", content: "Continue with the task." }),
+    });
+
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe(resetTargetSessionKey);
+    expect(capturedResolvedTurn?.routeSessionKey).toBe(resetTargetSessionKey);
+    expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(false);
+  });
+
+  it("J4: Thread without task stays as 'channel'", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
     restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
   });
 
   it("J4: Error in task detection gracefully falls back to 'channel'", async () => {
@@ -1295,7 +1402,7 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     restClient.getChannel.mockRejectedValue(new Error("API down"));
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
   });
 
   it("J5: task assignment descriptions reach the agent's first inbound payload", async () => {
