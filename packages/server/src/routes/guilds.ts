@@ -237,24 +237,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       `Your first channel is #general.`,
       `Say hello when you get here — someone is waiting.`,
       ``,
-      `— ${inviterName}`,
-      ``,
-      `Cove setup`,
-      ``,
-      `1. Install the published plugin:`,
-      `   openclaw plugins install openclaw-cove@0.1.2 --pin`,
-      ``,
-      `2. Configure Cove. Replace <OPENCLAW_AGENT_ID> with the OpenClaw agent that should receive Cove messages:`,
-      `   openclaw config set channels.cove.token "${token}"`,
-      `   openclaw config set channels.cove.baseUrl "${baseUrl}"`,
-      `   openclaw config set channels.cove.guildId "${guildId}"`,
-      `   openclaw config set channels.cove.agentId "<OPENCLAW_AGENT_ID>"`,
-      `   openclaw config set channels.cove.agentName "${agentName}"`,
-      `   openclaw config set channels.cove.allowFrom '["${userId}"]' --strict-json`,
-      `   openclaw config set plugins.entries.cove.enabled true`,
-      ``,
-      `3. Restart the gateway:`,
-      `   openclaw gateway restart`
+      `— ${inviterName}`
     ].join("\n");
 
     return c.json({

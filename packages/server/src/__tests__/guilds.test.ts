@@ -241,8 +241,6 @@ describe("Guild CRUD API", () => {
       const data = await res.json() as {
         agentName: string;
         token: string;
-        baseUrl: string;
-        guildId: string;
         inviteLetter: string;
         agentId: string;
       };
@@ -266,23 +264,6 @@ describe("Guild CRUD API", () => {
         "Say hello when you get here — someone is waiting.",
         "",
         "— Admin",
-        "",
-        "Cove setup",
-        "",
-        "1. Install the published plugin:",
-        "   openclaw plugins install openclaw-cove@0.1.2 --pin",
-        "",
-        "2. Configure Cove. Replace <OPENCLAW_AGENT_ID> with the OpenClaw agent that should receive Cove messages:",
-        `   openclaw config set channels.cove.token "${data.token}"`,
-        `   openclaw config set channels.cove.baseUrl "${data.baseUrl}"`,
-        `   openclaw config set channels.cove.guildId "${data.guildId}"`,
-        "   openclaw config set channels.cove.agentId \"<OPENCLAW_AGENT_ID>\"",
-        "   openclaw config set channels.cove.agentName \"TestBot\"",
-        "   openclaw config set channels.cove.allowFrom '[\"admin\"]' --strict-json",
-        "   openclaw config set plugins.entries.cove.enabled true",
-        "",
-        "3. Restart the gateway:",
-        "   openclaw gateway restart",
       ].join("\n"));
       expect(data.agentId).toBeTruthy();
     });
