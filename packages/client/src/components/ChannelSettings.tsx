@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CSSProperties } from "react";
 import type { Webhook, PermissionOverwrite } from "@cove/shared";
+import { PermissionFlags } from "@cove/shared";
 import { Input, Button, Modal, Switch } from "antd";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
