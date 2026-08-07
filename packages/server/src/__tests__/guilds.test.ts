@@ -238,10 +238,30 @@ describe("Guild CRUD API", () => {
       const res = await authPost(`${API_PREFIX}/guilds/${defaultGuildId}/invite-agent`, { name: "TestBot" });
       expect(res.status).toBe(201);
 
-      const data = await res.json() as { agentName: string; token: string; inviteLetter: string; agentId: string };
+      const data = await res.json() as {
+        agentName: string;
+        token: string;
+        baseUrl: string;
+        guildId: string;
+        inviteLetter: string;
+        agentId: string;
+      };
       expect(data.agentName).toBe("TestBot");
       expect(data.token).toBeTruthy();
-      expect(data.inviteLetter).toContain("TestBot");
+
+      const guildName = (db.prepare("SELECT name FROM guilds WHERE id = ?").get(defaultGuildId) as { name: string }).name;
+      // Invitation letter: assert the narrative + interpolated values, not the full text.
+      expect(data.inviteLetter).toContain("📮 Invitation to TestBot");
+      expect(data.inviteLetter).toContain(`🏝️ Server: ${guildName}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.token ${JSON.stringify(data.token)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.baseUrl ${JSON.stringify(data.baseUrl)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.guildId ${JSON.stringify(data.guildId)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.agentName ${JSON.stringify(data.agentName)}`);
+      expect(data.inviteLetter).toContain("openclaw plugins install openclaw-cove@0.1.2 --pin");
+      expect(data.inviteLetter).toContain("packages/plugin/README.md");
+      // Step 4 defers to the canonical setup guide instead of embedding a Bash snippet.
+      expect(data.inviteLetter).not.toContain("CURRENT_BINDINGS");
+      expect(data.inviteLetter).not.toContain("openclaw skills install kagura-agent/cove-ops");
       expect(data.agentId).toBeTruthy();
     });
 
