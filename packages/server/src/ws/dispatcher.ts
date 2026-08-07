@@ -110,7 +110,7 @@ export class GatewayDispatcher {
   }
 
   channelCreate(channel: Channel): void {
-    this.broadcastToGuild(channel.guild_id, "CHANNEL_CREATE", channel);
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, channel.id, "CHANNEL_CREATE", channel);
   }
 
   channelUpdate(channel: Channel): void {
@@ -239,6 +239,15 @@ export class GatewayDispatcher {
       // Fail-closed: if we can't compute permissions, deny by default
       if (!session.user) continue;
       if (!guild || !roles || !permChannel || !this.membersRepo) continue;
+
+      // Bot visibility is an explicit member allowlist. In particular, an
+      // absent overwrite means hidden, even when a guild role has VIEW_CHANNEL.
+      // Humans retain normal Discord-style computed permissions.
+      if (session.user.bot) {
+        if (!this.permissionsRepo?.hasPermission(permChannelId, session.user.id, VIEW_CHANNEL_BIT)) continue;
+        session.dispatch(event, data);
+        continue;
+      }
 
       const member = this.membersRepo.get(guildId, session.user.id);
       if (!member) continue;
