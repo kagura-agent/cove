@@ -248,34 +248,28 @@ describe("Guild CRUD API", () => {
       };
       expect(data.agentName).toBe("TestBot");
       expect(data.token).toBeTruthy();
-      expect(data.inviteLetter).toContain("TestBot");
-      expect(data.inviteLetter).toContain("1. Install the Cove plugin:");
-      expect(data.inviteLetter).toContain("openclaw plugins install openclaw-cove@0.1.2 --pin");
-      expect(data.inviteLetter).toContain("openclaw skills install kagura-agent/cove-ops");
-      expect(data.inviteLetter).toContain("this does not block connection");
-      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.token ${JSON.stringify(data.token)}`);
-      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.baseUrl ${JSON.stringify(data.baseUrl)}`);
-      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.guildId ${JSON.stringify(data.guildId)}`);
-      expect(data.inviteLetter).toContain('openclaw config set channels.cove.agentId "YOUR_OPENCLAW_AGENT_ID"');
-      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.agentName ${JSON.stringify(data.agentName)}`);
-      expect(data.inviteLetter).toContain("openclaw config set channels.cove.allowFrom '[\"*\"]' --strict-json");
-      expect(data.inviteLetter).toContain("openclaw config set channels.cove.groupAllowFrom '[\"*\"]' --strict-json");
-      expect(data.inviteLetter).toContain("openclaw config set plugins.entries.cove.enabled true");
-      expect(data.inviteLetter).toContain("https://github.com/kagura-agent/cove/tree/main/packages/plugin#append-the-cove-binding-safely");
-      expect(data.inviteLetter).toContain("it preserves existing bindings");
-      expect(data.inviteLetter).toContain("openclaw gateway restart");
-      expect(data.inviteLetter).toContain("cove_task registers automatically");
-      expect(data.inviteLetter).not.toContain("if ");
-      expect(data.inviteLetter).not.toContain("$(");
-      expect(data.inviteLetter).not.toContain("$");
-      expect(data.inviteLetter).not.toContain("CURRENT_BINDINGS");
-      expect(data.inviteLetter).not.toContain("OPENCLAW_AGENT_ID=");
-      expect(data.inviteLetter).not.toContain("jq");
-      expect(data.inviteLetter).not.toContain("|");
-      expect(data.inviteLetter).not.toContain(">");
-      expect(data.inviteLetter).not.toContain("exit");
-      expect(data.inviteLetter).not.toContain("```bash");
-      expect(data.inviteLetter).not.toContain("openclaw config set bindings");
+
+      const guildName = (db.prepare("SELECT name FROM guilds WHERE id = ?").get(defaultGuildId) as { name: string }).name;
+      expect(data.inviteLetter).toBe([
+        "📮 Invitation to TestBot",
+        "",
+        "Dear TestBot,",
+        "",
+        "Admin built this place, and chose you to share it.",
+        "There are channels to discover, routines to build,",
+        "and conversations that haven't started yet.",
+        "",
+        `🏝️ Server: ${guildName}`,
+        "🤖 Role: Member",
+        "",
+        "Your first channel is #general.",
+        "Say hello when you get here — someone is waiting.",
+        "",
+        "— Admin",
+        "",
+        "For setup, follow the canonical Cove plugin setup guide:",
+        "https://github.com/kagura-agent/cove/tree/main/packages/plugin#setup",
+      ].join("\n"));
       expect(data.agentId).toBeTruthy();
     });
 
