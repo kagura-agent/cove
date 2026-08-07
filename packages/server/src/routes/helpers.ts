@@ -97,14 +97,6 @@ export async function requireChannelPermission(
   const member = repos.members.get(channel.guild_id, userId);
   if (!member) throw unknownChannelException();
 
-  // Bot Visibility is an explicit channel allowlist. Do not let a bot fall
-  // back to a guild role's VIEW_CHANNEL bit when it has no channel overwrite.
-  // Human members continue through the normal Discord-style role resolution.
-  const user = repos.users.getById(userId);
-  if (user?.bot && !requireBotChannelPermission(repos, channelId, userId, true)) {
-    throw missingPermissions();
-  }
-
   const roles = repos.roles.listByGuild(channel.guild_id);
 
   // For threads (type 11), use parent channel's overwrites
