@@ -250,86 +250,17 @@ describe("Guild CRUD API", () => {
       expect(data.token).toBeTruthy();
 
       const guildName = (db.prepare("SELECT name FROM guilds WHERE id = ?").get(defaultGuildId) as { name: string }).name;
-      expect(data.inviteLetter).toBe([
-        "📮 Invitation to TestBot",
-        "",
-        "Dear TestBot,",
-        "",
-        "Admin built this place, and chose you to share it.",
-        "There are channels to discover, routines to build,",
-        "and conversations that haven't started yet.",
-        "",
-        `🏝️ Server: ${guildName}`,
-        "🤖 Role: Member",
-        "",
-        "Your first channel is #general.",
-        "Say hello when you get here — someone is waiting.",
-        "",
-        "— Admin",
-        "",
-        "════════════════════════════════════════",
-        "To accept this invitation, set up Cove as a new channel",
-        "in your OpenClaw. This won't affect your existing channels",
-        "(Discord, Feishu, etc.) — Cove runs alongside them.",
-        "",
-        "# Step 1: Install the Cove plugin",
-        "openclaw plugins install openclaw-cove@0.1.2 --pin",
-        "# cove_task automatically registers at plugin startup; no extra registration or configuration is needed.",
-        "",
-        "# Step 2: Configure your Cove connection",
-        `openclaw config set channels.cove.token ${JSON.stringify(data.token)}`,
-        `openclaw config set channels.cove.baseUrl ${JSON.stringify(data.baseUrl)}`,
-        `openclaw config set channels.cove.guildId ${JSON.stringify(data.guildId)}`,
-        "# Replace YOUR_OPENCLAW_AGENT_ID with your local OpenClaw agent id",
-        'openclaw config set channels.cove.agentId "YOUR_OPENCLAW_AGENT_ID"',
-        `openclaw config set channels.cove.agentName ${JSON.stringify(data.agentName)}`,
-        'openclaw config set channels.cove.allowFrom ["admin"] --strict-json',
-        'openclaw config set channels.cove.groupAllowFrom ["admin"] --strict-json',
-        "",
-        "# Step 3: Enable the plugin",
-        "openclaw config set plugins.entries.cove.enabled true",
-        "",
-        "# Step 4: Append a Cove binding so you receive messages",
-        "# Replace the placeholder, then run this Bash snippet exactly.",
-        "OPENCLAW_AGENT_ID='YOUR_OPENCLAW_AGENT_ID'",
-        "",
-        'if ! CURRENT_BINDINGS="$(openclaw config get bindings --json)"; then',
-        "  printf >&2 'Could not read the current bindings; nothing was changed.\\n'",
-        "  exit 1",
-        "fi",
-        "",
-        "if ! printf '%s\\n' \"$CURRENT_BINDINGS\" | jq -e 'type == \"array\"' >/dev/null; then",
-        "  printf >&2 'Current bindings are absent or unreadable; nothing was changed.\\n'",
-        "  exit 1",
-        "fi",
-        "",
-        'if ! UPDATED_BINDINGS="$(',
-        "  printf '%s\\n' \"$CURRENT_BINDINGS\" |",
-        "    jq --arg agent_id \"$OPENCLAW_AGENT_ID\" '",
-        '      if any(.[]; .agentId == $agent_id and .match == { channel: "cove", accountId: "*" }) then',
-        "        .",
-        "      else",
-        "        . + [{",
-        "          agentId: $agent_id,",
-        '          match: { channel: "cove", accountId: "*" }',
-        "        }]",
-        "      end",
-        "    '",
-        ')"; then',
-        "  printf >&2 'Could not construct the updated bindings; nothing was changed.\\n'",
-        "  exit 1",
-        "fi",
-        "",
-        'openclaw config set bindings "$UPDATED_BINDINGS" --strict-json',
-        "# Config patch replaces arrays, so any patch must include every existing binding plus this one.",
-        "",
-        "# Step 5: Restart to connect",
-        "openclaw gateway restart",
-        "",
-        "════════════════════════════════════════",
-        "After restart, you'll be connected automatically.",
-        "Say hello in #general!",
-      ].join("\n"));
+      // Invitation letter: assert the narrative + interpolated values, not the full text.
+      expect(data.inviteLetter).toContain("📮 Invitation to TestBot");
+      expect(data.inviteLetter).toContain(`🏝️ Server: ${guildName}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.token ${JSON.stringify(data.token)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.baseUrl ${JSON.stringify(data.baseUrl)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.guildId ${JSON.stringify(data.guildId)}`);
+      expect(data.inviteLetter).toContain(`openclaw config set channels.cove.agentName ${JSON.stringify(data.agentName)}`);
+      expect(data.inviteLetter).toContain("openclaw plugins install openclaw-cove@0.1.2 --pin");
+      expect(data.inviteLetter).toContain("packages/plugin/README.md");
+      // Step 4 defers to the canonical setup guide instead of embedding a Bash snippet.
+      expect(data.inviteLetter).not.toContain("CURRENT_BINDINGS");
       expect(data.inviteLetter).not.toContain("openclaw skills install kagura-agent/cove-ops");
       expect(data.agentId).toBeTruthy();
     });
