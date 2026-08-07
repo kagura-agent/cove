@@ -7,7 +7,6 @@ import type { ReadStatesRepo } from "../repos/readStates.js";
 import type { PermissionsRepo } from "../repos/permissions.js";
 import type { RolesRepo } from "../repos/roles.js";
 import type { MembersRepo } from "../repos/members.js";
-import { computePermissions } from "../permissions/compute.js";
 
 export class GatewaySession {
   readonly id: string;
@@ -54,19 +53,15 @@ export class GatewaySession {
       const roles = rolesRepo ? rolesRepo.listByGuild(g.id) : [];
       let channels = allChannels;
 
-      // For bot users, filter channels by computed permissions (not just raw overwrites)
-      if (user.bot && membersRepo && permissionsRepo) {
-        const member = membersRepo.get(g.id, user.id);
-        if (member) {
-          channels = allChannels.filter(ch => {
-            const overwriteChannelId = ch.type === 11 && ch.parent_id ? ch.parent_id : ch.id;
-            const overwrites = permissionsRepo.listByChannel(overwriteChannelId);
-            const perms = computePermissions(member, ch, g, roles, overwrites);
-            return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
-          });
-        } else {
-          channels = [];
-        }
+      // Bot Visibility is an explicit member allowlist. An absent overwrite
+      // hides the channel even when a guild role would otherwise grant access.
+      if (user.bot) {
+        channels = permissionsRepo
+          ? allChannels.filter((ch) => {
+              const overwriteChannelId = ch.type === 11 && ch.parent_id ? ch.parent_id : ch.id;
+              return permissionsRepo.hasPermission(overwriteChannelId, user.id, PermissionBits.VIEW_CHANNEL);
+            })
+          : [];
       }
 
       return { ...g, channels, roles };
