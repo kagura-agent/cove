@@ -303,7 +303,7 @@ describe("Guild CRUD API", () => {
         "  exit 1",
         "fi",
         "",
-        'if ! UPDATED_BINDINGS="$("',
+        'if ! UPDATED_BINDINGS="$(',
         "  printf '%s\\n' \"$CURRENT_BINDINGS\" |",
         "    jq --arg agent_id \"$OPENCLAW_AGENT_ID\" '",
         '      if any(.[]; .agentId == $agent_id and .match == { channel: "cove", accountId: "*" }) then',
