@@ -28,7 +28,9 @@ export interface CoveAccount {
   agentId: string;
   agentName: string;
   allowFrom: string[];
+  groupAllowFrom: string[];
   dmPolicy: string | undefined;
+  groupPolicy: string | undefined;
 }
 
 /** Gateway client events. */
