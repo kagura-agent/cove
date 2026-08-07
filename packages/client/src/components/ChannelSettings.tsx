@@ -8,6 +8,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
+import { botVisibilityOverwrite } from "../lib/bot-visibility";
 import type { GuildMember } from "../types";
 
 type SectionKey = "overview" | "permissions" | "invites" | "integrations" | "delete";
@@ -142,20 +143,12 @@ export function ChannelSettings({
   async function handleToggleBotPermission(botId: string, enabled: boolean) {
     setPermSaving(botId);
     try {
-      if (enabled) {
-        await api.putPermissionOverwrite(channelId, botId, {
-          type: 1,
-          allow: PermissionFlags.VIEW_CHANNEL,
-          deny: "0",
-        });
-        setOverwrites((prev) => [
-          ...prev.filter((o) => o.id !== botId),
-          { id: botId, type: 1, allow: PermissionFlags.VIEW_CHANNEL, deny: "0" },
-        ]);
-      } else {
-        await api.deletePermissionOverwrite(channelId, botId);
-        setOverwrites((prev) => prev.filter((o) => o.id !== botId));
-      }
+      const overwrite = botVisibilityOverwrite(enabled);
+      await api.putPermissionOverwrite(channelId, botId, overwrite);
+      setOverwrites((prev) => [
+        ...prev.filter((o) => o.id !== botId),
+        { id: botId, ...overwrite },
+      ]);
     } catch (err) {
       console.error("toggle permission:", err);
     } finally {

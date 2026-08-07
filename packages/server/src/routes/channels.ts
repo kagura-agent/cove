@@ -24,6 +24,9 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     const roles = repos.roles.listByGuild(guildId);
     const channels = repos.channels.list(guildId).filter((ch) => {
       const overwriteChannelId = ch.type === 11 && ch.parent_id ? ch.parent_id : ch.id;
+      if (user.bot) {
+        return repos.permissions.hasPermission(overwriteChannelId, user.id, PermissionBits.VIEW_CHANNEL);
+      }
       const overwrites = repos.permissions.listByChannel(overwriteChannelId);
       const perms = computePermissions(member, ch, guild, roles, overwrites);
       return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
@@ -155,11 +158,12 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
     const id = c.req.param("id")!;
     const user = c.get("botUser");
     const ch = await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
+    // Dispatch before the delete cascades the channel's permission overwrites,
+    // so the gateway can filter bot recipients against the visibility allowlist.
+    dispatcher?.channelDelete(ch.guild_id, id);
     if (!repos.channels.delete(id)) {
       return unknownChannel(c);
     }
-
-    dispatcher?.channelDelete(ch.guild_id, id);
     if (ch.type === 11) {
       dispatcher?.threadDelete(ch);
     }
