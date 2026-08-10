@@ -443,6 +443,58 @@ describe("C. Text Command Authorization (#426)", () => {
     expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(true);
   });
 
+  it.each(["/stop", "stop", "interrupt", "停止"])("C1b: forwards authorized abort trigger %s as a text command for fast abort", async (content) => {
+    const opts = createBaseOpts({
+      message: createTestMessage({ content }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      CommandBody: content,
+      RawBody: content,
+      CommandAuthorized: true,
+      CommandSource: "text",
+      SessionKey: "agent:routed-agent:cove:channel:ch-1",
+    });
+  });
+
+  it("C1c: keeps an ordinary follow-up as a non-command turn", async () => {
+    await dispatchMessage(createBaseOpts({ message: createTestMessage({ content: "Continue with the next step." }) }));
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      CommandBody: "Continue with the next step.",
+      RawBody: "Continue with the next step.",
+      CommandAuthorized: false,
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.CommandSource).toBeUndefined();
+  });
+
+  it("C1d: cancels the active Cove presentation only after an authorized abort enters the standard turn", async () => {
+    const activeRun = new AbortController();
+    const cancellableTool = new Promise<void>((resolve) => {
+      activeRun.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    const onAuthorizedAbort = vi.fn(() => activeRun.abort());
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "interrupt" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+      onAuthorizedAbort,
+    });
+
+    await dispatchMessage(opts);
+    await cancellableTool;
+
+    expect(onAuthorizedAbort).toHaveBeenCalledOnce();
+    expect(activeRun.signal.aborted).toBe(true);
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      SessionKey: "agent:routed-agent:cove:channel:ch-1",
+      CommandAuthorized: true,
+      CommandSource: "text",
+    });
+  });
+
   it("C2: drops an unauthorized /new before dispatching a turn", async () => {
     vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
       ingress: { admission: "drop", reasonCode: "control_command_unauthorized" },

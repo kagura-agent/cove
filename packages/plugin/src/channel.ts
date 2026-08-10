@@ -9,6 +9,7 @@ import { dispatchMessage } from "./dispatch.js";
 import { createChannelRunQueue } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelInboundDebouncer, shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-inbound";
 import { mergeAbortSignals } from "./utils.js";
+import { shouldDispatchImmediately } from "./control-message.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
@@ -154,6 +155,10 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           onError: (error) => log?.error?.(`cove: message run failed: ${error}`),
         });
 
+        // Local controllers only govern Cove presentation (typing/drafts). The
+        // OpenClaw dispatcher remains responsible for cancelling the real run.
+        const activeDispatches = new Map<string, AbortController>();
+
         // Queue depth guard — SDK queue is unbounded, add safety limits
         const QUEUE_WARN_THRESHOLD = 10;
         const QUEUE_DROP_THRESHOLD = 20;
@@ -212,13 +217,16 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
             }
 
             runQueue.enqueue(channelId, async ({ lifecycleSignal }) => {
+              const presentationAbort = new AbortController();
+              activeDispatches.set(channelId, presentationAbort);
               try {
-                const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
+                const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal, presentationAbort.signal]);
                 await dispatchMessage({
                   message: mergedMessage, account, restClient, channelRuntime, cfg,
                   accountId: ctx.accountId, abortSignal, log,
                 });
               } finally {
+                if (activeDispatches.get(channelId) === presentationAbort) activeDispatches.delete(channelId);
                 trackDequeue(channelId);
               }
             });
@@ -274,6 +282,18 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
+          if (shouldDispatchImmediately(message)) {
+            // Do not queue a stop behind the run it needs to cancel. dispatchMessage
+            // supplies CommandSource, CommandAuthorized, and SessionKey to OpenClaw's
+            // normal fast-abort path. Only after that ingress authorization succeeds,
+            // it also clears Cove's active typing/draft presentation for this channel.
+            void dispatchMessage({
+              message, account, restClient, channelRuntime, cfg,
+              accountId: ctx.accountId, abortSignal: ctx.abortSignal, log,
+              onAuthorizedAbort: () => activeDispatches.get(message.channel_id)?.abort(),
+            }).catch((error) => log?.error?.(`cove: control message dispatch failed: ${error}`));
+            return;
+          }
           debouncer.enqueue({ message });
         });
 
