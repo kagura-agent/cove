@@ -156,8 +156,12 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:id/typing — send typing indicator. */
-  async sendTyping(channelId: string): Promise<void> {
-    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`, undefined, AbortSignal.timeout(3000));
+  async sendTyping(channelId: string, abortable = false): Promise<void> {
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing${abortable ? "?abortable=1" : ""}`, undefined, AbortSignal.timeout(3000));
+  }
+
+  async reportAbortResult(channelId: string, targetUserId: string, requestId: string, status: "aborted" | "denied" | "failed"): Promise<void> {
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing/${targetUserId}/abort/${requestId}/result`, { status }, AbortSignal.timeout(3000));
   }
 
   /** POST /api/v10/channels/:channelId/webhooks — create a webhook. */

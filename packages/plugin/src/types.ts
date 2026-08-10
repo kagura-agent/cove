@@ -46,6 +46,7 @@ export interface GatewayEvents {
   guildMemberRemove: (payload: { user: { id: string; username: string }; guild_id: string }) => void;
   presenceUpdate: (presence: { user: { id: string }; status: string }) => void;
   typingStart: (payload: { channel_id: string; user_id: string; timestamp: number }) => void;
+  agentAbortRequest: (payload: { request_id: string; channel_id: string; target_user_id: string; requester: { id: string; username: string } }) => void;
   messageReactionAdd: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
   messageReactionRemove: (payload: { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } }) => void;
   channelFileCreate: (payload: { channel_id: string; guild_id: string; filename: string; content_type: string; size: number }) => void;

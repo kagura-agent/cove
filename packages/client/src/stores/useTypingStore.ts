@@ -4,6 +4,8 @@ export interface TypingUser {
   userId: string;
   username: string;
   timeout: ReturnType<typeof setTimeout>;
+  abortable?: boolean;
+  runId?: string;
 }
 
 interface TypingState {

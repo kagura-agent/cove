@@ -495,6 +495,24 @@ describe("C. Text Command Authorization (#426)", () => {
     });
   });
 
+  it("C1d2: reports a rejected targeted abort without cancelling the active presentation", async () => {
+    vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
+      ingress: { admission: "dispatch", reasonCode: "allowed" },
+      commandAccess: { authorized: false },
+    } as any);
+    const onAuthorizedAbort = vi.fn();
+    const onAbortRejected = vi.fn();
+
+    await dispatchMessage(createBaseOpts({
+      message: createTestMessage({ content: "stop" }),
+      onAuthorizedAbort,
+      onAbortRejected,
+    }));
+
+    expect(onAuthorizedAbort).not.toHaveBeenCalled();
+    expect(onAbortRejected).toHaveBeenCalledOnce();
+  });
+
   it("C1e: sends an accepted abort without channel or attachment enrichment", async () => {
     const opts = createBaseOpts({
       message: createTestMessage({
@@ -658,7 +676,7 @@ describe("F. Lifecycle / Abort", () => {
   it("F1: Typing sent immediately", async () => {
     const opts = createBaseOpts();
     await dispatchMessage(opts);
-    expect((opts.restClient as unknown as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1");
+    expect((opts.restClient as unknown as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1", true);
   });
 
   it("F2: Typing keepalive 5s", async () => {

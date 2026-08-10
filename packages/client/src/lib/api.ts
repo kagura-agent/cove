@@ -106,6 +106,11 @@ export function deleteBot(id: string) {
 export function sendTyping(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/typing`, { method: "POST" });
 }
+export function requestAgentAbort(channelId: string, targetUserId: string, runId: string) {
+  return api<{ status: "requested" | "already_requested"; requestId: string }>(`${API_PREFIX}/channels/${channelId}/typing/${targetUserId}/abort`, {
+    method: "POST", body: JSON.stringify({ run_id: runId }),
+  });
+}
 export function ackMessage(channelId: string, messageId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/ack`, { method: "PUT" });
 }

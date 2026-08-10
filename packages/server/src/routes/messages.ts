@@ -408,9 +408,35 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const channelId = c.req.param("id");
     const author = c.get("botUser");
     const ch = await requireChannelPermission(repos, channelId, author.id, PermissionBits.SEND_MESSAGES);
+    // Only bot-authenticated plugin requests may advertise an abortable run.
+    const abortable = author.bot && c.req.query("abortable") === "1";
+    dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id, abortable);
+    return c.body(null, 204);
+  });
 
-    dispatcher?.typingStart(channelId, { id: author.id, username: author.username }, ch.guild_id);
+  app.post("/channels/:id/typing/:targetUserId/abort", async (c) => {
+    const channelId = c.req.param("id");
+    const targetUserId = c.req.param("targetUserId");
+    const requester = c.get("botUser");
+    await requireChannelPermission(repos, channelId, requester.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
+    const body = await parseJsonBody<{ run_id?: string }>(c);
+    if (!body || typeof body.run_id !== "string" || body.run_id.length > 64) return validationError(c, "run_id is required");
+    const target = repos.users.getById(targetUserId);
+    if (!target?.bot) return c.json({ message: "Unknown Agent", code: 10003 }, 404);
+    const result = dispatcher?.requestAgentAbort(channelId, targetUserId, body.run_id, { id: requester.id, username: requester.username }) ?? { status: "unavailable" as const };
+    if (result.status === "not_active" || result.status === "unavailable") return c.json(result, 409);
+    return c.json(result, result.status === "requested" ? 202 : 200);
+  });
 
+  app.post("/channels/:id/typing/:targetUserId/abort/:requestId/result", async (c) => {
+    const channelId = c.req.param("id");
+    const targetUserId = c.req.param("targetUserId");
+    const bot = c.get("botUser");
+    if (bot.id !== targetUserId || !bot.bot) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    await requireChannelPermission(repos, channelId, bot.id, PermissionBits.SEND_MESSAGES);
+    const body = await parseJsonBody<{ status?: "aborted" | "denied" | "failed" }>(c);
+    if (!body || !["aborted", "denied", "failed"].includes(body.status ?? "")) return validationError(c, "invalid status");
+    if (!dispatcher?.agentAbortResult(c.req.param("requestId"), targetUserId, body.status!)) return c.json({ message: "Unknown abort request", code: 10008 }, 404);
     return c.body(null, 204);
   });
 
