@@ -495,6 +495,27 @@ describe("C. Text Command Authorization (#426)", () => {
     });
   });
 
+  it("C1e: sends an accepted abort without channel or attachment enrichment", async () => {
+    const opts = createBaseOpts({
+      message: createTestMessage({
+        content: "stop",
+        attachments: [{ id: "attachment-1", filename: "large.png", url: "/attachments/large.png", content_type: "image/png" }],
+      }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(getCoveMd).not.toHaveBeenCalled();
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      BodyForAgent: "stop",
+      CommandAuthorized: true,
+      CommandSource: "text",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.MediaUrls).toBeUndefined();
+    expect(capturedResolvedTurn?.ctxPayload?.GroupSystemPrompt).toBeUndefined();
+  });
+
   it("C2: drops an unauthorized /new before dispatching a turn", async () => {
     vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
       ingress: { admission: "drop", reasonCode: "control_command_unauthorized" },
@@ -507,6 +528,7 @@ describe("C. Text Command Authorization (#426)", () => {
 
     expect(capturedResolvedTurn).toBeNull();
     expect(runInboundReplyTurn).not.toHaveBeenCalled();
+    expect(getCoveMd).not.toHaveBeenCalled();
     expect(opts.log?.info).toHaveBeenCalledWith(expect.stringContaining("control_command_unauthorized"));
   });
 });

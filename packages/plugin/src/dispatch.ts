@@ -322,9 +322,6 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
     const chatType = taskThread ? "direct" : "channel";
-    const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
-    const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
-    const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
     // Match OpenClaw's full control-message predicate, including plain abort
     // triggers such as "stop" and "interrupt", not just slash commands.
     const controlCommand = isControlCommandMessage(message.content, cfg);
@@ -362,6 +359,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // the authorization decision. The actual agent/session cancellation below
     // still goes through runInboundReplyTurn and the standard fast-abort path.
     if (commandAuthorized && isAbortRequest) onAuthorizedAbort?.();
+
+    // Admission must complete before doing per-message enrichment, because
+    // dropped messages should not read channel state or process attachments.
+    // An accepted abort turn only needs its raw command and session identity;
+    // skipping enrichment lets OpenClaw's fast-abort path run immediately.
+    const skipEnrichment = isAbortRequest;
+    const coveMdContent = skipEnrichment ? null : await getCoveMd(restClient, coveMdChannelId, log);
+    const fullAttachmentUrls = skipEnrichment ? [] : collectImageAttachmentUrls(message, account.baseUrl);
+    const bodyForAgent = skipEnrichment
+      ? message.content
+      : buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
 
     try {
       const messageId = message.id ?? `cove-${Date.now()}`;
