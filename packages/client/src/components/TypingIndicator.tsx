@@ -8,7 +8,7 @@ const barStyle: CSSProperties = {
   padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
   minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)", flexWrap: "wrap",
 };
-const stopStyle: CSSProperties = { border: 0, borderRadius: "var(--radius-sm)", cursor: "pointer", padding: "1px 5px", lineHeight: 1.2 };
+const stopStyle: CSSProperties = { border: "1px solid color-mix(in srgb, var(--danger) 65%, transparent)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--danger)", cursor: "pointer", padding: "2px 6px", lineHeight: 1.2, fontSize: "var(--font-size-xs)", fontWeight: 600 };
 
 const dotKeyframes = `
 @keyframes typingDot {
@@ -68,8 +68,8 @@ export function TypingIndicator({ channelId }: { channelId: string }) {
       const canAbort = Boolean(user.abortable && user.runId);
       return <span key={user.userId} style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-xxs)" }}>
         {index > 0 && <span aria-hidden="true">·</span>}
-        {canAbort && <button type="button" style={stopStyle} disabled={state === "stopping"} aria-label={`停止 ${user.username} 的运行`} title={`停止 ${user.username} 的运行`} onClick={() => stop(user.userId, user.runId!)}>⏹</button>}
         <span>{label}</span>
+        {canAbort && <button type="button" style={stopStyle} disabled={state === "stopping"} aria-label={`停止 ${user.username} 的运行`} title={`停止 ${user.username} 的运行`} onClick={() => stop(user.userId, user.runId!)}>⏹ 停止</button>}
       </span>;
     })}
   </div>;
