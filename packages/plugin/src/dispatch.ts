@@ -6,7 +6,8 @@ import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, define
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
 import { defineStableChannelIngressIdentity, resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
-import { hasControlCommand, shouldComputeCommandAuthorized } from "openclaw/plugin-sdk/command-detection";
+import { isControlCommandMessage, shouldComputeCommandAuthorized } from "openclaw/plugin-sdk/command-detection";
+import { isAbortRequestText } from "openclaw/plugin-sdk/command-primitives-runtime";
 import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveThreadContext, isTaskThread, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
@@ -18,12 +19,12 @@ const coveIngressIdentity = defineStableChannelIngressIdentity();
 export interface DispatchMessageOptions {
   message: Message; account: CoveAccount;
   restClient: CoveRestClient; channelRuntime: any; cfg: any;
-  accountId: string; abortSignal?: AbortSignal;
+  accountId: string; abortSignal?: AbortSignal; onAuthorizedAbort?: () => void;
   log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void; error?: (...a: any[]) => void };
 }
 
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, account, restClient, channelRuntime, cfg, accountId, abortSignal, log } = opts;
+  const { message, account, restClient, channelRuntime, cfg, accountId, abortSignal, onAuthorizedAbort, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
@@ -321,10 +322,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
     const chatType = taskThread ? "direct" : "channel";
-    const coveMdContent = await getCoveMd(restClient, coveMdChannelId, log);
-    const fullAttachmentUrls = collectImageAttachmentUrls(message, account.baseUrl);
-    const bodyForAgent = buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
-    const controlCommand = hasControlCommand(message.content, cfg);
+    // Match OpenClaw's full control-message predicate, including plain abort
+    // triggers such as "stop" and "interrupt", not just slash commands.
+    const controlCommand = isControlCommandMessage(message.content, cfg);
     const ingress = await resolveChannelMessageIngress({
       channelId: "cove",
       accountId,
@@ -354,6 +354,22 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const commandAuthorized = shouldComputeCommandAuthorized(message.content, cfg)
       ? ingress.commandAccess.authorized
       : false;
+    const isAbortRequest = isAbortRequestText(message.content);
+    // This aborts only Cove's presentation controller after OpenClaw has made
+    // the authorization decision. The actual agent/session cancellation below
+    // still goes through runInboundReplyTurn and the standard fast-abort path.
+    if (commandAuthorized && isAbortRequest) onAuthorizedAbort?.();
+
+    // Admission must complete before doing per-message enrichment, because
+    // dropped messages should not read channel state or process attachments.
+    // An accepted abort turn only needs its raw command and session identity;
+    // skipping enrichment lets OpenClaw's fast-abort path run immediately.
+    const skipEnrichment = isAbortRequest;
+    const coveMdContent = skipEnrichment ? null : await getCoveMd(restClient, coveMdChannelId, log);
+    const fullAttachmentUrls = skipEnrichment ? [] : collectImageAttachmentUrls(message, account.baseUrl);
+    const bodyForAgent = skipEnrichment
+      ? message.content
+      : buildBodyForAgent(message, fullAttachmentUrls, account.baseUrl);
 
     try {
       const messageId = message.id ?? `cove-${Date.now()}`;
@@ -365,6 +381,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         AgentId: targetAgent, AccountId: accountId, MessageSid: messageId,
         Provider: "cove", Surface: "cove", ChatType: chatType,
         SenderId: senderId, SenderName: senderName, CommandAuthorized: commandAuthorized,
+        // The dispatcher only treats an authorized text command as an explicit
+        // command turn when its source is set. This lets its standard fast-abort
+        // path resolve and cancel the active SessionKey run.
+        ...(commandAuthorized && controlCommand ? { CommandSource: "text" } : {}),
         ...(taskThread ? {
           MessageThreadId: channelId,
           ParentSessionKey: threadSession.parentSessionKey,
