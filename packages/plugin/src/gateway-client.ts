@@ -252,6 +252,11 @@ export class CoveGatewayClient extends (EventEmitter as new () => TypedEmitter<G
         break;
       }
 
+      case "AGENT_ABORT_REQUEST": {
+        this.emit("agentAbortRequest", payload.d as { request_id: string; channel_id: string; target_user_id: string; requester: { id: string; username: string } });
+        break;
+      }
+
       case "MESSAGE_REACTION_ADD": {
         this.emit("messageReactionAdd", payload.d as { user_id: string; channel_id: string; message_id: string; guild_id?: string; emoji: { name: string } });
         break;

@@ -17,6 +17,8 @@ export class GatewayDispatcher {
   private permissionsRepo: PermissionsRepo | null = null;
   private membersRepo: MembersRepo | null = null;
   private rolesRepo: RolesRepo | null = null;
+  private activeTyping = new Map<string, { runId: string; expiresAt: number; abortRequested: boolean; abortRequestId?: string }>();
+  private abortRequests = new Map<string, { channelId: string; targetUserId: string; requesterId: string; expiresAt: number }>();
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
 
@@ -121,13 +123,51 @@ export class GatewayDispatcher {
     this.broadcastToGuild(guildId, "CHANNEL_DELETE", { id: channelId, guild_id: guildId });
   }
 
-  typingStart(channelId: string, user: { id: string; username: string }, guildId: string): void {
-    this.broadcastToGuildWithChannelFilter(guildId, channelId, "TYPING_START", {
-      channel_id: channelId,
-      user_id: user.id,
-      username: user.username,
-      timestamp: Date.now(),
+  typingStart(channelId: string, user: { id: string; username: string }, guildId: string, abortable = false): void {
+    const now = Date.now();
+    const key = `${channelId}:${user.id}`;
+    const current = this.activeTyping.get(key);
+    const continuingRun = Boolean(abortable && current && current.expiresAt > now);
+    const runId = continuingRun ? current!.runId : `${now}-${Math.random().toString(36).slice(2, 10)}`;
+    if (abortable) this.activeTyping.set(key, {
+      runId, expiresAt: now + 8_000,
+      abortRequested: continuingRun ? current!.abortRequested : false,
+      abortRequestId: continuingRun ? current!.abortRequestId : undefined,
     });
+    this.broadcastToGuildWithChannelFilter(guildId, channelId, "TYPING_START", {
+      channel_id: channelId, user_id: user.id, username: user.username, timestamp: now,
+      ...(abortable ? { abortable: true, run_id: runId } : {}),
+    });
+  }
+
+  requestAgentAbort(channelId: string, targetUserId: string, runId: string, requester: { id: string; username: string }): { status: "requested" | "already_requested"; requestId: string } | { status: "already_requested" | "not_active" | "unavailable" } {
+    const key = `${channelId}:${targetUserId}`;
+    const active = this.activeTyping.get(key);
+    if (!active || active.expiresAt <= Date.now() || active.runId !== runId) { this.activeTyping.delete(key); return { status: "not_active" }; }
+    if (active.abortRequested) return active.abortRequestId ? { status: "already_requested", requestId: active.abortRequestId } : { status: "already_requested" };
+    if (!this.userSessions.has(targetUserId)) return { status: "unavailable" };
+    active.abortRequested = true;
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    active.abortRequestId = requestId;
+    this.abortRequests.set(requestId, { channelId, targetUserId, requesterId: requester.id, expiresAt: Date.now() + 15_000 });
+    this.sendToUser(targetUserId, "AGENT_ABORT_REQUEST", { request_id: requestId, channel_id: channelId, target_user_id: targetUserId, requester });
+    return { status: "requested", requestId };
+  }
+
+  agentAbortResult(requestId: string, targetUserId: string, status: "aborted" | "denied" | "failed"): boolean {
+    const request = this.abortRequests.get(requestId);
+    if (!request || request.targetUserId !== targetUserId || request.expiresAt <= Date.now()) return false;
+    this.abortRequests.delete(requestId);
+    if (status === "aborted") this.activeTyping.delete(`${request.channelId}:${targetUserId}`);
+    else {
+      const active = this.activeTyping.get(`${request.channelId}:${targetUserId}`);
+      if (active?.abortRequestId === requestId) {
+        active.abortRequested = false;
+        active.abortRequestId = undefined;
+      }
+    }
+    this.sendToUser(request.requesterId, "AGENT_ABORT_RESULT", { request_id: requestId, channel_id: request.channelId, target_user_id: targetUserId, status });
+    return true;
   }
 
   messageAck(userId: string, channelId: string, messageId: string): void {

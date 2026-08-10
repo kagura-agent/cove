@@ -274,6 +274,35 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           } catch (err: any) { log?.warn?.(`cove: failed to enqueue reaction event: ${err.message}`); }
         });
 
+        gatewayClient.on("agentAbortRequest", (request) => {
+          // This private gateway event is emitted only to the selected bot. It
+          // recreates the same authenticated text abort ingress as #520, so
+          // OpenClaw remains the authority for command access and run aborts.
+          const controlMessage = {
+            id: `cove-abort-${request.request_id}`,
+            channel_id: request.channel_id,
+            content: "stop",
+            timestamp: new Date().toISOString(),
+            author: { id: request.requester.id, username: request.requester.username, global_name: request.requester.username, bot: false },
+          } as any;
+          void dispatchMessage({
+            message: controlMessage, account, restClient, channelRuntime, cfg,
+            accountId: ctx.accountId, abortSignal: ctx.abortSignal, log,
+            onAuthorizedAbort: () => {
+              activeDispatches.get(request.channel_id)?.abort();
+              void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "aborted").catch((error) =>
+                log?.warn?.(`cove: failed to report authorized abort: ${error.message}`));
+            },
+            onAbortRejected: () => {
+              void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "denied").catch((error) =>
+                log?.warn?.(`cove: failed to report rejected abort: ${error.message}`));
+            },
+          }).catch((error) => {
+            log?.error?.(`cove: UI abort dispatch failed: ${error}`);
+            void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "failed").catch(() => {});
+          });
+        });
+
         gatewayClient.on("messageCreate", async (message) => {
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
           if (!shouldNotifyAgentForMessage(message, account.agentId, gatewayClient.botUser?.id)) {

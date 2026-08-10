@@ -58,6 +58,7 @@ vi.mock("./routes", () => ({
 
 import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./gateway-subscriptions";
 import { useMessageStore } from "../stores/useMessageStore";
+import { useTypingStore } from "../stores/useTypingStore";
 import { useRoleStore } from "../stores/useRoleStore";
 
 describe("gateway-subscriptions", () => {
@@ -112,6 +113,19 @@ describe("gateway-subscriptions", () => {
     } as never);
 
     expect(addMessage).not.toHaveBeenCalled();
+  });
+
+  it("preserves abort metadata from a typing event", () => {
+    setupGatewaySubscriptions();
+
+    dispatcher.emit("TYPING_START", {
+      channel_id: "c1", user_id: "agent-1", username: "Agent", abortable: true, run_id: "run-1",
+    });
+
+    const update = vi.mocked(useTypingStore.setState).mock.calls.at(-1)?.[0] as (state: any) => any;
+    expect(update({ typingUsers: {} }).typingUsers.c1[0]).toMatchObject({
+      userId: "agent-1", username: "Agent", abortable: true, runId: "run-1",
+    });
   });
 
   describe("GUILD_ROLE_CREATE does not duplicate when role already in store", () => {

@@ -19,21 +19,21 @@ const coveIngressIdentity = defineStableChannelIngressIdentity();
 export interface DispatchMessageOptions {
   message: Message; account: CoveAccount;
   restClient: CoveRestClient; channelRuntime: any; cfg: any;
-  accountId: string; abortSignal?: AbortSignal; onAuthorizedAbort?: () => void;
+  accountId: string; abortSignal?: AbortSignal; onAuthorizedAbort?: () => void; onAbortRejected?: () => void;
   log?: { info?: (...a: any[]) => void; warn?: (...a: any[]) => void; error?: (...a: any[]) => void };
 }
 
 export async function dispatchMessage(opts: DispatchMessageOptions): Promise<void> {
-  const { message, account, restClient, channelRuntime, cfg, accountId, abortSignal, onAuthorizedAbort, log } = opts;
+  const { message, account, restClient, channelRuntime, cfg, accountId, abortSignal, onAuthorizedAbort, onAbortRejected, log } = opts;
   const channelId = message.channel_id;
   const senderId = message.author.id;
   const senderName = message.author.global_name || message.author.username;
 
   const isAborted = () => Boolean(abortSignal?.aborted);
-  restClient.sendTyping(channelId).catch(() => {});
+  restClient.sendTyping(channelId, true).catch(() => {});
 
   const typingCallbacks = createTypingCallbacks({
-    start: () => restClient.sendTyping(channelId),
+    start: () => restClient.sendTyping(channelId, true),
     keepaliveIntervalMs: 5000, maxDurationMs: 60000,
     onStartError: (err) => log?.warn?.(`cove: typing start error in [${channelId}]: ${err}`),
   });
@@ -358,7 +358,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // This aborts only Cove's presentation controller after OpenClaw has made
     // the authorization decision. The actual agent/session cancellation below
     // still goes through runInboundReplyTurn and the standard fast-abort path.
-    if (commandAuthorized && isAbortRequest) onAuthorizedAbort?.();
+    if (isAbortRequest) {
+      if (commandAuthorized) onAuthorizedAbort?.();
+      else onAbortRejected?.();
+    }
 
     // Admission must complete before doing per-message enrichment, because
     // dropped messages should not read channel state or process attachments.
