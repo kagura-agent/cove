@@ -8,7 +8,7 @@ const barStyle: CSSProperties = {
   padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
   minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)", flexWrap: "wrap",
 };
-const stopStyle: CSSProperties = { border: "1px solid color-mix(in srgb, var(--danger) 65%, transparent)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--danger)", cursor: "pointer", padding: "0 4px", lineHeight: 1.15, fontSize: "10px", fontWeight: 500 };
+const stopStyle: CSSProperties = { border: 0, background: "transparent", color: "var(--danger)", cursor: "pointer", padding: 0, lineHeight: 1.15, fontSize: "10px", fontWeight: 500 };
 
 const dotKeyframes = `
 @keyframes typingDot {
