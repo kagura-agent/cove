@@ -69,6 +69,41 @@ async function settledReject(promise: Promise<unknown>): Promise<Error> {
 /*  1. 204 No Content                                                  */
 /* ------------------------------------------------------------------ */
 
+describe("multipart media messages", () => {
+  it("sends caption and files as multipart with bot authorization", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(201, { id: "media-1" }));
+
+    const result = await client.sendMediaMessage("ch1", "A caption", [{
+      buffer: Buffer.from("gif-bytes"), filename: "reaction.gif", contentType: "image/gif",
+    }]);
+
+    expect(result).toEqual({ id: "media-1" });
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/api/v10/channels/ch1/messages`);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ Authorization: `Bot ${TOKEN}` });
+    expect(options.body).toBeInstanceOf(FormData);
+    const form = options.body as FormData;
+    expect(form.get("payload_json")).toBe(JSON.stringify({ content: "A caption" }));
+    const file = form.get("files[0]") as File;
+    expect(file.name).toBe("reaction.gif");
+    expect(file.type).toBe("image/gif");
+    expect(await file.text()).toBe("gif-bytes");
+  });
+
+  it("surfaces rejected media uploads", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(400, { message: "Unsupported file type" }));
+
+    await expect(client.sendMediaMessage("ch1", "", [{
+      buffer: Buffer.from("not-an-image"), filename: "note.txt", contentType: "text/plain",
+    }])).rejects.toThrow(/Cove media upload.*400.*Unsupported file type/);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  1. 204 No Content                                                  */
+/* ------------------------------------------------------------------ */
+
 describe("204 No Content", () => {
   it("deleteMessage returns undefined on 204", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(204));

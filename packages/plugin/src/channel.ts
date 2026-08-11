@@ -6,6 +6,7 @@ import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 import { createChannelRunQueue } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelInboundDebouncer, shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-inbound";
 import { mergeAbortSignals } from "./utils.js";
@@ -79,14 +80,22 @@ async function coveSendText(ctx: any): Promise<{ messageId: string }> {
   return { messageId: result.id };
 }
 
+async function coveSendMedia(ctx: any): Promise<{ messageId: string }> {
+  const account = resolveAccount(ctx.cfg, ctx.accountId);
+  const adapter = createCoveOutboundBridgeAdapter({ agentId: account.agentId });
+  const result = await adapter.sendMedia!({ ...ctx, to: ctx.to ?? "home", text: ctx.text ?? "" });
+  if (!result.messageId) throw new Error("cove: media upload completed without a message ID");
+  return { messageId: result.messageId };
+}
+
 const coveOutbound = {
   base: { deliveryMode: "direct" as const, textChunkLimit: COVE_TEXT_CHUNK_LIMIT, chunkerMode: "markdown" as const },
-  attachedResults: { channel: "cove", sendText: coveSendText },
+  attachedResults: { channel: "cove", sendText: coveSendText, sendMedia: coveSendMedia },
 };
 
 const coveMessageBaseAdapter = createChannelMessageAdapterFromOutbound({
   id: "cove",
-  outbound: { sendText: async (ctx: any) => coveSendText(ctx) },
+  outbound: { sendText: async (ctx: any) => coveSendText(ctx), sendMedia: async (ctx: any) => coveSendMedia(ctx) },
 });
 
 const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({

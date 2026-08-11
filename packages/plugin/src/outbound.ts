@@ -3,11 +3,14 @@
  *
  * Declares sendText and sendMedia capabilities for the Cove channel using the SDK's
  * createChannelMessageAdapterFromOutbound pattern. sendText delegates to sendDurableMessageBatch
- * for reliable delivery; sendMedia is a stub pending REST API support for media uploads.
+ * for reliable delivery; sendMedia uploads an authorized local or remote image as multipart data.
  */
 import {
   sendDurableMessageBatch,
 } from "openclaw/plugin-sdk/channel-message";
+import { loadOutboundMediaFromUrl } from "openclaw/plugin-sdk/outbound-media";
+import { resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
+import { CoveRestClient } from "./rest-client.js";
 import type {
   ChannelMessageSendTextContext,
   ChannelMessageSendMediaContext,
@@ -87,8 +90,7 @@ async function sendCoveDurableBatch(opts: { cfg: unknown; to: string; accountId?
  * Creates the Cove outbound bridge adapter with sendText and sendMedia capabilities.
  *
  * - sendText: Uses sendDurableMessageBatch for reliable delivery with best_effort durability.
- * - sendMedia: Stub — Cove REST API does not yet support media uploads. Logs a warning and
- *   falls back to text-only delivery if text is available.
+ * - sendMedia: Loads authorized media then sends its caption and file as one multipart Cove message.
  */
 export function createCoveOutboundBridgeAdapter(
   ctx: CoveOutboundAdapterContext,
@@ -97,7 +99,7 @@ export function createCoveOutboundBridgeAdapter(
 
   return {
     deliveryCapabilities: {
-      durableFinal: { text: true },
+      durableFinal: { text: true, media: true },
     },
 
     async sendText(sendCtx: ChannelMessageSendTextContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
@@ -106,16 +108,25 @@ export function createCoveOutboundBridgeAdapter(
     },
 
     async sendMedia(sendCtx: ChannelMessageSendMediaContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
-      log?.warn?.(
-        `cove: sendMedia not yet supported by Cove REST API — media URL ignored: ${sendCtx.mediaUrl}`,
-      );
-      // Stub: Cove REST API only supports text content.
-      // Fall back to text-only delivery when text is present.
-      // TODO(#401): implement when Cove REST API supports media uploads
-      if (sendCtx.text) {
-        await sendCoveDurableBatch({ cfg: sendCtx.cfg, to: sendCtx.to, accountId: sendCtx.accountId, text: sendCtx.text, agentId });
+      const channelConfig = (sendCtx.cfg as any)?.channels?.cove;
+      const accountId = sendCtx.accountId ?? undefined;
+      const account = resolveMergedAccountConfig({ channelConfig, accounts: channelConfig?.accounts, accountId: accountId as string });
+      const token = account?.token;
+      if (typeof token !== "string" || !token) throw new Error(`cove: account '${accountId ?? "default"}' missing token for media upload`);
+      const media = await loadOutboundMediaFromUrl(sendCtx.mediaUrl, {
+        maxBytes: 8 * 1024 * 1024,
+        ...(sendCtx.mediaAccess ? { mediaAccess: sendCtx.mediaAccess } : {}),
+        ...(sendCtx.mediaLocalRoots ? { mediaLocalRoots: sendCtx.mediaLocalRoots } : {}),
+        ...(sendCtx.mediaReadFile ? { mediaReadFile: sendCtx.mediaReadFile } : {}),
+      });
+      const contentType = media.contentType?.toLowerCase();
+      if (!contentType || !new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]).has(contentType)) {
+        throw new Error(`cove: unsupported outbound media type '${media.contentType ?? "unknown"}'; allowed: jpeg, png, gif, webp`);
       }
-      return {};
+      const client = new CoveRestClient(typeof account?.baseUrl === "string" ? account.baseUrl : "http://localhost:3400", token);
+      const message = await client.sendMediaMessage(sendCtx.to, sendCtx.text ?? "", [{ buffer: media.buffer, filename: media.fileName ?? "attachment", contentType }]);
+      log?.info?.(`cove: uploaded media attachment ${message.id} to ${sendCtx.to}`);
+      return { messageId: message.id };
     },
   };
 }

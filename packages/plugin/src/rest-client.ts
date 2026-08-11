@@ -127,6 +127,28 @@ export class CoveRestClient {
     });
   }
 
+  /** POST multipart message with a caption and one or more image attachments. */
+  async sendMediaMessage(channelId: string, content: string, files: Array<{ buffer: Buffer; filename: string; contentType: string }>): Promise<Message> {
+    if (files.length === 0) throw new Error("cove: sendMediaMessage requires at least one file");
+    const form = new FormData();
+    form.set("payload_json", JSON.stringify({ content }));
+    for (const [index, file] of files.entries()) {
+      form.append(`files[${index}]`, new Blob([file.buffer as unknown as BlobPart], { type: file.contentType }), file.filename);
+    }
+    const path = `${API_PREFIX}/channels/${channelId}/messages`;
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, { method: "POST", headers: { Authorization: `Bot ${this.token}` }, body: form, signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
+    } catch (cause) {
+      throw new Error(`cove: media upload request failed for ${path}`, { cause });
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new CoveApiError(res.status, `Cove media upload ${path} failed: ${res.status} ${detail}`);
+    }
+    return res.json() as Promise<Message>;
+  }
+
   /** PATCH /api/v10/channels/:id/messages/:msgId — edit a message. */
   async editMessage(channelId: string, messageId: string, content: string): Promise<Message> {
     return this.request("PATCH", `${API_PREFIX}/channels/${channelId}/messages/${messageId}`, {

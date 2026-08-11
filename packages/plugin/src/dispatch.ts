@@ -215,6 +215,19 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         }
         typingCallbacks.onCleanup?.();
         const text = payload.text ?? "";
+        const directive = /(?:^|\n)\s*MEDIA:\s*`?([^\s`]+)`?\s*(?:\n|$)/i.exec(text);
+        const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0] ?? directive?.[1];
+        const caption = directive ? text.replace(directive[0], "\n").trim() : text;
+        if (mediaUrl) {
+          if (draftMessageId) {
+            await restClient.deleteMessage(channelId, draftMessageId);
+            draftMessageId = undefined;
+          }
+          if (!outboundBridge.sendMedia) throw new Error("cove: outbound adapter missing sendMedia");
+          await outboundBridge.sendMedia({ cfg, to: channelId, accountId, text: caption, mediaUrl });
+          progressDraft.markFinalReplyDelivered();
+          return;
+        }
         if (!text) {
           // info not warn — empty text is legitimate for tool-only turns
           log?.info?.(`cove: deliver called with empty text for [${channelId}] (message: ${message.id})`);
