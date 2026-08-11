@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, UpdateTaskFields } from "@cove/shared";
+import type { Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, TaskRun, TaskRunEventType, UpdateTaskFields } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -271,6 +271,14 @@ export class CoveRestClient {
   /** GET /api/v10/tasks/:taskId — get a single task. */
   async getTask(taskId: string): Promise<Task> {
     return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
+  }
+
+  async startTaskRun(taskId: string): Promise<TaskRun> {
+    return this.request("POST", `${API_PREFIX}/tasks/${taskId}/runs`, {});
+  }
+
+  async appendTaskRunEvent(taskId: string, runId: string, event: { type: TaskRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }): Promise<TaskRun> {
+    return this.request("POST", `${API_PREFIX}/tasks/${taskId}/runs/${runId}/events`, event);
   }
 
   /** PATCH /api/v10/tasks/:taskId — update a task. */

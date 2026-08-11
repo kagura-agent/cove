@@ -1,7 +1,7 @@
 /** Cove message dispatch — inbound turn, draft streaming, tool progress, final delivery. */
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
-import type { Message } from "@cove/shared";
+import type { Message, TaskRunEventType } from "@cove/shared";
 import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
@@ -80,6 +80,16 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let lastSentText = "";
     let finalizedViaPreviewMessage = false;
     let undeliveredFinalPayload: string | undefined;
+    let taskRun: { taskId: string; runId: string } | undefined;
+    let taskEventQueue: Promise<void> = Promise.resolve();
+    const reportTaskRunEvent = (event: { type: TaskRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
+      if (!taskRun) return;
+      const run = taskRun;
+      // Callback delivery is concurrent in OpenClaw; serialize it so a terminal
+      // event cannot overtake an earlier tool result and close the run first.
+      taskEventQueue = taskEventQueue.then(() => restClient.appendTaskRunEvent(run.taskId, run.runId, event)).then(() => undefined).catch((error) =>
+        log?.warn?.(`cove: failed to report task run event: ${error.message}`));
+    };
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
     let warnedSendOrEditAborted = false;
@@ -257,6 +267,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           p?.detailMode ? { detailMode: p.detailMode as "explain" | "raw" } : undefined,
         );
         if (line) progressDraft.pushToolProgress(line, { toolName: name });
+        let args: string | undefined;
+        try { args = typeof p?.args === "string" ? p.args : JSON.stringify(p?.args ?? {}); } catch { args = "[unserializable arguments]"; }
+        reportTaskRunEvent({ type: "tool_started", tool_call_id: p?.toolCallId ?? p?.id, action: name, detail: args });
       },
       onItemEvent: guardFwd((p: any) => {
         const line = buildChannelProgressDraftLineForEntry(channelEntry, {
@@ -272,6 +285,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           meta: p.meta,
         });
         if (line) progressDraft.pushToolProgress(line);
+        reportTaskRunEvent({ type: p?.kind === "subagent" ? "subagent_progress" : "tool_progress", tool_call_id: p?.itemId, action: p?.title ?? p?.name, detail: p?.progressText ?? p?.summary, status: p?.status });
       }),
       onPlanUpdate: guardFwd((p: any) => {
         if (p.phase !== "update") return;
@@ -283,6 +297,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           steps: p.steps,
         });
         if (line) progressDraft.pushToolProgress(line);
+        reportTaskRunEvent({ type: "tool_progress", action: p?.title ?? "Plan update", detail: p?.explanation });
       }),
       onApprovalEvent: guardFwd((p: any) => {
         if (p.phase !== "requested") return;
@@ -295,6 +310,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           message: p.message,
         });
         if (line) progressDraft.pushToolProgress(line);
+        reportTaskRunEvent({ type: "approval_requested", action: p?.title, detail: p?.message ?? p?.reason });
       }),
       onCommandOutput: guardFwd((p: any) => {
         if (p.phase !== "end") return;
@@ -307,6 +323,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           exitCode: p.exitCode,
         });
         if (line) progressDraft.pushToolProgress(line);
+        reportTaskRunEvent({ type: p?.status === "failed" || (typeof p?.exitCode === "number" && p.exitCode !== 0) ? "tool_failed" : "command_output", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.output, status: p?.status, exit_code: p?.exitCode, duration_ms: p?.durationMs, cwd: p?.cwd });
       }),
       onPatchSummary: guardFwd((p: any) => {
         if (p.phase !== "end") return;
@@ -321,6 +338,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           summary: p.summary,
         });
         if (line) progressDraft.pushToolProgress(line);
+        reportTaskRunEvent({ type: "patch_summary", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.summary ?? [p?.added?.length ? `added: ${p.added.join(", ")}` : "", p?.modified?.length ? `modified: ${p.modified.join(", ")}` : "", p?.deleted?.length ? `deleted: ${p.deleted.join(", ")}` : ""].filter(Boolean).join("; ") });
       }),
       onCompactionStart: guardFwd(() => {
         progressDraft.pushToolProgress("📦 **Compacting context...**", { startImmediately: true });
@@ -381,6 +399,19 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // An accepted abort turn only needs its raw command and session identity;
     // skipping enrichment lets OpenClaw's fast-abort path run immediately.
     const skipEnrichment = isAbortRequest;
+    if (taskThread && !skipEnrichment) {
+      try {
+        const task = await restClient.getTaskByThreadId(channelId);
+        if (task) {
+          const run = await restClient.startTaskRun(task.task_id);
+          taskRun = { taskId: task.task_id, runId: run.run_id };
+        }
+      } catch (error: any) {
+        // Reporting is observability only; never turn a valid task message into
+        // a failed agent turn because the control plane is temporarily down.
+        log?.warn?.(`cove: failed to start task run: ${error.message}`);
+      }
+    }
     const coveMdContent = skipEnrichment ? null : await getCoveMd(restClient, coveMdChannelId, log);
     const fullAttachmentUrls = skipEnrichment ? [] : collectImageAttachmentUrls(message, account.baseUrl);
     const bodyForAgent = skipEnrichment
@@ -438,10 +469,18 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           }),
         },
       });
+      reportTaskRunEvent({ type: "run_finished", action: "Completed" });
+      await taskEventQueue;
     } catch (err: any) {
       if (abortSignal?.aborted) {
+        reportTaskRunEvent({ type: "run_aborted", action: "Aborted" });
+        await taskEventQueue;
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
-      } else { throw err; }
+      } else {
+        reportTaskRunEvent({ type: "run_failed", action: "Failed" });
+        await taskEventQueue;
+        throw err;
+      }
     } finally {
       // Orphaned draft cleanup (Discord parity)
       // Retry any preview that could not be deleted before non-in-place finalization.

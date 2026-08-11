@@ -378,6 +378,39 @@ export interface Task {
   updated_at: number;
 }
 
+/** A bounded, server-sanitized execution timeline for a task thread. */
+export type TaskRunStatus = "active" | "completed" | "failed" | "aborted" | "stale";
+export type TaskRunEventType = "run_started" | "run_finished" | "run_failed" | "run_aborted" | "tool_started" | "tool_progress" | "tool_finished" | "tool_failed" | "command_output" | "patch_summary" | "approval_requested" | "subagent_started" | "subagent_progress" | "subagent_finished" | "subagent_failed";
+
+export interface TaskRun {
+  run_id: string;
+  task_id: string;
+  agent_id: string;
+  status: TaskRunStatus;
+  current_action: string | null;
+  started_at: number;
+  updated_at: number;
+  finished_at: number | null;
+  expires_at: number;
+}
+
+export interface TaskRunEvent {
+  event_id: string;
+  task_id: string;
+  run_id: string;
+  tool_call_id: string | null;
+  type: TaskRunEventType;
+  action: string | null;
+  detail: string | null;
+  status: string | null;
+  exit_code: number | null;
+  duration_ms: number | null;
+  cwd: string | null;
+  created_at: number;
+}
+
+export interface TaskRunTimeline { run: TaskRun | null; events: TaskRunEvent[]; }
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id
