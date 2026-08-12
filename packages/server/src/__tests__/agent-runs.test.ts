@@ -23,6 +23,10 @@ describe("generic file-backed agent runs", () => {
     expect(timeline.events.every(event => (event.detail?.length ?? 0) <= 8_040)).toBe(true);
     expect(timeline.events.some(event => event.detail?.includes("also-secret") || event.detail?.includes("Bearer secret"))).toBe(false);
     expect(repos.agentRuns.associateMessage(one.run_id, "m2")?.assistant_message_id).toBe("m2");
+    const thread = db.prepare("SELECT id FROM channels WHERE id != ? LIMIT 1").get(channel.id) as { id: string };
+    const threaded = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "m1" });
+    expect(repos.agentRuns.latest({ channelId: channel.id })?.run_id).toBe(two.run_id);
+    expect(repos.agentRuns.latest({ channelId: channel.id, threadId: thread.id })?.run_id).toBe(threaded.run_id);
     db.close(); rmSync(root, { recursive: true, force: true });
   });
 });

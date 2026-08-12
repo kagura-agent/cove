@@ -51,8 +51,18 @@ export class AgentRunsRepo {
   get(runId: string): AgentRun | null { const row = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId); return row ? asRun(row) : null; }
   latest(input: { channelId?: string; threadId?: string; taskId?: string }): AgentRun | null {
     this.expire(input.taskId ? { taskId: input.taskId } : input.channelId ? { channelId: input.channelId } : undefined);
-    const key = input.threadId ? "thread_id" : input.taskId ? "task_id" : "channel_id"; const value = input.threadId ?? input.taskId ?? input.channelId;
-    if (!value) return null; const row = this.db.prepare(`SELECT * FROM agent_runs WHERE ${key}=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1`).get(value); return row ? asRun(row) : null;
+    if (input.threadId) {
+      const row = this.db.prepare("SELECT * FROM agent_runs WHERE thread_id=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.threadId);
+      return row ? asRun(row) : null;
+    }
+    if (input.taskId) {
+      const row = this.db.prepare("SELECT * FROM agent_runs WHERE task_id=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.taskId);
+      return row ? asRun(row) : null;
+    }
+    if (!input.channelId) return null;
+    // A parent channel's footer must not surface work belonging to one of its threads.
+    const row = this.db.prepare("SELECT * FROM agent_runs WHERE channel_id=? AND thread_id IS NULL ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.channelId);
+    return row ? asRun(row) : null;
   }
   events(runId: string): AgentRunEvent[] {
     const file = this.logPath(runId); if (!existsSync(file)) return [];
