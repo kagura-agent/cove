@@ -171,8 +171,8 @@ export function ExecutionTimeline({ events }: { events: AgentRunEvent[] }) {
 
 function LifecycleRow({ operation }: { operation: LifecycleOperation }) {
   const facts = [operation.duration_ms !== null ? formatDuration(operation.duration_ms) : null, operation.exit_code !== null ? `exit ${operation.exit_code}` : null].filter(Boolean).join(" · ");
-  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-    <span title={operation.state.label} aria-label={operation.state.label} style={{ color: operation.state.color, fontWeight: 700 }}>{operation.state.icon}</span>
+  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", alignItems: "start", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+    <span title={operation.state.label} aria-label={operation.state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: "20px", lineHeight: 1, color: operation.state.color, fontWeight: 700 }}>{operation.state.icon}</span>
     <div style={{ minWidth: 0 }}><div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{operation.action}{operation.detail && <span style={{ fontWeight: 400 }}> · {operation.detail}</span>}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>
       <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Lifecycle ({operation.events.length})</summary>
         {operation.events.map((event) => <TimelineRow key={event.event_id} event={event} />)}
@@ -184,8 +184,8 @@ function LifecycleRow({ operation }: { operation: LifecycleOperation }) {
 function TimelineRow({ event }: { event: AgentRunEvent }) {
   const state = eventState(event);
   const facts = [event.status, event.duration_ms !== null ? formatDuration(event.duration_ms) : null, event.exit_code !== null ? `exit ${event.exit_code}` : null].filter(Boolean).join(" · ");
-  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-    <span title={state.label} aria-label={state.label} style={{ color: state.color, fontWeight: 700 }}>{state.icon}</span>
+  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", alignItems: "start", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+    <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: "20px", lineHeight: 1, color: state.color, fontWeight: 700 }}>{state.icon}</span>
     <div style={{ minWidth: 0 }}><div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{conciseAction(event)}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>
       {event.detail && <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Safe detail</summary><pre style={detailStyle}>{event.detail}</pre></details>}
     </div>
