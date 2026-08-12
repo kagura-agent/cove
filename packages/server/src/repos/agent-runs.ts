@@ -51,9 +51,27 @@ export class AgentRunsRepo {
     if (scope?.channelId) { where = " AND channel_id=?"; args.push(scope.channelId); }
     this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
   }
+  /**
+   * Same-scope turns are serialized by the plugin's per-channel debouncer, so a
+   * second active run for the same (channel, thread, agent) can only be a
+   * leftover from a turn that never reported its terminal event. Stale it
+   * eagerly instead of waiting for the expiry window — genuine concurrency
+   * lives across threads/channels, never within one scope. In-flight task runs
+   * are excluded (a chat turn must not kill a task execution); task runs stay
+   * singleton via the task_id branch below.
+   */
+  private staleSameScope(now: number, input: { agent_id: string; channel_id: string; thread_id?: string | null }): void {
+    if (input.thread_id) {
+      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE thread_id=? AND agent_id=? AND task_id IS NULL AND status='active'").run(now, now, input.thread_id, input.agent_id);
+    } else {
+      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE channel_id=? AND thread_id IS NULL AND agent_id=? AND task_id IS NULL AND status='active'").run(now, now, input.channel_id, input.agent_id);
+    }
+  }
   start(input: { agent_id: string; channel_id: string; trigger_message_id: string; thread_id?: string | null; task_id?: string | null; parent_run_id?: string | null }): AgentRun {
     this.expire({ channelId: input.channel_id }); const now = Date.now(); const runId = randomUUID();
-    // Only task executions are singleton; normal-channel turns may run concurrently.
+    // Any new run supersedes leftover active runs in its own scope. Task
+    // executions additionally keep a per-task singleton invariant.
+    this.staleSameScope(now, input);
     if (input.task_id) this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE task_id=? AND status='active'").run(now, now, input.task_id);
     this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.task_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
     const run = this.get(runId)!; this.writeManifest(run); return run;
