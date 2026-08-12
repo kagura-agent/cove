@@ -16,6 +16,7 @@ import * as api from "../lib/api";
 import { useState, useMemo } from "react";
 import { ImageLightbox } from "./ImageLightbox";
 import { useActiveIds } from "../hooks/useActiveIds";
+import { MessageAgentRunDetails } from "./MessageAgentRunDetails";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
 
@@ -401,6 +402,8 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
           {/* Reactions */}
           <ReactionPills message={message} />
 
+          {isBot && <MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} />}
+
           {/* Task status bar */}
           {contentType === "task" && <TaskStatusBar message={message} />}
 
@@ -483,6 +486,8 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
         {/* Reactions */}
         <ReactionPills message={message} />
+
+        {isBot && <MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} />}
 
         {/* Task status bar */}
         {contentType === "task" && <TaskStatusBar message={message} />}

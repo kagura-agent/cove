@@ -7,7 +7,9 @@ import { dispatcher } from "../lib/gateway-dispatcher";
 export function AgentRunCard({ channelId, threadId }: { channelId: string; threadId?: string }) {
   const [timeline, setTimeline] = useState<AgentRunTimeline | null>(null); const [open, setOpen] = useState(false);
   useEffect(() => { let alive = true; const refresh = () => api.fetchLatestAgentRun(channelId, threadId).then(v => alive && setTimeline(v)).catch(() => {}); refresh(); const update = (run: NonNullable<AgentRunTimeline["run"]>) => { if (run.channel_id === channelId && (!threadId || run.thread_id === threadId)) refresh(); }; dispatcher.on("AGENT_RUN_UPDATED", update); return () => { alive = false; dispatcher.off("AGENT_RUN_UPDATED", update); }; }, [channelId, threadId]);
-  const run = timeline?.run; if (!run || (run.status !== "active" && !timeline?.events.length)) return null;
+  // Completed runs belong with the final message that they produced.  The
+  // footer is deliberately reserved for work that is still in progress.
+  const run = timeline?.run; if (!run || run.status !== "active") return null;
   return <div style={{ position: "relative", padding: "0 var(--space-md) var(--space-xs)", background: "var(--bg-secondary)" }}>
     <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} style={{ border: "1px solid var(--border-subtle)", borderRadius: 999, background: "var(--bg-primary)", color: "var(--text-normal)", padding: "5px 10px", cursor: "pointer", fontSize: "var(--font-size-sm)" }}>
       {run.status === "active" ? "🌸 Working" : "✓ " + run.status}{run.current_action ? ` · ${run.current_action}` : ""}

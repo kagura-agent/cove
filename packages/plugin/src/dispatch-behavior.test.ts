@@ -590,12 +590,12 @@ describe("D. Context Injection", () => {
 describe("E. Tool Progress (Compositor)", () => {
   beforeEach(resetState);
 
-  it("E1: Compositor created with correct params", async () => {
+  it("E1: compositor is disabled when durable agent-run evidence is available", async () => {
     await dispatchMessage(createBaseOpts());
     expect(createChannelProgressDraftCompositor).toHaveBeenCalledWith(expect.objectContaining({
       entry: expect.anything(),
       mode: "progress",
-      active: true,
+      active: false,
       seed: "msg-1",
       update: expect.any(Function),
     }));
@@ -642,14 +642,17 @@ describe("E. Tool Progress (Compositor)", () => {
   });
 
   it("E5: onToolStart calls pushToolProgress with formatted line", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(createBaseOpts());
+    const p = dispatchMessage(opts);
     await new Promise((r) => setTimeout(r, 50));
 
     const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
     expect(onToolStart).toBeDefined();
     onToolStart({ name: "Read", args: { file: "/foo" } });
     expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("📖 Read", { toolName: "Read" });
+    expect(restClient.sendMessage).not.toHaveBeenCalled();
 
     blocker.resolve(); await p;
   });
@@ -805,27 +808,26 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H2. Tool progress injection into draft", () => {
-    it("H2a: compositor update callback pushes text to draft.update", async () => {
+    it("H2a: tool compositor cannot write a durable assistant draft", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      // The compositor's update callback is captured in capturedCompositorParams
       expect(capturedCompositorParams?.update).toBeDefined();
       await capturedCompositorParams.update("Working on it...\n\n📖 Read file.ts");
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("Working on it...\n\n📖 Read file.ts");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
     });
 
-    it("H2b: compositor update with flush calls draft.loop.flush", async () => {
+    it("H2b: disabled progress updates do not flush or create fake replies", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
       await capturedCompositorParams.update("text", { flush: true });
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("text");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;

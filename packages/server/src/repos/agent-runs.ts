@@ -49,6 +49,16 @@ export class AgentRunsRepo {
     const run = this.get(runId)!; this.writeManifest(run); return run;
   }
   get(runId: string): AgentRun | null { const row = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId); return row ? asRun(row) : null; }
+  /**
+   * Look up an execution from the message it finalized.  The channel predicate
+   * is intentional: callers must not turn a globally-known message id into a
+   * cross-channel execution-log lookup.
+   */
+  forAssistantMessage(channelId: string, assistantMessageId: string): AgentRun | null {
+    const row = this.db.prepare("SELECT * FROM agent_runs WHERE assistant_message_id=? AND ((thread_id IS NULL AND channel_id=?) OR thread_id=?) ORDER BY updated_at DESC LIMIT 1")
+      .get(assistantMessageId, channelId, channelId);
+    return row ? asRun(row) : null;
+  }
   latest(input: { channelId?: string; threadId?: string; taskId?: string }): AgentRun | null {
     this.expire(input.taskId ? { taskId: input.taskId } : input.channelId ? { channelId: input.channelId } : undefined);
     if (input.threadId) {

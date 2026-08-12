@@ -245,6 +245,9 @@ export function fetchLatestAgentRun(channelId: string, threadId?: string) {
   return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/agent-runs/latest${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`);
 }
 export function fetchAgentRun(runId: string) { return api<AgentRunTimeline>(`${API_PREFIX}/agent-runs/${runId}`); }
+export function fetchMessageAgentRun(channelId: string, messageId: string) {
+  return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/agent-run`);
+}
 
 export function sendThreadMessage(threadId: string, content: string, nonce?: string) {
   return sendMessage(threadId, content, nonce);
