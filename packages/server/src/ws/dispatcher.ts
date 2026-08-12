@@ -466,6 +466,12 @@ export class GatewayDispatcher {
     const channel = this.channelsRepo.getById(run.channel_id);
     if (!channel) return;
     this.broadcastToGuildWithChannelFilter(channel.guild_id, run.channel_id, "AGENT_RUN_UPDATED", run);
+    // Thread views subscribe to their child channel, while a run uses its parent
+    // channel as the permission/index anchor. Fan out the same scoped event so
+    // the active card updates immediately instead of waiting for a later fetch.
+    if (run.thread_id && run.thread_id !== run.channel_id) {
+      this.broadcastToGuildWithChannelFilter(channel.guild_id, run.thread_id, "AGENT_RUN_UPDATED", run);
+    }
   }
 
   taskRunUpdated(task: Task, timeline: TaskRunTimeline): void {
