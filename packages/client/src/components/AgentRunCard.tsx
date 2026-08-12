@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
   padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
-  minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)", flexWrap: "wrap",
+  minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)", flexWrap: "nowrap",
 };
 const stopStyle: CSSProperties = { border: 0, background: "transparent", color: "var(--danger)", cursor: "pointer", padding: 0, lineHeight: 1.15, fontSize: "10px", fontWeight: 500 };
 
@@ -63,7 +63,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   }
   return <div style={{ position: "relative" }}>
     <div style={barStyle} aria-live="polite">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle agent execution timeline" style={{ border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", fontSize: "inherit" }}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle agent execution timeline" style={{ border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", fontSize: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {label}
       </button>
       <span style={{ flex: 1 }} />
