@@ -2,10 +2,12 @@ import type { AgentRunEventType } from "@cove/shared";
 
 /**
  * Bridges OpenClaw's native subagent hooks to the Cove run that owns the
- * requester session. In the locally installed OpenClaw 2026.6.8 SDK,
- * `PluginHookSubagentSpawnedEvent` supplies childSessionKey/runId and
- * `PluginHookSubagentEndedEvent` supplies targetSessionKey/outcome, while
- * ReplyOptions.onItemEvent has neither a requester nor child session key.
+ * requester session. OpenClaw's typed plugin API registers these lifecycle
+ * hooks through `api.on(name, handler)`, not `api.registerHook`. At runtime,
+ * `subagent_spawned` supplies childSessionKey/runId and its second context
+ * supplies requesterSessionKey; `subagent_ended` identifies that child as
+ * targetSessionKey (and supplies the same context when available). ReplyOptions
+ * onItemEvent has neither a requester nor child session key.
  * There is no native child-progress hook. Child runs are therefore not created
  * here: the parent ledger stores stable child-session evidence and only reports
  * liveness observed from an un-ended native lifecycle (never invented work).
@@ -60,7 +62,7 @@ export class CoveAgentRunLifecycleBridge {
     }, HEARTBEAT_MS);
   }
 
-  onSubagentEnded(event: NativeEnded): void {
+  onSubagentEnded(event: NativeEnded, _context?: NativeContext): void {
     if (event.targetKind !== "subagent") return;
     const child = this.children.get(event.targetSessionKey);
     if (!child) return;
@@ -116,12 +118,16 @@ export class CoveAgentRunLifecycleBridge {
 
 export const coveAgentRunLifecycleBridge = new CoveAgentRunLifecycleBridge();
 
-/** Register only documented OpenClaw lifecycle hooks (subagent_spawned/ended). */
-export function registerCoveAgentRunLifecycleHooks(api: { registerHook?: (events: string | string[], handler: (event: any, context: any) => void) => void }, bridge = coveAgentRunLifecycleBridge): void {
-  if (typeof api.registerHook !== "function") return;
-  // Runtime invokes hooks with (event, context); the public declaration only
-  // models one argument, so retain the documented runtime shape at this edge.
-  const register = api.registerHook as any;
-  register("subagent_spawned", (event: NativeSpawned, context: NativeContext) => bridge.onSubagentSpawned(event, context));
-  register("subagent_ended", (event: NativeEnded) => bridge.onSubagentEnded(event));
+/**
+ * Register the documented OpenClaw typed lifecycle hooks.
+ *
+ * OpenClaw's plugin loader exposes `api.on`, and `sessions_spawn` calls its
+ * global hook runner with `(event, { requesterSessionKey, childSessionKey,
+ * runId })`. Registering a non-existent `registerHook` API silently skipped
+ * both handlers in production, which left Cove with only run_started/finished.
+ */
+export function registerCoveAgentRunLifecycleHooks(api: { on?: (name: "subagent_spawned" | "subagent_ended", handler: (event: any, context: any) => void | Promise<void>) => void }, bridge = coveAgentRunLifecycleBridge): void {
+  if (typeof api.on !== "function") return;
+  api.on("subagent_spawned", (event: NativeSpawned, context: NativeContext) => bridge.onSubagentSpawned(event, context));
+  api.on("subagent_ended", (event: NativeEnded, context: NativeContext) => bridge.onSubagentEnded(event, context));
 }

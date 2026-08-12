@@ -6,33 +6,46 @@ async function flushReports() { for (let i = 0; i < 8; i++) await Promise.resolv
 describe("native OpenClaw subagent lifecycle bridge", () => {
   afterEach(() => vi.useRealTimers());
 
-  it("registers documented hooks and keeps the parent active through child progress and terminal outcome", async () => {
+  it("maps the real sessions_spawn api.on payload/context to the parent Cove thread run", async () => {
     vi.useFakeTimers();
     const bridge = new CoveAgentRunLifecycleBridge();
     const events: any[] = [];
-    bridge.bindParent("agent:cove:channel:parent", "parent-run", (event) => { events.push(event); });
-    const hooks = new Map<string, (event: any, context: any) => void>();
-    registerCoveAgentRunLifecycleHooks({ registerHook: (name, handler) => hooks.set(name as string, handler) }, bridge);
+    // This is the exact kind of thread session key Cove binds before dispatch.
+    const parentSessionKey = "agent:kagura:cove:direct:1536591983689072640:thread:1536591983689072640";
+    bridge.bindParent(parentSessionKey, "parent-run", (event) => { events.push(event); });
+    const hooks = new Map<string, (event: any, context: any) => void | Promise<void>>();
+    // OpenClaw's plugin API exposes api.on; registerHook does not exist here.
+    registerCoveAgentRunLifecycleHooks({ on: (name, handler) => hooks.set(name, handler) }, bridge);
 
     expect([...hooks.keys()]).toEqual(["subagent_spawned", "subagent_ended"]);
-    hooks.get("subagent_spawned")!({ childSessionKey: "child-session", runId: "native-child-run", label: "Investigate", mode: "run" }, { requesterSessionKey: "agent:cove:channel:parent" });
+    // Shape copied from OpenClaw's sessions_spawn call to runSubagentSpawned.
+    await hooks.get("subagent_spawned")!({
+      runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1",
+      agentId: "kagura", label: "Investigate", mode: "run", threadRequested: true,
+      requester: { channel: "cove", accountId: "default", to: "1536591983689072640", threadId: "1536591983689072640" },
+      resolvedModel: "floway-sg/gpt-5.6-terra", resolvedProvider: "floway-sg",
+    }, { runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1", requesterSessionKey: parentSessionKey });
     await flushReports();
     expect(events).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "subagent_started", tool_call_id: "child-session", detail: "OpenClaw child run native-child-run started" }),
-      expect.objectContaining({ type: "subagent_progress", tool_call_id: "child-session", detail: "Child session is active" }),
+      expect.objectContaining({ type: "subagent_started", tool_call_id: "agent:kagura:subagent:child-1", detail: "OpenClaw child run native-child-run started" }),
+      expect.objectContaining({ type: "subagent_progress", tool_call_id: "agent:kagura:subagent:child-1", detail: "Child session is active" }),
     ]));
 
     let parentMayFinish = false;
-    const waiting = bridge.waitForChildren("agent:cove:channel:parent").then(() => { parentMayFinish = true; });
+    const waiting = bridge.waitForChildren(parentSessionKey).then(() => { parentMayFinish = true; });
     await vi.advanceTimersByTimeAsync(25_000);
     await flushReports();
     expect(parentMayFinish).toBe(false);
-    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_progress", tool_call_id: "child-session", detail: "Child session remains active (awaiting OpenClaw terminal hook)" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_progress", tool_call_id: "agent:kagura:subagent:child-1", detail: "Child session remains active (awaiting OpenClaw terminal hook)" }));
 
-    hooks.get("subagent_ended")!({ targetSessionKey: "child-session", targetKind: "subagent", reason: "completed", outcome: "ok" }, {});
+    // Shape copied from the subagent registry's runSubagentEnded call.
+    await hooks.get("subagent_ended")!({
+      targetSessionKey: "agent:kagura:subagent:child-1", targetKind: "subagent", reason: "completed",
+      sendFarewell: true, accountId: "default", runId: "native-child-run", endedAt: 1_786_000_000_000, outcome: "ok",
+    }, { runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1", requesterSessionKey: parentSessionKey });
     await waiting; await flushReports();
     expect(parentMayFinish).toBe(true);
-    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_finished", tool_call_id: "child-session", status: "ok" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_finished", tool_call_id: "agent:kagura:subagent:child-1", status: "ok" }));
   });
 
   it("records an observed failed child terminal outcome without inventing child progress", async () => {
