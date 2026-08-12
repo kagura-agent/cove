@@ -12,15 +12,11 @@ import {
   type TaskStatus,
   type UpdateTaskFields,
   type UpdateTaskRecurrence,
-  type TaskRunEventType,
 } from "@cove/shared";
 import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
 import { createRecurringTaskOccurrence, validateTaskRecurrence } from "../services/task-recurrence.js";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
-const TASK_RUN_EVENT_TYPES = new Set<TaskRunEventType>([
-  "run_started", "run_finished", "run_failed", "run_aborted", "tool_started", "tool_progress", "tool_finished", "tool_failed", "command_output", "patch_summary", "approval_requested", "subagent_started", "subagent_progress", "subagent_finished", "subagent_failed",
-]);
 
 function hasField(value: object, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -116,44 +112,6 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
 
     return c.json(task);
-  });
-
-  app.get("/tasks/:taskId/runs", async (c) => {
-    const task = repos.tasks.getById(c.req.param("taskId"));
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
-    const user = c.get("botUser");
-    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
-    return c.json(repos.agentRuns.timeline({ taskId: task.task_id }));
-  });
-
-  app.post("/tasks/:taskId/runs", async (c) => {
-    const task = repos.tasks.getById(c.req.param("taskId"));
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
-    const user = c.get("botUser");
-    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
-    // Only the task's assigned agent may publish execution state. This keeps
-    // an otherwise channel-visible bot from fabricating another agent's run.
-    if (!task.assignee_id || task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    const run = repos.agentRuns.start({ agent_id: user.id, channel_id: task.thread_id, thread_id: task.thread_id, task_id: task.task_id, trigger_message_id: task.message_id });
-    repos.agentRuns.append(run.run_id, { type: "run_started", action: "Starting task" });
-    const timeline = repos.agentRuns.timeline({ taskId: task.task_id });
-    dispatcher?.taskRunUpdated(task, timeline);
-    return c.json(timeline.run!, 201);
-  });
-
-  app.post("/tasks/:taskId/runs/:runId/events", async (c) => {
-    const task = repos.tasks.getById(c.req.param("taskId"));
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
-    const user = c.get("botUser");
-    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
-    if (!task.assignee_id || task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    const body = await parseJsonBody<Record<string, unknown>>(c);
-    if (!body || typeof body.type !== "string" || !TASK_RUN_EVENT_TYPES.has(body.type as TaskRunEventType)) return validationError(c, "Invalid task run event type");
-    const run = repos.agentRuns.append(c.req.param("runId"), body as { type: TaskRunEventType });
-    if (!run || run.task_id !== task.task_id) return c.json({ message: "Unknown or inactive task run", code: 10081 }, 409);
-    const timeline = repos.agentRuns.timeline({ taskId: task.task_id });
-    dispatcher?.taskRunUpdated(task, timeline);
-    return c.json(timeline.run!);
   });
 
   app.patch("/tasks/:taskId", async (c) => {

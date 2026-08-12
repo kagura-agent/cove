@@ -82,17 +82,17 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let finalizedViaPreviewMessage = false;
     let undeliveredFinalPayload: string | undefined;
     let agentRun: { runId: string } | undefined;
-    let taskEventQueue: Promise<void> = Promise.resolve();
-    const reportTaskRunEvent = (event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
+    let agentEventQueue: Promise<void> = Promise.resolve();
+    const reportAgentRunEvent = (event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
       if (!agentRun) return;
       const run = agentRun;
       // Callback delivery is concurrent; serialize so a terminal event cannot overtake evidence.
-      taskEventQueue = taskEventQueue.then(() => restClient.appendAgentRunEvent(run.runId, event)).then(() => undefined).catch((error) =>
+      agentEventQueue = agentEventQueue.then(() => restClient.appendAgentRunEvent(run.runId, event)).then(() => undefined).catch((error) =>
         log?.warn?.(`cove: failed to report agent run event: ${error.message}`));
     };
     const associateAgentRunMessage = (assistantMessageId?: string) => {
       if (!agentRun || !assistantMessageId) return;
-      taskEventQueue = taskEventQueue.then(() => restClient.associateAgentRunMessage(agentRun!.runId, assistantMessageId)).then(() => undefined).catch((error) =>
+      agentEventQueue = agentEventQueue.then(() => restClient.associateAgentRunMessage(agentRun!.runId, assistantMessageId)).then(() => undefined).catch((error) =>
         log?.warn?.(`cove: failed to associate agent run message: ${error.message}`));
     };
     const channelEntry = cfg?.channels?.["cove"] ?? {};
@@ -276,7 +276,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         if (line) progressDraft.pushToolProgress(line, { toolName: name });
         let args: string | undefined;
         try { args = typeof p?.args === "string" ? p.args : JSON.stringify(p?.args ?? {}); } catch { args = "[unserializable arguments]"; }
-        reportTaskRunEvent({ type: "tool_started", tool_call_id: p?.toolCallId ?? p?.id, action: name, detail: args });
+        reportAgentRunEvent({ type: "tool_started", tool_call_id: p?.toolCallId ?? p?.id, action: name, detail: args });
       },
       onItemEvent: guardFwd((p: any) => {
         const line = buildChannelProgressDraftLineForEntry(channelEntry, {
@@ -298,7 +298,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         // These events are deliberately appended to the parent run: native
         // subagents do not emit a separate Cove inbound message, so this is the
         // durable parent-thread liveness signal until their work completes.
-        reportTaskRunEvent({ type: childType, tool_call_id: p?.itemId, action: p?.title ?? p?.name ?? "Subagent", detail: p?.progressText ?? p?.summary, status: p?.status });
+        reportAgentRunEvent({ type: childType, tool_call_id: p?.itemId, action: p?.title ?? p?.name ?? "Subagent", detail: p?.progressText ?? p?.summary, status: p?.status });
       }),
       onPlanUpdate: guardFwd((p: any) => {
         if (p.phase !== "update") return;
@@ -310,7 +310,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           steps: p.steps,
         });
         if (line) progressDraft.pushToolProgress(line);
-        reportTaskRunEvent({ type: "tool_progress", action: p?.title ?? "Plan update", detail: p?.explanation });
+        reportAgentRunEvent({ type: "tool_progress", action: p?.title ?? "Plan update", detail: p?.explanation });
       }),
       onApprovalEvent: guardFwd((p: any) => {
         if (p.phase !== "requested") return;
@@ -323,7 +323,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           message: p.message,
         });
         if (line) progressDraft.pushToolProgress(line);
-        reportTaskRunEvent({ type: "approval_requested", action: p?.title, detail: p?.message ?? p?.reason });
+        reportAgentRunEvent({ type: "approval_requested", action: p?.title, detail: p?.message ?? p?.reason });
       }),
       onCommandOutput: guardFwd((p: any) => {
         if (p.phase !== "end") return;
@@ -336,7 +336,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           exitCode: p.exitCode,
         });
         if (line) progressDraft.pushToolProgress(line);
-        reportTaskRunEvent({ type: p?.status === "failed" || (typeof p?.exitCode === "number" && p.exitCode !== 0) ? "tool_failed" : "command_output", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.output, status: p?.status, exit_code: p?.exitCode, duration_ms: p?.durationMs, cwd: p?.cwd });
+        reportAgentRunEvent({ type: p?.status === "failed" || (typeof p?.exitCode === "number" && p.exitCode !== 0) ? "tool_failed" : "command_output", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.output, status: p?.status, exit_code: p?.exitCode, duration_ms: p?.durationMs, cwd: p?.cwd });
       }),
       onPatchSummary: guardFwd((p: any) => {
         if (p.phase !== "end") return;
@@ -351,7 +351,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           summary: p.summary,
         });
         if (line) progressDraft.pushToolProgress(line);
-        reportTaskRunEvent({ type: "patch_summary", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.summary ?? [p?.added?.length ? `added: ${p.added.join(", ")}` : "", p?.modified?.length ? `modified: ${p.modified.join(", ")}` : "", p?.deleted?.length ? `deleted: ${p.deleted.join(", ")}` : ""].filter(Boolean).join("; ") });
+        reportAgentRunEvent({ type: "patch_summary", tool_call_id: p?.toolCallId ?? p?.id, action: p?.title ?? p?.name, detail: p?.summary ?? [p?.added?.length ? `added: ${p.added.join(", ")}` : "", p?.modified?.length ? `modified: ${p.modified.join(", ")}` : "", p?.deleted?.length ? `deleted: ${p.deleted.join(", ")}` : ""].filter(Boolean).join("; ") });
       }),
       onCompactionStart: guardFwd(() => {
         progressDraft.pushToolProgress("📦 **Compacting context...**", { startImmediately: true });
@@ -420,7 +420,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       // permission/index anchor; evidence and UI remain scoped by thread_id.
       const run = await restClient.startAgentRun({ channel_id: task?.channel_id ?? channel?.parent_id ?? channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
       agentRun = { runId: run.run_id };
-      coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportTaskRunEvent);
+      coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent);
     } catch (error: any) {
       // Observability must never turn an otherwise valid agent turn into failure.
       log?.warn?.(`cove: failed to start agent run: ${error.message}`);
@@ -486,16 +486,16 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       // Keep this ledger active until OpenClaw emits their terminal lifecycle hook.
       await coveAgentRunLifecycleBridge.waitForChildren(threadSession.sessionKey, abortSignal);
       if (abortSignal?.aborted) throw new Error("cove: dispatch aborted while awaiting child session");
-      reportTaskRunEvent({ type: "run_finished", action: "Completed" });
-      await taskEventQueue;
+      reportAgentRunEvent({ type: "run_finished", action: "Completed" });
+      await agentEventQueue;
     } catch (err: any) {
       if (abortSignal?.aborted) {
-        reportTaskRunEvent({ type: "run_aborted", action: "Aborted" });
-        await taskEventQueue;
+        reportAgentRunEvent({ type: "run_aborted", action: "Aborted" });
+        await agentEventQueue;
         log?.info?.(`cove: dispatch aborted in [${channelId}]`);
       } else {
-        reportTaskRunEvent({ type: "run_failed", action: "Failed" });
-        await taskEventQueue;
+        reportAgentRunEvent({ type: "run_failed", action: "Failed" });
+        await agentEventQueue;
         throw err;
       }
     } finally {

@@ -394,12 +394,6 @@ export interface AgentRunEvent {
   duration_ms: number | null; cwd: string | null; created_at: number;
 }
 export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; }
-/** Legacy aliases retained for task consumers; task is simply an optional agent-run relation. */
-export type TaskRunStatus = AgentRunStatus;
-export type TaskRunEventType = AgentRunEventType;
-export type TaskRun = AgentRun;
-export type TaskRunEvent = AgentRunEvent;
-export type TaskRunTimeline = AgentRunTimeline;
 
 /** A thread member entry. */
 export interface ThreadMember {
