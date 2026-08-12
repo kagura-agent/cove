@@ -351,7 +351,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             >
               {formatTime(message.timestamp)}
             </Typography.Text>
-            {isBot && <span className="execution-details-inline"><MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} /></span>}
+            {(isBot && !message.webhook_id) && <span className="execution-details-inline"><MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} /></span>}
           </div>
 
           {/* Reply quote */}
