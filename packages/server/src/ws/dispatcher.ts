@@ -1,4 +1,4 @@
-import type { Message, Channel, Role, AgentRun } from "@cove/shared";
+import type { Message, Channel, Role, Task, AgentRun } from "@cove/shared";
 import { PermissionBits } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
