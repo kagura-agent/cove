@@ -20,12 +20,18 @@ function cleanId(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, "_"); 
 export class AgentRunsRepo {
   private root: string;
   constructor(private db: Database.Database, root = process.env.COVE_AGENT_RUN_LOG_DIR ?? join(process.cwd(), "data", "agent-runs")) {
-    this.root = resolve(root); mkdirSync(this.root, { recursive: true });
+    this.root = resolve(root); mkdirSync(this.root, { recursive: true, mode: 0o700 });
   }
-  private dir(runId: string) { return join(this.root, cleanId(runId)); }
+  private dir(runId: string) {
+    // Run ids are server-generated, but keep the file boundary explicit before
+    // touching disk so a future caller cannot escape the private log root.
+    const dir = resolve(this.root, cleanId(runId));
+    if (dir !== this.root && !dir.startsWith(`${this.root}/`)) throw new Error("Invalid agent run log path");
+    return dir;
+  }
   private logPath(runId: string) { return join(this.dir(runId), "events.ndjson"); }
   private writeManifest(run: AgentRun) {
-    const dir = this.dir(run.run_id); mkdirSync(dir, { recursive: true });
+    const dir = this.dir(run.run_id); mkdirSync(dir, { recursive: true, mode: 0o700 });
     const payload = JSON.stringify({ version: 1, run_id: run.run_id, redaction_version: run.redaction_version, event_count: run.log_event_count, bytes: run.log_bytes, hash: run.log_hash, updated_at: run.updated_at }) + "\n";
     const tmp = join(dir, "manifest.json.tmp"); writeFileSync(tmp, payload, { mode: 0o600 }); renameSync(tmp, join(dir, "manifest.json"));
   }
@@ -58,7 +64,7 @@ export class AgentRunsRepo {
     const current = this.get(runId); if (!current || current.status !== "active") return null;
     const now = Date.now(); const terminal: Record<string, AgentRunStatus> = { run_finished: "completed", run_failed: "failed", run_aborted: "aborted" };
     const event: AgentRunEvent = { event_id: randomUUID(), run_id: runId, tool_call_id: safeText(input.tool_call_id, 160), type: input.type, action: safeText(input.action, 240), detail: safeText(input.detail), status: safeText(input.status, 80), exit_code: Number.isInteger(input.exit_code) ? input.exit_code as number : null, duration_ms: Number.isFinite(input.duration_ms) ? Math.max(0, Math.floor(input.duration_ms as number)) : null, cwd: safeText(input.cwd, 500), created_at: now };
-    const line = JSON.stringify(event) + "\n"; mkdirSync(this.dir(runId), { recursive: true }); appendFileSync(this.logPath(runId), line, { mode: 0o600 });
+    const line = JSON.stringify(event) + "\n"; mkdirSync(this.dir(runId), { recursive: true, mode: 0o700 }); appendFileSync(this.logPath(runId), line, { mode: 0o600 });
     const nextStatus = terminal[input.type] ?? "active"; const bytes = current.log_bytes + Buffer.byteLength(line); const hash = createHash("sha256").update(current.log_hash ?? "").update(line).digest("hex");
     this.db.prepare("UPDATE agent_runs SET status=?,current_action=?,updated_at=?,finished_at=?,expires_at=?,log_hash=?,log_event_count=?,log_bytes=? WHERE run_id=?").run(nextStatus,event.action ?? current.current_action,now,nextStatus === "active" ? null : now,nextStatus === "active" ? now+90_000 : now,hash,current.log_event_count+1,bytes,runId);
     const result = this.get(runId)!; this.writeManifest(result); return result;

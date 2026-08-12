@@ -129,7 +129,7 @@ import { resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingres
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; startAgentRun: Mock; appendAgentRunEvent: Mock; associateAgentRunMessage: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -139,6 +139,9 @@ const createMockRestClient = (): MockRestClient => ({
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
   getTasks: vi.fn().mockResolvedValue([]),
   getTaskByThreadId: vi.fn().mockResolvedValue(null),
+  startAgentRun: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  appendAgentRunEvent: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  associateAgentRunMessage: vi.fn().mockResolvedValue({ run_id: "run-1" }),
 });
 
 const createMockChannelRuntime = () => ({
@@ -662,6 +665,16 @@ describe("E. Tool Progress (Compositor)", () => {
     expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("🔔 Task created");
 
     blocker.resolve(); await p;
+  });
+
+  it("E6b: nested subagent lifecycle is appended to the parent Cove run", async () => {
+    const opts = createBaseOpts(); const rest = opts.restClient as unknown as MockRestClient;
+    const blocker = createDispatchBlocker(); const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "running", progressText: "Reading repository" });
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "completed", summary: "Done" });
+    blocker.resolve(); await p;
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_started", action: "Research" }));
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_finished", action: "Research" }));
   });
 
   it("E7: suppressDefaultToolProgressMessages from compositor", async () => {

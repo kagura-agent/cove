@@ -12,6 +12,7 @@ import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { getCoveMd } from "./cove-md-cache.js";
 import { resolveThreadContext, isTaskThread, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 import { createCoveOutboundBridgeAdapter } from "./outbound.js";
+import { coveAgentRunLifecycleBridge } from "./agent-run-lifecycle.js";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 const coveIngressIdentity = defineStableChannelIngressIdentity();
@@ -171,10 +172,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         }
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
+      if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
       try {
-        // REST send returns the durable Cove message ID needed to associate the run.
-        const sent = await restClient.sendMessage(channelId, text);
-        associateAgentRunMessage(sent.id);
+        const sent = await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
+        associateAgentRunMessage(sent?.messageId);
       } catch (e: any) {
         // Keep the payload on the failure object so the dispatcher/kernel can
         // retain it for recovery without claiming the reply was delivered.
@@ -292,7 +293,13 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           meta: p.meta,
         });
         if (line) progressDraft.pushToolProgress(line);
-        reportTaskRunEvent({ type: p?.kind === "subagent" ? "subagent_progress" : "tool_progress", tool_call_id: p?.itemId, action: p?.title ?? p?.name, detail: p?.progressText ?? p?.summary, status: p?.status });
+        const childType = p?.kind === "subagent"
+          ? (p?.phase === "start" || p?.status === "started" || p?.status === "running" ? "subagent_started" : p?.status === "failed" ? "subagent_failed" : p?.phase === "end" || p?.status === "completed" ? "subagent_finished" : "subagent_progress")
+          : "tool_progress";
+        // These events are deliberately appended to the parent run: native
+        // subagents do not emit a separate Cove inbound message, so this is the
+        // durable parent-thread liveness signal until their work completes.
+        reportTaskRunEvent({ type: childType, tool_call_id: p?.itemId, action: p?.title ?? p?.name ?? "Subagent", detail: p?.progressText ?? p?.summary, status: p?.status });
       }),
       onPlanUpdate: guardFwd((p: any) => {
         if (p.phase !== "update") return;
@@ -410,8 +417,11 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // relation only, so normal channels and DMs get the same evidence trail.
     try {
       const task = taskThread ? await restClient.getTaskByThreadId(channelId) : null;
-      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
+      // Task-thread runs use the task's parent channel as their durable
+      // permission/index anchor; evidence and UI remain scoped by thread_id.
+      const run = await restClient.startAgentRun({ channel_id: task?.channel_id ?? channel?.parent_id ?? channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
       agentRun = { runId: run.run_id };
+      coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportTaskRunEvent);
     } catch (error: any) {
       // Observability must never turn an otherwise valid agent turn into failure.
       log?.warn?.(`cove: failed to start agent run: ${error.message}`);
@@ -473,6 +483,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           }),
         },
       });
+      // Native sessions_spawn children may outlive the parent reply dispatcher.
+      // Keep this ledger active until OpenClaw emits their terminal lifecycle hook.
+      await coveAgentRunLifecycleBridge.waitForChildren(threadSession.sessionKey, abortSignal);
+      if (abortSignal?.aborted) throw new Error("cove: dispatch aborted while awaiting child session");
       reportTaskRunEvent({ type: "run_finished", action: "Completed" });
       await taskEventQueue;
     } catch (err: any) {
@@ -499,6 +513,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       if (undeliveredFinalPayload) {
         log?.warn?.(`cove: final reply remains recoverable after failed delivery in [${channelId}] (message: ${message.id}, ${undeliveredFinalPayload.length} chars)`);
       }
+      coveAgentRunLifecycleBridge.unbindParent(threadSession.sessionKey);
     }
   } catch (err: any) {
     log?.error?.(`cove: error in [${channelId}]: ${err.message}`);
