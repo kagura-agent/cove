@@ -423,6 +423,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!body || typeof body.run_id !== "string" || body.run_id.length > 64) return validationError(c, "run_id is required");
     const target = repos.users.getById(targetUserId);
     if (!target?.bot) return c.json({ message: "Unknown Agent", code: 10003 }, 404);
+    // Abort targets an agent run, not a typing heartbeat: verify the run
+    // belongs to this channel/agent and is still active before forwarding.
+    const run = repos.agentRuns.get(body.run_id);
+    if (!run || run.channel_id !== channelId || run.agent_id !== targetUserId || run.status !== "active") {
+      return c.json({ status: "not_active" as const }, 409);
+    }
     const result = dispatcher?.requestAgentAbort(channelId, targetUserId, body.run_id, { id: requester.id, username: requester.username }) ?? { status: "unavailable" as const };
     if (result.status === "not_active" || result.status === "unavailable") return c.json(result, 409);
     return c.json(result, result.status === "requested" ? 202 : 200);
