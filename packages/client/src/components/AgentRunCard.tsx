@@ -6,7 +6,7 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { ExecutionTimeline, elapsed } from "./AgentRunTimeline";
 
 /** Active work only; completed evidence remains attached to the agent's message. */
-export function AgentRunCard({ channelId, threadId, guildId }: { channelId: string; threadId?: string; guildId?: string }) {
+export function AgentRunCard({ channelId, threadId, guildId }: { channelId: string; threadId?: string; guildId?: string | null }) {
   const [timeline, setTimeline] = useState<AgentRunTimeline | null>(null);
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState<number | undefined>();
