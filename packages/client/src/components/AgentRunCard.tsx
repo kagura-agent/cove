@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentRunTimeline } from "@cove/shared";
 import * as api from "../lib/api";
 import { dispatcher } from "../lib/gateway-dispatcher";
@@ -21,6 +21,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   const [now, setNow] = useState<number | undefined>();
   const [stopState, setStopState] = useState<StopState | undefined>();
   const abortRequestIdRef = useRef<string | undefined>(undefined);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const members = useMemberStore((s) => guildId ? s.membersByGuildId[guildId] : undefined);
   const agentName = useMemo(() => {
     const run = timeline?.run;
@@ -47,6 +48,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
     dispatcher.on("AGENT_ABORT_RESULT", onResult);
     return () => dispatcher.off("AGENT_ABORT_RESULT", onResult);
   }, [channelId]);
+  useEffect(() => { if (open) bottomRef.current?.scrollIntoView({ behavior: "auto" }); }, [open, timeline?.events.length]);
   const run = timeline?.run;
   if (!run || run.status !== "active") return null;
   const name = agentName ? `@${agentName}` : "Agent";
@@ -71,6 +73,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>
       <ExecutionTimeline events={timeline?.events ?? []} />
+      <div ref={bottomRef} />
     </section>}
   </div>;
 }
