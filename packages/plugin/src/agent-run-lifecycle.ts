@@ -2,9 +2,13 @@ import type { AgentRunEventType } from "@cove/shared";
 
 /**
  * Bridges OpenClaw's native subagent hooks to the Cove run that owns the
- * requester session. OpenClaw exposes no channel-scoped child-run callback,
- * so child runs are intentionally not created here: the parent ledger keeps
- * evidence keyed by the stable child session key instead.
+ * requester session. In the locally installed OpenClaw 2026.6.8 SDK,
+ * `PluginHookSubagentSpawnedEvent` supplies childSessionKey/runId and
+ * `PluginHookSubagentEndedEvent` supplies targetSessionKey/outcome, while
+ * ReplyOptions.onItemEvent has neither a requester nor child session key.
+ * There is no native child-progress hook. Child runs are therefore not created
+ * here: the parent ledger stores stable child-session evidence and only reports
+ * liveness observed from an un-ended native lifecycle (never invented work).
  */
 type RunEvent = { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string };
 type Reporter = (event: RunEvent) => Promise<unknown> | unknown;
