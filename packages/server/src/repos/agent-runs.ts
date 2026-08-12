@@ -29,10 +29,15 @@ export class AgentRunsRepo {
     if (dir !== this.root && !dir.startsWith(`${this.root}/`)) throw new Error("Invalid agent run log path");
     return dir;
   }
-  private logPath(runId: string) { return join(this.dir(runId), "events.ndjson"); }
+  private logPath(runId: string) { return join(this.dir(runId), "events.jsonl"); }
+  private legacyLogPath(runId: string) { return join(this.dir(runId), "events.ndjson"); }
+  private readableLogPath(runId: string) {
+    const current = this.logPath(runId);
+    return existsSync(current) ? current : this.legacyLogPath(runId);
+  }
   private writeManifest(run: AgentRun) {
     const dir = this.dir(run.run_id); mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const payload = JSON.stringify({ version: 1, run_id: run.run_id, redaction_version: run.redaction_version, event_count: run.log_event_count, bytes: run.log_bytes, hash: run.log_hash, updated_at: run.updated_at }) + "\n";
+    const payload = JSON.stringify({ version: 1, run_id: run.run_id, event_log: "events.jsonl", redaction_version: run.redaction_version, event_count: run.log_event_count, bytes: run.log_bytes, hash: run.log_hash, updated_at: run.updated_at }) + "\n";
     const tmp = join(dir, "manifest.json.tmp"); writeFileSync(tmp, payload, { mode: 0o600 }); renameSync(tmp, join(dir, "manifest.json"));
   }
   expire(scope?: { taskId?: string; channelId?: string }) {
@@ -75,7 +80,7 @@ export class AgentRunsRepo {
     return row ? asRun(row) : null;
   }
   events(runId: string): AgentRunEvent[] {
-    const file = this.logPath(runId); if (!existsSync(file)) return [];
+    const file = this.readableLogPath(runId); if (!existsSync(file)) return [];
     return readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as AgentRunEvent);
   }
   timelineForRun(runId: string): { run: AgentRun | null; events: AgentRunEvent[] } { const run = this.get(runId); return { run, events: run ? this.events(runId) : [] }; }
