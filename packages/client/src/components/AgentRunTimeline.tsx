@@ -59,6 +59,9 @@ function eventState(event: AgentRunEvent): { icon: string; color: string; label:
   if (event.type.endsWith("failed") || event.type === "run_failed" || event.exit_code && event.exit_code !== 0 || event.status === "failed") return { icon: "!", color: "var(--color-danger, #d83c3e)", label: "Failed" };
   if (event.type === "run_aborted" || event.status === "aborted") return { icon: "−", color: "var(--color-warning, #d97706)", label: "Aborted" };
   if (["completed", "success", "succeeded", "done", "ok"].includes(event.status ?? "")) return { icon: "✓", color: "var(--color-success, #22a06b)", label: "Done" };
+  // A non-null duration indicates a terminal event; treat it as done even when
+  // the event type suffix would otherwise suggest "in progress".
+  if (event.duration_ms != null) return { icon: "✓", color: "var(--color-success, #22a06b)", label: "Done" };
   if (event.type.endsWith("started") || event.type.endsWith("progress") || event.type === "approval_requested") return { icon: "●", color: "var(--color-brand, #8b5cf6)", label: "In progress" };
   return { icon: "✓", color: "var(--color-success, #22a06b)", label: "Done" };
 }
