@@ -99,7 +99,11 @@ export function aggregateLifecycleEvents(events: AgentRunEvent[]): LifecycleOper
   events.forEach((event, index) => {
     const phase = lifecyclePhase(event);
     if (!phase) return;
-    const identity = event.tool_call_id ? `${phase}:${event.tool_call_id}` : null;
+    // OpenClaw's item/progress callbacks decorate the same call id as `tool:`
+    // or `command:`. Normalize those transport prefixes so one exec lifecycle
+    // remains one summarized operation.
+    const callId = event.tool_call_id?.replace(/^(?:tool|command):/, "") ?? null;
+    const identity = callId ? `${phase}:${callId}` : null;
     let operation = identity ? identified.get(identity) : undefined;
 
     if (!operation && !identity) {

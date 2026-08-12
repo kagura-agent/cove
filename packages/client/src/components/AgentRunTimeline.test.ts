@@ -26,8 +26,8 @@ describe("agent execution presentation", () => {
   it("summarizes a correlated tool lifecycle while retaining its raw events", () => {
     const events = [
       event({ event_id: "start", tool_call_id: "call-1", action: "Exec", detail: "pnpm test", status: "running" }),
-      event({ event_id: "running", tool_call_id: "call-1", type: "tool_progress", action: "Exec", detail: "still running", status: "running" }),
-      event({ event_id: "done", tool_call_id: "call-1", type: "command_output", action: "Exec", detail: "all tests passed", status: "completed", duration_ms: 1_200, exit_code: 0 }),
+      event({ event_id: "running", tool_call_id: "tool:call-1", type: "tool_progress", action: "Exec", detail: "still running", status: "running" }),
+      event({ event_id: "done", tool_call_id: "command:call-1", type: "command_output", action: "Exec", detail: "all tests passed", status: "completed", duration_ms: 1_200, exit_code: 0 }),
     ];
     const [operation] = aggregateLifecycleEvents(events);
 
