@@ -10,7 +10,7 @@ const barStyle: CSSProperties = {
 function TypingDots() {
   return <span aria-hidden="true" style={{ display: "inline-flex", gap: "var(--space-xxs)", marginRight: "var(--space-xs)" }}>
     {[0, 1, 2].map((i) => <span key={i} style={{ width: "var(--space-xs)", height: "var(--space-xs)", borderRadius: "50%", background: "currentColor", display: "inline-block", animation: "typingDot 1.4s infinite ease-in-out", animationDelay: `${i * 0.2}s` }} />)}
-  </span></>;
+  </span>;
 }
 
 export function TypingIndicator({ channelId }: { channelId: string }) {
