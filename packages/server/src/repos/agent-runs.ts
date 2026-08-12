@@ -5,6 +5,11 @@ import { join, resolve } from "node:path";
 import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus } from "@cove/shared";
 
 const MAX_DETAIL = 8_000;
+/** Stale-claim window for a run with no event traffic. Long turns (model
+ * thinking, file reads, subagent work) routinely exceed a 90s heartbeat gap,
+ * so a short window mislabels live runs as stale and the terminal event then
+ * bounces with 409. This is a crash-only safety net, not a liveness signal. */
+const RUN_STALE_AFTER_MS = 30 * 60 * 1000;
 const BEARER = /(authorization\s*[:=]\s*bearer\s+|bearer\s+)([^\s'"`]+)/gi;
 const SECRET = /((?:api[_-]?key|token|secret|password|cookie)\s*[:=]\s*)([^\s'"`]+)/gi;
 const ENV_VALUE = /\b[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)\s*=\s*[^\s]+/g;
@@ -50,7 +55,7 @@ export class AgentRunsRepo {
     this.expire({ channelId: input.channel_id }); const now = Date.now(); const runId = randomUUID();
     // Only task executions are singleton; normal-channel turns may run concurrently.
     if (input.task_id) this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE task_id=? AND status='active'").run(now, now, input.task_id);
-    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.task_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+90_000);
+    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.task_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
     const run = this.get(runId)!; this.writeManifest(run); return run;
   }
   get(runId: string): AgentRun | null { const row = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId); return row ? asRun(row) : null; }
@@ -91,7 +96,7 @@ export class AgentRunsRepo {
     const event: AgentRunEvent = { event_id: randomUUID(), run_id: runId, tool_call_id: safeText(input.tool_call_id, 160), type: input.type, action: safeText(input.action, 240), detail: safeText(input.detail), status: safeText(input.status, 80), exit_code: Number.isInteger(input.exit_code) ? input.exit_code as number : null, duration_ms: Number.isFinite(input.duration_ms) ? Math.max(0, Math.floor(input.duration_ms as number)) : null, cwd: safeText(input.cwd, 500), created_at: now };
     const line = JSON.stringify(event) + "\n"; mkdirSync(this.dir(runId), { recursive: true, mode: 0o700 }); appendFileSync(this.logPath(runId), line, { mode: 0o600 });
     const nextStatus = terminal[input.type] ?? "active"; const bytes = current.log_bytes + Buffer.byteLength(line); const hash = createHash("sha256").update(current.log_hash ?? "").update(line).digest("hex");
-    this.db.prepare("UPDATE agent_runs SET status=?,current_action=?,updated_at=?,finished_at=?,expires_at=?,log_hash=?,log_event_count=?,log_bytes=? WHERE run_id=?").run(nextStatus,event.action ?? current.current_action,now,nextStatus === "active" ? null : now,nextStatus === "active" ? now+90_000 : now,hash,current.log_event_count+1,bytes,runId);
+    this.db.prepare("UPDATE agent_runs SET status=?,current_action=?,updated_at=?,finished_at=?,expires_at=?,log_hash=?,log_event_count=?,log_bytes=? WHERE run_id=?").run(nextStatus,event.action ?? current.current_action,now,nextStatus === "active" ? null : now,nextStatus === "active" ? now+RUN_STALE_AFTER_MS : now,hash,current.log_event_count+1,bytes,runId);
     const result = this.get(runId)!; this.writeManifest(result); return result;
   }
   associateMessage(runId: string, assistantMessageId: string): AgentRun | null {

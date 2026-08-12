@@ -37,7 +37,11 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
     dispatcher.on("AGENT_RUN_UPDATED", update);
     setNow(Date.now());
     const clock = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => { alive = false; dispatcher.off("AGENT_RUN_UPDATED", update); window.clearInterval(clock); };
+    // Fallback poll: WS events can be missed during gateway reconnect/restart.
+    // Once the server marks the run terminal (or a newer active run replaces it)
+    // the card unmounts itself; this just guarantees the UI converges.
+    const poll = window.setInterval(() => refresh(), 15_000);
+    return () => { alive = false; dispatcher.off("AGENT_RUN_UPDATED", update); window.clearInterval(clock); window.clearInterval(poll); };
   }, [channelId, threadId]);
   useEffect(() => {
     const onResult = (data: { request_id: string; channel_id: string; target_user_id: string; status: "aborted" | "denied" | "failed" }) => {
