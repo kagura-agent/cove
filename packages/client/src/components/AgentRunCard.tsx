@@ -12,18 +12,6 @@ const barStyle: CSSProperties = {
 };
 const stopStyle: CSSProperties = { border: 0, background: "transparent", color: "var(--danger)", cursor: "pointer", padding: 0, lineHeight: 1.15, fontSize: "10px", fontWeight: 500 };
 
-const dotKeyframes = `
-@keyframes agentRunDot {
-  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
-  40% { opacity: 1; transform: translateY(-3px); }
-}`;
-
-function TypingDots() {
-  return <><style>{dotKeyframes}</style><span aria-hidden="true" style={{ display: "inline-flex", gap: "var(--space-xxs)" }}>
-    {[0, 1, 2].map((i) => <span key={i} style={{ width: "var(--space-xs)", height: "var(--space-xs)", borderRadius: "50%", background: "currentColor", display: "inline-block", animation: "agentRunDot 1.4s infinite ease-in-out", animationDelay: `${i * 0.2}s` }} />)}
-  </span></>;
-}
-
 type StopState = "stopping" | "denied" | "failed" | "already_finished";
 
 /** Active work only; completed evidence remains attached to the agent's message. */
@@ -75,10 +63,10 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   }
   return <div style={{ position: "relative" }}>
     <div style={barStyle} aria-live="polite">
-      <TypingDots />
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle agent execution timeline" style={{ border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", fontSize: "inherit" }}>
         {label}
       </button>
+      <span style={{ flex: 1 }} />
       {canAbort && <button type="button" style={stopStyle} disabled={false} aria-label={`停止 ${name} 的运行`} title={`停止 ${name} 的运行`} onClick={stop}>停止</button>}
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>
