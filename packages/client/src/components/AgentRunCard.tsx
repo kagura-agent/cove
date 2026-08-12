@@ -71,7 +71,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
       </button>
       <span style={{ flex: 1 }} />
       {elapsedText && <span>{elapsedText}</span>}
-      {canAbort && <button type="button" style={stopStyle} disabled={false} aria-label={`停止 ${name} 的运行`} title={`停止 ${name} 的运行`} onClick={stop}>stop</button>}
+      {canAbort && <button type="button" style={stopStyle} aria-label={`停止 ${name} 的运行`} title={`停止 ${name} 的运行`} onClick={stop}>stop</button>}
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>
       <ExecutionTimeline events={timeline?.events ?? []} />

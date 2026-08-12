@@ -168,7 +168,7 @@ export function ExecutionTimeline({ events }: { events: AgentRunEvent[] }) {
     }
   }
 
-  if (!events.length) return <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>No safe execution detail has arrived yet.</span>;
+  if (!events.length) return <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>No execution detail available.</span>;
   return <>{ordered.map((item) => "events" in item ? <LifecycleRow key={item.key} operation={item} /> : <TimelineRow key={item.event_id} event={item} />)}</>;
 }
 
