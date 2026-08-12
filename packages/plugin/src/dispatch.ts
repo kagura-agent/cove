@@ -144,15 +144,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
-    // Agent runs own durable tool evidence.  Keep the compositor disabled so
-    // its tool lines can never become a draft assistant message; the normal
-    // final-reply streaming draft below remains enabled and unchanged.
     const progressDraft = createChannelProgressDraftCompositor({
       entry: channelEntry,
       mode: "progress",
-      active: false,
+      active: true,
       seed: message.id ?? String(Date.now()),
-      update: async () => {},
+      update: async (streamText, options) => {
+        draft.update(streamText);
+        if (options?.flush) await draft.loop.flush();
+      },
     });
 
     const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
@@ -416,9 +416,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // relation only, so normal channels and DMs get the same evidence trail.
     try {
       const task = taskThread ? await restClient.getTaskByThreadId(channelId) : null;
-      // Task-thread runs use the task's parent channel as their durable
-      // permission/index anchor; evidence and UI remain scoped by thread_id.
-      const run = await restClient.startAgentRun({ channel_id: task?.channel_id ?? channel?.parent_id ?? channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
+      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
       agentRun = { runId: run.run_id };
       coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent);
     } catch (error: any) {
