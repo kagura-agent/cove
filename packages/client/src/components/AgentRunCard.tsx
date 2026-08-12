@@ -52,7 +52,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   const run = timeline?.run;
   if (!run || run.status !== "active") return null;
   const name = agentName ? `@${agentName}` : "Agent";
-  const label = stopState === "stopping" ? "正在停止…" : stopState === "denied" ? "无权停止此运行" : stopState === "failed" ? "停止失败" : stopState === "already_finished" ? "运行已结束" : `${name} ${run.current_action ?? "working"}`;
+  const label = stopState === "stopping" ? "Stopping…" : stopState === "denied" ? "Cannot stop this run" : stopState === "failed" ? "Stop failed" : stopState === "already_finished" ? "Run already finished" : `${name} ${run.current_action ?? "working"}`;
   const elapsedText = !stopState ? elapsed(run, now) : null;
   const canAbort = !stopState || stopState === "failed";
   async function stop() {
@@ -71,7 +71,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
       </button>
       <span style={{ flex: 1 }} />
       {elapsedText && <span>{elapsedText}</span>}
-      {canAbort && <button type="button" style={stopStyle} aria-label={`停止 ${name} 的运行`} title={`停止 ${name} 的运行`} onClick={stop}>stop</button>}
+      {canAbort && <button type="button" style={stopStyle} aria-label={`Stop ${name}`} title={`Stop ${name}`} onClick={stop}>stop</button>}
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>
       <ExecutionTimeline events={timeline?.events ?? []} />
