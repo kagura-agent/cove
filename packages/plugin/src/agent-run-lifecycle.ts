@@ -83,6 +83,9 @@ export class CoveAgentRunLifecycleBridge {
       abortSignal?.addEventListener("abort", done, { once: true });
       if (!this.parents.get(sessionKey)?.children.size) done();
     });
+    // The terminal hook queues its event before it releases waiters. Drain it
+    // so dispatch cannot append run_finished ahead of subagent_finished/failed.
+    await parent.queue;
   }
 
   private report(parent: Parent, event: RunEvent): void {
