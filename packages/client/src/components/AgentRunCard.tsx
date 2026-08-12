@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentRunTimeline } from "@cove/shared";
 import * as api from "../lib/api";
 import { dispatcher } from "../lib/gateway-dispatcher";
