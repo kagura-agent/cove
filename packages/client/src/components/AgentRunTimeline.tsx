@@ -22,8 +22,6 @@ const phaseForEvent: Record<AgentRunEvent["type"], ExecutionPhase> = {
   subagent_started: "Child agents", subagent_progress: "Child agents", subagent_finished: "Child agents", subagent_failed: "Child agents",
   patch_summary: "Changes", run_finished: "Final status", run_failed: "Final status", run_aborted: "Final status",
 };
-const phaseOrder: ExecutionPhase[] = ["Plan & analysis", "Tools", "Child agents", "Changes", "Final status"];
-
 const statusStyle: Record<AgentRunStatus, { icon: string; color: string; label: string }> = {
   active: { icon: "●", color: "var(--color-brand, #8b5cf6)", label: "Working" },
   completed: { icon: "✓", color: "var(--color-success, #22a06b)", label: "Completed" },
@@ -148,22 +146,27 @@ export function ExecutionChip({ run, events, now }: { run: AgentRun; events: Age
 /** Event detail is already server-redacted. Keep it subordinate so execution output never dominates chat. */
 export function ExecutionTimeline({ events }: { events: AgentRunEvent[] }) {
   const lifecycle = aggregateLifecycleEvents(events);
-  const groups = new Map<ExecutionPhase, Array<AgentRunEvent | LifecycleOperation>>();
+  const operationForEvent = new Map<string, LifecycleOperation>();
+  for (const operation of lifecycle) for (const event of operation.events) operationForEvent.set(event.event_id, operation);
+  const renderedOperations = new Set<string>();
+  const ordered: Array<AgentRunEvent | LifecycleOperation> = [];
+
+  // The log is an append-only time series. A collapsed lifecycle occupies the
+  // position of its first event; categorization must never reorder the sequence.
   for (const event of events) {
-    const phase = phaseFor(event);
-    if (phase === "Tools" || phase === "Child agents") continue;
-    groups.set(phase, [...(groups.get(phase) ?? []), event]);
+    const operation = operationForEvent.get(event.event_id);
+    if (!operation) {
+      ordered.push(event);
+      continue;
+    }
+    if (!renderedOperations.has(operation.key)) {
+      ordered.push(operation);
+      renderedOperations.add(operation.key);
+    }
   }
-  for (const operation of lifecycle) groups.set(operation.phase, [...(groups.get(operation.phase) ?? []), operation]);
+
   if (!events.length) return <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>No safe execution detail has arrived yet.</span>;
-  return <>{phaseOrder.flatMap((phase) => {
-    const phaseEvents = groups.get(phase);
-    if (!phaseEvents?.length) return [];
-    return <section key={phase} aria-label={phase} style={{ padding: "var(--space-xs) 0" }}>
-      <h4 style={{ margin: "0 0 2px", color: "var(--text-muted)", fontSize: "var(--font-size-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>{phase}</h4>
-      {phaseEvents.map((item) => "events" in item ? <LifecycleRow key={item.key} operation={item} /> : <TimelineRow key={item.event_id} event={item} />)}
-    </section>;
-  })}</>;
+  return <>{ordered.map((item) => "events" in item ? <LifecycleRow key={item.key} operation={item} /> : <TimelineRow key={item.event_id} event={item} />)}</>;
 }
 
 function LifecycleRow({ operation }: { operation: LifecycleOperation }) {

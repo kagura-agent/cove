@@ -48,4 +48,16 @@ describe("agent execution presentation", () => {
     ]);
     expect(operations.map((operation) => operation.events.length)).toEqual([1, 2]);
   });
+
+  it("keeps collapsed lifecycle operations in the append-only event order", () => {
+    const events = [
+      event({ event_id: "start", type: "run_started", action: "Starting" }),
+      event({ event_id: "tool", tool_call_id: "call-1", action: "Exec", detail: "pnpm test", status: "running" }),
+      event({ event_id: "done", tool_call_id: "command:call-1", type: "command_output", action: "Exec", status: "completed", exit_code: 0 }),
+      event({ event_id: "finish", type: "run_finished", action: "Completed" }),
+    ];
+    const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events }));
+    expect(html.indexOf("Starting")).toBeLessThan(html.indexOf("pnpm test"));
+    expect(html.indexOf("pnpm test")).toBeLessThan(html.indexOf("Completed"));
+  });
 });
