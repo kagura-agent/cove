@@ -351,6 +351,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             >
               {formatTime(message.timestamp)}
             </Typography.Text>
+            {isBot && <span className="execution-details-inline"><MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} /></span>}
           </div>
 
           {/* Reply quote */}
@@ -401,8 +402,6 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
           {/* Reactions */}
           <ReactionPills message={message} />
-
-          {isBot && <MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} />}
 
           {/* Task status bar */}
           {contentType === "task" && <TaskStatusBar message={message} />}
@@ -486,8 +485,6 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
 
         {/* Reactions */}
         <ReactionPills message={message} />
-
-        {isBot && <MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} />}
 
         {/* Task status bar */}
         {contentType === "task" && <TaskStatusBar message={message} />}

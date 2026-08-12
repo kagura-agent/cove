@@ -87,12 +87,12 @@ export function MessageAgentRunDetails({ channelId, messageId }: { channelId: st
   if (checked && !timeline?.run) return null;
   const run = timeline?.run;
   const content = open && run ? <ExecutionDetailsSurface narrow={narrow} placement={placement} surfaceRef={surfaceRef} titleId={titleId} onClose={() => close(true)} events={timeline?.events ?? []} /> : null;
-  return <div style={{ marginTop: "var(--space-xs)" }}>
-    <button ref={chipRef} type="button" onClick={toggle} aria-expanded={open} aria-controls={open ? titleId : undefined} aria-label="Show execution details" style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "1px solid var(--border-subtle)", borderRadius: 999, background: "transparent", color: "var(--text-muted)", padding: "3px 8px", cursor: "pointer", fontSize: "var(--font-size-xs)", maxWidth: "100%" }}>
-      {run ? <ExecutionChip run={run} events={timeline?.events ?? []} now={now} /> : <>◌ <span>Execution details</span></>}
+  return <>
+    <button ref={chipRef} type="button" onClick={toggle} aria-expanded={open} aria-controls={open ? titleId : undefined} aria-label="Show execution details" style={{ display: "inline", border: 0, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)", padding: 0, lineHeight: "inherit" }}>
+      {run ? <ExecutionChip run={run} events={timeline?.events ?? []} now={now} /> : <>◌ Execution details</>}
     </button>
     {content && typeof document !== "undefined" ? createPortal(content, document.body) : content}
-  </div>;
+  </>;
 }
 
 function ExecutionDetailsSurface({ narrow, placement, surfaceRef, titleId, onClose, events }: { narrow: boolean; placement: ExecutionDetailsPlacement | null; surfaceRef: React.RefObject<HTMLElement | null>; titleId: string; onClose: () => void; events: NonNullable<AgentRunTimeline["events"]> }) {
