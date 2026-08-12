@@ -142,7 +142,7 @@ export function ChannelView() {
         {activeTab === "chat" && (
           <div style={styles.chatFooter} className="chat-footer-cell">
             {channelId && <ReplyBar channelId={channelId} />}
-            {channelId && <AgentRunCard channelId={channelId} />}
+            {channelId && <AgentRunCard channelId={channelId} guildId={guildId} />}
             {channelId && <MessageInput channelId={channelId} />}
           </div>
         )}
