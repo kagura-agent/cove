@@ -17,7 +17,7 @@ describe("native OpenClaw subagent lifecycle bridge", () => {
     // OpenClaw's plugin API exposes api.on; registerHook does not exist here.
     registerCoveAgentRunLifecycleHooks({ on: (name, handler) => hooks.set(name, handler) }, bridge);
 
-    expect([...hooks.keys()]).toEqual(["subagent_spawned", "subagent_ended"]);
+    expect([...hooks.keys()]).toEqual(["subagent_spawned", "subagent_ended", "agent_end"]);
     // Shape copied from OpenClaw's sessions_spawn call to runSubagentSpawned.
     await hooks.get("subagent_spawned")!({
       runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1",
@@ -38,22 +38,37 @@ describe("native OpenClaw subagent lifecycle bridge", () => {
     expect(parentMayFinish).toBe(false);
     expect(events).toContainEqual(expect.objectContaining({ type: "subagent_progress", tool_call_id: "agent:kagura:subagent:child-1", detail: "Child session remains active (awaiting OpenClaw terminal hook)" }));
 
-    // Shape copied from the subagent registry's runSubagentEnded call.
-    await hooks.get("subagent_ended")!({
-      targetSessionKey: "agent:kagura:subagent:child-1", targetKind: "subagent", reason: "completed",
-      sendFarewell: true, accountId: "default", runId: "native-child-run", endedAt: 1_786_000_000_000, outcome: "ok",
-    }, { runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1", requesterSessionKey: parentSessionKey });
+    // Exact agent_end payload/context from OpenClaw's native harness. One-shot
+    // subagents complete here even when the registry has not emitted
+    // subagent_ended yet.
+    await hooks.get("agent_end")!({
+      runId: "native-child-run", messages: [], success: true, durationMs: 42,
+    }, { runId: "native-child-run", sessionKey: "agent:kagura:subagent:child-1", sessionId: "child-session" });
     await waiting; await flushReports();
     expect(parentMayFinish).toBe(true);
-    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_finished", tool_call_id: "agent:kagura:subagent:child-1", status: "ok" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "subagent_finished", tool_call_id: "agent:kagura:subagent:child-1", detail: "Child run completed", status: "completed" }));
+
+    // The registry may later emit its session-lifecycle hook; it must not
+    // duplicate the terminal event after agent_end already released the child.
+    await hooks.get("subagent_ended")!({
+      targetSessionKey: "agent:kagura:subagent:child-1", targetKind: "subagent", reason: "subagent-complete",
+      sendFarewell: true, accountId: "default", runId: "native-child-run", endedAt: 1_786_000_000_000, outcome: "ok",
+    }, { runId: "native-child-run", childSessionKey: "agent:kagura:subagent:child-1", requesterSessionKey: parentSessionKey });
+    await flushReports();
+    expect(events.filter((event) => event.type === "subagent_finished")).toHaveLength(1);
   });
 
-  it("records an observed failed child terminal outcome without inventing child progress", async () => {
+  it("records failed, cancelled, and session terminal outcomes without inventing child progress", async () => {
     const bridge = new CoveAgentRunLifecycleBridge(); const events: any[] = [];
     bridge.bindParent("parent", "parent-run", (event) => { events.push(event); });
-    bridge.onSubagentSpawned({ childSessionKey: "child", runId: "run", mode: "session" }, { requesterSessionKey: "parent" });
-    bridge.onSubagentEnded({ targetSessionKey: "child", targetKind: "subagent", reason: "cancelled", outcome: "killed", error: "cancelled by requester" });
+    bridge.onSubagentSpawned({ childSessionKey: "failed-child", runId: "failed-run", mode: "run" }, { requesterSessionKey: "parent" });
+    bridge.onAgentEnd({ runId: "failed-run", messages: [], success: false, error: "child cancelled" }, { runId: "failed-run", sessionKey: "failed-child" });
     await flushReports();
-    expect(events.at(-1)).toMatchObject({ type: "subagent_failed", tool_call_id: "child", detail: "cancelled by requester", status: "killed" });
+    expect(events.at(-1)).toMatchObject({ type: "subagent_failed", tool_call_id: "failed-child", detail: "child cancelled", status: "failed" });
+
+    bridge.onSubagentSpawned({ childSessionKey: "killed-child", runId: "killed-run", mode: "session" }, { requesterSessionKey: "parent" });
+    bridge.onSubagentEnded({ targetSessionKey: "killed-child", targetKind: "subagent", reason: "cancelled", outcome: "killed", error: "cancelled by requester" });
+    await flushReports();
+    expect(events.at(-1)).toMatchObject({ type: "subagent_failed", tool_call_id: "killed-child", detail: "cancelled by requester", status: "killed" });
   });
 });

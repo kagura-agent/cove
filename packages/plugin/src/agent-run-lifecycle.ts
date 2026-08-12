@@ -5,9 +5,11 @@ import type { AgentRunEventType } from "@cove/shared";
  * requester session. OpenClaw's typed plugin API registers these lifecycle
  * hooks through `api.on(name, handler)`, not `api.registerHook`. At runtime,
  * `subagent_spawned` supplies childSessionKey/runId and its second context
- * supplies requesterSessionKey; `subagent_ended` identifies that child as
- * targetSessionKey (and supplies the same context when available). ReplyOptions
- * onItemEvent has neither a requester nor child session key.
+ * supplies requesterSessionKey. `subagent_ended` identifies a session as
+ * targetSessionKey, but the native agent harness's `agent_end` is the reliable
+ * per-run terminal signal for one-shot child work: it carries the same runId
+ * and child sessionKey in its context. ReplyOptions onItemEvent has neither a
+ * requester nor child session key.
  * There is no native child-progress hook. Child runs are therefore not created
  * here: the parent ledger stores stable child-session evidence and only reports
  * liveness observed from an un-ended native lifecycle (never invented work).
@@ -16,10 +18,11 @@ type RunEvent = { type: AgentRunEventType; tool_call_id?: string; action?: strin
 type Reporter = (event: RunEvent) => Promise<unknown> | unknown;
 type NativeSpawned = { childSessionKey: string; runId: string; label?: string; mode: "run" | "session" };
 type NativeEnded = { targetSessionKey: string; targetKind: "subagent" | "acp"; reason: string; outcome?: "ok" | "error" | "timeout" | "killed" | "reset" | "deleted"; error?: string };
-type NativeContext = { requesterSessionKey?: string; childSessionKey?: string };
+type NativeAgentEnded = { runId?: string; messages: unknown[]; success: boolean; error?: string; durationMs?: number };
+type NativeContext = { runId?: string; sessionKey?: string; requesterSessionKey?: string; childSessionKey?: string };
 
 type Parent = { runId: string; report: Reporter; children: Set<string>; queue: Promise<void> };
-type Child = { parentSessionKey: string; label: string; timer?: ReturnType<typeof setInterval> };
+type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval> };
 
 const HEARTBEAT_MS = 25_000;
 
@@ -46,7 +49,7 @@ export class CoveAgentRunLifecycleBridge {
     if (!parent || this.children.has(event.childSessionKey)) return;
     const label = event.label || "Subagent";
     parent.children.add(event.childSessionKey);
-    this.children.set(event.childSessionKey, { parentSessionKey: parentKey!, label });
+    this.children.set(event.childSessionKey, { parentSessionKey: parentKey!, runId: event.runId, label });
     // `runId` is a native child run id; the stable session key is used in Cove
     // evidence because Cove cannot create/own that OpenClaw child run.
     this.report(parent, { type: "subagent_started", tool_call_id: event.childSessionKey, action: label, detail: `OpenClaw child run ${event.runId} started`, status: "running" });
@@ -64,19 +67,20 @@ export class CoveAgentRunLifecycleBridge {
 
   onSubagentEnded(event: NativeEnded, _context?: NativeContext): void {
     if (event.targetKind !== "subagent") return;
-    const child = this.children.get(event.targetSessionKey);
-    if (!child) return;
-    const parent = this.parents.get(child.parentSessionKey);
-    this.stopChild(event.targetSessionKey);
-    if (!parent) return;
     const succeeded = event.outcome === "ok";
-    this.report(parent, {
-      type: succeeded ? "subagent_finished" : "subagent_failed",
-      tool_call_id: event.targetSessionKey,
-      action: child.label,
-      detail: event.error ?? `Child ended: ${event.reason}${event.outcome ? ` (${event.outcome})` : ""}`,
-      status: event.outcome ?? (succeeded ? "completed" : "failed"),
-    });
+    this.finishChild(event.targetSessionKey, succeeded, event.outcome ?? (succeeded ? "completed" : "failed"), event.error ?? `Child ended: ${event.reason}${event.outcome ? ` (${event.outcome})` : ""}`);
+  }
+
+  onAgentEnd(event: NativeAgentEnded, context: NativeContext): void {
+    // OpenClaw's agent_end event is emitted for every completed child run. Match
+    // both immutable identifiers so a later turn in a persistent child session
+    // cannot close the original spawned run.
+    const childKey = context.sessionKey;
+    const child = childKey ? this.children.get(childKey) : undefined;
+    const runId = event.runId ?? context.runId;
+    if (!child || !runId || child.runId !== runId) return;
+    const status = event.success ? "completed" : "failed";
+    this.finishChild(childKey!, event.success, status, event.error ?? (event.success ? "Child run completed" : "Child run failed"));
   }
 
   async waitForChildren(sessionKey: string, abortSignal?: AbortSignal): Promise<void> {
@@ -99,6 +103,21 @@ export class CoveAgentRunLifecycleBridge {
     // native spawn is immediately visible locally, while retaining a settled
     // promise for cleanup and preventing hook failures from escaping.
     parent.queue = Promise.resolve(parent.report(event)).then(() => undefined).catch(() => undefined);
+  }
+
+  private finishChild(childKey: string, succeeded: boolean, status: string, detail: string): void {
+    const child = this.children.get(childKey);
+    if (!child) return;
+    const parent = this.parents.get(child.parentSessionKey);
+    this.stopChild(childKey);
+    if (!parent) return;
+    this.report(parent, {
+      type: succeeded ? "subagent_finished" : "subagent_failed",
+      tool_call_id: childKey,
+      action: child.label,
+      detail,
+      status,
+    });
   }
 
   private stopChild(childKey: string): void {
@@ -126,8 +145,9 @@ export const coveAgentRunLifecycleBridge = new CoveAgentRunLifecycleBridge();
  * runId })`. Registering a non-existent `registerHook` API silently skipped
  * both handlers in production, which left Cove with only run_started/finished.
  */
-export function registerCoveAgentRunLifecycleHooks(api: { on?: (name: "subagent_spawned" | "subagent_ended", handler: (event: any, context: any) => void | Promise<void>) => void }, bridge = coveAgentRunLifecycleBridge): void {
+export function registerCoveAgentRunLifecycleHooks(api: { on?: (name: "subagent_spawned" | "subagent_ended" | "agent_end", handler: (event: any, context: any) => void | Promise<void>) => void }, bridge = coveAgentRunLifecycleBridge): void {
   if (typeof api.on !== "function") return;
   api.on("subagent_spawned", (event: NativeSpawned, context: NativeContext) => bridge.onSubagentSpawned(event, context));
   api.on("subagent_ended", (event: NativeEnded, context: NativeContext) => bridge.onSubagentEnded(event, context));
+  api.on("agent_end", (event: NativeAgentEnded, context: NativeContext) => bridge.onAgentEnd(event, context));
 }
