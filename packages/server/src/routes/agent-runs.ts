@@ -1,0 +1,25 @@
+import { Hono } from "hono";
+import type { AppEnv } from "../auth.js";
+import type { Repos } from "../repos/index.js";
+import type { GatewayDispatcher } from "../ws/dispatcher.js";
+import { PermissionBits, type AgentRunEventType } from "@cove/shared";
+import { parseJsonBody, validationError } from "../validation.js";
+import { requireChannelPermission } from "./helpers.js";
+const TYPES = new Set<AgentRunEventType>(["run_started","run_finished","run_failed","run_aborted","tool_started","tool_progress","tool_finished","tool_failed","command_output","patch_summary","approval_requested","subagent_started","subagent_progress","subagent_finished","subagent_failed"]);
+
+export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
+ const app = new Hono<AppEnv>();
+ app.post("/agent-runs", async c => {
+  const body = await parseJsonBody<Record<string, unknown>>(c); if (!body || typeof body.channel_id !== "string" || typeof body.trigger_message_id !== "string") return validationError(c, "channel_id and trigger_message_id are required");
+  const user = c.get("botUser"); await requireChannelPermission(repos, body.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
+  const trigger = repos.messages.getById(body.channel_id, body.trigger_message_id); if (!trigger || trigger.channel_id !== body.channel_id) return c.json({ message: "Unknown trigger message", code: 10008 }, 404);
+  const taskId = typeof body.task_id === "string" ? body.task_id : null; if (taskId) { const task = repos.tasks.getById(taskId); if (!task || task.channel_id !== (typeof body.parent_channel_id === "string" ? body.parent_channel_id : task.channel_id)) return c.json({ message: "Unknown Task", code: 10080 }, 404); if (task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403); }
+  const run = repos.agentRuns.start({ agent_id: user.id, channel_id: body.channel_id, trigger_message_id: body.trigger_message_id, thread_id: typeof body.thread_id === "string" ? body.thread_id : null, task_id: taskId, parent_run_id: typeof body.parent_run_id === "string" ? body.parent_run_id : null });
+  repos.agentRuns.append(run.run_id, { type: "run_started", action: "Starting" }); const timeline = repos.agentRuns.timelineForRun(run.run_id); dispatcher?.agentRunUpdated(timeline.run!); return c.json(timeline.run!, 201);
+ });
+ app.get("/agent-runs/:runId", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); await requireChannelPermission(repos, run.channel_id, c.get("botUser").id, PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.timelineForRun(run.run_id)); });
+ app.get("/channels/:channelId/agent-runs/latest", async c => { const id = c.req.param("channelId"); await requireChannelPermission(repos,id,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.timeline({channelId:id, threadId:c.req.query("thread_id")})); });
+ app.post("/agent-runs/:runId/events", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); const user=c.get("botUser"); await requireChannelPermission(repos,run.channel_id,user.id,PermissionBits.SEND_MESSAGES|PermissionBits.VIEW_CHANNEL); if(run.agent_id!==user.id) return c.json({message:"Missing Permissions",code:50013},403); const body=await parseJsonBody<Record<string,unknown>>(c); if(!body || typeof body.type!=="string" || !TYPES.has(body.type as AgentRunEventType)) return validationError(c,"Invalid agent run event type"); const updated=repos.agentRuns.append(run.run_id,body as {type:AgentRunEventType}); if(!updated) return c.json({message:"Unknown or inactive agent run",code:10081},409); dispatcher?.agentRunUpdated(updated); return c.json(updated); });
+ app.patch("/agent-runs/:runId", async c => { const run=repos.agentRuns.get(c.req.param("runId")); if(!run) return c.json({message:"Unknown agent run",code:10081},404); const user=c.get("botUser"); await requireChannelPermission(repos,run.channel_id,user.id,PermissionBits.SEND_MESSAGES|PermissionBits.VIEW_CHANNEL); if(run.agent_id!==user.id) return c.json({message:"Missing Permissions",code:50013},403); const body=await parseJsonBody<Record<string,unknown>>(c); if(!body || typeof body.assistant_message_id!=="string") return validationError(c,"assistant_message_id is required"); const msg=repos.messages.getById(run.channel_id, body.assistant_message_id); if(!msg || msg.channel_id!==run.channel_id) return c.json({message:"Unknown assistant message",code:10008},404); const updated=repos.agentRuns.associateMessage(run.run_id,body.assistant_message_id); if(!updated) return c.json({message:"Run already has a different assistant message",code:409},409); dispatcher?.agentRunUpdated(updated); return c.json(updated); });
+ return app;
+}

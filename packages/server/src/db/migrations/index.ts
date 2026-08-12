@@ -31,8 +31,9 @@ import { migrateV29 } from "./v29-recurring-tasks.js";
 import { migrateV30 } from "./v30-recurring-task-occurrence-mode.js";
 import { migrateV31 } from "./v31-recurring-task-next-run-at.js";
 import { migrateV32 } from "./v32-task-runs.js";
+import { migrateV33 } from "./v33-agent-runs.js";
 
-const LATEST_VERSION = 32;
+const LATEST_VERSION = 33;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -69,6 +70,7 @@ const migrations: Record<number, MigrationFn> = {
   30: migrateV30,
   31: migrateV31,
   32: migrateV32,
+  33: migrateV33,
 };
 
 export function runMigrations(db: Database.Database): void {

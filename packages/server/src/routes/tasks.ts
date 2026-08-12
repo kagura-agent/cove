@@ -123,7 +123,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
-    return c.json(repos.taskRuns.timeline(task.task_id));
+    return c.json(repos.agentRuns.timeline({ taskId: task.task_id }));
   });
 
   app.post("/tasks/:taskId/runs", async (c) => {
@@ -134,9 +134,9 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     // Only the task's assigned agent may publish execution state. This keeps
     // an otherwise channel-visible bot from fabricating another agent's run.
     if (!task.assignee_id || task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-    const run = repos.taskRuns.start(task.task_id, user.id);
-    repos.taskRuns.append(task.task_id, run.run_id, { type: "run_started", action: "Starting task" });
-    const timeline = repos.taskRuns.timeline(task.task_id);
+    const run = repos.agentRuns.start({ agent_id: user.id, channel_id: task.thread_id, thread_id: task.thread_id, task_id: task.task_id, trigger_message_id: task.message_id });
+    repos.agentRuns.append(run.run_id, { type: "run_started", action: "Starting task" });
+    const timeline = repos.agentRuns.timeline({ taskId: task.task_id });
     dispatcher?.taskRunUpdated(task, timeline);
     return c.json(timeline.run!, 201);
   });
@@ -149,9 +149,9 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     if (!task.assignee_id || task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
     const body = await parseJsonBody<Record<string, unknown>>(c);
     if (!body || typeof body.type !== "string" || !TASK_RUN_EVENT_TYPES.has(body.type as TaskRunEventType)) return validationError(c, "Invalid task run event type");
-    const run = repos.taskRuns.append(task.task_id, c.req.param("runId"), body as { type: TaskRunEventType });
-    if (!run) return c.json({ message: "Unknown or inactive task run", code: 10081 }, 409);
-    const timeline = repos.taskRuns.timeline(task.task_id);
+    const run = repos.agentRuns.append(c.req.param("runId"), body as { type: TaskRunEventType });
+    if (!run || run.task_id !== task.task_id) return c.json({ message: "Unknown or inactive task run", code: 10081 }, 409);
+    const timeline = repos.agentRuns.timeline({ taskId: task.task_id });
     dispatcher?.taskRunUpdated(task, timeline);
     return c.json(timeline.run!);
   });

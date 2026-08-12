@@ -1,4 +1,4 @@
-import type { Message, Channel, Role, Task, TaskRunTimeline } from "@cove/shared";
+import type { Message, Channel, Role, Task, TaskRunTimeline, AgentRun } from "@cove/shared";
 import { PermissionBits } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
@@ -460,6 +460,12 @@ export class GatewayDispatcher {
     const channel = this.channelsRepo.getById(task.channel_id);
     if (!channel) return;
     this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_DELETED", task);
+  }
+
+  agentRunUpdated(run: AgentRun): void {
+    const channel = this.channelsRepo.getById(run.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, run.channel_id, "AGENT_RUN_UPDATED", run);
   }
 
   taskRunUpdated(task: Task, timeline: TaskRunTimeline): void {

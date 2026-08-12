@@ -15,6 +15,7 @@ import { roleRoutes } from "./routes/roles.js";
 import { guildRoutes } from "./routes/guilds.js";
 import { incomingRoutes } from "./routes/incoming.js";
 import { taskRoutes } from "./routes/tasks.js";
+import { agentRunRoutes } from "./routes/agent-runs.js";
 import { recurringTaskRoutes } from "./routes/recurring-tasks.js";
 import { requireAuth, type AppEnv } from "./auth.js";
 import type { GatewayDispatcher } from "./ws/dispatcher.js";
@@ -140,6 +141,7 @@ export function createApp(
   app.route(API_PREFIX, roleRoutes(repos, dispatcher));
   app.route(API_PREFIX, incomingRoutes(repos, dispatcher));
   app.route(API_PREFIX, taskRoutes(repos, dispatcher));
+  app.route(API_PREFIX, agentRunRoutes(repos, dispatcher));
   app.route(API_PREFIX, recurringTaskRoutes(repos, dispatcher));
 
   const gwUrl = config?.gatewayUrl ?? "ws://localhost:3000/gateway";

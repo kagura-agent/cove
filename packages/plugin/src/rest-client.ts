@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, TaskRun, TaskRunEventType, UpdateTaskFields } from "@cove/shared";
+import type { AgentRun, AgentRunEventType, Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, TaskRun, TaskRunEventType, UpdateTaskFields } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -271,6 +271,18 @@ export class CoveRestClient {
   /** GET /api/v10/tasks/:taskId — get a single task. */
   async getTask(taskId: string): Promise<Task> {
     return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
+  }
+
+  async startAgentRun(input: { channel_id: string; trigger_message_id: string; thread_id?: string; task_id?: string }): Promise<AgentRun> {
+    return this.request("POST", `${API_PREFIX}/agent-runs`, input);
+  }
+
+  async appendAgentRunEvent(runId: string, event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }): Promise<AgentRun> {
+    return this.request("POST", `${API_PREFIX}/agent-runs/${runId}/events`, event);
+  }
+
+  async associateAgentRunMessage(runId: string, assistantMessageId: string): Promise<AgentRun> {
+    return this.request("PATCH", `${API_PREFIX}/agent-runs/${runId}`, { assistant_message_id: assistantMessageId });
   }
 
   async startTaskRun(taskId: string): Promise<TaskRun> {

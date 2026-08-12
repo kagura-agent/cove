@@ -1,7 +1,7 @@
 /** Cove message dispatch — inbound turn, draft streaming, tool progress, final delivery. */
 import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import type { CoveRestClient } from "./rest-client.js";
-import type { Message, TaskRunEventType } from "@cove/shared";
+import type { AgentRunEventType, Message } from "@cove/shared";
 import { createTypingCallbacks, deliverWithFinalizableLivePreviewAdapter, defineFinalizableLivePreviewAdapter } from "openclaw/plugin-sdk/channel-message";
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelProgressDraftCompositor, formatChannelProgressDraftLineForEntry, formatChannelProgressDraftLine, buildChannelProgressDraftLineForEntry } from "openclaw/plugin-sdk/channel-outbound";
@@ -80,15 +80,19 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let lastSentText = "";
     let finalizedViaPreviewMessage = false;
     let undeliveredFinalPayload: string | undefined;
-    let taskRun: { taskId: string; runId: string } | undefined;
+    let agentRun: { runId: string } | undefined;
     let taskEventQueue: Promise<void> = Promise.resolve();
-    const reportTaskRunEvent = (event: { type: TaskRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
-      if (!taskRun) return;
-      const run = taskRun;
-      // Callback delivery is concurrent in OpenClaw; serialize it so a terminal
-      // event cannot overtake an earlier tool result and close the run first.
-      taskEventQueue = taskEventQueue.then(() => restClient.appendTaskRunEvent(run.taskId, run.runId, event)).then(() => undefined).catch((error) =>
-        log?.warn?.(`cove: failed to report task run event: ${error.message}`));
+    const reportTaskRunEvent = (event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
+      if (!agentRun) return;
+      const run = agentRun;
+      // Callback delivery is concurrent; serialize so a terminal event cannot overtake evidence.
+      taskEventQueue = taskEventQueue.then(() => restClient.appendAgentRunEvent(run.runId, event)).then(() => undefined).catch((error) =>
+        log?.warn?.(`cove: failed to report agent run event: ${error.message}`));
+    };
+    const associateAgentRunMessage = (assistantMessageId?: string) => {
+      if (!agentRun || !assistantMessageId) return;
+      taskEventQueue = taskEventQueue.then(() => restClient.associateAgentRunMessage(agentRun!.runId, assistantMessageId)).then(() => undefined).catch((error) =>
+        log?.warn?.(`cove: failed to associate agent run message: ${error.message}`));
     };
     const channelEntry = cfg?.channels?.["cove"] ?? {};
 
@@ -167,9 +171,10 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         }
       }
       log?.info?.(`cove: reply → [${channelId}] (${text.length} chars)`);
-      if (!outboundBridge.sendText) throw new Error("cove: outbound adapter missing sendText");
       try {
-        await outboundBridge.sendText({ cfg, to: channelId, accountId, text });
+        // REST send returns the durable Cove message ID needed to associate the run.
+        const sent = await restClient.sendMessage(channelId, text);
+        associateAgentRunMessage(sent.id);
       } catch (e: any) {
         // Keep the payload on the failure object so the dispatcher/kernel can
         // retain it for recovery without claiming the reply was delivered.
@@ -203,6 +208,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           await freshSend(text);
         } else {
           await restClient.editMessage(channelId, id, text);
+          associateAgentRunMessage(id);
           finalizedViaPreviewMessage = true;
         }
         // Prevent pending throttle callbacks from overwriting the finalized message (openclaw/openclaw#118348)
@@ -234,7 +240,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
             draftMessageId = undefined;
           }
           if (!outboundBridge.sendMedia) throw new Error("cove: outbound adapter missing sendMedia");
-          await outboundBridge.sendMedia({ cfg, to: channelId, accountId, text: caption, mediaUrl });
+          const delivered = await outboundBridge.sendMedia({ cfg, to: channelId, accountId, text: caption, mediaUrl });
+          associateAgentRunMessage(delivered?.messageId);
           progressDraft.markFinalReplyDelivered();
           return;
         }
@@ -399,18 +406,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // An accepted abort turn only needs its raw command and session identity;
     // skipping enrichment lets OpenClaw's fast-abort path run immediately.
     const skipEnrichment = isAbortRequest;
-    if (taskThread && !skipEnrichment) {
-      try {
-        const task = await restClient.getTaskByThreadId(channelId);
-        if (task) {
-          const run = await restClient.startTaskRun(task.task_id);
-          taskRun = { taskId: task.task_id, runId: run.run_id };
-        }
-      } catch (error: any) {
-        // Reporting is observability only; never turn a valid task message into
-        // a failed agent turn because the control plane is temporarily down.
-        log?.warn?.(`cove: failed to start task run: ${error.message}`);
-      }
+    // Every admitted Cove turn receives a generic ledger run. Task context is a
+    // relation only, so normal channels and DMs get the same evidence trail.
+    try {
+      const task = taskThread ? await restClient.getTaskByThreadId(channelId) : null;
+      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
+      agentRun = { runId: run.run_id };
+    } catch (error: any) {
+      // Observability must never turn an otherwise valid agent turn into failure.
+      log?.warn?.(`cove: failed to start agent run: ${error.message}`);
     }
     const coveMdContent = skipEnrichment ? null : await getCoveMd(restClient, coveMdChannelId, log);
     const fullAttachmentUrls = skipEnrichment ? [] : collectImageAttachmentUrls(message, account.baseUrl);
