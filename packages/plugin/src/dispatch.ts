@@ -412,11 +412,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     // An accepted abort turn only needs its raw command and session identity;
     // skipping enrichment lets OpenClaw's fast-abort path run immediately.
     const skipEnrichment = isAbortRequest;
-    // Every admitted Cove turn receives a generic ledger run. Task context is a
-    // relation only, so normal channels and DMs get the same evidence trail.
+    // Every admitted Cove turn receives a generic ledger run.
     try {
-      const task = taskThread ? await restClient.getTaskByThreadId(channelId) : null;
-      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}), ...(task ? { task_id: task.task_id } : {}) });
+      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(taskThread ? { thread_id: channelId } : {}) });
       agentRun = { runId: run.run_id };
       coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent);
     } catch (error: any) {
