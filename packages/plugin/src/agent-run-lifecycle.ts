@@ -14,7 +14,7 @@ import type { AgentRunEventType } from "@cove/shared";
  * here: the parent ledger stores stable child-session evidence and only reports
  * liveness observed from an un-ended native lifecycle (never invented work).
  */
-type RunEvent = { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; duration_ms?: number };
+type RunEvent = { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string };
 type Reporter = (event: RunEvent) => Promise<unknown> | unknown;
 type NativeSpawned = { childSessionKey: string; runId: string; label?: string; mode: "run" | "session" };
 type NativeEnded = { targetSessionKey: string; targetKind: "subagent" | "acp"; reason: string; outcome?: "ok" | "error" | "timeout" | "killed" | "reset" | "deleted"; error?: string };
@@ -25,18 +25,6 @@ type Parent = { runId: string; report: Reporter; children: Set<string>; queue: P
 type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval> };
 
 const HEARTBEAT_MS = 25_000;
-
-/** Serialize tool params/results for a run event detail. Undefined for empty;
- * the server-side redaction still applies a bounded 8KB truncation downstream. */
-function serializeDetail(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
 
 export class CoveAgentRunLifecycleBridge {
   private parents = new Map<string, Parent>();
@@ -55,30 +43,13 @@ export class CoveAgentRunLifecycleBridge {
     this.resolveWaiters(sessionKey);
   }
 
-  /** Resolve a session key to its owning top-level parent run, walking up
-   * through nested subagents. The parent agent's own session resolves to its
-   * Parent too; callers that only care about subagents must check children. */
-  private parentFor(sessionKey: string | undefined): Parent | undefined {
-    if (!sessionKey) return undefined;
-    const seen = new Set<string>();
-    let cursor = sessionKey;
-    while (!seen.has(cursor)) {
-      seen.add(cursor);
-      const child = this.children.get(cursor);
-      if (!child) return this.parents.get(cursor) ?? undefined;
-      cursor = child.parentSessionKey;
-    }
-    return undefined;
-  }
-
   onSubagentSpawned(event: NativeSpawned, context: NativeContext): void {
-    const requesterKey = context.requesterSessionKey;
-    if (!requesterKey || this.children.has(event.childSessionKey)) return;
-    const parent = this.parentFor(requesterKey);
-    if (!parent) return;
+    const parentKey = context.requesterSessionKey;
+    const parent = parentKey ? this.parents.get(parentKey) : undefined;
+    if (!parent || this.children.has(event.childSessionKey)) return;
     const label = event.label || "Subagent";
     parent.children.add(event.childSessionKey);
-    this.children.set(event.childSessionKey, { parentSessionKey: requesterKey, runId: event.runId, label });
+    this.children.set(event.childSessionKey, { parentSessionKey: parentKey!, runId: event.runId, label });
     // `runId` is a native child run id; the stable session key is used in Cove
     // evidence because Cove cannot create/own that OpenClaw child run.
     this.report(parent, { type: "subagent_started", tool_call_id: event.childSessionKey, action: label, detail: `OpenClaw child run ${event.runId} started`, status: "running" });
@@ -110,48 +81,6 @@ export class CoveAgentRunLifecycleBridge {
     if (!child || !runId || child.runId !== runId) return;
     const status = event.success ? "completed" : "failed";
     this.finishChild(childKey!, event.success, status, event.error ?? (event.success ? "Child run completed" : "Child run failed"));
-  }
-
-  /** Record a subagent's tool invocation. Only child sessions are reported;
-   * the parent agent's own tool calls are already covered by the dispatcher. */
-  onChildToolStart(event: { toolName: string; params?: unknown; toolCallId?: string }, context: { sessionKey?: string }): void {
-    const sessionKey = context.sessionKey;
-    if (!sessionKey || !this.children.has(sessionKey)) return;
-    const parent = this.parentFor(sessionKey);
-    if (!parent) return;
-    this.report(parent, {
-      type: "tool_started",
-      tool_call_id: event.toolCallId,
-      action: event.toolName,
-      detail: serializeDetail(event.params),
-      status: "running",
-    });
-  }
-
-  /** Record a subagent's tool result or error. */
-  onChildToolEnd(event: { toolName: string; toolCallId?: string; result?: unknown; error?: string; durationMs?: number }, context: { sessionKey?: string }): void {
-    const sessionKey = context.sessionKey;
-    if (!sessionKey || !this.children.has(sessionKey)) return;
-    const parent = this.parentFor(sessionKey);
-    if (!parent) return;
-    if (event.error) {
-      this.report(parent, {
-        type: "tool_failed",
-        tool_call_id: event.toolCallId,
-        action: event.toolName,
-        detail: event.error,
-        status: "failed",
-      });
-    } else {
-      this.report(parent, {
-        type: "tool_finished",
-        tool_call_id: event.toolCallId,
-        action: event.toolName,
-        detail: serializeDetail(event.result),
-        status: "completed",
-        duration_ms: event.durationMs,
-      });
-    }
   }
 
   async waitForChildren(sessionKey: string, abortSignal?: AbortSignal): Promise<void> {
@@ -216,16 +145,9 @@ export const coveAgentRunLifecycleBridge = new CoveAgentRunLifecycleBridge();
  * runId })`. Registering a non-existent `registerHook` API silently skipped
  * both handlers in production, which left Cove with only run_started/finished.
  */
-type LifecycleHookName = "subagent_spawned" | "subagent_ended" | "agent_end" | "before_tool_call" | "after_tool_call";
-
-export function registerCoveAgentRunLifecycleHooks(api: { on?: (name: LifecycleHookName, handler: (event: any, context: any) => void | Promise<void>) => void }, bridge = coveAgentRunLifecycleBridge): void {
+export function registerCoveAgentRunLifecycleHooks(api: { on?: (name: "subagent_spawned" | "subagent_ended" | "agent_end", handler: (event: any, context: any) => void | Promise<void>) => void }, bridge = coveAgentRunLifecycleBridge): void {
   if (typeof api.on !== "function") return;
   api.on("subagent_spawned", (event: NativeSpawned, context: NativeContext) => bridge.onSubagentSpawned(event, context));
   api.on("subagent_ended", (event: NativeEnded, context: NativeContext) => bridge.onSubagentEnded(event, context));
   api.on("agent_end", (event: NativeAgentEnded, context: NativeContext) => bridge.onAgentEnd(event, context));
-  // Tool-level observation: only subagent sessions are reported (the bridge
-  // checks children), so the parent's own dispatcher-reported tool events are
-  // not duplicated.
-  api.on("before_tool_call", (event: any, context: any) => bridge.onChildToolStart(event, context));
-  api.on("after_tool_call", (event: any, context: any) => bridge.onChildToolEnd(event, context));
 }
