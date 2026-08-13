@@ -10,7 +10,7 @@ import { isControlCommandMessage, shouldComputeCommandAuthorized } from "opencla
 import { isAbortRequestText } from "openclaw/plugin-sdk/command-primitives-runtime";
 import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { getCoveMd } from "./cove-md-cache.js";
-import { resolveThreadContext, isTaskThread, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
+import { resolveThreadContext, collectImageAttachmentUrls, buildBodyForAgent } from "./build-context.js";
 import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 import { coveAgentRunLifecycleBridge } from "./agent-run-lifecycle.js";
 
@@ -42,8 +42,8 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
   try { // typing lifecycle: finally guarantees cleanup on all exit paths
     const { runInboundReplyTurn } = await loadInbound();
     const { coveMdChannelId, channel } = await resolveThreadContext(restClient, channelId);
-    const taskThread = await isTaskThread(restClient, channelId, channel);
-    const routePeer = { kind: taskThread ? "direct" as const : "channel" as const, id: channelId };
+    const isThread = channel?.type === 11;
+    const routePeer = { kind: isThread ? "direct" as const : "channel" as const, id: channelId };
     const route = channelRuntime.routing?.resolveAgentRoute?.({
       cfg,
       channel: "cove",
@@ -57,7 +57,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       sessionKey: `agent:${account.agentId}:cove:${routePeer.kind}:${channelId}`,
       mainSessionKey: `agent:${account.agentId}:main`,
     };
-    const parentRoute = taskThread && channel?.parent_id
+    const parentRoute = isThread && channel?.parent_id
       ? channelRuntime.routing?.resolveAgentRoute?.({
         cfg,
         channel: "cove",
@@ -65,7 +65,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         peer: { kind: "channel" as const, id: channel.parent_id },
       })
       : undefined;
-    const threadSession = taskThread
+    const threadSession = isThread
       ? resolveThreadSessionKeys({
         baseSessionKey: route.sessionKey,
         threadId: channelId,
@@ -365,7 +365,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1)); // yield for WS typing frame
-    const chatType = taskThread ? "direct" : "channel";
+    const chatType = isThread ? "direct" : "channel";
     // Match OpenClaw's full control-message predicate, including plain abort
     // triggers such as "stop" and "interrupt", not just slash commands.
     const controlCommand = isControlCommandMessage(message.content, cfg);
@@ -416,8 +416,9 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     try {
       // A run belongs to the channel where it actually happens. For any thread
       // (task or plain), that channel is the thread itself, so the run is
-      // anchored to it via thread_id. The taskThread flag only governs routing;
-      // it must not decide whether a thread-scoped run is discoverable.
+      // anchored to it via thread_id. Routing and thread session keys likewise
+      // treat every type-11 channel as a thread, so a plain thread's subagent
+      // requester key matches the parent bound here.
       const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(channel?.type === 11 ? { thread_id: channelId } : {}) });
       agentRun = { runId: run.run_id };
       coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent);
@@ -445,7 +446,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
         // command turn when its source is set. This lets its standard fast-abort
         // path resolve and cancel the active SessionKey run.
         ...(commandAuthorized && controlCommand ? { CommandSource: "text" } : {}),
-        ...(taskThread ? {
+        ...(isThread ? {
           MessageThreadId: channelId,
           ParentSessionKey: threadSession.parentSessionKey,
         } : {}),

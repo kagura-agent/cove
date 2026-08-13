@@ -1493,14 +1493,15 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(false);
   });
 
-  it("J4: Thread without task stays as 'channel'", async () => {
+  it("J4: Thread without task routes as a direct thread", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
     restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
-    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
+    expect(capturedResolvedTurn?.ctxPayload?.MessageThreadId).toBe("ch-1");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
   });
 
   it("J4b: plain thread (no task) run is anchored to the thread, not the parent channel", async () => {
