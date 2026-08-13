@@ -144,15 +144,15 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       warnPrefix: "cove",
     });
 
+    // Agent runs own durable tool evidence. Keep the compositor disabled so
+    // its tool lines can never become a draft assistant message; the normal
+    // final-reply streaming draft below remains enabled and unchanged.
     const progressDraft = createChannelProgressDraftCompositor({
       entry: channelEntry,
       mode: "progress",
-      active: true,
+      active: false,
       seed: message.id ?? String(Date.now()),
-      update: async (streamText, options) => {
-        draft.update(streamText);
-        if (options?.flush) await draft.loop.flush();
-      },
+      update: async () => {},
     });
 
     const outboundBridge = createCoveOutboundBridgeAdapter({ agentId: targetAgent, log });
