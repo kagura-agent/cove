@@ -14,7 +14,7 @@ describe("agent execution presentation", () => {
       event({ type: "subagent_started", tool_call_id: "child-1" }),
       event({ type: "subagent_finished", tool_call_id: "child-1" }),
       event({ type: "patch_summary", detail: "modified: src/a.ts, src/b.ts; deleted: docs/readme.md" }),
-    ])).toEqual({ events: 3, children: 1, files: 3 });
+    ])).toEqual({ actions: 2, children: 1, files: 3 });
   });
 
   it("keeps row labels concise and formats available durations", () => {

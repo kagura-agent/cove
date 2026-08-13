@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 
 export type ExecutionPhase = "Plan & analysis" | "Tools" | "Child agents" | "Changes" | "Final status";
 
-type Summary = { events: number; children: number; files: number };
+type Summary = { actions: number; children: number; files: number };
 export type LifecycleOperation = {
   key: string;
   phase: "Tools" | "Child agents";
@@ -47,7 +47,12 @@ export function executionSummary(events: AgentRunEvent[]): Summary {
     if (event.type !== "patch_summary" || !event.detail) continue;
     for (const match of event.detail.matchAll(/(?:^|[\s,;])([\w@./-]+\.(?:[a-z0-9]+))(?=$|[\s,;])/gim)) files.add(match[1]);
   }
-  return { events: events.length, children: childIds.size, files: files.size };
+  // Count the collapsed operations the timeline actually renders (one row per
+  // tool/child-agent lifecycle, plus any unmerged narrative events), not the raw
+  // event stream. Users read "actions", so the chip number should match the
+  // visible rows rather than the internal event count.
+  const actions = aggregateLifecycleEvents(events).length + events.filter((event) => lifecyclePhase(event) === null).length;
+  return { actions, children: childIds.size, files: files.size };
 }
 
 export function conciseAction(event: AgentRunEvent): string {
@@ -140,7 +145,7 @@ export function aggregateLifecycleEvents(events: AgentRunEvent[]): LifecycleOper
 export function ExecutionChip({ run, events, now }: { run: AgentRun; events: AgentRunEvent[]; now?: number }) {
   const status = statusStyle[run.status];
   const summary = executionSummary(events);
-  const parts = [status.label, `${summary.events} event${summary.events === 1 ? "" : "s"}`, elapsed(run, now)];
+  const parts = [status.label, `${summary.actions} action${summary.actions === 1 ? "" : "s"}`, elapsed(run, now)];
   if (summary.children) parts.push(`${summary.children} child agent${summary.children === 1 ? "" : "s"}`);
   if (summary.files) parts.push(`${summary.files} file${summary.files === 1 ? "" : "s"}`);
   return <><span aria-hidden="true" style={{ color: status.color, fontWeight: 700 }}>{status.icon}</span><span>{parts.join(" · ")}</span></>;
