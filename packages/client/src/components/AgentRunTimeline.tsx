@@ -187,10 +187,17 @@ function LifecycleRow({ operation }: { operation: LifecycleOperation }) {
 function TimelineRow({ event }: { event: AgentRunEvent }) {
   const state = eventState(event);
   const facts = [event.status, event.duration_ms !== null ? formatDuration(event.duration_ms) : null, event.exit_code !== null ? `exit ${event.exit_code}` : null].filter(Boolean).join(" · ");
+  // Narrative events (preamble, plan updates, run status, child-agent lifecycle)
+  // carry human-meaningful text that should be visible at a glance, not hidden
+  // behind a disclosure. Tool output stays collapsed so execution dumps never
+  // dominate the chat surface.
+  const inlineDetail = phaseFor(event) !== "Tools";
   return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", alignItems: "start", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
     <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: "20px", lineHeight: 1, color: state.color, fontWeight: 700 }}>{state.icon}</span>
     <div style={{ minWidth: 0 }}><div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{conciseAction(event)}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>
-      {event.detail && <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Safe detail</summary><pre style={detailStyle}>{event.detail}</pre></details>}
+      {event.detail && (inlineDetail
+        ? <div style={{ color: "var(--text-muted)", fontSize: "var(--font-size-xs)", whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: 2 }}>{conciseDetail(event.detail)}</div>
+        : <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Safe detail</summary><pre style={detailStyle}>{event.detail}</pre></details>)}
     </div>
   </article>;
 }

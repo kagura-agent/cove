@@ -83,6 +83,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     let undeliveredFinalPayload: string | undefined;
     let agentRun: { runId: string } | undefined;
     let agentEventQueue: Promise<void> = Promise.resolve();
+    const reportedToolStarts = new Set<string>();
     const reportAgentRunEvent = (event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }) => {
       if (!agentRun) return;
       const run = agentRun;
@@ -274,9 +275,16 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
           p?.detailMode ? { detailMode: p.detailMode as "explain" | "raw" } : undefined,
         );
         if (line) progressDraft.pushToolProgress(line, { toolName: name });
+        // onToolStart fires once per phase transition (start/update), so the same
+        // tool_call_id is delivered multiple times — later deliveries carry empty
+        // args. Report tool_started once per durable call id; later phases update
+        // the compositor line only.
+        const callId = p?.toolCallId ?? p?.id;
+        if (callId && reportedToolStarts.has(callId)) return;
+        if (callId) reportedToolStarts.add(callId);
         let args: string | undefined;
         try { args = typeof p?.args === "string" ? p.args : JSON.stringify(p?.args ?? {}); } catch { args = "[unserializable arguments]"; }
-        reportAgentRunEvent({ type: "tool_started", tool_call_id: p?.toolCallId ?? p?.id, action: name, detail: args });
+        reportAgentRunEvent({ type: "tool_started", tool_call_id: callId, action: name, detail: args });
       },
       onItemEvent: guardFwd((p: any) => {
         const line = buildChannelProgressDraftLineForEntry(channelEntry, {
