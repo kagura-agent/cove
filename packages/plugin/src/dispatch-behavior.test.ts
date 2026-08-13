@@ -1503,6 +1503,18 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
   });
 
+  it("J4b: plain thread (no task) run is anchored to the thread, not the parent channel", async () => {
+    const opts = createBaseOpts({ message: createTestMessage({ id: "msg-1", channel_id: "thread-1" }) });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "thread-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue(null);
+    await dispatchMessage(opts);
+    expect(restClient.startAgentRun).toHaveBeenCalledWith(expect.objectContaining({
+      channel_id: "thread-1",
+      thread_id: "thread-1",
+    }));
+  });
+
   it("J4: Error in task detection gracefully falls back to 'channel'", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
