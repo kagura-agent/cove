@@ -73,10 +73,10 @@ describe("agent execution presentation", () => {
     expect((html.match(/<li/g) ?? []).length).toBe(3);
     // Every row contributes a spine node (aria-hidden axis column).
     expect((html.match(/aria-hidden="true"/g) ?? []).length).toBe(3);
-    // Interior rows draw a spine segment above the node; no row draws a full
-    // spine from edge to edge (the axis is built from per-row segments).
+    // Interior rows draw a dashed spine segment above the node; no row draws a
+    // full spine from edge to edge (the axis is built from per-row segments).
     expect(html).toContain("position:absolute");
-    expect(html).toContain("translateX(-50%)");
+    expect(html).toContain("border-left:2px dashed");
     expect(html).not.toContain("borderBottom");
   });
 

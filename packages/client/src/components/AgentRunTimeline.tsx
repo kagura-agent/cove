@@ -229,16 +229,15 @@ function TimelineNode({ state, first, last }: { state: { icon: string; color: st
         position: "absolute",
         left: "50%",
         transform: "translateX(-50%)",
-        width: 2,
-        borderRadius: 1,
-        background: "var(--text-muted)",
-        opacity: 0.35,
+        borderLeft: "2px dashed var(--text-muted)",
+        opacity: 0.45,
         ...(first ? { top: NODE_SIZE / 2 } : { top: 0 }),
         ...(last ? { height: NODE_SIZE / 2 } : { bottom: 0 }),
       };
+  // The glyph is the node: it carries the state semantics on its own, no ring needed.
   return <div style={{ position: "relative", alignSelf: "stretch", display: "flex", justifyContent: "center" }}>
     <div aria-hidden="true" style={spine} />
-    <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: NODE_SIZE, height: NODE_SIZE, borderRadius: "50%", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", color: state.color, fontWeight: 700, fontSize: 12, lineHeight: 1 }}>{state.icon}</span>
+    <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: NODE_SIZE, height: NODE_SIZE, lineHeight: 1, color: state.color, fontWeight: 700, fontSize: 12 }}>{state.icon}</span>
   </div>;
 }
 
