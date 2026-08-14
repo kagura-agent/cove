@@ -85,6 +85,16 @@ export class AgentRunsRepo {
       .get(assistantMessageId, channelId, channelId);
     return row ? asRun(row) : null;
   }
+  /**
+   * Liveness probe for the heartbeat worker: is there an active run touching
+   * this thread within the given window? Active runs mean the agent is
+   * executing (silently or not) — the heartbeat must not fire.
+   */
+  hasActiveRun(threadId: string, sinceMs: number): boolean {
+    const row = this.db.prepare("SELECT 1 FROM agent_runs WHERE thread_id=? AND status='active' AND updated_at >= ? LIMIT 1").get(threadId, sinceMs);
+    return row !== undefined;
+  }
+
   latest(input: { channelId?: string; threadId?: string }): AgentRun | null {
     this.expire(input.channelId ? { channelId: input.channelId } : undefined);
     if (input.threadId) {

@@ -72,10 +72,15 @@ export class TaskHeartbeatWorker {
 
       for (const task of dueTasks) {
         const sinceMs = now - task.heartbeat_interval_ms;
-        const hasActivity = this.repos.messages.hasRecentActivity(task.thread_id, sinceMs);
+        const hasActivity = this.isThreadActive(task, now, sinceMs);
 
         if (hasActivity) {
           // Thread is active — just bump the timestamp, don't disturb
+          this.repos.tasks.update(task.task_id, { heartbeat_last_at: now });
+        } else if (this.hasUnansweredHeartbeat(task.thread_id)) {
+          // A heartbeat was already sent and the agent hasn't replied yet.
+          // Bump the timestamp instead of stacking another one — a backlog
+          // would otherwise burst-deliver once the agent session drains.
           this.repos.tasks.update(task.task_id, { heartbeat_last_at: now });
         } else {
           // Thread is silent — send heartbeat message
@@ -86,6 +91,32 @@ export class TaskHeartbeatWorker {
     } catch (err) {
       console.error("💓 Task heartbeat tick error:", err);
     }
+  }
+
+  /**
+   * Liveness is broader than "new messages": an agent executing a task runs
+   * silent work (CI, API calls, file reads) that produces no thread messages.
+   * Treat the thread as active when any of these hold:
+   *  1. recent non-heartbeat message in the thread
+   *  2. an active agent_run touching the thread (updated within the interval)
+   *  3. the assigned agent is actively typing in the thread
+   */
+  private isThreadActive(task: Task, now: number, sinceMs: number): boolean {
+    if (this.repos.messages.hasRecentActivity(task.thread_id, sinceMs)) return true;
+    if (task.assignee_id && this.repos.agentRuns.hasActiveRun(task.thread_id, sinceMs)) return true;
+    // Optional-call: not all dispatcher doubles implement typing liveness.
+    if (task.assignee_id && (this.dispatcher as any).hasActiveTyping?.(task.thread_id, task.assignee_id)) return true;
+    return false;
+  }
+
+  /**
+   * Backlog coalescing: if the last message in the thread is an unanswered
+   * task heartbeat (no non-heartbeat message after it), the agent has not
+   * processed it yet — sending another would stack a burst. Returns true when
+   * a heartbeat is still pending.
+   */
+  private hasUnansweredHeartbeat(threadId: string): boolean {
+    return this.repos.messages.hasUnansweredHeartbeat(threadId);
   }
 
   private sendHeartbeat(task: Task): void {

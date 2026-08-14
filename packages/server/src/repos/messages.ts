@@ -289,6 +289,24 @@ export class MessagesRepo {
     return row !== undefined;
   }
 
+  /**
+   * Backlog coalescing for the heartbeat worker: returns true when the most
+   * recent message in the thread is an unanswered task heartbeat (i.e. no
+   * non-heartbeat message arrived after it). Sending another heartbeat then
+   * would stack a burst the agent cannot keep up with.
+   */
+  hasUnansweredHeartbeat(channelId: string): boolean {
+    const row = this.db.prepare(
+      "SELECT metadata FROM messages WHERE channel_id = ? ORDER BY id DESC LIMIT 1"
+    ).get(channelId) as { metadata: string | null } | undefined;
+    if (!row?.metadata) return false;
+    try {
+      return JSON.parse(row.metadata)?.content_type === "task_heartbeat";
+    } catch {
+      return false;
+    }
+  }
+
   deleteAll(channelId: string): number {
     const result = this.db.prepare("DELETE FROM messages WHERE channel_id = ?").run(channelId);
     return result.changes;
