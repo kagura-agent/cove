@@ -13,10 +13,17 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   const body = await parseJsonBody<Record<string, unknown>>(c); if (!body || typeof body.channel_id !== "string" || typeof body.trigger_message_id !== "string") return validationError(c, "channel_id and trigger_message_id are required");
   const user = c.get("botUser"); await requireChannelPermission(repos, body.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
   const threadId = typeof body.thread_id === "string" ? body.thread_id : null;
+  // Normalize legacy/defensive callers: a run whose channel_id points at a
+  // thread (old plugin behavior, channel_id == thread_id) is rewritten so
+  // channel_id is the parent channel and thread_id the thread. New callers
+  // already send channel_id = parent + thread_id = thread.
+  const rawChannel = repos.channels.getById(body.channel_id);
+  const channelId = rawChannel?.type === 11 && rawChannel.parent_id ? rawChannel.parent_id : body.channel_id;
+  const normalizedThreadId = rawChannel?.type === 11 && rawChannel.parent_id ? rawChannel.id : threadId;
   // A thread run is permission-anchored to its parent channel, while the trigger
   // lives in the thread itself. Do not require child agents to be thread members.
-  const trigger = repos.messages.getById(threadId ?? body.channel_id, body.trigger_message_id); if (!trigger || (trigger.channel_id !== body.channel_id && trigger.channel_id !== threadId)) return c.json({ message: "Unknown trigger message", code: 10008 }, 404);
-  const run = repos.agentRuns.start({ agent_id: user.id, channel_id: body.channel_id, trigger_message_id: body.trigger_message_id, thread_id: threadId, parent_run_id: typeof body.parent_run_id === "string" ? body.parent_run_id : null });
+  const trigger = repos.messages.getById(normalizedThreadId ?? channelId, body.trigger_message_id); if (!trigger || (trigger.channel_id !== channelId && trigger.channel_id !== normalizedThreadId)) return c.json({ message: "Unknown trigger message", code: 10008 }, 404);
+  const run = repos.agentRuns.start({ agent_id: user.id, channel_id: channelId, trigger_message_id: body.trigger_message_id, thread_id: normalizedThreadId, parent_run_id: typeof body.parent_run_id === "string" ? body.parent_run_id : null });
   repos.agentRuns.append(run.run_id, { type: "run_started", action: "Starting" }); const timeline = repos.agentRuns.timelineForRun(run.run_id); dispatcher?.agentRunUpdated(timeline.run!); return c.json(timeline.run!, 201);
  });
  app.get("/agent-runs/:runId", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); await requireChannelPermission(repos, run.channel_id, c.get("botUser").id, PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.timelineForRun(run.run_id)); });

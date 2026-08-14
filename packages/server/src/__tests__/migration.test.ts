@@ -12,10 +12,10 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 36 with generic agent run ledger tables", () => {
+  it("fresh DB gets user_version = 37 with generic agent run ledger tables", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(36);
+    expect(version).toBe(37);
 
     const recurringColumns = db.prepare("PRAGMA table_info(recurring_tasks)").all() as Array<{ name: string; dflt_value: string | null }>;
     expect(recurringColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
@@ -156,7 +156,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(36);
+      expect(version).toBe(37);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -227,7 +227,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(36);
+      expect(version).toBe(37);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -253,7 +253,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(36);
+      expect(version).toBe(37);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -375,7 +375,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(36);
+      expect(version).toBe(37);
 
       db2.close();
     } finally {
@@ -447,7 +447,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(36);
+      expect(db.pragma("user_version", { simple: true })).toBe(37);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -625,7 +625,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(36);
+      expect(version).toBe(37);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -677,7 +677,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(36);
+      expect(db2.pragma("user_version", { simple: true })).toBe(37);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
@@ -743,7 +743,7 @@ describe("V36 drops denormalized agent_runs.task_id", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(36);
+      expect(db2.pragma("user_version", { simple: true })).toBe(37);
       const cols = db2.prepare("PRAGMA table_info(agent_runs)").all() as Array<{ name: string }>;
       expect(cols.map((c) => c.name)).not.toContain("task_id");
       const idx = db2.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_agent_runs_task_updated'").get();
@@ -751,6 +751,41 @@ describe("V36 drops denormalized agent_runs.task_id", () => {
       // Thread linkage (the source of truth for task association) survives.
       const run = db2.prepare("SELECT thread_id FROM agent_runs WHERE run_id='r1'").get() as { thread_id: string };
       expect(run.thread_id).toBe("th-task");
+      db2.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+});
+
+describe("V37 normalizes agent_runs.channel_id to parent channel", () => {
+  it("rewrites thread runs whose channel_id pointed at the thread itself", () => {
+    const tmpFile = tmpDb();
+    try {
+      const db1 = initDb(tmpFile);
+      db1.pragma("user_version = 36");
+      const guild = db1.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+      seedChannels(db1, guild.id);
+      const channel = db1.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string };
+      const now = Date.now();
+      db1.prepare("INSERT INTO users (id,username,bot,created_at,updated_at) VALUES ('agent','agent',1,?,?)").run(now, now);
+      db1.prepare("INSERT INTO channels (id, guild_id, name, type, parent_id) VALUES ('th-task',?, 'task-thread', 11, ?)").run(guild.id, channel.id);
+      db1.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m1','th-task','agent','go',?)").run(now);
+      // Old semantics: channel_id = thread id, thread_id = thread id.
+      db1.prepare("INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,trigger_message_id,status,started_at,updated_at,expires_at,log_manifest_ref,redaction_version) VALUES ('r1','agent','th-task','th-task','m1','completed',?,?,?,'manifest.json',1)").run(now, now, now + 3600000);
+      // Channel run: channel_id = channel itself, thread_id NULL — untouched.
+      db1.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m2',?,'agent','hi',?)").run(channel.id, now);
+      db1.prepare("INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,trigger_message_id,status,started_at,updated_at,expires_at,log_manifest_ref,redaction_version) VALUES ('r2','agent',?,'th-task','m2','completed',?,?,?,'manifest.json',1)").run(channel.id, now, now, now + 3600000);
+      db1.close();
+
+      const db2 = initDb(tmpFile);
+      expect(db2.pragma("user_version", { simple: true })).toBe(37);
+      const r1 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r1'").get() as { channel_id: string; thread_id: string };
+      const r2 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r2'").get() as { channel_id: string; thread_id: string };
+      expect(r1.channel_id).toBe(channel.id); // rewritten to parent channel
+      expect(r1.thread_id).toBe("th-task");    // thread marker preserved
+      expect(r2.channel_id).toBe(channel.id);  // channel run untouched
+      expect(r2.thread_id).toBe("th-task");
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}

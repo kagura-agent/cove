@@ -175,13 +175,12 @@ export class AgentRunsRepo {
          WHERE t.task_id = ?`
       ).all(scope.taskId);
     } else if (scope.channelId) {
-      // The plugin anchors a thread run to the thread's own id (channel_id =
-      // thread_id), while direct runs use the parent channel. A channel-level
-      // aggregate must cover both: direct runs + every run in its threads.
+      // channel_id is the permission/index anchor: direct runs and thread runs
+      // both carry the parent channel id (thread runs add thread_id), so one
+      // predicate covers the whole channel.
       rows = this.db.prepare(
-        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id
-         WHERE r.channel_id = ? OR r.thread_id IN (SELECT id FROM channels WHERE parent_id = ?)`
-      ).all(scope.channelId, scope.channelId);
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ?`
+      ).all(scope.channelId);
     } else {
       return null;
     }
