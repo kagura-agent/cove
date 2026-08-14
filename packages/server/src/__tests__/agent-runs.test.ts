@@ -26,6 +26,18 @@ describe("generic file-backed agent runs", () => {
     expect(repos.agentRuns.get(two.run_id)?.status).toBe("active");
     expect(repos.agentRuns.latest({ channelId: channel.id })?.run_id).toBe(two.run_id);
     expect(repos.agentRuns.latest({ channelId: channel.id, threadId: thread.id })?.run_id).toBe(threaded.run_id);
+    // A zombie thread run (dispatch died before reporting a terminal event) must
+    // be expired by a thread-scoped lookup — the parent-channel scope must not
+    // touch it, and neither may it stay 'active' forever.
+    repos.agentRuns.append(threaded.run_id, { type: "tool_progress", action: "work", detail: "in progress" });
+    const expiredAt = Date.now() - 31 * 60 * 1000;
+    db.prepare("UPDATE agent_runs SET expires_at=? WHERE run_id=?").run(expiredAt, threaded.run_id);
+    expect(repos.agentRuns.latest({ channelId: channel.id })?.run_id).toBe(two.run_id); // parent lookup untouched
+    expect(repos.agentRuns.get(threaded.run_id)?.status).toBe("active"); // still active before thread lookup
+    const threadLookup = repos.agentRuns.latest({ channelId: channel.id, threadId: thread.id });
+    expect(threadLookup?.run_id).toBe(threaded.run_id); // still the latest run…
+    expect(threadLookup?.status).toBe("stale"); // …but the lookup expired the zombie (card hides on non-active)
+    expect(repos.agentRuns.get(threaded.run_id)?.status).toBe("stale");
     for (let i = 0; i < 105; i++) repos.agentRuns.append(two.run_id, { type: "tool_progress", action: `step-${i}`, detail: "x".repeat(9_000) });
     repos.agentRuns.append(two.run_id, { type: "tool_started", detail: "Authorization: Bearer secret API_KEY=also-secret" });
     repos.agentRuns.append(two.run_id, { type: "run_finished" });

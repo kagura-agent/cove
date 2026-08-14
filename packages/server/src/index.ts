@@ -50,6 +50,22 @@ heartbeatWorker.start();
 const recurringTaskWorker = new RecurringTaskWorker(repos, dispatcher);
 recurringTaskWorker.start();
 
+// Zombie agent-run sweeper: a dispatch that dies without reporting its
+// terminal event leaves its run 'active' forever (expire() is otherwise only
+// triggered by new starts / timeline lookups, and thread runs need a thread
+// scope). Sweep globally every 5 minutes — the 30-min stale window keeps live
+// long turns safe.
+const AGENT_RUN_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const agentRunSweeper = setInterval(() => {
+  try {
+    const staleCount = repos.agentRuns.expire();
+    if (staleCount > 0) console.log(`🧹 Agent-run sweep: marked ${staleCount} zombie run(s) stale`);
+  } catch (err) {
+    console.error("Agent-run sweep failed:", err);
+  }
+}, AGENT_RUN_SWEEP_INTERVAL_MS);
+agentRunSweeper.unref();
+
 const app = createApp(db, repos, dispatcher, {
   gatewayUrl: process.env["GATEWAY_URL"] ?? `ws://localhost:${PORT}/gateway`,
   oauth: googleClientId && googleClientSecret ? {

@@ -425,8 +425,12 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!target?.bot) return c.json({ message: "Unknown Agent", code: 10003 }, 404);
     // Abort targets an agent run, not a typing heartbeat: verify the run
     // belongs to this channel/agent and is still active before forwarding.
+    // Thread runs are anchored with channel_id = thread id, so accept both the
+    // run's own channel and its thread id as the lookup boundary (the client
+    // may legitimately address the abort from either the thread or its parent).
     const run = repos.agentRuns.get(body.run_id);
-    if (!run || run.channel_id !== channelId || run.agent_id !== targetUserId || run.status !== "active") {
+    const runScopeMatches = run && (run.channel_id === channelId || run.thread_id === channelId);
+    if (!runScopeMatches || run.agent_id !== targetUserId || run.status !== "active") {
       return c.json({ status: "not_active" as const }, 409);
     }
     const result = dispatcher?.requestAgentAbort(channelId, targetUserId, body.run_id, { id: requester.id, username: requester.username }) ?? { status: "unavailable" as const };
