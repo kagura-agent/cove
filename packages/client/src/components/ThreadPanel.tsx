@@ -137,14 +137,16 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   // Aggregated thread usage: spans all sessions/runs in this thread. Refresh
   // when the thread changes; live-refresh on usage events for this thread.
   useEffect(() => {
-    if (!thread?.parent_id) return;
+    const parentId = thread?.parent_id;
+    const threadIdVal = thread?.id;
+    if (!parentId || !threadIdVal) return;
     let alive = true;
     const refresh = () => {
-      api.fetchThreadUsage(thread.parent_id, thread.id).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
+      api.fetchThreadUsage(parentId, threadIdVal).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
     };
     refresh();
     const onUsage = (run: { channel_id: string; thread_id: string | null }) => {
-      if (run.thread_id === thread.id || (run.channel_id === thread.parent_id && !run.thread_id)) refresh();
+      if (run.thread_id === threadIdVal || (run.channel_id === parentId && !run.thread_id)) refresh();
     };
     dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
     return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
