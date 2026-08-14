@@ -285,6 +285,11 @@ export class CoveRestClient {
     return this.request("PATCH", `${API_PREFIX}/agent-runs/${runId}`, { assistant_message_id: assistantMessageId });
   }
 
+  /** POST /api/v10/agent-runs/:runId/usage — record one LLM call's usage. */
+  async recordRunUsage(runId: string, usage: { provider: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens?: number; cache_write_tokens?: number; cost?: number | null; cost_source?: "provider" | "price_table" | "none" }): Promise<void> {
+    await this.request("POST", `${API_PREFIX}/agent-runs/${runId}/usage`, usage);
+  }
+
   /** PATCH /api/v10/tasks/:taskId — update a task. */
   async updateTask(taskId: string, fields: UpdateTaskFields): Promise<Task> {
     return this.request("PATCH", `${API_PREFIX}/tasks/${taskId}`, fields);

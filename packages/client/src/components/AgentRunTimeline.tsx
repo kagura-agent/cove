@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunEvent, AgentRunStatus } from "@cove/shared";
+import type { AgentRun, AgentRunEvent, AgentRunStatus, AgentRunUsage } from "@cove/shared";
 import type { CSSProperties } from "react";
 
 export type ExecutionPhase = "Plan & analysis" | "Tools" | "Child agents" | "Changes" | "Final status";
@@ -142,12 +142,33 @@ export function aggregateLifecycleEvents(events: AgentRunEvent[]): LifecycleOper
   return operations.map(({ lastIndex: _lastIndex, ...operation }) => operation);
 }
 
-export function ExecutionChip({ run, events, now }: { run: AgentRun; events: AgentRunEvent[]; now?: number }) {
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+  return String(tokens);
+}
+
+export function formatUsd(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  if (cost < 1) return `$${cost.toFixed(3)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+export function usageLabel(usage: AgentRunUsage | null | undefined): string | null {
+  if (!usage || usage.calls === 0) return null;
+  const tokens = formatTokens(usage.total_tokens);
+  if (usage.cost === null) return `${tokens} tok`;
+  return `${tokens} tok · ${formatUsd(usage.cost)}`;
+}
+
+export function ExecutionChip({ run, events, now, usage }: { run: AgentRun; events: AgentRunEvent[]; now?: number; usage?: AgentRunUsage | null }) {
   const status = statusStyle[run.status];
   const summary = executionSummary(events);
   const parts = [status.label, `${summary.actions} action${summary.actions === 1 ? "" : "s"}`, elapsed(run, now)];
   if (summary.children) parts.push(`${summary.children} child agent${summary.children === 1 ? "" : "s"}`);
   if (summary.files) parts.push(`${summary.files} file${summary.files === 1 ? "" : "s"}`);
+  const usageText = usageLabel(usage);
+  if (usageText) parts.push(usageText);
   return <><span aria-hidden="true" style={{ color: status.color, fontWeight: 700 }}>{status.icon}</span><span>{parts.join(" · ")}</span></>;
 }
 

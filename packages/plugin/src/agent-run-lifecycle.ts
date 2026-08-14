@@ -1,4 +1,5 @@
 import type { AgentRunEventType } from "@cove/shared";
+import type { CoveRestClient } from "./rest-client.js";
 
 /**
  * Bridges OpenClaw's native subagent hooks to the Cove run that owns the
@@ -21,7 +22,9 @@ type NativeEnded = { targetSessionKey: string; targetKind: "subagent" | "acp"; r
 type NativeAgentEnded = { runId?: string; messages: unknown[]; success: boolean; error?: string; durationMs?: number };
 type NativeContext = { runId?: string; sessionKey?: string; requesterSessionKey?: string; childSessionKey?: string };
 
-type Parent = { runId: string; report: Reporter; children: Set<string>; queue: Promise<void> };
+type UsageRest = Pick<CoveRestClient, "recordRunUsage">;
+
+type Parent = { runId: string; report: Reporter; children: Set<string>; queue: Promise<void>; rest?: UsageRest };
 type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval> };
 
 const HEARTBEAT_MS = 25_000;
@@ -31,8 +34,8 @@ export class CoveAgentRunLifecycleBridge {
   private children = new Map<string, Child>();
   private waiters = new Map<string, Set<() => void>>();
 
-  bindParent(sessionKey: string, runId: string, report: Reporter): void {
-    this.parents.set(sessionKey, { runId, report, children: new Set(), queue: Promise.resolve() });
+  bindParent(sessionKey: string, runId: string, report: Reporter, rest?: UsageRest): void {
+    this.parents.set(sessionKey, { runId, report, children: new Set(), queue: Promise.resolve(), rest });
   }
 
   unbindParent(sessionKey: string): void {
@@ -96,6 +99,21 @@ export class CoveAgentRunLifecycleBridge {
     // The terminal hook queues its event before it releases waiters. Drain it
     // so dispatch cannot append run_finished ahead of subagent_finished/failed.
     await parent.queue;
+  }
+
+  /** Cove run id owning this session, or null when the session is not a live Cove turn. */
+  runForSession(sessionKey: string): string | null {
+    return this.parents.get(sessionKey)?.runId ?? null;
+  }
+
+  /** Parent Cove session key for a child (subagent) session, when tracked. */
+  parentSessionFor(sessionKey: string): string | null {
+    return this.children.get(sessionKey)?.parentSessionKey ?? null;
+  }
+
+  /** REST client registered with the owning run (for usage writes), when known. */
+  restForSession(sessionKey: string): UsageRest | null {
+    return this.parents.get(sessionKey)?.rest ?? null;
   }
 
   private report(parent: Parent, event: RunEvent): void {

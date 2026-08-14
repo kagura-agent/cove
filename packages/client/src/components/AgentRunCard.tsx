@@ -3,7 +3,7 @@ import type { AgentRunTimeline } from "@cove/shared";
 import * as api from "../lib/api";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import { useMemberStore } from "../stores/useMemberStore";
-import { ExecutionTimeline, elapsed } from "./AgentRunTimeline";
+import { ExecutionTimeline, elapsed, usageLabel } from "./AgentRunTimeline";
 import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
@@ -58,6 +58,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   const name = agentName ? `@${agentName}` : "Agent";
   const label = stopState === "stopping" ? "Stopping…" : stopState === "denied" ? "Cannot stop this run" : stopState === "failed" ? "Stop failed" : stopState === "already_finished" ? "Run already finished" : `${name} ${run.current_action ?? "working"}`;
   const elapsedText = !stopState ? elapsed(run, now) : null;
+  const usageText = usageLabel(timeline?.usage);
   const canAbort = !stopState || stopState === "failed";
   async function stop() {
     setStopState("stopping");
@@ -75,6 +76,7 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
       </button>
       <span style={{ flex: 1 }} />
       {elapsedText && <span>{elapsedText}</span>}
+      {usageText && <span style={{ color: "var(--text-muted)" }}>{usageText}</span>}
       {canAbort && <button type="button" style={stopStyle} aria-label={`Stop ${name}`} title={`Stop ${name}`} onClick={stop}>stop</button>}
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>

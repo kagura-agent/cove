@@ -89,7 +89,7 @@ export function MessageAgentRunDetails({ channelId, messageId }: { channelId: st
   const content = open && run ? <ExecutionDetailsSurface narrow={narrow} placement={placement} surfaceRef={surfaceRef} titleId={titleId} onClose={() => close(true)} events={timeline?.events ?? []} /> : null;
   return <>
     <button ref={chipRef} type="button" onClick={toggle} aria-expanded={open} aria-controls={open ? titleId : undefined} aria-label="Show execution details" style={{ display: "inline", border: 0, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)", padding: 0, lineHeight: "inherit" }}>
-      {run ? <ExecutionChip run={run} events={timeline?.events ?? []} now={now} /> : <>◌ Execution details</>}
+      {run ? <ExecutionChip run={run} events={timeline?.events ?? []} now={now} usage={timeline?.usage} /> : <>◌ Execution details</>}
     </button>
     {content && typeof document !== "undefined" ? createPortal(content, document.body) : content}
   </>;
