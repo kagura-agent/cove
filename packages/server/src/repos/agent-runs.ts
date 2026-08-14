@@ -175,9 +175,13 @@ export class AgentRunsRepo {
          WHERE t.task_id = ?`
       ).all(scope.taskId);
     } else if (scope.channelId) {
+      // The plugin anchors a thread run to the thread's own id (channel_id =
+      // thread_id), while direct runs use the parent channel. A channel-level
+      // aggregate must cover both: direct runs + every run in its threads.
       rows = this.db.prepare(
-        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ?`
-      ).all(scope.channelId);
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id
+         WHERE r.channel_id = ? OR r.thread_id IN (SELECT id FROM channels WHERE parent_id = ?)`
+      ).all(scope.channelId, scope.channelId);
     } else {
       return null;
     }
@@ -191,11 +195,14 @@ export class AgentRunsRepo {
    * Task association is derived via tasks.thread_id (single source of truth).
    */
   usageByTask(channelId: string): Record<string, AgentRunUsage> {
+    // Tasks belong to the channel via tasks.channel_id; runs are matched by
+    // their thread (runs anchored to a thread may carry channel_id = thread id
+    // or parent channel id, so the thread link is the reliable join).
     const rows = this.db.prepare(
       `SELECT u.*, t.task_id FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
        JOIN tasks t ON t.thread_id = r.thread_id
-       WHERE r.channel_id = ?`
+       WHERE t.channel_id = ?`
     ).all(channelId) as any[];
     const byTask = new Map<string, any[]>();
     for (const row of rows) {
