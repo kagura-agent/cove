@@ -1,4 +1,12 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { CoveRestClient } from "./rest-client.js";
+
+/** Persistent baseline store path. Survives gateway restarts so the first
+ * turn after a restart is reported instead of silently establishing a new
+ * baseline. Overridable for tests / custom state dirs. */
+const STATE_FILE = process.env.COVE_USAGE_STATE_FILE ?? join(homedir(), ".openclaw", "state", "cove-usage-baselines.json");
 
 /**
  * Collects per-turn LLM usage from OpenClaw's `agent_end` hook and attributes
@@ -85,7 +93,32 @@ export class CoveUsageCollector {
   constructor(
     private readonly bridge: UsageBridge,
     private readonly log?: { warn?: (msg: string) => void },
-  ) {}
+    private readonly stateFile = STATE_FILE,
+  ) {
+    this.loadBaselines();
+  }
+
+  private loadBaselines(): void {
+    try {
+      if (!existsSync(this.stateFile)) return;
+      const raw = JSON.parse(readFileSync(this.stateFile, "utf8")) as Record<string, TokenTotals>;
+      for (const [key, value] of Object.entries(raw)) {
+        if (value && typeof value === "object") this.baselines.set(key, value);
+      }
+      this.log?.warn?.(`cove: restored ${this.baselines.size} usage baseline(s) from ${this.stateFile}`);
+    } catch (error) {
+      this.log?.warn?.(`cove: failed to load usage baselines: ${(error as Error)?.message ?? String(error)}`);
+    }
+  }
+
+  private persistBaselines(): void {
+    try {
+      mkdirSync(this.stateFile.substring(0, this.stateFile.lastIndexOf("/")), { recursive: true });
+      writeFileSync(this.stateFile, JSON.stringify(Object.fromEntries(this.baselines)), { mode: 0o600 });
+    } catch (error) {
+      this.log?.warn?.(`cove: failed to persist usage baselines: ${(error as Error)?.message ?? String(error)}`);
+    }
+  }
 
   onAgentEnd(event: AgentEndEvent, ctx: AgentEndContext): void {
     const sessionKey = ctx.sessionKey ?? ctx.sessionId;
@@ -96,6 +129,7 @@ export class CoveUsageCollector {
       // First observed end for this session: record the baseline without
       // reporting (the messages include pre-existing history).
       this.baselines.set(sessionKey, totals);
+      this.persistBaselines();
       return;
     }
     const delta: TokenTotals = {
@@ -107,6 +141,7 @@ export class CoveUsageCollector {
       hasCost: totals.hasCost,
     };
     this.baselines.set(sessionKey, totals);
+    this.persistBaselines();
     if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
       return;
     }
