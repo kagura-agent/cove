@@ -1,0 +1,89 @@
+name: Publish Plugin to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/plugin/**'
+      - '.github/workflows/publish-plugin.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (e.g. 0.1.4). Defaults to packages/plugin/package.json'
+        required: false
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # for creating the release git tag
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native addons
+        run: cd node_modules/better-sqlite3 && npx --yes prebuild-install || npx --yes node-gyp rebuild
+
+      - name: Resolve version to publish
+        id: version
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version }}
+        run: |
+          if [ -n "$VERSION_OVERRIDE" ]; then
+            (cd packages/plugin && npm version "$VERSION_OVERRIDE" --no-git-tag-version)
+          fi
+          VERSION=$(node -p "require('./packages/plugin/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Target version: $VERSION"
+
+      - name: Skip if version already published
+        id: check
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set +e
+          EXISTING=$(npm view "openclaw-cove@$VERSION" version --registry=https://registry.npmjs.org 2>/dev/null)
+          set -e
+          if [ -n "$EXISTING" ]; then
+            echo "Version $VERSION already exists on npm — skipping publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build plugin
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm --filter openclaw-cove build
+
+      - name: Test plugin
+        if: steps.check.outputs.skip != 'true'
+        run: pnpm --filter openclaw-cove test
+
+      - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
+        working-directory: packages/plugin
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --no-git-checks --access public
+
+      - name: Tag release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "kagura-agent"
+          git config user.email "kagura.agent.ai@gmail.com"
+          git tag "openclaw-cove@v$VERSION"
+          git push origin "openclaw-cove@v$VERSION"
