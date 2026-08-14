@@ -136,6 +136,15 @@ export class GatewayDispatcher {
     });
   }
 
+  /**
+   * Liveness probe for the heartbeat worker: is the given user actively
+   * typing (within the 8s abortable window) in this channel right now?
+   */
+  hasActiveTyping(channelId: string, userId: string): boolean {
+    const entry = this.activeTyping.get(`${channelId}:${userId}`);
+    return Boolean(entry && entry.expiresAt > Date.now());
+  }
+
   requestAgentAbort(channelId: string, targetUserId: string, runId: string, requester: { id: string; username: string }): { status: "requested" | "already_requested"; requestId: string } | { status: "already_requested" | "not_active" | "unavailable" } {
     // The run's validity (exists, belongs to this channel/agent, status=active)
     // is verified by the route before forwarding. Here we only gate on agent
@@ -463,6 +472,17 @@ export class GatewayDispatcher {
     // the active card updates immediately instead of waiting for a later fetch.
     if (run.thread_id && run.thread_id !== run.channel_id) {
       this.broadcastToGuildWithChannelFilter(channel.guild_id, run.thread_id, "AGENT_RUN_UPDATED", run);
+    }
+  }
+
+  /** New usage recorded for a run: fan out to channel + thread scopes so the
+   * aggregate chips (channel/thread headers, task table) refresh live. */
+  usageUpdated(run: AgentRun): void {
+    const channel = this.channelsRepo.getById(run.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, run.channel_id, "AGENT_USAGE_UPDATED", run);
+    if (run.thread_id && run.thread_id !== run.channel_id) {
+      this.broadcastToGuildWithChannelFilter(channel.guild_id, run.thread_id, "AGENT_USAGE_UPDATED", run);
     }
   }
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AgentRunTimeline } from "@cove/shared";
+import type { AgentRunTimeline, AgentRunUsage } from "@cove/shared";
 import * as api from "../lib/api";
 import { dispatcher } from "../lib/gateway-dispatcher";
-import { ExecutionChip, ExecutionTimeline } from "./AgentRunTimeline";
+import { ExecutionChip, ExecutionTimeline, usageLabel } from "./AgentRunTimeline";
 
 const NARROW_VIEWPORT = 640;
 const VIEWPORT_GUTTER = 12;
@@ -86,7 +86,7 @@ export function MessageAgentRunDetails({ channelId, messageId }: { channelId: st
   // issuing one request for every historical message in the scrollback.
   if (checked && !timeline?.run) return null;
   const run = timeline?.run;
-  const content = open && run ? <ExecutionDetailsSurface narrow={narrow} placement={placement} surfaceRef={surfaceRef} titleId={titleId} onClose={() => close(true)} events={timeline?.events ?? []} /> : null;
+  const content = open && run ? <ExecutionDetailsSurface narrow={narrow} placement={placement} surfaceRef={surfaceRef} titleId={titleId} onClose={() => close(true)} events={timeline?.events ?? []} usage={timeline?.usage ?? null} /> : null;
   return <>
     <button ref={chipRef} type="button" onClick={toggle} aria-expanded={open} aria-controls={open ? titleId : undefined} aria-label="Show execution details" style={{ display: "inline", border: 0, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)", padding: 0, lineHeight: "inherit" }}>
       {run ? <ExecutionChip run={run} events={timeline?.events ?? []} now={now} usage={timeline?.usage} /> : <>◌ Execution details</>}
@@ -95,12 +95,17 @@ export function MessageAgentRunDetails({ channelId, messageId }: { channelId: st
   </>;
 }
 
-function ExecutionDetailsSurface({ narrow, placement, surfaceRef, titleId, onClose, events }: { narrow: boolean; placement: ExecutionDetailsPlacement | null; surfaceRef: React.RefObject<HTMLElement | null>; titleId: string; onClose: () => void; events: NonNullable<AgentRunTimeline["events"]> }) {
+function ExecutionDetailsSurface({ narrow, placement, surfaceRef, titleId, onClose, events, usage }: { narrow: boolean; placement: ExecutionDetailsPlacement | null; surfaceRef: React.RefObject<HTMLElement | null>; titleId: string; onClose: () => void; events: NonNullable<AgentRunTimeline["events"]>; usage: AgentRunUsage | null }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { closeButtonRef.current?.focus(); }, []);
   const closeButton = <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close execution details" style={{ border: 0, background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>;
   const surfaceHeight = narrow ? "min(58vh, 460px)" : `${placement?.maxHeight ?? 360}px`;
-  const heading = <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-sm)", paddingBottom: "var(--space-xs)", borderBottom: "1px solid var(--border-subtle)", flexShrink: 0 }}><strong id={titleId} style={{ fontSize: "var(--font-size-sm)" }}>Execution details</strong>{closeButton}</header>;
+  const usageText = usageLabel(usage);
+  const heading = <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-sm)", paddingBottom: "var(--space-xs)", borderBottom: "1px solid var(--border-subtle)", flexShrink: 0 }}>
+    <strong id={titleId} style={{ fontSize: "var(--font-size-sm)" }}>Execution details</strong>
+    {usageText && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{usageText}</span>}
+    {closeButton}
+  </header>;
   const timeline = <div style={{ overflow: "auto", flex: 1, paddingTop: "var(--space-xs)" }}><ExecutionTimeline events={events} /></div>;
   if (narrow) return <div style={{ position: "fixed", zIndex: 10000, inset: 0, display: "flex", alignItems: "flex-end", background: "rgba(0,0,0,.42)" }}>
     <section ref={surfaceRef as React.RefObject<HTMLElement>} role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ width: "100%", maxHeight: "82vh", height: surfaceHeight, overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--bg-floating)", borderRadius: "16px 16px 0 0", boxShadow: "0 -8px 28px rgba(0,0,0,.35)", padding: "var(--space-md)" }}>{heading}{timeline}</section>

@@ -9,3 +9,4 @@ server-bundle.js
 .claude/worktrees/
 *.tsbuildinfo
 package-lock.json
+packages/server/data/

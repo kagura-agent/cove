@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { AgentRunTimeline, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
+import type { AgentRunTimeline, AgentRunUsage, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -240,6 +240,18 @@ export function fetchThreadMessages(threadId: string, opts?: { before?: string; 
 
 export function fetchLatestAgentRun(channelId: string, threadId?: string) {
   return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/agent-runs/latest${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`);
+}
+export function fetchChannelUsage(channelId: string) {
+  return api<AgentRunUsage | null>(`${API_PREFIX}/channels/${channelId}/usage`);
+}
+export function fetchThreadUsage(channelId: string, threadId: string) {
+  return api<AgentRunUsage | null>(`${API_PREFIX}/channels/${channelId}/threads/${threadId}/usage`);
+}
+export function fetchTaskUsage(taskId: string) {
+  return api<AgentRunUsage | null>(`${API_PREFIX}/tasks/${taskId}/usage`);
+}
+export function fetchTaskUsages(channelId: string) {
+  return api<Record<string, AgentRunUsage>>(`${API_PREFIX}/channels/${channelId}/tasks/usage`);
 }
 export function fetchAgentRun(runId: string) { return api<AgentRunTimeline>(`${API_PREFIX}/agent-runs/${runId}`); }
 export function fetchMessageAgentRun(channelId: string, messageId: string) {

@@ -273,7 +273,7 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
   }
 
-  async startAgentRun(input: { channel_id: string; trigger_message_id: string; thread_id?: string; task_id?: string }): Promise<AgentRun> {
+  async startAgentRun(input: { channel_id: string; trigger_message_id: string; thread_id?: string }): Promise<AgentRun> {
     return this.request("POST", `${API_PREFIX}/agent-runs`, input);
   }
 

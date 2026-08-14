@@ -60,24 +60,23 @@ export class AgentRunsRepo {
    * second active run for the same (channel, thread, agent) can only be a
    * leftover from a turn that never reported its terminal event. Stale it
    * eagerly instead of waiting for the expiry window — genuine concurrency
-   * lives across threads/channels, never within one scope. In-flight task runs
-   * are excluded (a chat turn must not kill a task execution); task runs stay
-   * singleton via the task_id branch below.
+   * lives across threads/channels, never within one scope. A task owns exactly
+   * one thread, so per-thread serialization covers task executions too.
    */
   private staleSameScope(now: number, input: { agent_id: string; channel_id: string; thread_id?: string | null }): void {
     if (input.thread_id) {
-      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE thread_id=? AND agent_id=? AND task_id IS NULL AND status='active'").run(now, now, input.thread_id, input.agent_id);
+      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE thread_id=? AND agent_id=? AND status='active'").run(now, now, input.thread_id, input.agent_id);
     } else {
-      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE channel_id=? AND thread_id IS NULL AND agent_id=? AND task_id IS NULL AND status='active'").run(now, now, input.channel_id, input.agent_id);
+      this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE channel_id=? AND thread_id IS NULL AND agent_id=? AND status='active'").run(now, now, input.channel_id, input.agent_id);
     }
   }
-  start(input: { agent_id: string; channel_id: string; trigger_message_id: string; thread_id?: string | null; task_id?: string | null; parent_run_id?: string | null }): AgentRun {
+  start(input: { agent_id: string; channel_id: string; trigger_message_id: string; thread_id?: string | null; parent_run_id?: string | null }): AgentRun {
     this.expire({ channelId: input.channel_id }); const now = Date.now(); const runId = randomUUID();
     // Any new run supersedes leftover active runs in its own scope. Task
-    // executions additionally keep a per-task singleton invariant.
+    // executions are kept singleton through their thread (a task owns exactly
+    // one thread), so no separate task_id branch is needed.
     this.staleSameScope(now, input);
-    if (input.task_id) this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE task_id=? AND status='active'").run(now, now, input.task_id);
-    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.task_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
+    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
     const run = this.get(runId)!; this.writeManifest(run); return run;
   }
   get(runId: string): AgentRun | null { const row = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId); return row ? asRun(row) : null; }
@@ -91,6 +90,16 @@ export class AgentRunsRepo {
       .get(assistantMessageId, channelId, channelId);
     return row ? asRun(row) : null;
   }
+  /**
+   * Liveness probe for the heartbeat worker: is there an active run touching
+   * this thread within the given window? Active runs mean the agent is
+   * executing (silently or not) — the heartbeat must not fire.
+   */
+  hasActiveRun(threadId: string, sinceMs: number): boolean {
+    const row = this.db.prepare("SELECT 1 FROM agent_runs WHERE thread_id=? AND status='active' AND updated_at >= ? LIMIT 1").get(threadId, sinceMs);
+    return row !== undefined;
+  }
+
   latest(input: { channelId?: string; threadId?: string; taskId?: string }): AgentRun | null {
     // Expire the scope that actually owns the runs we're about to surface. A
     // thread lookup must expire by thread_id (thread runs store
@@ -99,10 +108,6 @@ export class AgentRunsRepo {
     this.expire(input.taskId ? { taskId: input.taskId } : input.threadId ? { threadId: input.threadId } : input.channelId ? { channelId: input.channelId } : undefined);
     if (input.threadId) {
       const row = this.db.prepare("SELECT * FROM agent_runs WHERE thread_id=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.threadId);
-      return row ? asRun(row) : null;
-    }
-    if (input.taskId) {
-      const row = this.db.prepare("SELECT * FROM agent_runs WHERE task_id=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.taskId);
       return row ? asRun(row) : null;
     }
     if (!input.channelId) return null;
@@ -115,7 +120,7 @@ export class AgentRunsRepo {
     return readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as AgentRunEvent);
   }
   timelineForRun(runId: string): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.get(runId); return { run, events: run ? this.events(runId) : [], usage: run ? this.usage(runId, true) : null }; }
-  timeline(input: { channelId?: string; threadId?: string; taskId?: string }): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [], usage: run ? this.usage(run.run_id, true) : null }; }
+  timeline(input: { channelId?: string; threadId?: string }): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [], usage: run ? this.usage(run.run_id, true) : null }; }
   append(runId: string, input: { type: AgentRunEventType; tool_call_id?: unknown; action?: unknown; detail?: unknown; status?: unknown; exit_code?: unknown; duration_ms?: unknown; cwd?: unknown }): AgentRun | null {
     const current = this.get(runId); if (!current || current.status !== "active") return null;
     const now = Date.now(); const terminal: Record<string, AgentRunStatus> = { run_finished: "completed", run_failed: "failed", run_aborted: "aborted" };
@@ -157,6 +162,81 @@ export class AgentRunsRepo {
     } else {
       rows = this.db.prepare("SELECT * FROM agent_run_usage WHERE run_id=?").all(runId);
     }
+    return this.aggregateUsageRows(rows);
+  }
+
+  /**
+   * Aggregate usage across every run in a scope, returning the same
+   * `AgentRunUsage` shape as `usage()` so the client reuses existing formatting.
+   * Scopes (exactly one):
+   *  - `threadId`: all runs in the thread (spans sessions; includes task runs
+   *    and child/subagent runs, which inherit the thread scope).
+   *  - `taskId`: all runs for the task, across sessions.
+   *  - `channelId`: ALL runs anchored to the channel — the parent channel chat
+   *    plus every thread. A header placed at channel level reads as "the whole
+   *    channel spent X", so it must not be limited to direct runs; the thread
+   *    scope exists for per-thread drill-down.
+   */
+  usageByScope(scope: { threadId?: string; channelId?: string; taskId?: string }): AgentRunUsage | null {
+    let rows: any[];
+    if (scope.threadId) {
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.thread_id = ?`
+      ).all(scope.threadId);
+    } else if (scope.taskId) {
+      // Task scope is derived through the canonical tasks.thread_id link — the
+      // task table is the single source of truth for task↔thread, so runs are
+      // matched by their thread, not by a denormalized task_id column.
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u
+         JOIN agent_runs r ON r.run_id = u.run_id
+         JOIN tasks t ON t.thread_id = r.thread_id
+         WHERE t.task_id = ?`
+      ).all(scope.taskId);
+    } else if (scope.channelId) {
+      // channel_id is the permission/index anchor: direct runs and thread runs
+      // both carry the parent channel id (thread runs add thread_id), so one
+      // predicate covers the whole channel.
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ?`
+      ).all(scope.channelId);
+    } else {
+      return null;
+    }
+    return this.aggregateUsageRows(rows);
+  }
+
+  /**
+   * Per-task usage for every task in a channel that has usage recorded,
+   * keyed by task_id. Tasks without usage rows are absent from the map so the
+   * client can render an em dash for them. Used by the task table Usage column.
+   * Task association is derived via tasks.thread_id (single source of truth).
+   */
+  usageByTask(channelId: string): Record<string, AgentRunUsage> {
+    // Tasks belong to the channel via tasks.channel_id; runs are matched by
+    // their thread (the canonical task↔thread link).
+    const rows = this.db.prepare(
+      `SELECT u.*, t.task_id FROM agent_run_usage u
+       JOIN agent_runs r ON r.run_id = u.run_id
+       JOIN tasks t ON t.thread_id = r.thread_id
+       WHERE t.channel_id = ?`
+    ).all(channelId) as any[];
+    const byTask = new Map<string, any[]>();
+    for (const row of rows) {
+      const list = byTask.get(row.task_id) ?? [];
+      list.push(row);
+      byTask.set(row.task_id, list);
+    }
+    const out: Record<string, AgentRunUsage> = {};
+    for (const [taskId, taskRows] of byTask) {
+      const agg = this.aggregateUsageRows(taskRows);
+      if (agg) out[taskId] = agg;
+    }
+    return out;
+  }
+
+  /** Shared rollup: totals + cost + per-model breakdown from usage rows. */
+  private aggregateUsageRows(rows: any[]): AgentRunUsage | null {
     if (!rows.length) return null;
     const currency = "USD";
     const sum = (k: string) => rows.reduce((acc, r) => acc + (r[k] || 0), 0);
@@ -179,7 +259,8 @@ export class AgentRunsRepo {
       cache_write_tokens: sum("cache_write_tokens"),
       total_tokens: sum("total_tokens"),
       cost, currency, cost_source,
-      models: [...models.values()],
+      // Deterministic order regardless of SQLite join plan.
+      models: [...models.values()].sort((a, b) => a.model.localeCompare(b.model)),
     };
   }
 }

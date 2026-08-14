@@ -422,12 +422,13 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
     const skipEnrichment = isAbortRequest;
     // Every admitted Cove turn receives a generic ledger run.
     try {
-      // A run belongs to the channel where it actually happens. For any thread
-      // (task or plain), that channel is the thread itself, so the run is
-      // anchored to it via thread_id. Routing and thread session keys likewise
-      // treat every type-11 channel as a thread, so a plain thread's subagent
-      // requester key matches the parent bound here.
-      const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(channel?.type === 11 ? { thread_id: channelId } : {}) });
+      // A run's channel_id is its permission/index anchor: for a channel turn
+      // that is the channel itself; for a thread turn it is the parent channel
+      // (the thread belongs to it). thread_id then marks which thread the run
+      // actually happened in. This keeps channel aggregates/authorization
+      // naturally correct instead of relying on channel_id == thread_id.
+      const runChannelId = channel?.type === 11 && channel.parent_id ? channel.parent_id : channelId;
+      const run = await restClient.startAgentRun({ channel_id: runChannelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(channel?.type === 11 ? { thread_id: channelId } : {}) });
       agentRun = { runId: run.run_id };
       coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent, restClient);
     } catch (error: any) {

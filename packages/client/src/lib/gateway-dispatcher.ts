@@ -43,6 +43,7 @@ export interface GatewayEventMap {
   TASK_UPDATED: Task;
   TASK_DELETED: Task;
   AGENT_RUN_UPDATED: AgentRun;
+  AGENT_USAGE_UPDATED: AgentRun;
 }
 
 type Handler<T> = (data: T) => void;

@@ -61,6 +61,62 @@ describe("agent execution presentation", () => {
     expect(html.indexOf("pnpm test")).toBeLessThan(html.indexOf("Completed"));
   });
 
+  it("renders the sequence as a vertical axis: ol/li rows with connected spine nodes", () => {
+    const events = [
+      event({ event_id: "one", type: "run_started", action: "Starting", detail: "Let me dig in." }),
+      event({ event_id: "two", type: "tool_progress", action: "Plan update", detail: "First pass done." }),
+      event({ event_id: "three", type: "run_finished", action: "Completed" }),
+    ];
+    const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events }));
+    // Rows are list items inside an ordered list.
+    expect(html.match(/<ol/g)).not.toBeNull();
+    expect((html.match(/<li/g) ?? []).length).toBe(3);
+    // Every row contributes a spine node (aria-hidden axis column).
+    expect((html.match(/aria-hidden="true"/g) ?? []).length).toBe(3);
+    // The spine is dashed, faint, and uses negative offsets so it crosses the
+    // row padding — one continuous axis rather than per-row segments.
+    expect(html).toContain("position:absolute");
+    expect(html).toContain("border-left:2px dashed");
+    expect(html).toContain("opacity:0.3");
+    expect(html).toContain("bottom:-4px");
+    expect(html).not.toContain("borderBottom");
+  });
+
+  it("keeps state glyphs as the node semantics (done/failed/in-progress)", () => {
+    const events = [
+      event({ event_id: "ok", type: "tool_finished", action: "Build", status: "completed" }),
+      event({ event_id: "bad", type: "tool_failed", action: "Test", status: "failed" }),
+      event({ event_id: "running", type: "tool_started", action: "Deploy", status: "running" }),
+    ];
+    const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events }));
+    expect(html).toContain("aria-label=\"Done\"");
+    expect(html).toContain("aria-label=\"Failed\"");
+    expect(html).toContain("aria-label=\"In progress\"");
+    expect(html).toContain("✓");
+    expect(html).toContain("!");
+    expect(html).toContain("●");
+  });
+
+  it("renders Preamble content directly without the label heading", () => {
+    const events = [
+      event({ event_id: "pre", type: "run_started", action: "Preamble", detail: "We need to fix the flaky CI before shipping." }),
+      event({ event_id: "after", type: "tool_progress", action: "Plan update", detail: "Proposed two fixes." }),
+    ];
+    const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events }));
+    expect(html).toContain("We need to fix the flaky CI before shipping.");
+    expect(html).not.toContain("Preamble");
+    expect(html).toContain("Proposed two fixes.");
+    // The opener content is rendered as a heading-weight row (bold), not a muted detail line.
+    expect(html).toContain("font-weight:600");
+  });
+
+  it("treats an opener without detail as a normal labeled row", () => {
+    const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events: [event({ event_id: "bare", type: "run_started", action: "Preamble", detail: null })] }));
+    // The action label is kept as the row heading when there is no content to stand in for it.
+    expect(html).toContain("font-weight:600");
+    expect(html).toContain("Preamble");
+  });
+
   it("formats token counts and costs for the execution chip", () => {
     expect(formatTokens(500)).toBe("500");
     expect(formatTokens(12_400)).toBe("12.4k");
