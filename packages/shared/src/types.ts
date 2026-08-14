@@ -294,6 +294,69 @@ export type TaskStatus = "open" | "in_progress" | "in_review" | "done" | "cancel
 export const TASK_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", "done", "cancelled"];
 
 /** A channel-level task with a linked thread. */
+export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
+
+/** A recurring task template that creates ordinary task occurrences. */
+export interface RecurringTask {
+  id: string;
+  guild_id: string;
+  channel_id: string;
+  title: string;
+  description: string;
+  assignee_id: string | null;
+  created_by: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  next_run_at: number;
+  enabled: boolean;
+  last_task_id: string | null;
+  last_spawned_at: number;
+  heartbeat_interval_ms: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface TaskRecurrence {
+  /** Stable task ID that owns this recurrence configuration. */
+  root_task_id: string;
+  id: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  next_run_at: number;
+  enabled: boolean;
+  last_task_id: string | null;
+  last_spawned_at: number;
+}
+
+export interface CreateTaskRecurrence {
+  interval_ms: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+}
+
+export interface UpdateTaskRecurrence {
+  interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+}
+
+export interface CreateTaskFields {
+  title: string;
+  assignee_id?: string;
+  description?: string;
+  heartbeat_interval_ms?: number;
+  recurrence?: CreateTaskRecurrence;
+}
+
+export interface UpdateTaskFields {
+  status?: TaskStatus;
+  assignee_id?: string | null;
+  title?: string;
+  description?: string;
+  heartbeat_interval_ms?: number;
+  recurrence?: UpdateTaskRecurrence | null;
+}
+
 export interface Task {
   task_id: string;
   channel_id: string;
@@ -308,9 +371,29 @@ export interface Task {
   created_by: string;
   heartbeat_interval_ms: number;
   heartbeat_last_at: number;
+  recurring_id: string | null;
+  recurring_seq: number;
+  recurrence?: TaskRecurrence;
   created_at: number;
   updated_at: number;
 }
+
+/** Generic agent execution ledger. Event evidence is file-backed and redacted before persistence. */
+export type AgentRunStatus = "active" | "completed" | "failed" | "aborted" | "stale";
+export type AgentRunEventType = "run_started" | "run_finished" | "run_failed" | "run_aborted" | "tool_started" | "tool_progress" | "tool_finished" | "tool_failed" | "command_output" | "patch_summary" | "approval_requested" | "subagent_started" | "subagent_progress" | "subagent_finished" | "subagent_failed";
+export interface AgentRun {
+  run_id: string; agent_id: string; channel_id: string; thread_id: string | null; task_id: string | null;
+  trigger_message_id: string; assistant_message_id: string | null; parent_run_id: string | null;
+  status: AgentRunStatus; current_action: string | null; started_at: number; updated_at: number;
+  finished_at: number | null; expires_at: number; log_manifest_ref: string; log_hash: string | null;
+  log_event_count: number; log_bytes: number; redaction_version: number;
+}
+export interface AgentRunEvent {
+  event_id: string; run_id: string; tool_call_id: string | null; type: AgentRunEventType;
+  action: string | null; detail: string | null; status: string | null; exit_code: number | null;
+  duration_ms: number | null; cwd: string | null; created_at: number;
+}
+export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; }
 
 /** A thread member entry. */
 export interface ThreadMember {

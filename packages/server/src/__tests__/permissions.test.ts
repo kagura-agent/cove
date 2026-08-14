@@ -478,6 +478,74 @@ describe("Permissions", () => {
     dispatcher.removeSession(session);
   });
 
+  it("bot with role-inherited VIEW_CHANNEL but no explicit allow does NOT receive dispatched events", () => {
+    createBotUser("inherited-view-bot", "InheritedViewBot");
+    const everyone = db.prepare("SELECT permissions FROM roles WHERE id = ?").get(defaultGuildId) as { permissions: string };
+    expect(BigInt(everyone.permissions) & BigInt(PermissionFlags.VIEW_CHANNEL)).not.toBe(0n);
+
+    const dispatched: { event: string; data: unknown }[] = [];
+    const mockWs = {
+      readyState: 1,
+      send: (data: string) => {
+        const parsed = JSON.parse(data);
+        if (parsed.t) dispatched.push({ event: parsed.t, data: parsed.d });
+      },
+      close: () => {},
+    } as any;
+
+    const session = new GatewaySession(mockWs);
+    session.user = { id: "inherited-view-bot", username: "InheritedViewBot", bot: true, avatar: null, discriminator: "0000", global_name: null };
+    session.guildIds.add(defaultGuildId);
+    (session as any).identified = true;
+    dispatcher.addSession(session);
+
+    dispatcher.messageCreate({
+      id: "msg-inherited-view",
+      channel_id: generalId,
+      content: "test",
+      author: { id: "admin", username: "Admin", bot: false, avatar: null, discriminator: "0000", global_name: null },
+      timestamp: new Date().toISOString(),
+      type: 0,
+      attachments: [],
+      embeds: [],
+      mentions: [],
+      mention_roles: [],
+      pinned: false,
+      tts: false,
+      mention_everyone: false,
+    });
+
+    expect(dispatched.filter((event) => event.event === "MESSAGE_CREATE")).toHaveLength(0);
+    dispatcher.removeSession(session);
+  });
+
+  it("omits channels from READY for a bot without an explicit allow", () => {
+    createBotUser("ready-hidden-bot", "ReadyHiddenBot");
+    const payloads: Array<{ t?: string; d?: any }> = [];
+    const mockWs = {
+      readyState: 1,
+      send: (data: string) => payloads.push(JSON.parse(data)),
+      close: () => {},
+    } as any;
+    const session = new GatewaySession(mockWs);
+    const repos = createRepos(db);
+
+    session.identify(
+      { id: "ready-hidden-bot", username: "ReadyHiddenBot", bot: true, avatar: null, discriminator: "0000", global_name: null },
+      dispatcher,
+      repos.guilds,
+      repos.channels,
+      repos.readStates,
+      repos.permissions,
+      repos.roles,
+      repos.members,
+    );
+
+    const ready = payloads.find((payload) => payload.t === "READY")!;
+    const guild = ready.d.guilds.find((item: { id: string }) => item.id === defaultGuildId);
+    expect(guild.channels).not.toContainEqual(expect.objectContaining({ id: generalId }));
+  });
+
   it("human user always receives messages regardless of permissions", async () => {
     const dispatched: { event: string; data: unknown }[] = [];
     const mockWs = {

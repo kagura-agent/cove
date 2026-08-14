@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import Database from "better-sqlite3";
-import { initDb } from "../db/schema.js";
+import { initDb, seedChannels } from "../db/schema.js";
+import { runMigrations } from "../db/migrations/index.js";
 import { snowflakeToTimestamp } from "@cove/shared";
 import * as fs from "fs";
 import * as os from "os";
@@ -11,10 +12,57 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 22", () => {
+  it("fresh DB gets user_version = 33 with generic agent run ledger tables", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(26);
+    expect(version).toBe(33);
+
+    const recurringColumns = db.prepare("PRAGMA table_info(recurring_tasks)").all() as Array<{ name: string; dflt_value: string | null }>;
+    expect(recurringColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      "id", "channel_id", "guild_id", "created_by", "title", "interval_ms",
+      "enabled", "assignee_id", "heartbeat_interval_ms", "last_task_id", "last_spawned_at", "occurrence_mode", "next_run_at",
+    ]));
+    expect(recurringColumns.map((column) => column.name)).not.toContain("schedule_type");
+    expect(recurringColumns.find((column) => column.name === "occurrence_mode")).toMatchObject({ dflt_value: "'same_task'" });
+    expect(recurringColumns.find((column) => column.name === "next_run_at")).toMatchObject({ dflt_value: "0" });
+    const taskColumns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>;
+    expect(taskColumns.map((column) => column.name)).toEqual(expect.arrayContaining(["recurring_id", "recurring_seq"]));
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='task_runs'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='task_run_events'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_runs'").get()).toBeTruthy();
+    db.close();
+  });
+
+  it("backfills interval templates and disables unsupported completion templates", () => {
+    const db = initDb();
+    const guildId = (db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string }).id;
+    seedChannels(db, guildId);
+    const channelId = (db.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string }).id;
+    db.exec("DROP TABLE recurring_tasks");
+    db.exec(`
+      CREATE TABLE recurring_tasks (
+        id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '', assignee_id TEXT, created_by TEXT NOT NULL,
+        schedule_type TEXT NOT NULL, interval_ms INTEGER NOT NULL DEFAULT 0,
+        occurrence_mode TEXT NOT NULL DEFAULT 'new_task', enabled INTEGER NOT NULL DEFAULT 1,
+        last_task_id TEXT, last_spawned_at INTEGER NOT NULL DEFAULT 0,
+        heartbeat_interval_ms INTEGER NOT NULL DEFAULT 300000, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      )
+    `);
+    db.prepare(
+      "INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, schedule_type, interval_ms, occurrence_mode, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run("recurring-1", guildId, channelId, "Daily report", "", null, "creator", "interval", 60_000, "new_task", 1, null, 0, 300000, 1, 1_000);
+    db.prepare(
+      "INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, schedule_type, interval_ms, occurrence_mode, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run("recurring-2", guildId, channelId, "Legacy report", "", null, "creator", "on_complete", 0, "new_task", 1, null, 0, 300000, 1, 1_000);
+    db.pragma("user_version = 30");
+
+    runMigrations(db);
+
+    expect(db.prepare("SELECT id, next_run_at FROM recurring_tasks ORDER BY id").all()).toEqual([
+      { id: "recurring-1", next_run_at: 61_000 },
+      { id: "recurring-2", next_run_at: 0 },
+    ]);
     db.close();
   });
 
@@ -66,15 +114,21 @@ describe("versioned migration system", () => {
     db.close();
   });
 
-  it("throws on future DB version (newer than supported)", () => {
+  it("warns but does not throw on future DB version (newer than supported)", () => {
     const tmpFile = tmpDb();
     try {
-      const setup = new Database(tmpFile);
-      setup.pragma("journal_mode = WAL");
-      setup.pragma("user_version = 999");
-      setup.close();
+      // First initialize normally so all tables exist
+      initDb(tmpFile);
 
-      expect(() => initDb(tmpFile)).toThrow(/newer than supported/);
+      // Then bump version to simulate a future migration
+      const db = new Database(tmpFile);
+      db.pragma("user_version = 999");
+      db.close();
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(() => initDb(tmpFile)).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("newer than supported"));
+      warnSpy.mockRestore();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
@@ -102,7 +156,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(33);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -173,7 +227,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(33);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -199,7 +253,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(33);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -321,7 +375,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(33);
 
       db2.close();
     } finally {
@@ -393,7 +447,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(26);
+      expect(db.pragma("user_version", { simple: true })).toBe(33);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -571,7 +625,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(26);
+      expect(version).toBe(33);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -623,7 +677,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(26);
+      expect(db2.pragma("user_version", { simple: true })).toBe(33);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;

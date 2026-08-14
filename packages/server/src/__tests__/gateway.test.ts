@@ -134,6 +134,57 @@ describe("GatewayDispatcher guild-scoped broadcasting", () => {
     });
   });
 
+  describe("agent abort runs", () => {
+    it("keeps concurrent agents independent and makes a repeated request idempotent", () => {
+      dispatcher.typingStart("chan-1", { id: "user-1", username: "u1" }, "guild-a", true);
+      dispatcher.typingStart("chan-1", { id: "user-2", username: "u2" }, "guild-a", true);
+
+      const typingCalls = vi.mocked(sessionA.dispatch).mock.calls.filter(([event]) => event === "TYPING_START");
+      const firstRunId = (typingCalls[0][1] as { run_id: string }).run_id;
+      const secondRunId = (typingCalls[1][1] as { run_id: string }).run_id;
+
+      const first = dispatcher.requestAgentAbort("chan-1", "user-1", firstRunId, { id: "user-2", username: "requester" });
+      const second = dispatcher.requestAgentAbort("chan-1", "user-2", secondRunId, { id: "user-1", username: "requester" });
+
+      expect(first.status).toBe("requested");
+      expect(second.status).toBe("requested");
+      expect(dispatcher.requestAgentAbort("chan-1", "user-1", firstRunId, { id: "user-2", username: "requester" })).toMatchObject({ status: "already_requested", requestId: first.status === "requested" ? first.requestId : undefined });
+      expect(sessionA.dispatch).toHaveBeenCalledWith("AGENT_ABORT_REQUEST", expect.objectContaining({ target_user_id: "user-1" }));
+      expect(sessionB.dispatch).toHaveBeenCalledWith("AGENT_ABORT_REQUEST", expect.objectContaining({ target_user_id: "user-2" }));
+    });
+
+    it("allows a fresh typing run to be aborted after the prior run expires", () => {
+      vi.useFakeTimers();
+      try {
+        dispatcher.typingStart("chan-1", { id: "user-1", username: "u1" }, "guild-a", true);
+        const firstRunId = (vi.mocked(sessionA.dispatch).mock.calls.find(([event]) => event === "TYPING_START")![1] as { run_id: string }).run_id;
+        expect(dispatcher.requestAgentAbort("chan-1", "user-1", firstRunId, { id: "user-2", username: "requester" }).status).toBe("requested");
+
+        vi.advanceTimersByTime(8_001);
+        dispatcher.typingStart("chan-1", { id: "user-1", username: "u1" }, "guild-a", true);
+        const typingCalls = vi.mocked(sessionA.dispatch).mock.calls.filter(([event]) => event === "TYPING_START");
+        const nextRunId = (typingCalls.at(-1)![1] as { run_id: string }).run_id;
+        expect(nextRunId).not.toBe(firstRunId);
+        expect(dispatcher.requestAgentAbort("chan-1", "user-1", nextRunId, { id: "user-2", username: "requester" }).status).toBe("requested");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("relays a result only to the original requester and clears only the aborted run", () => {
+      dispatcher.typingStart("chan-1", { id: "user-1", username: "u1" }, "guild-a", true);
+      const typingCall = vi.mocked(sessionA.dispatch).mock.calls.find(([event]) => event === "TYPING_START")!;
+      const runId = (typingCall[1] as { run_id: string }).run_id;
+      const request = dispatcher.requestAgentAbort("chan-1", "user-1", runId, { id: "user-2", username: "requester" });
+      expect(request.status).toBe("requested");
+      if (request.status !== "requested") throw new Error("expected requested abort");
+
+      expect(dispatcher.agentAbortResult(request.requestId, "user-1", "denied")).toBe(true);
+      expect(sessionB.dispatch).toHaveBeenCalledWith("AGENT_ABORT_RESULT", expect.objectContaining({ request_id: request.requestId, status: "denied" }));
+      expect(dispatcher.agentAbortResult(request.requestId, "user-1", "denied")).toBe(false);
+    });
+  });
+
   describe("presenceUpdate", () => {
     it("sends online to sessions sharing a guild", () => {
       const sessionA2 = mockSession("s3", "user-3", ["guild-a"]);

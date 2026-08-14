@@ -313,8 +313,18 @@ textarea:focus-visible {
 
 .discord-msg-row { position: relative; transition: background-color 0.1s ease; }
 .discord-msg-row:hover { background: var(--bg-modifier-hover); }
-.discord-msg-row .compact-ts { position: absolute; left: 0; width: var(--compact-ts-width); text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-muted); line-height: 22px; opacity: 0; user-select: none; top: 4px; transition: opacity 0.1s ease; }
+.discord-msg-row .compact-ts { position: absolute; left: 0; width: var(--compact-ts-width); text-align: right; padding-right: 4px; font-size: 11px; color: var(--text-muted); line-height: 22px; opacity: 0; user-select: none; top: 4px; transition: opacity 0.1s ease; white-space: nowrap; overflow: hidden; }
 .discord-msg-row:hover .compact-ts { opacity: 1; }
+
+/* Typing indicator dot animation */
+@keyframes typingDot {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Execution details in message header — visible on hover only */
+.discord-msg-row .execution-details-inline { opacity: 0; transition: opacity 0.1s ease; margin-left: 6px; }
+.discord-msg-row:hover .execution-details-inline { opacity: 1; }
 
 /* ── Settings modal ───────────────────────────────────────── */
 

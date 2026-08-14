@@ -193,6 +193,63 @@ describe("Cove API — Discord-compatible", () => {
       expect(new Date(msg.timestamp).toISOString()).toBe(msg.timestamp);
     });
 
+    it("creates an image attachment with its caption from multipart form data", async () => {
+      const bot = await createBotUser("image-bot", "Image Bot");
+      await grantViewChannel(generalId, "image-bot");
+      const form = new FormData();
+      form.set("payload_json", JSON.stringify({ content: "Look at this" }));
+      form.set("files[0]", new Blob([Buffer.from("gif89a")], { type: "image/gif" }), "reaction.gif");
+
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${bot.token}` },
+        body: form,
+      });
+
+      expect(res.status).toBe(201);
+      const message = await res.json() as Message;
+      expect(message.content).toBe("Look at this");
+      expect(message.attachments).toHaveLength(1);
+      expect(message.attachments[0]).toMatchObject({ filename: "reaction.gif", content_type: "image/gif", size: 6 });
+      expect(message.attachments[0]?.url).toContain(`/attachments/${defaultGuildId}/${generalId}/`);
+    });
+
+    it("rejects unsupported multipart upload types without creating a message", async () => {
+      const bot = await createBotUser("upload-bot", "Upload Bot");
+      await grantViewChannel(generalId, "upload-bot");
+      const form = new FormData();
+      form.set("payload_json", JSON.stringify({ content: "This must fail" }));
+      form.set("files[0]", new Blob(["not an image"], { type: "text/plain" }), "note.txt");
+
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${bot.token}` },
+        body: form,
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ message: "Unsupported file type: text/plain (allowed: jpeg, png, gif, webp)", code: 50035 });
+      expect((db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ?").get(generalId) as { count: number }).count).toBe(0);
+    });
+
+    it("rejects attachments over the 8 MiB upload limit", async () => {
+      const bot = await createBotUser("large-upload-bot", "Large Upload Bot");
+      await grantViewChannel(generalId, "large-upload-bot");
+      const form = new FormData();
+      form.set("payload_json", JSON.stringify({ content: "Too large" }));
+      form.set("files[0]", new Blob([new Uint8Array(8 * 1024 * 1024 + 1)], { type: "image/png" }), "large.png");
+
+      const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${bot.token}` },
+        body: form,
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ code: 40005, message: "File too large: large.png (max 8MB)" });
+      expect((db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ?").get(generalId) as { count: number }).count).toBe(0);
+    });
+
     it("returns 401 when no auth header", async () => {
       const res = await app.request(`${API_PREFIX}/channels/${generalId}/messages`, {
         method: "POST",

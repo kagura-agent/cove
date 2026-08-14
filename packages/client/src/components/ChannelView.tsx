@@ -7,6 +7,7 @@ import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { ChatArea } from "./ChatArea";
 import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
+import { AgentRunCard } from "./AgentRunCard";
 import { MemberList } from "./MemberList";
 import { FilesSidebar } from "./FilesSidebar";
 import { TaskPanel } from "./TaskPanel";
@@ -29,6 +30,9 @@ const styles = {
   tabBar: { display: "flex", alignItems: "center", gap: 0, background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", paddingLeft: "var(--content-pad)" } as CSSProperties,
   tab: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 500, cursor: "pointer", color: "var(--text-muted)", borderBottom: "2px solid transparent", transition: "color 0.15s, border-color 0.15s" } as CSSProperties,
   tabActive: { padding: "8px 16px", fontSize: "var(--font-size-sm)", fontWeight: 600, cursor: "pointer", color: "var(--header-primary)", borderBottom: "2px solid var(--accent, #5865f2)", transition: "color 0.15s, border-color 0.15s" } as CSSProperties,
+  mobileMembersBackdrop: { position: "fixed", inset: 0, background: "var(--bg-overlay-strong)", zIndex: 20, opacity: 0, pointerEvents: "none" as const, transition: "opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)" } as CSSProperties,
+  mobileMembersBackdropVisible: { opacity: 1, pointerEvents: "auto" as const } as CSSProperties,
+  membersOpenWrapper: { display: "contents" } as CSSProperties,
 };
 
 export function ChannelView() {
@@ -101,6 +105,8 @@ export function ChannelView() {
     navigateRef.current(url, { replace: true });
   }, [guildId, channelId, searchParams]);
 
+  const toggleMembers = () => setMembersOpen((open) => !open);
+
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragStartX.current = e.clientX;
@@ -126,7 +132,7 @@ export function ChannelView() {
         <div style={styles.chatBody} className="chat-body-cell">
           <ChatArea
             onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-            onMembersClick={() => setMembersOpen(!membersOpen)}
+            onMembersClick={toggleMembers}
             membersOpen={membersOpen}
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -136,12 +142,22 @@ export function ChannelView() {
         {activeTab === "chat" && (
           <div style={styles.chatFooter} className="chat-footer-cell">
             {channelId && <ReplyBar channelId={channelId} />}
+            {channelId && <AgentRunCard channelId={channelId} guildId={guildId} />}
             {channelId && <MessageInput channelId={channelId} />}
           </div>
         )}
       </div>
 
-      {!threadId && membersOpen && <MemberList />}
+      <div
+        className="mobile-members-backdrop"
+        onClick={() => setMembersOpen(false)}
+        style={{ ...styles.mobileMembersBackdrop, ...(membersOpen ? styles.mobileMembersBackdropVisible : {}) }}
+      />
+      {membersOpen && (
+        <div className="members-open" style={styles.membersOpenWrapper}>
+          <MemberList />
+        </div>
+      )}
       {threadId && (
         <>
           <div

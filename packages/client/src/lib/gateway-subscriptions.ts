@@ -112,7 +112,7 @@ export function setupGatewaySubscriptions(): void {
           ...s.typingUsers,
           [data.channel_id]: [
             ...existing,
-            { userId: data.user_id, username: data.username ?? data.user_id, timeout },
+            { userId: data.user_id, username: data.username ?? data.user_id, timeout, abortable: data.abortable, runId: data.run_id },
           ],
         },
       };

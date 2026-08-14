@@ -69,6 +69,41 @@ async function settledReject(promise: Promise<unknown>): Promise<Error> {
 /*  1. 204 No Content                                                  */
 /* ------------------------------------------------------------------ */
 
+describe("multipart media messages", () => {
+  it("sends caption and files as multipart with bot authorization", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(201, { id: "media-1" }));
+
+    const result = await client.sendMediaMessage("ch1", "A caption", [{
+      buffer: Buffer.from("gif-bytes"), filename: "reaction.gif", contentType: "image/gif",
+    }]);
+
+    expect(result).toEqual({ id: "media-1" });
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/api/v10/channels/ch1/messages`);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ Authorization: `Bot ${TOKEN}` });
+    expect(options.body).toBeInstanceOf(FormData);
+    const form = options.body as FormData;
+    expect(form.get("payload_json")).toBe(JSON.stringify({ content: "A caption" }));
+    const file = form.get("files[0]") as File;
+    expect(file.name).toBe("reaction.gif");
+    expect(file.type).toBe("image/gif");
+    expect(await file.text()).toBe("gif-bytes");
+  });
+
+  it("surfaces rejected media uploads", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(400, { message: "Unsupported file type" }));
+
+    await expect(client.sendMediaMessage("ch1", "", [{
+      buffer: Buffer.from("not-an-image"), filename: "note.txt", contentType: "text/plain",
+    }])).rejects.toThrow(/Cove media upload.*400.*Unsupported file type/);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  1. 204 No Content                                                  */
+/* ------------------------------------------------------------------ */
+
 describe("204 No Content", () => {
   it("deleteMessage returns undefined on 204", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse(204));
@@ -243,5 +278,50 @@ describe("sendTyping timeout", () => {
     const call = mockFetch.mock.calls[0];
     const options = call[1] as RequestInit;
     expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe("task recurrence endpoints", () => {
+  it("maps recurrence fields on task creation and update", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(201, { task_id: "task-1" }))
+      .mockResolvedValueOnce(mockResponse(200, { task_id: "task-1" }));
+
+    await client.createTask("channel-1", {
+      title: "Daily",
+      recurrence: { interval_ms: 60_000, occurrence_mode: "new_task", enabled: true },
+    });
+    await client.updateTask("task-1", {
+      description: "Updated description",
+      recurrence: { enabled: false },
+    });
+
+    expect(mockFetch.mock.calls.map(([url, options]) => [url, (options as RequestInit).method, (options as RequestInit).body])).toEqual([
+      ["https://cove.test/api/v10/channels/channel-1/tasks", "POST", JSON.stringify({ title: "Daily", recurrence: { interval_ms: 60_000, occurrence_mode: "new_task", enabled: true } })],
+      ["https://cove.test/api/v10/tasks/task-1", "PATCH", JSON.stringify({ description: "Updated description", recurrence: { enabled: false } })],
+    ]);
+  });
+
+  it("maps create, list, get, update, and delete to recurring task routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(201, { id: "recurring-1" }))
+      .mockResolvedValueOnce(mockResponse(200, [{ id: "recurring-1" }]))
+      .mockResolvedValueOnce(mockResponse(200, { id: "recurring-1" }))
+      .mockResolvedValueOnce(mockResponse(200, { id: "recurring-1", enabled: false }))
+      .mockResolvedValueOnce(mockResponse(204));
+
+    await client.createRecurringTask("channel-1", { title: "Daily", interval_ms: 60_000 });
+    await client.getRecurringTasks("channel-1");
+    await client.getRecurringTask("recurring-1");
+    await client.updateRecurringTask("recurring-1", { enabled: false });
+    await client.deleteRecurringTask("recurring-1");
+
+    expect(mockFetch.mock.calls.map(([url, options]) => [url, (options as RequestInit).method, (options as RequestInit).body])).toEqual([
+      ["https://cove.test/api/v10/channels/channel-1/recurring-tasks", "POST", JSON.stringify({ title: "Daily", interval_ms: 60_000 })],
+      ["https://cove.test/api/v10/channels/channel-1/recurring-tasks", "GET", undefined],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "GET", undefined],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "PATCH", JSON.stringify({ enabled: false })],
+      ["https://cove.test/api/v10/recurring-tasks/recurring-1", "DELETE", undefined],
+    ]);
   });
 });

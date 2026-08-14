@@ -6,12 +6,15 @@ import { type CoveAccount, COVE_TEXT_CHUNK_LIMIT } from "./types.js";
 import { CoveRestClient } from "./rest-client.js";
 import { CoveGatewayClient } from "./gateway-client.js";
 import { dispatchMessage } from "./dispatch.js";
+import { createCoveOutboundBridgeAdapter } from "./outbound.js";
 import { createChannelRunQueue } from "openclaw/plugin-sdk/channel-lifecycle";
 import { createChannelInboundDebouncer, shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-inbound";
 import { mergeAbortSignals } from "./utils.js";
+import { shouldDispatchImmediately } from "./control-message.js";
 import { invalidateCoveMd } from "./cove-md-cache.js";
 import { resolveTargetsWithOptionalToken } from "openclaw/plugin-sdk/target-resolver-runtime";
 import { createAccountListHelpers, resolveMergedAccountConfig } from "openclaw/plugin-sdk/account-resolution";
+import type { Message } from "@cove/shared";
 
 const { listAccountIds: listCoveAccountIds, resolveDefaultAccountId: resolveDefaultCoveAccountId } = createAccountListHelpers("cove");
 
@@ -25,6 +28,18 @@ class SentMessageTracker {
     this.ids.add(id);
   }
   has(id: string): boolean { return this.ids.has(id); }
+}
+
+export function shouldNotifyAgentForMessage(message: Pick<Message, "metadata">, agentId: string, botUserId?: string): boolean {
+  if (!message.metadata) return true;
+  try {
+    const metadata = JSON.parse(message.metadata) as { skip_agent_notify?: boolean; content_type?: string; assignee_id?: string };
+    if (metadata.skip_agent_notify) return false;
+    if (metadata.content_type !== "task_assignment" && metadata.content_type !== "task_heartbeat") return true;
+    return typeof metadata.assignee_id === "string" && (metadata.assignee_id === agentId || metadata.assignee_id === botUserId);
+  } catch {
+    return true;
+  }
 }
 
 const restClients = new Map<string, CoveRestClient>();
@@ -44,7 +59,18 @@ function resolveAccount(cfg: any, accountId?: string | null): CoveAccount {
   if (!token) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing token — set channels.cove.accounts.<id>.token`);
   const agentId = merged?.agentId;
   if (!agentId) throw new Error(`cove: account '${effectiveAccountId ?? "default"}' missing agentId — set channels.cove.accounts.<id>.agentId`);
-  return { accountId: accountId ?? null, token, baseUrl: merged?.baseUrl ?? "http://localhost:3400", guildId: merged?.guildId ?? null, agentId, agentName: merged?.agentName ?? agentId, allowFrom: merged?.allowFrom ?? [], dmPolicy: merged?.dmSecurity };
+  return {
+    accountId: accountId ?? null,
+    token,
+    baseUrl: merged?.baseUrl ?? "http://localhost:3400",
+    guildId: merged?.guildId ?? null,
+    agentId,
+    agentName: merged?.agentName ?? agentId,
+    allowFrom: merged?.allowFrom ?? [],
+    groupAllowFrom: merged?.groupAllowFrom ?? [],
+    dmPolicy: merged?.dmSecurity,
+    groupPolicy: merged?.groupPolicy,
+  };
 }
 
 async function coveSendText(ctx: any): Promise<{ messageId: string }> {
@@ -54,14 +80,22 @@ async function coveSendText(ctx: any): Promise<{ messageId: string }> {
   return { messageId: result.id };
 }
 
+async function coveSendMedia(ctx: any): Promise<{ messageId: string }> {
+  const account = resolveAccount(ctx.cfg, ctx.accountId);
+  const adapter = createCoveOutboundBridgeAdapter({ agentId: account.agentId });
+  const result = await adapter.sendMedia!({ ...ctx, to: ctx.to ?? "home", text: ctx.text ?? "" });
+  if (!result.messageId) throw new Error("cove: media upload completed without a message ID");
+  return { messageId: result.messageId };
+}
+
 const coveOutbound = {
   base: { deliveryMode: "direct" as const, textChunkLimit: COVE_TEXT_CHUNK_LIMIT, chunkerMode: "markdown" as const },
-  attachedResults: { channel: "cove", sendText: coveSendText },
+  attachedResults: { channel: "cove", sendText: coveSendText, sendMedia: coveSendMedia },
 };
 
 const coveMessageBaseAdapter = createChannelMessageAdapterFromOutbound({
   id: "cove",
-  outbound: { sendText: async (ctx: any) => coveSendText(ctx) },
+  outbound: { sendText: async (ctx: any) => coveSendText(ctx), sendMedia: async (ctx: any) => coveSendMedia(ctx) },
 });
 
 const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
@@ -130,6 +164,10 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           onError: (error) => log?.error?.(`cove: message run failed: ${error}`),
         });
 
+        // Local controllers only govern Cove presentation (typing/drafts). The
+        // OpenClaw dispatcher remains responsible for cancelling the real run.
+        const activeDispatches = new Map<string, AbortController>();
+
         // Queue depth guard — SDK queue is unbounded, add safety limits
         const QUEUE_WARN_THRESHOLD = 10;
         const QUEUE_DROP_THRESHOLD = 20;
@@ -188,13 +226,16 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
             }
 
             runQueue.enqueue(channelId, async ({ lifecycleSignal }) => {
+              const presentationAbort = new AbortController();
+              activeDispatches.set(channelId, presentationAbort);
               try {
-                const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal]);
+                const abortSignal = mergeAbortSignals([ctx.abortSignal, lifecycleSignal, presentationAbort.signal]);
                 await dispatchMessage({
                   message: mergedMessage, account, restClient, channelRuntime, cfg,
                   accountId: ctx.accountId, abortSignal, log,
                 });
               } finally {
+                if (activeDispatches.get(channelId) === presentationAbort) activeDispatches.delete(channelId);
                 trackDequeue(channelId);
               }
             });
@@ -242,17 +283,55 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
           } catch (err: any) { log?.warn?.(`cove: failed to enqueue reaction event: ${err.message}`); }
         });
 
+        gatewayClient.on("agentAbortRequest", (request) => {
+          // This private gateway event is emitted only to the selected bot. It
+          // recreates the same authenticated text abort ingress as #520, so
+          // OpenClaw remains the authority for command access and run aborts.
+          const controlMessage = {
+            id: `cove-abort-${request.request_id}`,
+            channel_id: request.channel_id,
+            content: "stop",
+            timestamp: new Date().toISOString(),
+            author: { id: request.requester.id, username: request.requester.username, global_name: request.requester.username, bot: false },
+          } as any;
+          void dispatchMessage({
+            message: controlMessage, account, restClient, channelRuntime, cfg,
+            accountId: ctx.accountId, abortSignal: ctx.abortSignal, log,
+            onAuthorizedAbort: () => {
+              activeDispatches.get(request.channel_id)?.abort();
+              void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "aborted").catch((error) =>
+                log?.warn?.(`cove: failed to report authorized abort: ${error.message}`));
+            },
+            onAbortRejected: () => {
+              void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "denied").catch((error) =>
+                log?.warn?.(`cove: failed to report rejected abort: ${error.message}`));
+            },
+          }).catch((error) => {
+            log?.error?.(`cove: UI abort dispatch failed: ${error}`);
+            void restClient.reportAbortResult(request.channel_id, request.target_user_id, request.request_id, "failed").catch(() => {});
+          });
+        });
+
         gatewayClient.on("messageCreate", async (message) => {
           if (gatewayClient.botUser && message.author.id === gatewayClient.botUser.id) { sentMessages.add(message.id); return; }
-          // Skip card messages with skip_agent_notify (task cards in parent channel)
-          if (message.metadata) {
-            try {
-              const meta = JSON.parse(message.metadata);
-              if (meta.skip_agent_notify) { log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (skip_agent_notify)`); return; }
-            } catch {}
+          if (!shouldNotifyAgentForMessage(message, account.agentId, gatewayClient.botUser?.id)) {
+            log?.info?.(`cove: skipping agent-notify for [${message.channel_id}] (not targeted to this agent)`);
+            return;
           }
           if (message.author.bot && !message.webhook_id) return;
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
+          if (shouldDispatchImmediately(message)) {
+            // Do not queue a stop behind the run it needs to cancel. dispatchMessage
+            // supplies CommandSource, CommandAuthorized, and SessionKey to OpenClaw's
+            // normal fast-abort path. Only after that ingress authorization succeeds,
+            // it also clears Cove's active typing/draft presentation for this channel.
+            void dispatchMessage({
+              message, account, restClient, channelRuntime, cfg,
+              accountId: ctx.accountId, abortSignal: ctx.abortSignal, log,
+              onAuthorizedAbort: () => activeDispatches.get(message.channel_id)?.abort(),
+            }).catch((error) => log?.error?.(`cove: control message dispatch failed: ${error}`));
+            return;
+          }
           debouncer.enqueue({ message });
         });
 

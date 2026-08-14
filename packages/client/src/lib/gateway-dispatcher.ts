@@ -1,5 +1,5 @@
 import type { Message, Channel, Guild } from "../types";
-import type { Role, Task, ThreadMember } from "@cove/shared";
+import type { AgentRun, Role, Task, ThreadMember } from "@cove/shared";
 
 export interface ReadyGuild extends Guild {
   channels: Channel[];
@@ -11,7 +11,8 @@ export interface GatewayEventMap {
   MESSAGE_UPDATE: Message;
   MESSAGE_DELETE: { id: string; channel_id: string; guild_id?: string };
   MESSAGE_DELETE_BULK: { ids: string[]; channel_id: string };
-  TYPING_START: { channel_id: string; user_id: string; username?: string };
+  TYPING_START: { channel_id: string; user_id: string; username?: string; abortable?: boolean; run_id?: string };
+  AGENT_ABORT_RESULT: { request_id: string; channel_id: string; target_user_id: string; status: "aborted" | "denied" | "failed" };
   PRESENCE_UPDATE: { user: { id: string }; status: "online" | "offline" };
   READY: { user?: { id: string; username: string; avatar: string | null; bot: boolean }; guilds?: ReadyGuild[]; presences?: Array<{ user: { id: string }; status: string }>; read_state?: Array<{ channel_id: string; last_read_message_id: string | null; last_message_id: string | null }> };
   CHANNEL_CREATE: Channel;
@@ -41,6 +42,7 @@ export interface GatewayEventMap {
   TASK_CREATED: Task;
   TASK_UPDATED: Task;
   TASK_DELETED: Task;
+  AGENT_RUN_UPDATED: AgentRun;
 }
 
 type Handler<T> = (data: T) => void;

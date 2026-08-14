@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { Role, Task, Webhook } from "@cove/shared";
+import type { AgentRunTimeline, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -105,6 +105,11 @@ export function deleteBot(id: string) {
 }
 export function sendTyping(channelId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/typing`, { method: "POST" });
+}
+export function requestAgentAbort(channelId: string, targetUserId: string, runId: string) {
+  return api<{ status: "requested" | "already_requested"; requestId: string }>(`${API_PREFIX}/channels/${channelId}/typing/${targetUserId}/abort`, {
+    method: "POST", body: JSON.stringify({ run_id: runId }),
+  });
 }
 export function ackMessage(channelId: string, messageId: string) {
   return api<void>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/ack`, { method: "PUT" });
@@ -233,6 +238,14 @@ export function fetchThreadMessages(threadId: string, opts?: { before?: string; 
   return fetchMessages(threadId, opts); // threads are channels, same endpoint
 }
 
+export function fetchLatestAgentRun(channelId: string, threadId?: string) {
+  return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/agent-runs/latest${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`);
+}
+export function fetchAgentRun(runId: string) { return api<AgentRunTimeline>(`${API_PREFIX}/agent-runs/${runId}`); }
+export function fetchMessageAgentRun(channelId: string, messageId: string) {
+  return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/agent-run`);
+}
+
 export function sendThreadMessage(threadId: string, content: string, nonce?: string) {
   return sendMessage(threadId, content, nonce);
 }
@@ -315,17 +328,57 @@ export function deleteGuild(guildId: string) {
 export function fetchTasks(channelId: string) {
   return api<Task[]>(`${API_PREFIX}/channels/${channelId}/tasks`);
 }
-export function createTask(channelId: string, title: string, assigneeId?: string, description?: string, heartbeatIntervalMs?: number) {
-  return api<any>(`${API_PREFIX}/channels/${channelId}/tasks`, {
-    method: "POST",
-    body: JSON.stringify({ title, ...(assigneeId ? { assignee_id: assigneeId } : {}), ...(description ? { description } : {}), ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}) }),
+export function createTask(channelId: string, fields: CreateTaskFields) {
+  return api<Task>(`${API_PREFIX}/channels/${channelId}/tasks`, {
+    method: "POST", body: JSON.stringify(fields),
   });
 }
-export function updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }) {
+export function updateTask(taskId: string, fields: UpdateTaskFields) {
   return api<Task>(`${API_PREFIX}/tasks/${taskId}`, {
     method: "PATCH", body: JSON.stringify(fields),
   });
 }
 export function deleteTask(taskId: string) {
   return api<{ deleted: boolean }>(`${API_PREFIX}/tasks/${taskId}`, { method: "DELETE" });
+}
+
+export type { RecurringTaskOccurrenceMode } from "@cove/shared";
+
+export interface CreateRecurringTaskFields {
+  title: string;
+  description?: string;
+  assignee_id?: string;
+  interval_ms: number;
+  occurrence_mode: RecurringTaskOccurrenceMode;
+  heartbeat_interval_ms?: number;
+}
+
+export interface UpdateRecurringTaskFields {
+  title?: string;
+  description?: string;
+  assignee_id?: string | null;
+  interval_ms?: number;
+  occurrence_mode?: RecurringTaskOccurrenceMode;
+  enabled?: boolean;
+  heartbeat_interval_ms?: number;
+}
+
+export function fetchRecurringTasks(channelId: string) {
+  return api<RecurringTask[]>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`);
+}
+export function fetchRecurringTask(recurringTaskId: string) {
+  return api<RecurringTask>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`);
+}
+export function createRecurringTask(channelId: string, fields: CreateRecurringTaskFields) {
+  return api<RecurringTask>(`${API_PREFIX}/channels/${channelId}/recurring-tasks`, {
+    method: "POST", body: JSON.stringify(fields),
+  });
+}
+export function updateRecurringTask(recurringTaskId: string, fields: UpdateRecurringTaskFields) {
+  return api<RecurringTask>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, {
+    method: "PATCH", body: JSON.stringify(fields),
+  });
+}
+export function deleteRecurringTask(recurringTaskId: string) {
+  return api<{ deleted: boolean }>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, { method: "DELETE" });
 }

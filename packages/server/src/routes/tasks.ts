@@ -4,9 +4,23 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
-import { generateSnowflake, PermissionBits, TASK_STATUSES, type Message, type Task, type TaskStatus } from "@cove/shared";
+import {
+  PermissionBits,
+  TASK_STATUSES,
+  type CreateTaskFields,
+  type CreateTaskRecurrence,
+  type TaskStatus,
+  type UpdateTaskFields,
+  type UpdateTaskRecurrence,
+} from "@cove/shared";
+import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
+import { createRecurringTaskOccurrence, validateTaskRecurrence } from "../services/task-recurrence.js";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
+
+function hasField(value: object, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, field);
+}
 
 export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -21,11 +35,17 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       return c.json({ message: "Cannot create tasks inside a thread", code: 50035 }, 400);
     }
 
-    const body = await parseJsonBody<{ title: string; assignee_id?: string; description?: string; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<CreateTaskFields>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     const titleErr = validateString(body.title, "title", { required: true, maxLength: 200 });
     if (titleErr) return validationError(c, titleErr);
+
+    const hasRecurrence = hasField(body, "recurrence");
+    if (hasRecurrence) {
+      const recurrenceError = validateTaskRecurrence(body.recurrence, true);
+      if (recurrenceError) return validationError(c, recurrenceError);
+    }
 
     const assigneeId = body.assignee_id ?? null;
     if (assigneeId && !repos.members.exists(channel.guild_id, assigneeId)) {
@@ -33,112 +53,30 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     }
 
     const result = repos.db.transaction(() => {
-      const seq = repos.tasks.getNextSeq(channelId);
-      const now = Date.now();
-      const messageId = generateSnowflake();
-      const taskId = generateSnowflake();
-      const title = body.title.trim();
-
-      // 1. Card message — skip_agent_notify so it doesn't trigger agent sessions
-      const cardContent = JSON.stringify({ title, status: "open", assignee_id: assigneeId, seq });
-      const cardMetadata = JSON.stringify({ content_type: "task", skip_agent_notify: true });
-      repos.db.prepare(
-        "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(messageId, channelId, user.id, user.username, cardContent, now, cardMetadata, null);
-      const cardMessage: Message = {
-        id: messageId,
-        channel_id: channelId,
-        content: cardContent,
-        author: { id: user.id, username: user.username, bot: user.bot, avatar: user.avatar ?? null, discriminator: user.discriminator ?? "0", global_name: user.global_name ?? null },
-        timestamp: new Date(now).toISOString(),
-        edited_timestamp: null,
-        type: 0,
-        attachments: [],
-        embeds: [],
-        mentions: [],
-        mention_roles: [],
-        pinned: false,
-        tts: false,
-        mention_everyone: false,
-        metadata: cardMetadata,
-      };
-
-      // 2. Derive thread from card message (name: first 30 chars by codepoint)
-      const threadName = [...title].slice(0, 30).join("");
-      const thread = repos.threads.createFromMessage(
-        channel.guild_id,
-        channelId,
-        messageId,
-        threadName,
-        user.id,
-      );
-
-      // 3. Add assignee to thread members
-      if (assigneeId && assigneeId !== user.id) {
-        repos.threads.addMember(thread.id, assigneeId);
+      if (hasRecurrence) {
+        return createRecurringTaskOccurrence(repos, {
+          channel,
+          creator: user,
+          title: body.title,
+          description: body.description,
+          assigneeId,
+          heartbeatIntervalMs: body.heartbeat_interval_ms,
+          recurrence: body.recurrence as CreateTaskRecurrence,
+        }).occurrence;
       }
-      // Add channel owner if they are still a guild member and not already in thread
-      if (channel.owner_id && channel.owner_id !== user.id && channel.owner_id !== assigneeId) {
-        if (repos.members.exists(channel.guild_id, channel.owner_id)) {
-          repos.threads.addMember(thread.id, channel.owner_id);
-        }
-      }
-
-      // 4. Assignment message in thread — this is the signal that wakes the agent.
-      //    DB stores real author; WS frame rewrites to "system" (see below).
-      //    Preamble carries all instructions so agent doesn't need to understand "task".
-      const assignmentNow = Date.now();
-      const assignmentId = generateSnowflake();
-      const preamble = [
-        `This is a task assignment (task_id: ${taskId}).`,
-        `Title: ${title}`,
-        `工作属于这个 thread，就在这里做。`,
-        `开工时用 cove_task 工具设 status 为 in_progress（action: "update", taskId: "${taskId}", status: "in_progress"）。`,
-        `完成后用 cove_task 设 status 为 in_review 并 @通知相关人验收。`,
-        `不要用 curl 调 REST API，用 cove_task 工具。`,
-      ].join("\n");
-      const assignmentContent = preamble;
-      const assignmentMetadata = JSON.stringify({ content_type: "task_assignment" });
-      repos.db.prepare(
-        "INSERT INTO messages (id, channel_id, sender, sender_name, content, timestamp, metadata, edited_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(assignmentId, thread.id, user.id, user.username, assignmentContent, assignmentNow, assignmentMetadata, null);
-
-      // Build the WS frame for assignment — rewrite author to "system"
-      // so agent's self-loop filter doesn't discard it when agent assigns to itself
-      const assignmentMessage: Message = {
-        id: assignmentId,
-        channel_id: thread.id,
-        content: assignmentContent,
-        author: { id: "system", username: "System", bot: false, avatar: null, discriminator: "0", global_name: "System" },
-        timestamp: new Date(assignmentNow).toISOString(),
-        edited_timestamp: null,
-        type: 0,
-        attachments: [],
-        embeds: [],
-        mentions: [],
-        mention_roles: [],
-        pinned: false,
-        tts: false,
-        mention_everyone: false,
-        metadata: assignmentMetadata,
-      };
-
-      // 5. Task row — written last. Agent may receive message before this exists.
-      const task = repos.tasks.create(taskId, channelId, thread.id, messageId, assigneeId, title, seq, { guild_id: channel.guild_id, description: body.description ?? "", created_by: user.id });
-
-      // Set heartbeat — default to 10 min if not specified
-      const heartbeatMs = (body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0) ? body.heartbeat_interval_ms : 600000;
-      repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatMs, heartbeat_last_at: Date.now() });
-      task.heartbeat_interval_ms = heartbeatMs;
-      task.heartbeat_last_at = Date.now();
-
-      return { cardMessage, thread, assignmentMessage, task };
+      return createTaskOccurrence(repos, {
+        channel,
+        creator: user,
+        title: body.title,
+        description: body.description,
+        assigneeId,
+        heartbeatIntervalMs: body.heartbeat_interval_ms,
+      });
     })();
 
-    // Broadcast outside transaction
-    dispatcher?.messageCreate(result.cardMessage);   // skip_agent_notify in metadata
+    dispatcher?.messageCreate(result.cardMessage);
     dispatcher?.threadCreate(result.thread);
-    dispatcher?.messageCreate(result.assignmentMessage);  // this wakes the agent
+    if (result.assignmentMessage) dispatcher?.messageCreate(result.assignmentMessage);
     dispatcher?.taskCreated(result.task);
 
     return c.json(result.task, 201);
@@ -152,6 +90,17 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     const tasks = repos.tasks.listByChannel(channelId);
     return c.json(tasks);
+  });
+
+  app.get("/tasks/by-thread/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    const task = repos.tasks.getByThreadId(threadId);
+    if (!task) return c.json(null, 200);
+
+    const user = c.get("botUser");
+    await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
+
+    return c.json(task);
   });
 
   app.get("/tasks/:taskId", async (c) => {
@@ -173,11 +122,11 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
-    const body = await parseJsonBody<{ status?: string; assignee_id?: string | null; title?: string; description?: string; heartbeat_interval_ms?: number }>(c);
+    const body = await parseJsonBody<UpdateTaskFields>(c);
     if (!body) return validationError(c, "Invalid JSON");
 
     if (body.status !== undefined && !VALID_STATUSES.has(body.status as TaskStatus)) {
-      return validationError(c, "status must be one of: open, in_progress, in_review, done");
+      return validationError(c, "status must be one of: open, in_progress, in_review, done, cancelled");
     }
 
     if (body.title !== undefined) {
@@ -192,19 +141,111 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       }
     }
 
-    const updated = repos.tasks.update(taskId, {
+    const hasRecurrence = hasField(body, "recurrence");
+    const recurrence = body.recurrence;
+    if (hasRecurrence && recurrence !== null) {
+      const recurrenceError = validateTaskRecurrence(recurrence, !task.recurrence);
+      if (recurrenceError) return validationError(c, recurrenceError);
+    }
+    if (hasRecurrence && task.recurrence && task.recurrence.root_task_id !== taskId) {
+      return validationError(c, "recurrence must be updated through its root task");
+    }
+
+    const assigneeChanged = body.assignee_id !== undefined && body.assignee_id !== task.assignee_id;
+    const assigneeId = body.assignee_id === undefined ? task.assignee_id : body.assignee_id;
+    const heartbeatFields: { heartbeat_interval_ms?: number; heartbeat_last_at?: number } = assigneeId === null
+      ? task.heartbeat_interval_ms === 0 && task.heartbeat_last_at === 0
+        ? {}
+        : { heartbeat_interval_ms: 0, heartbeat_last_at: 0 }
+      : assigneeChanged
+        ? {
+            heartbeat_interval_ms: body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0
+              ? body.heartbeat_interval_ms
+              : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS,
+            heartbeat_last_at: Date.now(),
+          }
+        : body.heartbeat_interval_ms !== undefined
+          ? { heartbeat_interval_ms: body.heartbeat_interval_ms }
+          : {};
+    const taskFields = {
       status: body.status,
       assignee_id: body.assignee_id,
       title: body.title?.trim(),
       description: body.description,
-      heartbeat_interval_ms: body.heartbeat_interval_ms,
-    });
+      ...heartbeatFields,
+    };
+    const templateFields = {
+      ...(body.title !== undefined ? { title: body.title.trim() } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.assignee_id !== undefined ? { assignee_id: body.assignee_id } : {}),
+      ...(heartbeatFields.heartbeat_interval_ms !== undefined ? { heartbeat_interval_ms: heartbeatFields.heartbeat_interval_ms } : {}),
+    };
 
-    if (updated) {
-      dispatcher?.taskUpdated(updated);
-    }
+    const result = repos.db.transaction(() => {
+      const updatedTask = repos.tasks.update(taskId, taskFields)!;
+      let assignmentMessage: ReturnType<typeof createTaskAssignmentMessage> | undefined;
+      if (assigneeChanged && updatedTask.assignee_id) {
+        const channel = repos.channels.getById(updatedTask.channel_id);
+        const creator = repos.users.getById(updatedTask.created_by);
+        if (channel && creator) {
+          repos.threads.addMember(updatedTask.thread_id, updatedTask.assignee_id);
+          assignmentMessage = createTaskAssignmentMessage(repos, {
+            threadId: updatedTask.thread_id,
+            creator,
+            taskId: updatedTask.task_id,
+            title: updatedTask.title,
+            description: updatedTask.description,
+            assigneeId: updatedTask.assignee_id,
+          });
+        }
+      }
+      const linkedRecurrence = task.recurrence;
 
-    return c.json(updated);
+      if (!hasRecurrence) {
+        if (linkedRecurrence && linkedRecurrence.root_task_id === taskId) repos.recurringTasks.update(linkedRecurrence.id, templateFields);
+        return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!], assignmentMessage };
+      }
+
+      if (recurrence === null) {
+        if (!linkedRecurrence) return { task: repos.tasks.getById(taskId)!, affected: [repos.tasks.getById(taskId)!], assignmentMessage };
+        const affectedTaskIds = repos.tasks.listByRecurringId(linkedRecurrence.id).map((occurrence) => occurrence.task_id);
+        repos.tasks.clearRecurrenceAssociation(linkedRecurrence.id);
+        repos.recurringTasks.delete(linkedRecurrence.id);
+        const affected = affectedTaskIds.map((occurrenceId) => repos.tasks.getById(occurrenceId)!).filter(Boolean);
+        return { task: repos.tasks.getById(taskId)!, affected, assignmentMessage };
+      }
+
+      const recurrenceFields = recurrence as UpdateTaskRecurrence;
+      let recurrenceId = linkedRecurrence?.id;
+      if (recurrenceId) {
+        repos.recurringTasks.update(recurrenceId, { ...templateFields, ...recurrenceFields });
+      } else {
+        const template = repos.recurringTasks.create({
+          guild_id: updatedTask.guild_id,
+          channel_id: updatedTask.channel_id,
+          title: updatedTask.title,
+          description: updatedTask.description,
+          assignee_id: updatedTask.assignee_id,
+          created_by: updatedTask.created_by,
+          interval_ms: recurrenceFields.interval_ms!,
+          occurrence_mode: recurrenceFields.occurrence_mode,
+          enabled: recurrenceFields.enabled,
+          heartbeat_interval_ms: updatedTask.heartbeat_interval_ms,
+        });
+        repos.tasks.associateRecurrence(taskId, template.id);
+        repos.recurringTasks.update(template.id, {
+          last_task_id: taskId,
+          last_spawned_at: Date.now(),
+        });
+        recurrenceId = template.id;
+      }
+      const affected = repos.tasks.listByRecurringId(recurrenceId);
+      return { task: repos.tasks.getById(taskId)!, affected, assignmentMessage };
+    })();
+
+    if (result.assignmentMessage) dispatcher?.messageCreate(result.assignmentMessage);
+    for (const affectedTask of result.affected) dispatcher?.taskUpdated(affectedTask);
+    return c.json(result.task);
   });
 
   app.delete("/tasks/:taskId", async (c) => {

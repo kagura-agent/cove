@@ -6,7 +6,7 @@
  * Includes retry logic with exponential backoff and 429 rate-limit handling.
  */
 
-import type { Channel, Message, Task } from "@cove/shared";
+import type { AgentRun, AgentRunEventType, Channel, CreateTaskFields, Message, RecurringTask, RecurringTaskOccurrenceMode, Task, UpdateTaskFields } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const MAX_RETRIES = 3;
@@ -127,6 +127,28 @@ export class CoveRestClient {
     });
   }
 
+  /** POST multipart message with a caption and one or more image attachments. */
+  async sendMediaMessage(channelId: string, content: string, files: Array<{ buffer: Buffer; filename: string; contentType: string }>): Promise<Message> {
+    if (files.length === 0) throw new Error("cove: sendMediaMessage requires at least one file");
+    const form = new FormData();
+    form.set("payload_json", JSON.stringify({ content }));
+    for (const [index, file] of files.entries()) {
+      form.append(`files[${index}]`, new Blob([file.buffer as unknown as BlobPart], { type: file.contentType }), file.filename);
+    }
+    const path = `${API_PREFIX}/channels/${channelId}/messages`;
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, { method: "POST", headers: { Authorization: `Bot ${this.token}` }, body: form, signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
+    } catch (cause) {
+      throw new Error(`cove: media upload request failed for ${path}`, { cause });
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new CoveApiError(res.status, `Cove media upload ${path} failed: ${res.status} ${detail}`);
+    }
+    return res.json() as Promise<Message>;
+  }
+
   /** PATCH /api/v10/channels/:id/messages/:msgId — edit a message. */
   async editMessage(channelId: string, messageId: string, content: string): Promise<Message> {
     return this.request("PATCH", `${API_PREFIX}/channels/${channelId}/messages/${messageId}`, {
@@ -156,8 +178,12 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:id/typing — send typing indicator. */
-  async sendTyping(channelId: string): Promise<void> {
-    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing`, undefined, AbortSignal.timeout(3000));
+  async sendTyping(channelId: string, abortable = false): Promise<void> {
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing${abortable ? "?abortable=1" : ""}`, undefined, AbortSignal.timeout(3000));
+  }
+
+  async reportAbortResult(channelId: string, targetUserId: string, requestId: string, status: "aborted" | "denied" | "failed"): Promise<void> {
+    return this.requestVoid("POST", `${API_PREFIX}/channels/${channelId}/typing/${targetUserId}/abort/${requestId}/result`, { status }, AbortSignal.timeout(3000));
   }
 
   /** POST /api/v10/channels/:channelId/webhooks — create a webhook. */
@@ -228,12 +254,8 @@ export class CoveRestClient {
   }
 
   /** POST /api/v10/channels/:channelId/tasks — create a task. */
-  async createTask(channelId: string, title: string, assigneeId?: string, description?: string): Promise<Task> {
-    return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, {
-      title,
-      ...(assigneeId ? { assignee_id: assigneeId } : {}),
-      ...(description ? { description } : {}),
-    });
+  async createTask(channelId: string, fields: CreateTaskFields): Promise<Task> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/tasks`, fields);
   }
 
   /** GET /api/v10/channels/:channelId/tasks — list tasks in a channel. */
@@ -241,13 +263,55 @@ export class CoveRestClient {
     return this.request("GET", `${API_PREFIX}/channels/${channelId}/tasks`);
   }
 
+  /** GET /api/v10/tasks/by-thread/:threadId — get task by thread ID, or null. */
+  async getTaskByThreadId(threadId: string): Promise<Task | null> {
+    return this.request("GET", `${API_PREFIX}/tasks/by-thread/${threadId}`);
+  }
+
   /** GET /api/v10/tasks/:taskId — get a single task. */
   async getTask(taskId: string): Promise<Task> {
     return this.request("GET", `${API_PREFIX}/tasks/${taskId}`);
   }
 
+  async startAgentRun(input: { channel_id: string; trigger_message_id: string; thread_id?: string; task_id?: string }): Promise<AgentRun> {
+    return this.request("POST", `${API_PREFIX}/agent-runs`, input);
+  }
+
+  async appendAgentRunEvent(runId: string, event: { type: AgentRunEventType; tool_call_id?: string; action?: string; detail?: string; status?: string; exit_code?: number; duration_ms?: number; cwd?: string }): Promise<AgentRun> {
+    return this.request("POST", `${API_PREFIX}/agent-runs/${runId}/events`, event);
+  }
+
+  async associateAgentRunMessage(runId: string, assistantMessageId: string): Promise<AgentRun> {
+    return this.request("PATCH", `${API_PREFIX}/agent-runs/${runId}`, { assistant_message_id: assistantMessageId });
+  }
+
   /** PATCH /api/v10/tasks/:taskId — update a task. */
-  async updateTask(taskId: string, fields: { status?: string; assignee_id?: string | null; title?: string }): Promise<Task> {
+  async updateTask(taskId: string, fields: UpdateTaskFields): Promise<Task> {
     return this.request("PATCH", `${API_PREFIX}/tasks/${taskId}`, fields);
+  }
+
+  /** POST /api/v10/channels/:channelId/recurring-tasks — create a template. */
+  async createRecurringTask(channelId: string, fields: { title: string; description?: string; assignee_id?: string; interval_ms: number; occurrence_mode?: RecurringTaskOccurrenceMode; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+    return this.request("POST", `${API_PREFIX}/channels/${channelId}/recurring-tasks`, fields);
+  }
+
+  /** GET /api/v10/channels/:channelId/recurring-tasks — list templates. */
+  async getRecurringTasks(channelId: string): Promise<RecurringTask[]> {
+    return this.request("GET", `${API_PREFIX}/channels/${channelId}/recurring-tasks`);
+  }
+
+  /** GET /api/v10/recurring-tasks/:id — get a template. */
+  async getRecurringTask(id: string): Promise<RecurringTask> {
+    return this.request("GET", `${API_PREFIX}/recurring-tasks/${id}`);
+  }
+
+  /** PATCH /api/v10/recurring-tasks/:id — update a template. */
+  async updateRecurringTask(id: string, fields: { title?: string; description?: string; assignee_id?: string | null; interval_ms?: number; occurrence_mode?: RecurringTaskOccurrenceMode; enabled?: boolean; heartbeat_interval_ms?: number }): Promise<RecurringTask> {
+    return this.request("PATCH", `${API_PREFIX}/recurring-tasks/${id}`, fields);
+  }
+
+  /** DELETE /api/v10/recurring-tasks/:id — delete a template. */
+  async deleteRecurringTask(id: string): Promise<void> {
+    return this.requestVoid("DELETE", `${API_PREFIX}/recurring-tasks/${id}`);
   }
 }

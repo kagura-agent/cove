@@ -23,6 +23,16 @@ function createDispatchBlocker() {
   return dispatchBlocker;
 }
 
+const defaultIngress = () => ({
+  ingress: { admission: "dispatch", reasonCode: "allowed" },
+  commandAccess: { authorized: true },
+});
+
+vi.mock("openclaw/plugin-sdk/channel-ingress-runtime", () => ({
+  defineStableChannelIngressIdentity: vi.fn(() => ({})),
+  resolveChannelMessageIngress: vi.fn(async () => defaultIngress()),
+}));
+
 vi.mock("openclaw/plugin-sdk/inbound-reply-dispatch", () => ({
   runInboundReplyTurn: vi.fn(async (params: any) => {
     // Mimic the kernel: call ingest, then resolveTurn, then runDispatch.
@@ -41,7 +51,11 @@ vi.mock("openclaw/plugin-sdk/channel-message", async () => {
   const real = await vi.importActual<typeof import("openclaw/plugin-sdk/channel-message")>("openclaw/plugin-sdk/channel-message");
   return {
     createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn(async () => {}), onCleanup: vi.fn() })),
-    sendDurableMessageBatch: vi.fn(async () => ({ status: "sent", outcomes: [] })),
+    sendDurableMessageBatch: vi.fn(async () => ({
+      status: "sent",
+      results: [{ channel: "cove", messageId: "final-1" }],
+      receipt: { platformMessageIds: ["final-1"], parts: [], sentAt: Date.now() },
+    })),
     deliverWithFinalizableLivePreviewAdapter: real.deliverWithFinalizableLivePreviewAdapter,
     defineFinalizableLivePreviewAdapter: real.defineFinalizableLivePreviewAdapter,
   };
@@ -111,10 +125,11 @@ import { createTypingCallbacks, sendDurableMessageBatch } from "openclaw/plugin-
 import { createFinalizableDraftLifecycle } from "openclaw/plugin-sdk/channel-lifecycle";
 import { getCoveMd } from "./cove-md-cache.js";
 import { createChannelProgressDraftCompositor } from "openclaw/plugin-sdk/channel-outbound";
+import { resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; startAgentRun: Mock; appendAgentRunEvent: Mock; associateAgentRunMessage: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -123,10 +138,18 @@ const createMockRestClient = (): MockRestClient => ({
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
   getTasks: vi.fn().mockResolvedValue([]),
+  getTaskByThreadId: vi.fn().mockResolvedValue(null),
+  startAgentRun: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  appendAgentRunEvent: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  associateAgentRunMessage: vi.fn().mockResolvedValue({ run_id: "run-1" }),
 });
 
 const createMockChannelRuntime = () => ({
-  routing: { resolveAgentRoute: vi.fn().mockReturnValue({ agentId: "original-agent", sessionKey: "agent:original-agent:cove:group:ch-1" }) },
+  routing: { resolveAgentRoute: vi.fn((params: any) => ({
+    agentId: "routed-agent",
+    sessionKey: `agent:routed-agent:cove:${params.peer.kind}:${params.peer.id}`,
+    mainSessionKey: "agent:routed-agent:main",
+  })) },
   reply: { dispatchReplyWithBufferedBlockDispatcher: vi.fn((params: any) => { capturedDispatcherParams = params; return Promise.resolve(); }) },
   session: { recordInboundSession: vi.fn(async () => ({})) },
 });
@@ -140,7 +163,7 @@ const createTestMessage = (overrides: Partial<any> = {}): any => ({
 const createBaseOpts = (overrides: Partial<DispatchMessageOptions> = {}): DispatchMessageOptions => ({
   message: createTestMessage(),
   account: { accountId: "test-account", token: "test-token", baseUrl: "http://localhost:3400",
-             guildId: "guild-1", agentId: "test-agent", agentName: "Test Agent", allowFrom: [], dmPolicy: undefined },
+             guildId: "guild-1", agentId: "test-agent", agentName: "Test Agent", allowFrom: [], groupAllowFrom: [], dmPolicy: undefined, groupPolicy: undefined },
   restClient: createMockRestClient() as any, channelRuntime: createMockChannelRuntime(),
   cfg: { channels: { cove: {} } }, accountId: "test-account",
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...overrides,
@@ -214,7 +237,7 @@ describe("A. Draft Streaming Lifecycle", () => {
 describe("B. Final Delivery", () => {
   beforeEach(resetState);
 
-  it("B1: Final edit when draft active", async () => {
+  it("B1: Final edit when draft active keeps exactly the preview as the final message", async () => {
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
@@ -222,10 +245,11 @@ describe("B. Final Delivery", () => {
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Final" }, { kind: "final" });
     expect(restClient.editMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1", "Final");
+    expect(sendDurableMessageBatch).not.toHaveBeenCalled();
     blocker.resolve(); await p;
   });
 
-  it("B2: Fallback on final edit failure", async () => {
+  it("B2: final PATCH failure falls back to one confirmed visible final send", async () => {
     const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
     const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
@@ -234,6 +258,135 @@ describe("B. Final Delivery", () => {
     const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
     if (deliver) await deliver({ text: "Fallback" }, { kind: "final" });
     expect(restClient.deleteMessage).toHaveBeenCalled();
+    expect(sendDurableMessageBatch).toHaveBeenCalledTimes(1);
+    blocker.resolve(); await p;
+  });
+
+  it("B2a: dispatchMessage preserves a failed fallback for recovery", async () => {
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+    const sendFailure = new Error("send failed");
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: sendFailure } as any);
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    let deliveryError: unknown;
+
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (!capturedSendOrEdit) throw new Error("Expected draft sender");
+      await capturedSendOrEdit("Draft");
+      restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+      try {
+        await params.dispatcherOptions.deliver({ text: "Final that must be recoverable" }, { kind: "final" });
+      } catch (error) {
+        deliveryError = error;
+        throw error;
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect(deliveryError).toBeInstanceOf(Error);
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect((deliveryError as Error & { coveFinalPayload?: string }).coveFinalPayload).toBe("Final that must be recoverable");
+    expect(restClient.deleteMessage).toHaveBeenCalledWith("ch-1", "msg-draft-1");
+    expect(opts.log?.warn).toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
+  });
+
+  it("B2b: failed fallback retries preview cleanup when its first deletion fails", async () => {
+    const opts = createBaseOpts(); const restClient = opts.restClient as unknown as MockRestClient;
+    const sendFailure = new Error("send failed");
+    const deleteFailure = new Error("delete failed");
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "failed", error: sendFailure } as any);
+    restClient.deleteMessage.mockRejectedValueOnce(deleteFailure).mockResolvedValueOnce(undefined);
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    let deliveryError: unknown;
+
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (!capturedSendOrEdit) throw new Error("Expected draft sender");
+      await capturedSendOrEdit("Draft");
+      restClient.editMessage.mockRejectedValueOnce(new Error("Edit failed"));
+      try {
+        await params.dispatcherOptions.deliver({ text: "Recoverable final" }, { kind: "final" });
+      } catch (error) {
+        deliveryError = error;
+        throw error;
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect(restClient.deleteMessage).toHaveBeenCalledTimes(2);
+    expect(restClient.deleteMessage).toHaveBeenNthCalledWith(1, "ch-1", "msg-draft-1");
+    expect(restClient.deleteMessage).toHaveBeenNthCalledWith(2, "ch-1", "msg-draft-1");
+  });
+
+  it("B2c: treats a suppressed durable outcome as handled no-send", async () => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status: "suppressed" } as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Suppressed final" }, { kind: "final" })).resolves.toBeUndefined();
+
+    expect(opts.log?.warn).not.toHaveBeenCalledWith(expect.stringContaining("freshSend sendText failed"));
+    blocker.resolve(); await p;
+    expect(opts.log?.warn).not.toHaveBeenCalledWith(expect.stringContaining("remains recoverable"));
+  });
+
+  it.each([
+    ["receipt", { status: "sent", receipt: { platformMessageIds: ["final-1"] } }],
+    ["result", { status: "sent", results: [{ channel: "cove", messageId: "final-1" }] }],
+  ])("B2d: accepts a sent result with visible aggregate %s and no payload outcomes", async (_name, result) => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce(result as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Legacy confirmation" }, { kind: "final" })).resolves.toBeUndefined();
+
+    blocker.resolve(); await p;
+  });
+
+  it.each(["failed", "partial_failed"] as const)("B2e: preserves the original %s error as the cause", async (status) => {
+    const opts = createBaseOpts();
+    const sendFailure = new Error(`${status} send`);
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce({ status, error: sendFailure, sentBeforeError: true } as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    let deliveryError: unknown;
+    try {
+      await deliver({ text: "Must remain recoverable" }, { kind: "final" });
+    } catch (error) {
+      deliveryError = error;
+    }
+
+    expect((deliveryError as Error & { cause?: unknown }).cause).toBe(sendFailure);
+    expect((deliveryError as Error & { coveFinalPayload?: string }).coveFinalPayload).toBe("Must remain recoverable");
+    blocker.resolve(); await p;
+  });
+
+  it.each([
+    ["sent result without visible confirmation", { status: "sent" }],
+    ["sent result with malformed payload outcomes despite a receipt", {
+      status: "sent",
+      payloadOutcomes: [],
+      receipt: { platformMessageIds: ["final-1"] },
+    }],
+    ["unknown result", { status: "mystery" }],
+  ])("B2f: rejects a %s durable outcome", async (_name, result) => {
+    const opts = createBaseOpts();
+    vi.mocked(sendDurableMessageBatch).mockResolvedValueOnce(result as any);
+    const blocker = createDispatchBlocker();
+    const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+
+    const deliver = capturedDispatcherParams?.dispatcherOptions?.deliver;
+    await expect(deliver({ text: "Must not be reported as delivered" }, { kind: "final" })).rejects.toThrow();
+
     blocker.resolve(); await p;
   });
 
@@ -274,6 +427,133 @@ describe("B. Final Delivery", () => {
   });
 });
 
+describe("C. Text Command Authorization (#426)", () => {
+  beforeEach(resetState);
+
+  it("C1: forwards an allowlisted /new with command authorization", async () => {
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "/new" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(resolveChannelMessageIngress).toHaveBeenCalledWith(expect.objectContaining({
+      subject: { stableId: "user-1" },
+      allowFrom: ["user-1"],
+      command: expect.objectContaining({ allowTextCommands: true, hasControlCommand: true }),
+    }));
+    expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(true);
+  });
+
+  it.each(["/stop", "stop", "interrupt", "停止"])("C1b: forwards authorized abort trigger %s as a text command for fast abort", async (content) => {
+    const opts = createBaseOpts({
+      message: createTestMessage({ content }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      CommandBody: content,
+      RawBody: content,
+      CommandAuthorized: true,
+      CommandSource: "text",
+      SessionKey: "agent:routed-agent:cove:channel:ch-1",
+    });
+  });
+
+  it("C1c: keeps an ordinary follow-up as a non-command turn", async () => {
+    await dispatchMessage(createBaseOpts({ message: createTestMessage({ content: "Continue with the next step." }) }));
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      CommandBody: "Continue with the next step.",
+      RawBody: "Continue with the next step.",
+      CommandAuthorized: false,
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.CommandSource).toBeUndefined();
+  });
+
+  it("C1d: cancels the active Cove presentation only after an authorized abort enters the standard turn", async () => {
+    const activeRun = new AbortController();
+    const cancellableTool = new Promise<void>((resolve) => {
+      activeRun.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    const onAuthorizedAbort = vi.fn(() => activeRun.abort());
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "interrupt" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+      onAuthorizedAbort,
+    });
+
+    await dispatchMessage(opts);
+    await cancellableTool;
+
+    expect(onAuthorizedAbort).toHaveBeenCalledOnce();
+    expect(activeRun.signal.aborted).toBe(true);
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      SessionKey: "agent:routed-agent:cove:channel:ch-1",
+      CommandAuthorized: true,
+      CommandSource: "text",
+    });
+  });
+
+  it("C1d2: reports a rejected targeted abort without cancelling the active presentation", async () => {
+    vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
+      ingress: { admission: "dispatch", reasonCode: "allowed" },
+      commandAccess: { authorized: false },
+    } as any);
+    const onAuthorizedAbort = vi.fn();
+    const onAbortRejected = vi.fn();
+
+    await dispatchMessage(createBaseOpts({
+      message: createTestMessage({ content: "stop" }),
+      onAuthorizedAbort,
+      onAbortRejected,
+    }));
+
+    expect(onAuthorizedAbort).not.toHaveBeenCalled();
+    expect(onAbortRejected).toHaveBeenCalledOnce();
+  });
+
+  it("C1e: sends an accepted abort without channel or attachment enrichment", async () => {
+    const opts = createBaseOpts({
+      message: createTestMessage({
+        content: "stop",
+        attachments: [{ id: "attachment-1", filename: "large.png", url: "/attachments/large.png", content_type: "image/png" }],
+      }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+
+    await dispatchMessage(opts);
+
+    expect(getCoveMd).not.toHaveBeenCalled();
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      BodyForAgent: "stop",
+      CommandAuthorized: true,
+      CommandSource: "text",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.MediaUrls).toBeUndefined();
+    expect(capturedResolvedTurn?.ctxPayload?.GroupSystemPrompt).toBeUndefined();
+  });
+
+  it("C2: drops an unauthorized /new before dispatching a turn", async () => {
+    vi.mocked(resolveChannelMessageIngress).mockResolvedValueOnce({
+      ingress: { admission: "drop", reasonCode: "control_command_unauthorized" },
+      commandAccess: { authorized: false, shouldBlockControlCommand: true },
+    } as any);
+    const opts = createBaseOpts({ message: createTestMessage({ content: "/new" }) });
+    const { runInboundReplyTurn } = await loadInbound();
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn).toBeNull();
+    expect(runInboundReplyTurn).not.toHaveBeenCalled();
+    expect(getCoveMd).not.toHaveBeenCalled();
+    expect(opts.log?.info).toHaveBeenCalledWith(expect.stringContaining("control_command_unauthorized"));
+  });
+});
+
 describe("D. Context Injection", () => {
   beforeEach(resetState);
 
@@ -310,12 +590,12 @@ describe("D. Context Injection", () => {
 describe("E. Tool Progress (Compositor)", () => {
   beforeEach(resetState);
 
-  it("E1: Compositor created with correct params", async () => {
+  it("E1: compositor is disabled when durable agent-run evidence is available", async () => {
     await dispatchMessage(createBaseOpts());
     expect(createChannelProgressDraftCompositor).toHaveBeenCalledWith(expect.objectContaining({
       entry: expect.anything(),
       mode: "progress",
-      active: true,
+      active: false,
       seed: "msg-1",
       update: expect.any(Function),
     }));
@@ -362,14 +642,17 @@ describe("E. Tool Progress (Compositor)", () => {
   });
 
   it("E5: onToolStart calls pushToolProgress with formatted line", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(createBaseOpts());
+    const p = dispatchMessage(opts);
     await new Promise((r) => setTimeout(r, 50));
 
     const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
     expect(onToolStart).toBeDefined();
     onToolStart({ name: "Read", args: { file: "/foo" } });
     expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("📖 Read", { toolName: "Read" });
+    expect(restClient.sendMessage).not.toHaveBeenCalled();
 
     blocker.resolve(); await p;
   });
@@ -387,6 +670,16 @@ describe("E. Tool Progress (Compositor)", () => {
     blocker.resolve(); await p;
   });
 
+  it("E6b: nested subagent lifecycle is appended to the parent Cove run", async () => {
+    const opts = createBaseOpts(); const rest = opts.restClient as unknown as MockRestClient;
+    const blocker = createDispatchBlocker(); const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "running", progressText: "Reading repository" });
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "completed", summary: "Done" });
+    blocker.resolve(); await p;
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_started", action: "Research" }));
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_finished", action: "Research" }));
+  });
+
   it("E7: suppressDefaultToolProgressMessages from compositor", async () => {
     await dispatchMessage(createBaseOpts());
     expect(capturedDispatcherParams?.replyOptions?.suppressDefaultToolProgressMessages).toBe(true);
@@ -399,7 +692,7 @@ describe("F. Lifecycle / Abort", () => {
   it("F1: Typing sent immediately", async () => {
     const opts = createBaseOpts();
     await dispatchMessage(opts);
-    expect((opts.restClient as unknown as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1");
+    expect((opts.restClient as unknown as MockRestClient).sendTyping).toHaveBeenCalledWith("ch-1", true);
   });
 
   it("F2: Typing keepalive 5s", async () => {
@@ -515,27 +808,26 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H2. Tool progress injection into draft", () => {
-    it("H2a: compositor update callback pushes text to draft.update", async () => {
+    it("H2a: tool compositor cannot write a durable assistant draft", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      // The compositor's update callback is captured in capturedCompositorParams
       expect(capturedCompositorParams?.update).toBeDefined();
       await capturedCompositorParams.update("Working on it...\n\n📖 Read file.ts");
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("Working on it...\n\n📖 Read file.ts");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
     });
 
-    it("H2b: compositor update with flush calls draft.loop.flush", async () => {
+    it("H2b: disabled progress updates do not flush or create fake replies", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
       await capturedCompositorParams.update("text", { flush: true });
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("text");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
@@ -1129,29 +1421,99 @@ describe("J. Task Thread Direct Policy (#473)", () => {
   it("J1: Regular channel uses ChatType 'channel'", async () => {
     await dispatchMessage(createBaseOpts());
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
-    expect(capturedResolvedTurn?.routeSessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
+    expect(capturedResolvedTurn?.routeSessionKey).toContain(":channel:");
   });
 
-  it("J2: Task thread uses ChatType 'direct'", async () => {
+  it("J2: Task thread uses the routed canonical thread session", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const resolveAgentRoute = (opts.channelRuntime as any).routing.resolveAgentRoute as Mock;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "t1" });
+
+    await dispatchMessage(opts);
+
+    expect(resolveAgentRoute).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      peer: { kind: "direct", id: "ch-1" },
+      parentPeer: { kind: "channel", id: "parent-ch" },
+    }));
+    expect(resolveAgentRoute).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      peer: { kind: "channel", id: "parent-ch" },
+    }));
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      AgentId: "routed-agent",
+      ChatType: "direct",
+      MessageThreadId: "ch-1",
+      ParentSessionKey: "agent:routed-agent:cove:channel:parent-ch",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    expect(capturedResolvedTurn?.routeSessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    // OpenClaw recognizes this as a thread reset because both canonical
+    // thread key syntax and parent/thread metadata are supplied above.
+  });
+
+  it("J3: authorized /reset in a task thread targets its canonical session, delivers confirmation, and preserves it for the next message", async () => {
+    const resetConfirmation = "Reset the task session.";
+    const opts = createBaseOpts({
+      message: createTestMessage({ content: "/reset" }),
+      account: { ...createBaseOpts().account, allowFrom: ["user-1"] },
+    });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    const originalDispatcher = (opts.channelRuntime as any).reply.dispatchReplyWithBufferedBlockDispatcher as Mock;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "t1" });
+
+    let resetTargetSessionKey: string | undefined;
+    originalDispatcher.mockImplementation(async (params: any) => {
+      capturedDispatcherParams = params;
+      if (params.ctx.Body === "/reset") {
+        expect(params.ctx.CommandAuthorized).toBe(true);
+        resetTargetSessionKey = params.ctx.SessionKey;
+        await params.dispatcherOptions.deliver({ text: resetConfirmation }, { kind: "final" });
+      }
+    });
+
+    await dispatchMessage(opts);
+
+    expect(resetTargetSessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+    expect(sendDurableMessageBatch).toHaveBeenCalledOnce();
+    expect(sendDurableMessageBatch).toHaveBeenCalledWith(expect.objectContaining({
+      to: "ch-1",
+      payloads: [{ text: resetConfirmation }],
+    }));
+
+    await dispatchMessage({
+      ...opts,
+      message: createTestMessage({ id: "msg-2", content: "Continue with the task." }),
+    });
+
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe(resetTargetSessionKey);
+    expect(capturedResolvedTurn?.routeSessionKey).toBe(resetTargetSessionKey);
+    expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(false);
+  });
+
+  it("J4: Thread without task routes as a direct thread", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
-    restClient.getTasks.mockResolvedValue([{ thread_id: "ch-1", task_id: "t1" }]);
+    restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":task:");
-    expect(capturedResolvedTurn?.routeSessionKey).toContain(":task:");
+    expect(capturedResolvedTurn?.ctxPayload?.MessageThreadId).toBe("ch-1");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
   });
 
-  it("J3: Thread without task stays as 'channel'", async () => {
-    const opts = createBaseOpts();
+  it("J4b: plain thread (no task) run is anchored to the thread, not the parent channel", async () => {
+    const opts = createBaseOpts({ message: createTestMessage({ id: "msg-1", channel_id: "thread-1" }) });
     const restClient = opts.restClient as unknown as MockRestClient;
-    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
-    restClient.getTasks.mockResolvedValue([]);
+    restClient.getChannel.mockResolvedValue({ id: "thread-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
-    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(restClient.startAgentRun).toHaveBeenCalledWith(expect.objectContaining({
+      channel_id: "thread-1",
+      thread_id: "thread-1",
+    }));
   });
 
   it("J4: Error in task detection gracefully falls back to 'channel'", async () => {
@@ -1160,6 +1522,33 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     restClient.getChannel.mockRejectedValue(new Error("API down"));
     await dispatchMessage(opts);
     expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":group:");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
+  });
+
+  it("J5: task assignment descriptions reach the agent's first inbound payload", async () => {
+    const description = "Run the focused server and plugin tests.";
+    const assignmentContent = [
+      "This is a task assignment (task_id: task-1).",
+      "Title: Include complete task context",
+      "Assigned to: Test Agent",
+      "",
+      "Description:",
+      description,
+      "",
+      "工作属于这个 thread，就在这里做。",
+    ].join("\n");
+    const opts = createBaseOpts({ message: createTestMessage({ content: assignmentContent }) });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue({ thread_id: "ch-1", task_id: "task-1" });
+
+    await dispatchMessage(opts);
+
+    expect(capturedResolvedTurn?.ctxPayload).toMatchObject({
+      Body: assignmentContent,
+      BodyForAgent: assignmentContent,
+      ChatType: "direct",
+    });
+    expect(capturedResolvedTurn?.ctxPayload?.Body).toContain(`Description:\n${description}`);
   });
 });

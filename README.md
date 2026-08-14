@@ -68,10 +68,7 @@ pnpm dev
 
 ### Connect an OpenClaw Agent
 
-1. Build the plugin: `cd packages/plugin && pnpm build`
-2. Copy `dist/index.js` to your OpenClaw extensions directory
-3. Configure the Cove channel in OpenClaw gateway config
-4. Your agent will appear in Cove channels and respond to messages
+Follow the [canonical OpenClaw Cove setup guide](packages/plugin/README.md) for published and local-development installation, configuration, safe binding setup, and gateway restart instructions.
 
 ## Project Structure
 
