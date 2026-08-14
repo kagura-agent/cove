@@ -305,12 +305,11 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       {/* Reuse the exact same input as main chat */}
       <div style={{ flexShrink: 0, background: "var(--bg-secondary)" }}>
         <ReplyBar channelId={thread.id} />
-        {/* Thread runs are anchored to the thread itself (channel_id = thread.id in
-            agent_runs), so the card must use thread.id here: the abort route,
-            stale-run expiry, and WS run-update filter all key off channel_id.
-            Passing the parent id made stop return 409 (run.channel_id mismatch)
-            and let zombie runs stay 'active' forever. */}
-        {thread.guild_id && <AgentRunCard channelId={thread.id} threadId={thread.id} guildId={thread.guild_id} />}
+        {/* Thread runs are anchored with channel_id = parent channel (the
+            permission/index anchor) and thread_id = the thread itself, so the
+            card must use the parent channel id here: the abort route, stale-run
+            expiry, and WS run-update filter all key off channel_id = parent. */}
+        {thread.guild_id && <AgentRunCard channelId={thread.parent_id ?? thread.id} threadId={thread.id} guildId={thread.guild_id} />}
         <MessageInput channelId={thread.id} />
       </div>
     </div>
