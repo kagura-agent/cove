@@ -16,8 +16,7 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
   // A thread run is permission-anchored to its parent channel, while the trigger
   // lives in the thread itself. Do not require child agents to be thread members.
   const trigger = repos.messages.getById(threadId ?? body.channel_id, body.trigger_message_id); if (!trigger || (trigger.channel_id !== body.channel_id && trigger.channel_id !== threadId)) return c.json({ message: "Unknown trigger message", code: 10008 }, 404);
-  const taskId = typeof body.task_id === "string" ? body.task_id : null; if (taskId) { const task = repos.tasks.getById(taskId); if (!task || task.channel_id !== body.channel_id || task.thread_id !== threadId) return c.json({ message: "Unknown Task", code: 10080 }, 404); if (task.assignee_id !== user.id) return c.json({ message: "Missing Permissions", code: 50013 }, 403); }
-  const run = repos.agentRuns.start({ agent_id: user.id, channel_id: body.channel_id, trigger_message_id: body.trigger_message_id, thread_id: threadId, task_id: taskId, parent_run_id: typeof body.parent_run_id === "string" ? body.parent_run_id : null });
+  const run = repos.agentRuns.start({ agent_id: user.id, channel_id: body.channel_id, trigger_message_id: body.trigger_message_id, thread_id: threadId, parent_run_id: typeof body.parent_run_id === "string" ? body.parent_run_id : null });
   repos.agentRuns.append(run.run_id, { type: "run_started", action: "Starting" }); const timeline = repos.agentRuns.timelineForRun(run.run_id); dispatcher?.agentRunUpdated(timeline.run!); return c.json(timeline.run!, 201);
  });
  app.get("/agent-runs/:runId", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); await requireChannelPermission(repos, run.channel_id, c.get("botUser").id, PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.timelineForRun(run.run_id)); });
