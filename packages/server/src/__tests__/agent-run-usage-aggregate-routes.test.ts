@@ -112,8 +112,9 @@ describe("agent run usage aggregate routes", () => {
     const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, task_id: task.task_id, trigger_message_id: "trigger2" });
     await recordUsage(app, run2.run_id, "m1", 500, 250, 0.005);
 
-    // Unrelated run in the same thread but no task must not count.
-    const other = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger" });
+    // Unrelated run in a different thread (no task) must not count.
+    const otherThread = repos.threads.createStandalone(channel.guild_id, channel.id, "other-thread", "agent");
+    const other = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: otherThread.id, trigger_message_id: "trigger" });
     await recordUsage(app, other.run_id, "m9", 777, 777, 0.077);
 
     const res = await app.request(`${API_PREFIX}/tasks/${task.task_id}/usage`, { headers: { Authorization: "Bot viewer-token" } });

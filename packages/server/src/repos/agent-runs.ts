@@ -72,8 +72,17 @@ export class AgentRunsRepo {
     // Any new run supersedes leftover active runs in its own scope. Task
     // executions additionally keep a per-task singleton invariant.
     this.staleSameScope(now, input);
-    if (input.task_id) this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE task_id=? AND status='active'").run(now, now, input.task_id);
-    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,input.task_id ?? null,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
+    // Derive task_id from the thread when the caller did not supply one: every
+    // run anchored to a task thread belongs to that task, so aggregates keyed
+    // by task_id (task table Usage column) stay correct regardless of whether
+    // the client remembered to pass task_id.
+    let taskId = input.task_id ?? null;
+    if (!taskId && input.thread_id) {
+      const taskRow = this.db.prepare("SELECT task_id FROM tasks WHERE thread_id = ?").get(input.thread_id) as { task_id: string } | undefined;
+      taskId = taskRow?.task_id ?? null;
+    }
+    if (taskId) this.db.prepare("UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE task_id=? AND status='active'").run(now, now, taskId);
+    this.db.prepare(`INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,assistant_message_id,parent_run_id,status,current_action,started_at,updated_at,finished_at,expires_at,log_manifest_ref,log_hash,log_event_count,log_bytes,redaction_version) VALUES (?,?,?,?,?,?,?,?, 'active',NULL,?,?,NULL,?,'manifest.json',NULL,0,0,1)`).run(runId,input.agent_id,input.channel_id,input.thread_id ?? null,taskId,input.trigger_message_id,null,input.parent_run_id ?? null,now,now,now+RUN_STALE_AFTER_MS);
     const run = this.get(runId)!; this.writeManifest(run); return run;
   }
   get(runId: string): AgentRun | null { const row = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId); return row ? asRun(row) : null; }
