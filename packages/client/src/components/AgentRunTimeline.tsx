@@ -16,6 +16,10 @@ export type LifecycleOperation = {
   status: string | null;
 };
 
+const NODE_SIZE = 18;
+/** Narrative openers carry their own readable text; the action label is redundant noise. */
+const NARRATIVE_OPENER_ACTIONS = new Set(["preamble", "introduction", "intro"]);
+
 const phaseForEvent: Record<AgentRunEvent["type"], ExecutionPhase> = {
   run_started: "Plan & analysis", tool_progress: "Plan & analysis", approval_requested: "Plan & analysis",
   tool_started: "Tools", tool_finished: "Tools", tool_failed: "Tools", command_output: "Tools",
@@ -85,6 +89,12 @@ function lifecyclePhase(event: AgentRunEvent): "Tools" | "Child agents" | null {
 
 function isTerminal(event: AgentRunEvent): boolean {
   return event.type === "tool_finished" || event.type === "tool_failed" || event.type === "command_output" || event.type === "subagent_finished" || event.type === "subagent_failed" || ["completed", "success", "succeeded", "done", "ok", "failed", "aborted"].includes(event.status ?? "");
+}
+
+function isNarrativeOpener(event: AgentRunEvent): boolean {
+  // "Preamble", "Preamble:", etc. — the content itself is the label.
+  const normalized = (event.action ?? "").trim().toLowerCase().replace(/[\s:]+$/u, "");
+  return NARRATIVE_OPENER_ACTIONS.has(normalized);
 }
 
 function conciseDetail(detail: string | null): string | null {
@@ -195,22 +205,58 @@ export function ExecutionTimeline({ events }: { events: AgentRunEvent[] }) {
   }
 
   if (!events.length) return <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>No execution detail available.</span>;
-  return <>{ordered.map((item) => "events" in item ? <LifecycleRow key={item.key} operation={item} /> : <TimelineRow key={item.event_id} event={item} />)}</>;
+  return <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+    {ordered.map((item, index) => {
+      const first = index === 0;
+      const last = index === ordered.length - 1;
+      return "events" in item
+        ? <LifecycleRow key={item.key} operation={item} first={first} last={last} />
+        : <TimelineRow key={item.event_id} event={item} first={first} last={last} />;
+    })}
+  </ol>;
 }
 
-function LifecycleRow({ operation }: { operation: LifecycleOperation }) {
+/**
+ * A timeline node: the state glyph sits on the vertical spine. The spine is
+ * drawn as one continuous line across rows — each row contributes the segment
+ * from its top edge to the node center, or from the node center to its bottom
+ * edge — so collapsed sequences still read as a connected axis.
+ */
+function TimelineNode({ state, first, last }: { state: { icon: string; color: string; label: string }; first: boolean; last: boolean }) {
+  const spine: CSSProperties = first && last
+    ? { display: "none" }
+    : {
+        position: "absolute",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 2,
+        borderRadius: 1,
+        background: "var(--text-muted)",
+        opacity: 0.35,
+        ...(first ? { top: NODE_SIZE / 2 } : { top: 0 }),
+        ...(last ? { height: NODE_SIZE / 2 } : { bottom: 0 }),
+      };
+  return <div style={{ position: "relative", alignSelf: "stretch", display: "flex", justifyContent: "center" }}>
+    <div aria-hidden="true" style={spine} />
+    <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: NODE_SIZE, height: NODE_SIZE, borderRadius: "50%", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", color: state.color, fontWeight: 700, fontSize: 12, lineHeight: 1 }}>{state.icon}</span>
+  </div>;
+}
+
+function LifecycleRow({ operation, first, last }: { operation: LifecycleOperation; first: boolean; last: boolean }) {
   const facts = [operation.duration_ms !== null ? formatDuration(operation.duration_ms) : null, operation.exit_code !== null ? `exit ${operation.exit_code}` : null].filter(Boolean).join(" · ");
-  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", alignItems: "start", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-    <span title={operation.state.label} aria-label={operation.state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: "20px", lineHeight: 1, color: operation.state.color, fontWeight: 700 }}>{operation.state.icon}</span>
+  return <li style={{ display: "grid", gridTemplateColumns: `${NODE_SIZE + 4}px minmax(0, 1fr)`, alignItems: "start", gap: "var(--space-xs)", padding: "4px 0" }}>
+    <TimelineNode state={operation.state} first={first} last={last} />
     <div style={{ minWidth: 0 }}><div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{operation.action}{operation.detail && <span style={{ fontWeight: 400 }}> · {operation.detail}</span>}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>
       <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Lifecycle ({operation.events.length})</summary>
-        {operation.events.map((event) => <TimelineRow key={event.event_id} event={event} />)}
+        <ol style={{ listStyle: "none", margin: "4px 0 0", padding: 0 }}>
+          {operation.events.map((event, index) => <TimelineRow key={event.event_id} event={event} first={index === 0} last={index === operation.events.length - 1} />)}
+        </ol>
       </details>
     </div>
-  </article>;
+  </li>;
 }
 
-function TimelineRow({ event }: { event: AgentRunEvent }) {
+function TimelineRow({ event, first, last }: { event: AgentRunEvent; first: boolean; last: boolean }) {
   const state = eventState(event);
   const facts = [event.status, event.duration_ms !== null ? formatDuration(event.duration_ms) : null, event.exit_code !== null ? `exit ${event.exit_code}` : null].filter(Boolean).join(" · ");
   // Narrative events (preamble, plan updates, run status, child-agent lifecycle)
@@ -218,14 +264,19 @@ function TimelineRow({ event }: { event: AgentRunEvent }) {
   // behind a disclosure. Tool output stays collapsed so execution dumps never
   // dominate the chat surface.
   const inlineDetail = phaseFor(event) !== "Tools";
-  return <article style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr)", alignItems: "start", gap: "var(--space-xs)", padding: "4px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-    <span title={state.label} aria-label={state.label} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: "20px", lineHeight: 1, color: state.color, fontWeight: 700 }}>{state.icon}</span>
-    <div style={{ minWidth: 0 }}><div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{conciseAction(event)}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>
-      {event.detail && (inlineDetail
+  // Narrative openers ("Preamble") already read as full sentences; the content
+  // is the label, so render it directly instead of a heading + body pair.
+  const opener = isNarrativeOpener(event) && !!event.detail;
+  return <li style={{ display: "grid", gridTemplateColumns: `${NODE_SIZE + 4}px minmax(0, 1fr)`, alignItems: "start", gap: "var(--space-xs)", padding: "4px 0" }}>
+    <TimelineNode state={state} first={first} last={last} />
+    <div style={{ minWidth: 0 }}>{opener
+      ? <div style={{ fontSize: "var(--font-size-sm)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{conciseDetail(event.detail)}</div>
+      : <div style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{conciseAction(event)}{facts && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · {facts}</span>}</div>}
+      {event.detail && !opener && (inlineDetail
         ? <div style={{ color: "var(--text-muted)", fontSize: "var(--font-size-xs)", whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: 2 }}>{conciseDetail(event.detail)}</div>
         : <details style={{ marginTop: 2 }}><summary style={{ color: "var(--text-muted)", cursor: "pointer", fontSize: "var(--font-size-xs)" }}>Safe detail</summary><pre style={detailStyle}>{event.detail}</pre></details>)}
     </div>
-  </article>;
+  </li>;
 }
 
 const detailStyle: CSSProperties = { margin: "3px 0 0", maxHeight: 160, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, fontFamily: "var(--font-mono, monospace)", color: "var(--text-muted)" };
