@@ -53,7 +53,7 @@ export class AgentRunsRepo {
     if (scope?.taskId) { where = " AND task_id=?"; args.push(scope.taskId); }
     else if (scope?.threadId) { where = " AND thread_id=?"; args.push(scope.threadId); }
     else if (scope?.channelId) { where = " AND channel_id=? AND thread_id IS NULL"; args.push(scope.channelId); }
-    return this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args).changes;
+    this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
   }
   /**
    * Same-scope turns are serialized by the plugin's per-channel debouncer, so a
