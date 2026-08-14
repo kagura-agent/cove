@@ -159,8 +159,10 @@ export class AgentRunsRepo {
    *  - `threadId`: all runs in the thread (spans sessions; includes task runs
    *    and child/subagent runs, which inherit the thread scope).
    *  - `taskId`: all runs for the task, across sessions.
-   *  - `channelId`: direct channel runs only (`thread_id IS NULL`) — a parent
-   *    channel's aggregate must not absorb work belonging to one of its threads.
+   *  - `channelId`: ALL runs anchored to the channel — the parent channel chat
+   *    plus every thread. A header placed at channel level reads as "the whole
+   *    channel spent X", so it must not be limited to direct runs; the thread
+   *    scope exists for per-thread drill-down.
    */
   usageByScope(scope: { threadId?: string; channelId?: string; taskId?: string }): AgentRunUsage | null {
     let rows: any[];
@@ -174,12 +176,35 @@ export class AgentRunsRepo {
       ).all(scope.taskId);
     } else if (scope.channelId) {
       rows = this.db.prepare(
-        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ? AND r.thread_id IS NULL`
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ?`
       ).all(scope.channelId);
     } else {
       return null;
     }
     return this.aggregateUsageRows(rows);
+  }
+
+  /**
+   * Per-task usage for every task in a channel that has usage recorded,
+   * keyed by task_id. Tasks without usage rows are absent from the map so the
+   * client can render an em dash for them. Used by the task table Usage column.
+   */
+  usageByTask(channelId: string): Record<string, AgentRunUsage> {
+    const rows = this.db.prepare(
+      `SELECT u.*, r.task_id FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ? AND r.task_id IS NOT NULL`
+    ).all(channelId) as any[];
+    const byTask = new Map<string, any[]>();
+    for (const row of rows) {
+      const list = byTask.get(row.task_id) ?? [];
+      list.push(row);
+      byTask.set(row.task_id, list);
+    }
+    const out: Record<string, AgentRunUsage> = {};
+    for (const [taskId, taskRows] of byTask) {
+      const agg = this.aggregateUsageRows(taskRows);
+      if (agg) out[taskId] = agg;
+    }
+    return out;
   }
 
   /** Shared rollup: totals + cost + per-model breakdown from usage rows. */
@@ -206,7 +231,8 @@ export class AgentRunsRepo {
       cache_write_tokens: sum("cache_write_tokens"),
       total_tokens: sum("total_tokens"),
       cost, currency, cost_source,
-      models: [...models.values()],
+      // Deterministic order regardless of SQLite join plan.
+      models: [...models.values()].sort((a, b) => a.model.localeCompare(b.model)),
     };
   }
 }

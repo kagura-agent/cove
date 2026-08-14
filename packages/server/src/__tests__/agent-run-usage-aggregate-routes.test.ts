@@ -39,12 +39,13 @@ describe("agent run usage aggregate routes", () => {
     });
   }
 
-  it("aggregates channel usage from direct runs only, excluding threads", async () => {
+  it("aggregates channel usage across chat + all threads (whole channel)", async () => {
     const { db, app, channel, repos } = setup();
     const run = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger" });
     await recordUsage(app, run.run_id, "m1", 1000, 500, 0.01);
 
-    // Thread run in the same channel must NOT count toward channel usage.
+    // Thread run in the same channel DOES count — channel-level aggregate means
+    // "the whole channel" (chat + threads), matching the header placement.
     const thread = repos.threads.createStandalone(channel.guild_id, channel.id, "thread-1", "agent");
     const threadRun = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger" });
     await recordUsage(app, threadRun.run_id, "m2", 100, 50, 0.001);
@@ -52,16 +53,19 @@ describe("agent run usage aggregate routes", () => {
     const res = await app.request(`${API_PREFIX}/channels/${channel.id}/usage`, { headers: { Authorization: "Bot viewer-token" } });
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({
-      calls: 1,
-      input_tokens: 1000,
-      output_tokens: 500,
-      cache_read_tokens: 1000,
-      cache_write_tokens: 500,
-      total_tokens: 3000,
-      cost: 0.01,
+      calls: 2,
+      input_tokens: 1100,
+      output_tokens: 550,
+      cache_read_tokens: 1100,
+      cache_write_tokens: 550,
+      total_tokens: 3300,
+      cost: 0.011,
       currency: "USD",
       cost_source: "price_table",
-      models: [{ model: "m1", calls: 1, input_tokens: 1000, output_tokens: 500, cost: 0.01 }],
+      models: [
+        { model: "m1", calls: 1, input_tokens: 1000, output_tokens: 500, cost: 0.01 },
+        { model: "m2", calls: 1, input_tokens: 100, output_tokens: 50, cost: 0.001 },
+      ],
     });
     db.close();
   });
@@ -124,6 +128,40 @@ describe("agent run usage aggregate routes", () => {
       cost: 0.015,
       models: [{ model: "m1", calls: 2, input_tokens: 1500, output_tokens: 750, cost: 0.015 }],
     });
+    db.close();
+  });
+
+  it("returns per-task usage map for the channel task table", async () => {
+    const { db, app, channel, repos } = setup();
+    const threadA = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread-a", "agent");
+    const threadB = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread-b", "agent");
+    const taskA = repos.tasks.create("task-a", channel.id, threadA.id, "trigger", "agent", "Task A", 1, { guild_id: channel.guild_id, created_by: "agent" });
+    const taskB = repos.tasks.create("task-b", channel.id, threadB.id, "trigger2", "agent", "Task B", 2, { guild_id: channel.guild_id, created_by: "agent" });
+
+    const runA1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, task_id: taskA.task_id, trigger_message_id: "trigger" });
+    await recordUsage(app, runA1.run_id, "m1", 1000, 500, 0.01);
+    const runA2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, task_id: taskA.task_id, trigger_message_id: "trigger" });
+    await recordUsage(app, runA2.run_id, "m1", 500, 250, 0.005);
+    const runB = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadB.id, task_id: taskB.task_id, trigger_message_id: "trigger2" });
+    await recordUsage(app, runB.run_id, "m2", 100, 50, 0.001);
+
+    // A direct (non-task) run must not appear in the task map.
+    const direct = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger" });
+    await recordUsage(app, direct.run_id, "m9", 777, 777, 0.077);
+
+    const res = await app.request(`${API_PREFIX}/channels/${channel.id}/tasks/usage`, { headers: { Authorization: "Bot viewer-token" } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual([taskA.task_id, taskB.task_id].sort());
+    expect(body[taskA.task_id]).toMatchObject({ calls: 2, input_tokens: 1500, output_tokens: 750, cost: 0.015 });
+    expect(body[taskB.task_id]).toMatchObject({ calls: 1, input_tokens: 100, output_tokens: 50, cost: 0.001 });
+    db.close();
+  });
+
+  it("gates bulk task usage behind VIEW_CHANNEL (non-member 404)", async () => {
+    const { db, app, channel } = setup();
+    const res = await app.request(`${API_PREFIX}/channels/${channel.id}/tasks/usage`, { headers: { Authorization: "Bot outsider-token" } });
+    expect(res.status).toBe(404);
     db.close();
   });
 

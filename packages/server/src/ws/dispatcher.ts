@@ -466,6 +466,17 @@ export class GatewayDispatcher {
     }
   }
 
+  /** New usage recorded for a run: fan out to channel + thread scopes so the
+   * aggregate chips (channel/thread headers, task table) refresh live. */
+  usageUpdated(run: AgentRun): void {
+    const channel = this.channelsRepo.getById(run.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, run.channel_id, "AGENT_USAGE_UPDATED", run);
+    if (run.thread_id && run.thread_id !== run.channel_id) {
+      this.broadcastToGuildWithChannelFilter(channel.guild_id, run.thread_id, "AGENT_USAGE_UPDATED", run);
+    }
+  }
+
   /** Broadcast to all sessions in any of the given guilds, deduplicating. */
   private broadcastToGuilds(guildIds: Set<string>, event: string, data: unknown, excludeSessionId?: string): void {
     for (const session of this.sessions) {

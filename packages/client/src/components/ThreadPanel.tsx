@@ -13,7 +13,8 @@ import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 import { AgentRunCard } from "./AgentRunCard";
-import { usageLabel } from "./AgentRunTimeline";
+import { UsageChip } from "./UsageChip";
+import { dispatcher } from "../lib/gateway-dispatcher";
 import type { AgentRunUsage } from "@cove/shared";
 
 interface ThreadPanelProps {
@@ -134,12 +135,19 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   }, [thread?.id, thread?.message_id, thread?.parent_id]);
 
   // Aggregated thread usage: spans all sessions/runs in this thread. Refresh
-  // when the thread changes; cheap enough to refetch on remount.
+  // when the thread changes; live-refresh on usage events for this thread.
   useEffect(() => {
     if (!thread?.parent_id) return;
     let alive = true;
-    api.fetchThreadUsage(thread.parent_id, thread.id).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
-    return () => { alive = false; };
+    const refresh = () => {
+      api.fetchThreadUsage(thread.parent_id, thread.id).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
+    };
+    refresh();
+    const onUsage = (run: { channel_id: string; thread_id: string | null }) => {
+      if (run.thread_id === thread.id || (run.channel_id === thread.parent_id && !run.thread_id)) refresh();
+    };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
   }, [thread?.id, thread?.parent_id]);
 
   if (!thread) return null;
@@ -216,21 +224,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
             }}
           />
         )}
-        {usageLabel(usage) && (
-          <span
-            title={`Aggregate usage for this thread (${usage!.calls} call${usage!.calls === 1 ? "" : "s"})`}
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "var(--font-size-xs)",
-              background: "var(--bg-tertiary, rgba(255,255,255,0.04))",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "var(--space-xs)",
-              padding: "1px var(--space-sm)",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >{usageLabel(usage)}</span>
-        )}
+        {usage && <UsageChip usage={usage} scope="thread" />}
         <div style={{ position: "relative" }}>
           <button
             ref={menuBtnRef}

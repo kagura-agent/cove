@@ -250,6 +250,9 @@ export function fetchThreadUsage(channelId: string, threadId: string) {
 export function fetchTaskUsage(taskId: string) {
   return api<AgentRunUsage | null>(`${API_PREFIX}/tasks/${taskId}/usage`);
 }
+export function fetchTaskUsages(channelId: string) {
+  return api<Record<string, AgentRunUsage>>(`${API_PREFIX}/channels/${channelId}/tasks/usage`);
+}
 export function fetchAgentRun(runId: string) { return api<AgentRunTimeline>(`${API_PREFIX}/agent-runs/${runId}`); }
 export function fetchMessageAgentRun(channelId: string, messageId: string) {
   return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/agent-run`);
