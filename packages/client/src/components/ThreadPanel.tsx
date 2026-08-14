@@ -13,6 +13,8 @@ import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 import { AgentRunCard } from "./AgentRunCard";
+import { usageLabel } from "./AgentRunTimeline";
+import type { AgentRunUsage } from "@cove/shared";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -24,6 +26,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [usage, setUsage] = useState<AgentRunUsage | null | undefined>(undefined);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const threadFetchRef = useRef<string | null>(null);
@@ -130,6 +133,15 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       .catch(() => setParentMessage(null));
   }, [thread?.id, thread?.message_id, thread?.parent_id]);
 
+  // Aggregated thread usage: spans all sessions/runs in this thread. Refresh
+  // when the thread changes; cheap enough to refetch on remount.
+  useEffect(() => {
+    if (!thread?.parent_id) return;
+    let alive = true;
+    api.fetchThreadUsage(thread.parent_id, thread.id).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
+    return () => { alive = false; };
+  }, [thread?.id, thread?.parent_id]);
+
   if (!thread) return null;
 
   async function handleArchive() {
@@ -203,6 +215,21 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
               }
             }}
           />
+        )}
+        {usageLabel(usage) && (
+          <span
+            title={`Aggregate usage for this thread (${usage!.calls} call${usage!.calls === 1 ? "" : "s"})`}
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "var(--font-size-xs)",
+              background: "var(--bg-tertiary, rgba(255,255,255,0.04))",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--space-xs)",
+              padding: "1px var(--space-sm)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >{usageLabel(usage)}</span>
         )}
         <div style={{ position: "relative" }}>
           <button

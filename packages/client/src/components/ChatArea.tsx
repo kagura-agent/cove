@@ -11,9 +11,10 @@ import { MessageList } from "./MessageList";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
-import type { Task, TaskStatus } from "@cove/shared";
+import type { Task, TaskStatus, AgentRunUsage } from "@cove/shared";
 import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { usageLabel } from "./AgentRunTimeline";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
 import { STATUS_ICON_COMPONENTS, getStatusSelectOptions, getStatusFilterOptions, getStatusLabelOptions } from "../lib/taskStatusConfig";
@@ -60,6 +61,17 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
   const getChannels = useChannelStore((s) => s.getChannels);
   const channels = getChannels(guildId);
   const channel = channels.find((c) => c.id === channelId);
+  const [channelUsage, setChannelUsage] = useState<AgentRunUsage | null | undefined>(undefined);
+
+  // Channel-scope aggregate: direct runs only (threads excluded). Refetch when
+  // the channel changes; failures degrade to no chip.
+  useEffect(() => {
+    if (!channelId || channel?.type === 11) return;
+    let alive = true;
+    setChannelUsage(undefined);
+    api.fetchChannelUsage(channelId).then((u) => { if (alive) setChannelUsage(u); }).catch(() => { if (alive) setChannelUsage(null); });
+    return () => { alive = false; };
+  }, [channelId, channel?.type]);
 
   if (!channel) {
     return (
@@ -80,6 +92,21 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
           <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{channel.topic ? <ChatMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
         </div>
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
+        {usageLabel(channelUsage) && (
+          <span
+            title={`Aggregate usage for this channel (${channelUsage!.calls} call${channelUsage!.calls === 1 ? "" : "s"})`}
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "var(--font-size-xs)",
+              background: "var(--bg-tertiary, rgba(255,255,255,0.04))",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--space-xs)",
+              padding: "1px var(--space-sm)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >{usageLabel(channelUsage)}</span>
+        )}
       </div>
 
       {/* Tab bar */}

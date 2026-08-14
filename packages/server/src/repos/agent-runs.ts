@@ -149,6 +149,41 @@ export class AgentRunsRepo {
     } else {
       rows = this.db.prepare("SELECT * FROM agent_run_usage WHERE run_id=?").all(runId);
     }
+    return this.aggregateUsageRows(rows);
+  }
+
+  /**
+   * Aggregate usage across every run in a scope, returning the same
+   * `AgentRunUsage` shape as `usage()` so the client reuses existing formatting.
+   * Scopes (exactly one):
+   *  - `threadId`: all runs in the thread (spans sessions; includes task runs
+   *    and child/subagent runs, which inherit the thread scope).
+   *  - `taskId`: all runs for the task, across sessions.
+   *  - `channelId`: direct channel runs only (`thread_id IS NULL`) — a parent
+   *    channel's aggregate must not absorb work belonging to one of its threads.
+   */
+  usageByScope(scope: { threadId?: string; channelId?: string; taskId?: string }): AgentRunUsage | null {
+    let rows: any[];
+    if (scope.threadId) {
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.thread_id = ?`
+      ).all(scope.threadId);
+    } else if (scope.taskId) {
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.task_id = ?`
+      ).all(scope.taskId);
+    } else if (scope.channelId) {
+      rows = this.db.prepare(
+        `SELECT u.* FROM agent_run_usage u JOIN agent_runs r ON r.run_id = u.run_id WHERE r.channel_id = ? AND r.thread_id IS NULL`
+      ).all(scope.channelId);
+    } else {
+      return null;
+    }
+    return this.aggregateUsageRows(rows);
+  }
+
+  /** Shared rollup: totals + cost + per-model breakdown from usage rows. */
+  private aggregateUsageRows(rows: any[]): AgentRunUsage | null {
     if (!rows.length) return null;
     const currency = "USD";
     const sum = (k: string) => rows.reduce((acc, r) => acc + (r[k] || 0), 0);
