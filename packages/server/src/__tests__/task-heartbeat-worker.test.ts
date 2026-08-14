@@ -94,7 +94,6 @@ describe("TaskHeartbeatWorker liveness + backlog coalescing", () => {
       channel_id: channelId,
       trigger_message_id: "m-trigger",
       thread_id: task.thread_id,
-      task_id: task.task_id,
     });
     runTick();
     expect(dispatcher.sent).toHaveLength(0);
