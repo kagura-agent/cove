@@ -84,6 +84,10 @@ export interface UsageBridge {
   runForSession(sessionKey: string): string | null;
   parentSessionFor(sessionKey: string): string | null;
   restForSession(sessionKey: string): Pick<CoveRestClient, "recordRunUsage"> | null;
+  /** Consumes and returns the fresh-claim for a session created by a Cove run
+   * in this process (new task thread, spawned subagent). True exactly once per
+   * session, before its first agent_end is observed. */
+  consumeFreshSession(sessionKey: string): boolean;
 }
 
 export class CoveUsageCollector {
@@ -126,8 +130,19 @@ export class CoveUsageCollector {
     const totals = sumUsage(event.messages ?? []);
     const baseline = this.baselines.get(sessionKey);
     if (!baseline) {
-      // First observed end for this session: record the baseline without
-      // reporting (the messages include pre-existing history).
+      const fresh = this.bridge.consumeFreshSession(sessionKey);
+      if (fresh) {
+        // The session was created by this Cove run and this is its first turn:
+        // the cumulative message usage IS the turn's consumption, so report the
+        // full totals from a zero baseline instead of silently dropping it
+        // (#551 — one-shot subagents and fresh task threads were 100% missed).
+        this.baselines.set(sessionKey, totals);
+        this.persistBaselines();
+        this.reportDelta(sessionKey, totals, event, ctx);
+        return;
+      }
+      // First observed end for a pre-existing session: record the baseline
+      // without reporting (the messages include pre-existing history).
       this.baselines.set(sessionKey, totals);
       this.persistBaselines();
       return;
@@ -142,6 +157,13 @@ export class CoveUsageCollector {
     };
     this.baselines.set(sessionKey, totals);
     this.persistBaselines();
+    if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
+      return;
+    }
+    this.reportDelta(sessionKey, delta, event, ctx);
+  }
+
+  private reportDelta(sessionKey: string, delta: TokenTotals, event: AgentEndEvent, ctx: AgentEndContext): void {
     if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
       return;
     }

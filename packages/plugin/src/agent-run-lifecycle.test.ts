@@ -6,6 +6,61 @@ async function flushReports() { for (let i = 0; i < 8; i++) await Promise.resolv
 describe("native OpenClaw subagent lifecycle bridge", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("claims fresh only for Cove-created thread/subagent sessions and consumes once (#551)", async () => {
+    const bridge = new CoveAgentRunLifecycleBridge();
+    // Thread sessions (new channel per task) are claimed fresh at dispatch.
+    const parentSessionKey = "agent:kagura:cove:direct:1536591983689072640:thread:1536591983689072640";
+    bridge.bindParent(parentSessionKey, "parent-run", () => {});
+    expect(bridge.consumeFreshSession(parentSessionKey)).toBe(true);
+    expect(bridge.consumeFreshSession(parentSessionKey)).toBe(false);
+
+    // A spawned child session is also claimed fresh (one-shot subagents fire a
+    // single agent_end — their whole usage must be reported, not baselined).
+    bridge.onSubagentSpawned({ childSessionKey: "agent:kagura:subagent:child-1", runId: "native-run", mode: "run" }, { requesterSessionKey: parentSessionKey });
+    expect(bridge.consumeFreshSession("agent:kagura:subagent:child-1")).toBe(true);
+    expect(bridge.consumeFreshSession("agent:kagura:subagent:child-1")).toBe(false);
+
+    // Persistent channel/group sessions are NOT fresh even when this process
+    // dispatches them — their first observation must stay a silent baseline so
+    // pre-existing history is not double counted.
+    bridge.bindParent("agent:kagura:cove:channel:123", "chan-run", () => {});
+    bridge.bindParent("agent:kagura:cove:group:456", "group-run", () => {});
+    expect(bridge.consumeFreshSession("agent:kagura:cove:channel:123")).toBe(false);
+    expect(bridge.consumeFreshSession("agent:kagura:cove:group:456")).toBe(false);
+
+    // unbindParent drops the parent claim; a re-bound session of the same key
+    // is a new run and claims fresh again (new task thread turn).
+    bridge.unbindParent(parentSessionKey);
+    expect(bridge.consumeFreshSession(parentSessionKey)).toBe(false);
+    bridge.bindParent(parentSessionKey, "parent-run-2", () => {});
+    expect(bridge.consumeFreshSession(parentSessionKey)).toBe(true);
+  });
+
+  it("keeps the child fresh-claim until parent unbind so hook order cannot starve usage (#551)", async () => {
+    const bridge = new CoveAgentRunLifecycleBridge();
+    const parentKey = "agent:kagura:cove:direct:1:thread:1";
+    const childKey = "agent:kagura:subagent:child-9";
+    bridge.bindParent(parentKey, "parent-run", () => {});
+    bridge.onSubagentSpawned({ childSessionKey: childKey, runId: "native-run", mode: "run" }, { requesterSessionKey: parentKey });
+    expect(bridge.consumeFreshSession(childKey)).toBe(true);
+    expect(bridge.consumeFreshSession(childKey)).toBe(false);
+
+    // Second child: lifecycle handler may run BEFORE the usage collector on
+    // agent_end. stopChild must not delete the claim — the collector still sees
+    // it and reports the one-shot child's usage.
+    const childKey2 = "agent:kagura:subagent:child-10";
+    bridge.onSubagentSpawned({ childSessionKey: childKey2, runId: "native-run-2", mode: "run" }, { requesterSessionKey: parentKey });
+    bridge.onAgentEnd({ runId: "native-run-2", messages: [], success: true }, { runId: "native-run-2", sessionKey: childKey2 });
+    // stopChild ran (child finished), but the claim survives for the collector.
+    expect(bridge.consumeFreshSession(childKey2)).toBe(true);
+
+    // unbindParent cleans up any unconsumed claims.
+    const childKey3 = "agent:kagura:subagent:child-11";
+    bridge.onSubagentSpawned({ childSessionKey: childKey3, runId: "native-run-3", mode: "run" }, { requesterSessionKey: parentKey });
+    bridge.unbindParent(parentKey);
+    expect(bridge.consumeFreshSession(childKey3)).toBe(false);
+  });
+
   it("maps the real sessions_spawn api.on payload/context to the parent Cove thread run", async () => {
     vi.useFakeTimers();
     const bridge = new CoveAgentRunLifecycleBridge();
