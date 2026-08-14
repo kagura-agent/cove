@@ -1,5 +1,4 @@
 import type { CoveRestClient } from "./rest-client.js";
-import { estimateCost } from "./model-prices.js";
 
 /**
  * Collects per-turn LLM usage from OpenClaw's `agent_end` hook and attributes
@@ -10,6 +9,12 @@ import { estimateCost } from "./model-prices.js";
  * message. The message list is cumulative across the session, so this collector
  * keeps a per-session baseline and reports the *delta* (new usage since the
  * last observed end) — that delta is exactly the current turn's consumption.
+ *
+ * Cost policy: **trust the reported data**. OpenClaw's per-call usage carries
+ * `cost` (provider-billed or model-config-derived); whatever it reports — even
+ * 0 — is recorded as-is. No local price table fallback: an invented price would
+ * silently corrupt ROI/cache-rate analytics. When cost is absent, it is stored
+ * as null with cost_source "none".
  *
  * Attribution: OpenClaw's native runId is NOT the Cove run id — the Cove
  * plugin creates its own run per turn. Mapping:
@@ -23,7 +28,14 @@ import { estimateCost } from "./model-prices.js";
  * The hook is fire-and-forget. All reporting is queued and failures are
  * logged, never thrown — observability must not break the turn.
  */
-type MsgUsage = { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+type MsgUsage = {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+};
 type AgentEndEvent = {
   runId?: string;
   messages: Array<{ role?: string; provider?: string; model?: string; usage?: MsgUsage }>;
@@ -32,10 +44,10 @@ type AgentEndEvent = {
   durationMs?: number;
 };
 type AgentEndContext = { sessionKey?: string; sessionId?: string; runId?: string };
-type TokenTotals = { input: number; output: number; cacheRead: number; cacheWrite: number };
+type TokenTotals = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number; hasCost: boolean };
 
 function sumUsage(messages: Array<{ usage?: MsgUsage }>): TokenTotals {
-  const totals: TokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const totals: TokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, hasCost: false };
   for (const m of messages) {
     const u = m.usage;
     if (!u) continue;
@@ -43,6 +55,10 @@ function sumUsage(messages: Array<{ usage?: MsgUsage }>): TokenTotals {
     totals.output += u.output ?? 0;
     totals.cacheRead += u.cacheRead ?? 0;
     totals.cacheWrite += u.cacheWrite ?? 0;
+    if (u.cost && typeof u.cost.total === "number") {
+      totals.cost += u.cost.total;
+      totals.hasCost = true;
+    }
   }
   return totals;
 }
@@ -63,7 +79,7 @@ export interface UsageBridge {
 }
 
 export class CoveUsageCollector {
-  /** Per-session cumulative token baseline (for delta computation). */
+  /** Per-session cumulative token/cost baseline (for delta computation). */
   private baselines = new Map<string, TokenTotals>();
 
   constructor(
@@ -87,6 +103,8 @@ export class CoveUsageCollector {
       output: totals.output - baseline.output,
       cacheRead: totals.cacheRead - baseline.cacheRead,
       cacheWrite: totals.cacheWrite - baseline.cacheWrite,
+      cost: totals.cost - baseline.cost,
+      hasCost: totals.hasCost,
     };
     this.baselines.set(sessionKey, totals);
     if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
@@ -108,13 +126,6 @@ export class CoveUsageCollector {
     const modelInfo = lastModel(event.messages ?? []);
     const model = modelInfo?.model ?? "unknown";
     const provider = modelInfo?.provider ?? "unknown";
-    const cost = estimateCost({
-      model,
-      inputTokens: delta.input,
-      outputTokens: delta.output,
-      cacheReadTokens: delta.cacheRead,
-      cacheWriteTokens: delta.cacheWrite,
-    });
 
     rest.recordRunUsage(runId, {
       provider,
@@ -123,8 +134,9 @@ export class CoveUsageCollector {
       output_tokens: delta.output,
       cache_read_tokens: delta.cacheRead,
       cache_write_tokens: delta.cacheWrite,
-      cost,
-      cost_source: cost === null ? "none" : "price_table",
+      // Trust the reported cost: use it as-is (0 stays 0), null when absent.
+      cost: delta.hasCost ? delta.cost : null,
+      cost_source: delta.hasCost ? "provider" : "none",
     }).catch((error) => this.log?.warn?.(`cove: failed to record run usage: ${error?.message ?? error}`));
   }
 }
