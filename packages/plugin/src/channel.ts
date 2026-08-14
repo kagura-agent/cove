@@ -42,6 +42,16 @@ export function shouldNotifyAgentForMessage(message: Pick<Message, "metadata">, 
   }
 }
 
+export function isTaskHeartbeat(message: Pick<Message, "metadata">): boolean {
+  if (!message.metadata) return false;
+  try {
+    const metadata = JSON.parse(message.metadata) as { content_type?: string };
+    return metadata.content_type === "task_heartbeat";
+  } catch {
+    return false;
+  }
+}
+
 const restClients = new Map<string, CoveRestClient>();
 
 function getRestClient(baseUrl: string, token: string): CoveRestClient {
@@ -319,6 +329,27 @@ const coveChannelPlugin = createChatChannelPlugin<CoveAccount>({
             return;
           }
           if (message.author.bot && !message.webhook_id) return;
+          // Stale heartbeat skip: if the agent already replied (or a newer
+          // message exists) after this heartbeat was sent, it is stale — the
+          // server only sends one unanswered heartbeat per thread, but a burst
+          // released after an idle gap can still carry an outdated snapshot.
+          // Asking the server for the latest message tells us if this one is
+          // already superseded; when it is, drop it instead of queuing another
+          // turn against stale state.
+          if (isTaskHeartbeat(message)) {
+            try {
+              const latest = await restClient.getMessages(message.channel_id, { limit: 1 });
+              const newest = latest[0];
+              if (newest && newest.id !== message.id) {
+                log?.info?.(`cove: skipping stale task heartbeat [${message.channel_id}] (superseded by ${newest.id})`);
+                return;
+              }
+            } catch (error: any) {
+              // If we cannot verify, deliver — better to over-deliver than
+              // to drop a legitimate continuation.
+              log?.warn?.(`cove: stale-heartbeat check failed, delivering anyway: ${error.message}`);
+            }
+          }
           log?.info?.(`cove: [${message.channel_id}] ${message.author.global_name || message.author.username}: ${message.content.slice(0, 50)}`);
           if (shouldDispatchImmediately(message)) {
             // Do not queue a stop behind the run it needs to cancel. dispatchMessage

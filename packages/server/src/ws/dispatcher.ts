@@ -136,6 +136,15 @@ export class GatewayDispatcher {
     });
   }
 
+  /**
+   * Liveness probe for the heartbeat worker: is the given user actively
+   * typing (within the 8s abortable window) in this channel right now?
+   */
+  hasActiveTyping(channelId: string, userId: string): boolean {
+    const entry = this.activeTyping.get(`${channelId}:${userId}`);
+    return Boolean(entry && entry.expiresAt > Date.now());
+  }
+
   requestAgentAbort(channelId: string, targetUserId: string, runId: string, requester: { id: string; username: string }): { status: "requested" | "already_requested"; requestId: string } | { status: "already_requested" | "not_active" | "unavailable" } {
     // The run's validity (exists, belongs to this channel/agent, status=active)
     // is verified by the route before forwarding. Here we only gate on agent
