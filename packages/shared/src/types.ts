@@ -378,6 +378,23 @@ export interface Task {
   updated_at: number;
 }
 
+/** Generic agent execution ledger. Event evidence is file-backed and redacted before persistence. */
+export type AgentRunStatus = "active" | "completed" | "failed" | "aborted" | "stale";
+export type AgentRunEventType = "run_started" | "run_finished" | "run_failed" | "run_aborted" | "tool_started" | "tool_progress" | "tool_finished" | "tool_failed" | "command_output" | "patch_summary" | "approval_requested" | "subagent_started" | "subagent_progress" | "subagent_finished" | "subagent_failed";
+export interface AgentRun {
+  run_id: string; agent_id: string; channel_id: string; thread_id: string | null; task_id: string | null;
+  trigger_message_id: string; assistant_message_id: string | null; parent_run_id: string | null;
+  status: AgentRunStatus; current_action: string | null; started_at: number; updated_at: number;
+  finished_at: number | null; expires_at: number; log_manifest_ref: string; log_hash: string | null;
+  log_event_count: number; log_bytes: number; redaction_version: number;
+}
+export interface AgentRunEvent {
+  event_id: string; run_id: string; tool_call_id: string | null; type: AgentRunEventType;
+  action: string | null; detail: string | null; status: string | null; exit_code: number | null;
+  duration_ms: number | null; cwd: string | null; created_at: number;
+}
+export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; }
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id

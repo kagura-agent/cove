@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
+import type { AgentRunTimeline, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -236,6 +236,14 @@ export function leaveThread(threadId: string) {
 
 export function fetchThreadMessages(threadId: string, opts?: { before?: string; limit?: number }) {
   return fetchMessages(threadId, opts); // threads are channels, same endpoint
+}
+
+export function fetchLatestAgentRun(channelId: string, threadId?: string) {
+  return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/agent-runs/latest${threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ""}`);
+}
+export function fetchAgentRun(runId: string) { return api<AgentRunTimeline>(`${API_PREFIX}/agent-runs/${runId}`); }
+export function fetchMessageAgentRun(channelId: string, messageId: string) {
+  return api<AgentRunTimeline>(`${API_PREFIX}/channels/${channelId}/messages/${messageId}/agent-run`);
 }
 
 export function sendThreadMessage(threadId: string, content: string, nonce?: string) {

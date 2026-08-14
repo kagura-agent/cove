@@ -1,4 +1,4 @@
-import type { Message, Channel, Role, Task } from "@cove/shared";
+import type { Message, Channel, Role, Task, AgentRun } from "@cove/shared";
 import { PermissionBits } from "@cove/shared";
 import type { GatewaySession } from "./session.js";
 import type { ChannelsRepo } from "../repos/channels.js";
@@ -17,8 +17,8 @@ export class GatewayDispatcher {
   private permissionsRepo: PermissionsRepo | null = null;
   private membersRepo: MembersRepo | null = null;
   private rolesRepo: RolesRepo | null = null;
-  private activeTyping = new Map<string, { runId: string; expiresAt: number; abortRequested: boolean; abortRequestId?: string }>();
-  private abortRequests = new Map<string, { channelId: string; targetUserId: string; requesterId: string; expiresAt: number }>();
+  private activeTyping = new Map<string, { runId: string; expiresAt: number }>();
+  private abortRequests = new Map<string, { channelId: string; targetUserId: string; requesterId: string; runId: string; expiresAt: number }>();
 
   constructor(private channelsRepo: ChannelsRepo, private guildsRepo?: GuildsRepo) {}
 
@@ -129,11 +129,7 @@ export class GatewayDispatcher {
     const current = this.activeTyping.get(key);
     const continuingRun = Boolean(abortable && current && current.expiresAt > now);
     const runId = continuingRun ? current!.runId : `${now}-${Math.random().toString(36).slice(2, 10)}`;
-    if (abortable) this.activeTyping.set(key, {
-      runId, expiresAt: now + 8_000,
-      abortRequested: continuingRun ? current!.abortRequested : false,
-      abortRequestId: continuingRun ? current!.abortRequestId : undefined,
-    });
+    if (abortable) this.activeTyping.set(key, { runId, expiresAt: now + 8_000 });
     this.broadcastToGuildWithChannelFilter(guildId, channelId, "TYPING_START", {
       channel_id: channelId, user_id: user.id, username: user.username, timestamp: now,
       ...(abortable ? { abortable: true, run_id: runId } : {}),
@@ -141,15 +137,18 @@ export class GatewayDispatcher {
   }
 
   requestAgentAbort(channelId: string, targetUserId: string, runId: string, requester: { id: string; username: string }): { status: "requested" | "already_requested"; requestId: string } | { status: "already_requested" | "not_active" | "unavailable" } {
-    const key = `${channelId}:${targetUserId}`;
-    const active = this.activeTyping.get(key);
-    if (!active || active.expiresAt <= Date.now() || active.runId !== runId) { this.activeTyping.delete(key); return { status: "not_active" }; }
-    if (active.abortRequested) return active.abortRequestId ? { status: "already_requested", requestId: active.abortRequestId } : { status: "already_requested" };
+    // The run's validity (exists, belongs to this channel/agent, status=active)
+    // is verified by the route before forwarding. Here we only gate on agent
+    // presence and dedupe in-flight abort requests per run.
     if (!this.userSessions.has(targetUserId)) return { status: "unavailable" };
-    active.abortRequested = true;
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    active.abortRequestId = requestId;
-    this.abortRequests.set(requestId, { channelId, targetUserId, requesterId: requester.id, expiresAt: Date.now() + 15_000 });
+    const now = Date.now();
+    for (const [id, request] of this.abortRequests) {
+      if (request.channelId === channelId && request.targetUserId === targetUserId && request.runId === runId && request.expiresAt > now) {
+        return { status: "already_requested", requestId: id };
+      }
+    }
+    const requestId = `${now}-${Math.random().toString(36).slice(2, 10)}`;
+    this.abortRequests.set(requestId, { channelId, targetUserId, requesterId: requester.id, runId, expiresAt: now + 15_000 });
     this.sendToUser(targetUserId, "AGENT_ABORT_REQUEST", { request_id: requestId, channel_id: channelId, target_user_id: targetUserId, requester });
     return { status: "requested", requestId };
   }
@@ -159,13 +158,6 @@ export class GatewayDispatcher {
     if (!request || request.targetUserId !== targetUserId || request.expiresAt <= Date.now()) return false;
     this.abortRequests.delete(requestId);
     if (status === "aborted") this.activeTyping.delete(`${request.channelId}:${targetUserId}`);
-    else {
-      const active = this.activeTyping.get(`${request.channelId}:${targetUserId}`);
-      if (active?.abortRequestId === requestId) {
-        active.abortRequested = false;
-        active.abortRequestId = undefined;
-      }
-    }
     this.sendToUser(request.requesterId, "AGENT_ABORT_RESULT", { request_id: requestId, channel_id: request.channelId, target_user_id: targetUserId, status });
     return true;
   }
@@ -460,6 +452,18 @@ export class GatewayDispatcher {
     const channel = this.channelsRepo.getById(task.channel_id);
     if (!channel) return;
     this.broadcastToGuildWithChannelFilter(channel.guild_id, task.channel_id, "TASK_DELETED", task);
+  }
+
+  agentRunUpdated(run: AgentRun): void {
+    const channel = this.channelsRepo.getById(run.channel_id);
+    if (!channel) return;
+    this.broadcastToGuildWithChannelFilter(channel.guild_id, run.channel_id, "AGENT_RUN_UPDATED", run);
+    // Thread views subscribe to their child channel, while a run uses its parent
+    // channel as the permission/index anchor. Fan out the same scoped event so
+    // the active card updates immediately instead of waiting for a later fetch.
+    if (run.thread_id && run.thread_id !== run.channel_id) {
+      this.broadcastToGuildWithChannelFilter(channel.guild_id, run.thread_id, "AGENT_RUN_UPDATED", run);
+    }
   }
 
   /** Broadcast to all sessions in any of the given guilds, deduplicating. */

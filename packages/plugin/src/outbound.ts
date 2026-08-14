@@ -84,6 +84,8 @@ async function sendCoveDurableBatch(opts: { cfg: unknown; to: string; accountId?
     session: { key: `agent:${opts.agentId}:cove:group:${opts.to}` },
   });
   assertConfirmedVisibleDelivery(result, 1);
+  const delivered = result as any;
+  return delivered.payloadOutcomes?.[0]?.results?.[0]?.messageId ?? delivered.receipt?.platformMessageIds?.[0] ?? delivered.results?.[0]?.messageId;
 }
 
 /**
@@ -103,8 +105,8 @@ export function createCoveOutboundBridgeAdapter(
     },
 
     async sendText(sendCtx: ChannelMessageSendTextContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {
-      await sendCoveDurableBatch({ cfg: sendCtx.cfg, to: sendCtx.to, accountId: sendCtx.accountId, text: sendCtx.text, agentId });
-      return {};
+      const messageId = await sendCoveDurableBatch({ cfg: sendCtx.cfg, to: sendCtx.to, accountId: sendCtx.accountId, text: sendCtx.text, agentId });
+      return messageId ? { messageId } : {};
     },
 
     async sendMedia(sendCtx: ChannelMessageSendMediaContext<unknown>): Promise<ChannelMessageOutboundBridgeResult> {

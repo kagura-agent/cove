@@ -9,6 +9,7 @@ import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
 import { coveChannelPlugin } from "./channel.js";
 import { createCoveTaskTool } from "./cove-task-tool.js";
+import { registerCoveAgentRunLifecycleHooks } from "./agent-run-lifecycle.js";
 
 console.log('[cove-plugin] module loaded at', new Date().toISOString());
 
@@ -20,6 +21,9 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
   registerFull: (api) => {
     console.log('[cove] registerFull called, registrationMode:', (api as any).registrationMode);
     try {
+      // OpenClaw 2026.6.8 exposes native subagent_spawned/subagent_ended hooks.
+      // They are the only truthful source for sessions_spawn lifecycle state.
+      registerCoveAgentRunLifecycleHooks(api as any);
       api.registerTool(
         (context) => createCoveTaskTool({ cfg: (context as any).config ?? (context as any).runtimeConfig ?? {} }),
         { names: ["cove_task"] }

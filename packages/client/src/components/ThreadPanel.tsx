@@ -12,6 +12,7 @@ import { TaskBadge } from "./TaskBadge";
 import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
+import { AgentRunCard } from "./AgentRunCard";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -281,6 +282,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       {/* Reuse the exact same input as main chat */}
       <div style={{ flexShrink: 0, background: "var(--bg-secondary)" }}>
         <ReplyBar channelId={thread.id} />
+        {thread.guild_id && <AgentRunCard channelId={thread.parent_id ?? thread.id} threadId={thread.id} guildId={thread.guild_id} />}
         <MessageInput channelId={thread.id} />
       </div>
     </div>

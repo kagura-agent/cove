@@ -16,6 +16,7 @@ import * as api from "../lib/api";
 import { useState, useMemo } from "react";
 import { ImageLightbox } from "./ImageLightbox";
 import { useActiveIds } from "../hooks/useActiveIds";
+import { MessageAgentRunDetails } from "./MessageAgentRunDetails";
 
 const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
 
@@ -331,7 +332,7 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Header: username + badge + timestamp */}
-          <div style={{ display: "flex", alignItems: "baseline", lineHeight: 1.375 }}>
+          <div style={{ display: "flex", alignItems: "baseline", lineHeight: 1.375, flexWrap: "nowrap" }}>
             <span
               style={{
                 fontSize: "var(--font-size-lg)",
@@ -346,10 +347,11 @@ export function MessageItem({ message, isGroupStart, onJumpToMessage, onContextM
             {isBot && <span style={botBadgeStyle}>APP</span>}
             <Typography.Text
               type="secondary"
-              style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", marginLeft: "var(--space-sm)" }}
+              style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", marginLeft: "var(--space-sm)", whiteSpace: "nowrap" }}
             >
               {formatTime(message.timestamp)}
             </Typography.Text>
+            {(isBot && !message.webhook_id) && <span className="execution-details-inline"><MessageAgentRunDetails channelId={message.channel_id} messageId={message.id} /></span>}
           </div>
 
           {/* Reply quote */}

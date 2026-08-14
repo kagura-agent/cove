@@ -129,7 +129,7 @@ import { resolveChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingres
 
 const loadInbound = () => import("openclaw/plugin-sdk/inbound-reply-dispatch");
 
-interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; }
+interface MockRestClient { sendTyping: Mock; sendMessage: Mock; editMessage: Mock; deleteMessage: Mock; getChannel: Mock; getTasks: Mock; getTaskByThreadId: Mock; startAgentRun: Mock; appendAgentRunEvent: Mock; associateAgentRunMessage: Mock; }
 
 const createMockRestClient = (): MockRestClient => ({
   sendTyping: vi.fn().mockResolvedValue(undefined),
@@ -139,6 +139,9 @@ const createMockRestClient = (): MockRestClient => ({
   getChannel: vi.fn().mockResolvedValue({ id: "ch-1", type: 0 }),
   getTasks: vi.fn().mockResolvedValue([]),
   getTaskByThreadId: vi.fn().mockResolvedValue(null),
+  startAgentRun: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  appendAgentRunEvent: vi.fn().mockResolvedValue({ run_id: "run-1" }),
+  associateAgentRunMessage: vi.fn().mockResolvedValue({ run_id: "run-1" }),
 });
 
 const createMockChannelRuntime = () => ({
@@ -587,12 +590,12 @@ describe("D. Context Injection", () => {
 describe("E. Tool Progress (Compositor)", () => {
   beforeEach(resetState);
 
-  it("E1: Compositor created with correct params", async () => {
+  it("E1: compositor is disabled when durable agent-run evidence is available", async () => {
     await dispatchMessage(createBaseOpts());
     expect(createChannelProgressDraftCompositor).toHaveBeenCalledWith(expect.objectContaining({
       entry: expect.anything(),
       mode: "progress",
-      active: true,
+      active: false,
       seed: "msg-1",
       update: expect.any(Function),
     }));
@@ -639,14 +642,17 @@ describe("E. Tool Progress (Compositor)", () => {
   });
 
   it("E5: onToolStart calls pushToolProgress with formatted line", async () => {
+    const opts = createBaseOpts();
+    const restClient = opts.restClient as unknown as MockRestClient;
     const blocker = createDispatchBlocker();
-    const p = dispatchMessage(createBaseOpts());
+    const p = dispatchMessage(opts);
     await new Promise((r) => setTimeout(r, 50));
 
     const onToolStart = capturedDispatcherParams?.replyOptions?.onToolStart;
     expect(onToolStart).toBeDefined();
     onToolStart({ name: "Read", args: { file: "/foo" } });
     expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("📖 Read", { toolName: "Read" });
+    expect(restClient.sendMessage).not.toHaveBeenCalled();
 
     blocker.resolve(); await p;
   });
@@ -662,6 +668,16 @@ describe("E. Tool Progress (Compositor)", () => {
     expect(mockCompositor.pushToolProgress).toHaveBeenCalledWith("🔔 Task created");
 
     blocker.resolve(); await p;
+  });
+
+  it("E6b: nested subagent lifecycle is appended to the parent Cove run", async () => {
+    const opts = createBaseOpts(); const rest = opts.restClient as unknown as MockRestClient;
+    const blocker = createDispatchBlocker(); const p = dispatchMessage(opts); await new Promise((r) => setTimeout(r, 50));
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "running", progressText: "Reading repository" });
+    capturedDispatcherParams?.replyOptions?.onItemEvent?.({ kind: "subagent", itemId: "child-1", title: "Research", status: "completed", summary: "Done" });
+    blocker.resolve(); await p;
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_started", action: "Research" }));
+    expect(rest.appendAgentRunEvent).toHaveBeenCalledWith("run-1", expect.objectContaining({ type: "subagent_finished", action: "Research" }));
   });
 
   it("E7: suppressDefaultToolProgressMessages from compositor", async () => {
@@ -792,27 +808,26 @@ describe("H. Draft Streaming Lifecycle (SPEC-401)", () => {
   });
 
   describe("H2. Tool progress injection into draft", () => {
-    it("H2a: compositor update callback pushes text to draft.update", async () => {
+    it("H2a: tool compositor cannot write a durable assistant draft", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
-      // The compositor's update callback is captured in capturedCompositorParams
       expect(capturedCompositorParams?.update).toBeDefined();
       await capturedCompositorParams.update("Working on it...\n\n📖 Read file.ts");
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("Working on it...\n\n📖 Read file.ts");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
     });
 
-    it("H2b: compositor update with flush calls draft.loop.flush", async () => {
+    it("H2b: disabled progress updates do not flush or create fake replies", async () => {
       const blocker = createDispatchBlocker();
       const p = dispatchMessage(createBaseOpts());
       await new Promise((r) => setTimeout(r, 50));
 
       await capturedCompositorParams.update("text", { flush: true });
-      expect(capturedDraftUpdate).toHaveBeenCalledWith("text");
+      expect(capturedDraftUpdate).not.toHaveBeenCalled();
 
       blocker.resolve();
       await p;
@@ -1478,14 +1493,27 @@ describe("J. Task Thread Direct Policy (#473)", () => {
     expect(capturedResolvedTurn?.ctxPayload?.CommandAuthorized).toBe(false);
   });
 
-  it("J4: Thread without task stays as 'channel'", async () => {
+  it("J4: Thread without task routes as a direct thread", async () => {
     const opts = createBaseOpts();
     const restClient = opts.restClient as unknown as MockRestClient;
     restClient.getChannel.mockResolvedValue({ id: "ch-1", type: 11, parent_id: "parent-ch" });
     restClient.getTaskByThreadId.mockResolvedValue(null);
     await dispatchMessage(opts);
-    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("channel");
-    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toContain(":channel:");
+    expect(capturedResolvedTurn?.ctxPayload?.ChatType).toBe("direct");
+    expect(capturedResolvedTurn?.ctxPayload?.MessageThreadId).toBe("ch-1");
+    expect(capturedResolvedTurn?.ctxPayload?.SessionKey).toBe("agent:routed-agent:cove:direct:ch-1:thread:ch-1");
+  });
+
+  it("J4b: plain thread (no task) run is anchored to the thread, not the parent channel", async () => {
+    const opts = createBaseOpts({ message: createTestMessage({ id: "msg-1", channel_id: "thread-1" }) });
+    const restClient = opts.restClient as unknown as MockRestClient;
+    restClient.getChannel.mockResolvedValue({ id: "thread-1", type: 11, parent_id: "parent-ch" });
+    restClient.getTaskByThreadId.mockResolvedValue(null);
+    await dispatchMessage(opts);
+    expect(restClient.startAgentRun).toHaveBeenCalledWith(expect.objectContaining({
+      channel_id: "thread-1",
+      thread_id: "thread-1",
+    }));
   });
 
   it("J4: Error in task detection gracefully falls back to 'channel'", async () => {

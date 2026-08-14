@@ -7,6 +7,7 @@ import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { ChatArea } from "./ChatArea";
 import { MessageInput } from "./MessageInput";
 import { ReplyBar } from "./ReplyBar";
+import { AgentRunCard } from "./AgentRunCard";
 import { MemberList } from "./MemberList";
 import { FilesSidebar } from "./FilesSidebar";
 import { TaskPanel } from "./TaskPanel";
@@ -141,6 +142,7 @@ export function ChannelView() {
         {activeTab === "chat" && (
           <div style={styles.chatFooter} className="chat-footer-cell">
             {channelId && <ReplyBar channelId={channelId} />}
+            {channelId && <AgentRunCard channelId={channelId} guildId={guildId} />}
             {channelId && <MessageInput channelId={channelId} />}
           </div>
         )}
