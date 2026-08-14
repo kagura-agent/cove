@@ -2,28 +2,58 @@ import type { CoveRestClient } from "./rest-client.js";
 import { estimateCost } from "./model-prices.js";
 
 /**
- * Collects per-call LLM usage from OpenClaw's `llm_output` hook and attributes
- * it to the Cove run that owns the session. OpenClaw's native runId is NOT the
- * Cove run id — the Cove plugin creates its own run per turn. The mapping is:
+ * Collects per-turn LLM usage from OpenClaw's `agent_end` hook and attributes
+ * it to the Cove run that owns the session.
  *
- *   llm_output ctx.sessionKey → Cove thread session key → Cove run id
+ * Data source: `agent_end` fires on every completed turn (channel turns
+ * included) and its `messages` array carries per-call `usage` on each assistant
+ * message. The message list is cumulative across the session, so this collector
+ * keeps a per-session baseline and reports the *delta* (new usage since the
+ * last observed end) — that delta is exactly the current turn's consumption.
+ *
+ * Attribution: OpenClaw's native runId is NOT the Cove run id — the Cove
+ * plugin creates its own run per turn. Mapping:
+ *
+ *   hook sessionKey → Cove thread session key → Cove run id
  *   (bound in the agent-run-lifecycle bridge when dispatch starts the turn).
  *
- * Subagent calls carry their child session key; the lifecycle bridge tracks
- * child → parent session keys, so usage for children is attributed to the
- * parent Cove run and rolled up server-side via parent_run_id.
+ * Subagent turns carry their child session key; the lifecycle bridge tracks
+ * child → parent session keys, so child usage is attributed to the parent run.
  *
- * The hook is fire-and-forget (runs in parallel). All reporting is queued and
- * failures are logged, never thrown — observability must not break the turn.
+ * The hook is fire-and-forget. All reporting is queued and failures are
+ * logged, never thrown — observability must not break the turn.
  */
-type LlmOutputEvent = {
-  runId: string;
-  sessionId: string;
-  provider: string;
-  model: string;
-  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+type MsgUsage = { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+type AgentEndEvent = {
+  runId?: string;
+  messages: Array<{ role?: string; provider?: string; model?: string; usage?: MsgUsage }>;
+  success: boolean;
+  error?: string;
+  durationMs?: number;
 };
-type LlmOutputContext = { sessionKey?: string; sessionId?: string; runId?: string };
+type AgentEndContext = { sessionKey?: string; sessionId?: string; runId?: string };
+type TokenTotals = { input: number; output: number; cacheRead: number; cacheWrite: number };
+
+function sumUsage(messages: Array<{ usage?: MsgUsage }>): TokenTotals {
+  const totals: TokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  for (const m of messages) {
+    const u = m.usage;
+    if (!u) continue;
+    totals.input += u.input ?? 0;
+    totals.output += u.output ?? 0;
+    totals.cacheRead += u.cacheRead ?? 0;
+    totals.cacheWrite += u.cacheWrite ?? 0;
+  }
+  return totals;
+}
+
+function lastModel(messages: Array<{ role?: string; provider?: string; model?: string; usage?: MsgUsage }>): { provider: string; model: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.usage && m.model) return { provider: m.provider ?? "unknown", model: m.model };
+  }
+  return null;
+}
 
 /** Bridge subset the collector needs: run attribution + per-run REST client. */
 export interface UsageBridge {
@@ -33,21 +63,37 @@ export interface UsageBridge {
 }
 
 export class CoveUsageCollector {
+  /** Per-session cumulative token baseline (for delta computation). */
+  private baselines = new Map<string, TokenTotals>();
+
   constructor(
     private readonly bridge: UsageBridge,
     private readonly log?: { warn?: (msg: string) => void },
   ) {}
 
-  onLlmOutput(event: LlmOutputEvent, ctx: LlmOutputContext): void {
-    const usage = event.usage;
-    if (!usage) return;
-    const tokens = (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-    if (tokens <= 0) return;
-
-    // Attribute through the session chain: a child session resolves to its
-    // parent Cove run; a direct session resolves to its own run.
+  onAgentEnd(event: AgentEndEvent, ctx: AgentEndContext): void {
     const sessionKey = ctx.sessionKey ?? ctx.sessionId;
     if (!sessionKey) return;
+    const totals = sumUsage(event.messages ?? []);
+    const baseline = this.baselines.get(sessionKey);
+    if (!baseline) {
+      // First observed end for this session: record the baseline without
+      // reporting (the messages include pre-existing history).
+      this.baselines.set(sessionKey, totals);
+      return;
+    }
+    const delta: TokenTotals = {
+      input: totals.input - baseline.input,
+      output: totals.output - baseline.output,
+      cacheRead: totals.cacheRead - baseline.cacheRead,
+      cacheWrite: totals.cacheWrite - baseline.cacheWrite,
+    };
+    this.baselines.set(sessionKey, totals);
+    if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
+      return;
+    }
+
+    // Attribute through the session chain (child → parent Cove run).
     let runId = this.bridge.runForSession(sessionKey);
     let rest = this.bridge.restForSession(sessionKey);
     if (!runId || !rest) {
@@ -59,21 +105,24 @@ export class CoveUsageCollector {
     }
     if (!runId || !rest) return;
 
+    const modelInfo = lastModel(event.messages ?? []);
+    const model = modelInfo?.model ?? "unknown";
+    const provider = modelInfo?.provider ?? "unknown";
     const cost = estimateCost({
-      model: event.model,
-      inputTokens: usage.input ?? 0,
-      outputTokens: usage.output ?? 0,
-      cacheReadTokens: usage.cacheRead ?? 0,
-      cacheWriteTokens: usage.cacheWrite ?? 0,
+      model,
+      inputTokens: delta.input,
+      outputTokens: delta.output,
+      cacheReadTokens: delta.cacheRead,
+      cacheWriteTokens: delta.cacheWrite,
     });
 
     rest.recordRunUsage(runId, {
-      provider: event.provider,
-      model: event.model,
-      input_tokens: usage.input ?? 0,
-      output_tokens: usage.output ?? 0,
-      cache_read_tokens: usage.cacheRead ?? 0,
-      cache_write_tokens: usage.cacheWrite ?? 0,
+      provider,
+      model,
+      input_tokens: delta.input,
+      output_tokens: delta.output,
+      cache_read_tokens: delta.cacheRead,
+      cache_write_tokens: delta.cacheWrite,
       cost,
       cost_source: cost === null ? "none" : "price_table",
     }).catch((error) => this.log?.warn?.(`cove: failed to record run usage: ${error?.message ?? error}`));

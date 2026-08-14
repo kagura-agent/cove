@@ -35,14 +35,17 @@ const entry: ReturnType<typeof defineChannelPluginEntry> = defineChannelPluginEn
     } catch (err: any) {
       console.error('[cove] registerTool failed:', err.message);
     }
-    // Per-run token usage tracking. The collector resolves the owning Cove run
-    // through the lifecycle bridge (which carries each run's REST client), so
-    // llm_output calls are attributed to the correct channel/task run even when
-    // they originate from a subagent session.
+    // Per-turn token usage tracking. `agent_end` fires on every completed turn
+    // (channel turns included) and its messages carry per-call `usage` — the
+    // reliable data source for token/cost (verified live). `llm_output` only
+    // fires on CLI/embedded-runner paths, and `reply_payload_sending` fires
+    // without usageState in this harness. The collector computes per-turn delta
+    // from the cumulative message usage and attributes it to the owning Cove
+    // run via the lifecycle bridge.
     try {
       if (typeof (api as any).on === "function") {
-        (api as any).on("llm_output", (event: any, ctx: any) => usageCollector.onLlmOutput(event, ctx));
-        console.log('[cove] llm_output usage collector registered');
+        (api as any).on("agent_end", (event: any, ctx: any) => usageCollector.onAgentEnd(event, ctx));
+        console.log('[cove] agent_end usage collector registered');
       } else {
         console.warn('[cove] api.on unavailable; usage tracking disabled');
       }

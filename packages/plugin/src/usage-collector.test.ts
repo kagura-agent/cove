@@ -11,23 +11,29 @@ function bridge(overrides: Partial<UsageBridge> = {}): UsageBridge {
   };
 }
 
-describe("CoveUsageCollector", () => {
-  it("attributes llm_output usage to the Cove run owning the session", async () => {
+function usageMsg(input: number, output: number, cacheRead = 0, model = "deepseek-v4-flash") {
+  return { role: "assistant" as const, provider: "floway-sg", model, usage: { input, output, cacheRead, cacheWrite: 0 } };
+}
+
+describe("CoveUsageCollector (agent_end source)", () => {
+  it("reports the delta between consecutive agent_end baselines to the Cove run", async () => {
     const record = vi.fn().mockResolvedValue(undefined);
     const collector = new CoveUsageCollector(bridge({
       runForSession: (key) => key === "agent:kagura:cove:direct:1" ? "cove-run-1" : null,
       restForSession: (key) => key === "agent:kagura:cove:direct:1" ? { recordRunUsage: record } as any : null,
     }));
-    collector.onLlmOutput({
-      runId: "native-run", sessionId: "s1", provider: "floway-sg", model: "deepseek-v4-flash",
-      usage: { input: 1000, output: 500, cacheRead: 200, cacheWrite: 100 },
-    }, { sessionKey: "agent:kagura:cove:direct:1", sessionId: "s1", runId: "native-run" });
+    const sessionKey = "agent:kagura:cove:direct:1";
+    // First end: establishes baseline (cumulative history), reports nothing.
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(100, 50)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+    // Second end: delta = new messages only.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(100, 50), usageMsg(1000, 500)], success: true }, { sessionKey });
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
     const [runId, usage] = record.mock.calls[0];
     expect(runId).toBe("cove-run-1");
     expect(usage).toMatchObject({
       provider: "floway-sg", model: "deepseek-v4-flash",
-      input_tokens: 1000, output_tokens: 500, cache_read_tokens: 200, cache_write_tokens: 100,
+      input_tokens: 1000, output_tokens: 500,
       cost_source: "price_table",
     });
     expect(usage.cost).toBeGreaterThan(0);
@@ -40,29 +46,31 @@ describe("CoveUsageCollector", () => {
       parentSessionFor: (key) => key === "agent:kagura:subagent:child-1" ? "agent:kagura:cove:direct:1" : null,
       restForSession: (key) => key === "agent:kagura:cove:direct:1" ? { recordRunUsage: record } as any : null,
     }));
-    collector.onLlmOutput({
-      runId: "child-run", sessionId: "child-session", provider: "p", model: "gpt-5-mini",
-      usage: { input: 100, output: 50 },
-    }, { sessionKey: "agent:kagura:subagent:child-1", sessionId: "child-session", runId: "child-run" });
+    const childKey = "agent:kagura:subagent:child-1";
+    collector.onAgentEnd({ runId: "c1", messages: [usageMsg(10, 5)], success: true }, { sessionKey: childKey });
+    collector.onAgentEnd({ runId: "c2", messages: [usageMsg(10, 5), usageMsg(200, 100)], success: true }, { sessionKey: childKey });
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
     expect(record.mock.calls[0][0]).toBe("cove-run-1");
+    expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 200, output_tokens: 100 });
   });
 
-  it("skips calls with no usage or zero tokens", () => {
+  it("does not record when no run owns the session", async () => {
+    const record = vi.fn();
+    const collector = new CoveUsageCollector(bridge({ restForSession: () => ({ recordRunUsage: record }) as any }));
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(10, 5)], success: true }, { sessionKey: "no-such" });
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(10, 5), usageMsg(20, 10)], success: true }, { sessionKey: "no-such" });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("skips turns with no new usage", async () => {
     const record = vi.fn();
     const collector = new CoveUsageCollector(bridge({
       runForSession: () => "cove-run-1",
       restForSession: () => ({ recordRunUsage: record }) as any,
     }));
-    collector.onLlmOutput({ runId: "r", sessionId: "s", provider: "p", model: "m" }, { sessionKey: "k" });
-    collector.onLlmOutput({ runId: "r", sessionId: "s", provider: "p", model: "m", usage: { input: 0, output: 0 } }, { sessionKey: "k" });
-    expect(record).not.toHaveBeenCalled();
-  });
-
-  it("does not record when no run owns the session", () => {
-    const record = vi.fn();
-    const collector = new CoveUsageCollector(bridge({ restForSession: () => ({ recordRunUsage: record }) as any }));
-    collector.onLlmOutput({ runId: "r", sessionId: "s", provider: "p", model: "m", usage: { input: 10, output: 5 } }, { sessionKey: "no-such-session" });
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(100, 50)], success: true }, { sessionKey });
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(100, 50)], success: true }, { sessionKey });
     expect(record).not.toHaveBeenCalled();
   });
 
@@ -73,7 +81,9 @@ describe("CoveUsageCollector", () => {
       runForSession: () => "cove-run-1",
       restForSession: () => ({ recordRunUsage: record }) as any,
     }), { warn });
-    collector.onLlmOutput({ runId: "r", sessionId: "s", provider: "p", model: "m", usage: { input: 10, output: 5 } }, { sessionKey: "k" });
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(10, 5)], success: true }, { sessionKey });
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(10, 5), usageMsg(20, 10)], success: true }, { sessionKey });
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
     expect(warn.mock.calls[0][0]).toContain("failed to record run usage");
   });
