@@ -45,7 +45,11 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   }, [channelId, threadId]);
   useEffect(() => {
     const onResult = (data: { request_id: string; channel_id: string; target_user_id: string; status: "aborted" | "denied" | "failed" }) => {
-      if (data.channel_id !== channelId || data.request_id !== abortRequestIdRef.current) return;
+      // The abort is forwarded to the scope the dispatch runs in (thread id for
+      // a thread run), so the result event's channel_id may be the thread id
+      // even though the card is anchored to the parent channel.
+      const matchesScope = data.channel_id === channelId || (threadId != null && data.channel_id === threadId);
+      if (!matchesScope || data.request_id !== abortRequestIdRef.current) return;
       if (data.status === "aborted") { setStopState(undefined); abortRequestIdRef.current = undefined; return; }
       setStopState(data.status === "denied" ? "denied" : "failed");
     };

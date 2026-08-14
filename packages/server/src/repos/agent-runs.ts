@@ -45,9 +45,14 @@ export class AgentRunsRepo {
     const payload = JSON.stringify({ version: 1, run_id: run.run_id, event_log: "events.jsonl", redaction_version: run.redaction_version, event_count: run.log_event_count, bytes: run.log_bytes, hash: run.log_hash, updated_at: run.updated_at }) + "\n";
     const tmp = join(dir, "manifest.json.tmp"); writeFileSync(tmp, payload, { mode: 0o600 }); renameSync(tmp, join(dir, "manifest.json"));
   }
-  expire(scope?: { channelId?: string }) {
+  expire(scope?: { channelId?: string; threadId?: string }) {
     const now = Date.now(); let where = ""; const args: unknown[] = [now, now, now];
-    if (scope?.channelId) { where = " AND channel_id=?"; args.push(scope.channelId); }
+    // A thread run is anchored to its parent channel (channel_id = parent,
+    // thread_id marks the thread), so a parent-channel scope must only expire
+    // the channel's own runs — never a thread's runs behind its back. Match the
+    // thread scope explicitly instead.
+    if (scope?.threadId) { where = " AND thread_id=?"; args.push(scope.threadId); }
+    else if (scope?.channelId) { where = " AND channel_id=? AND thread_id IS NULL"; args.push(scope.channelId); }
     this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
   }
   /**
@@ -96,7 +101,10 @@ export class AgentRunsRepo {
   }
 
   latest(input: { channelId?: string; threadId?: string }): AgentRun | null {
-    this.expire(input.channelId ? { channelId: input.channelId } : undefined);
+    // Expire the scope that actually owns the runs we're about to surface. A
+    // thread lookup must expire by thread_id, otherwise zombie runs from
+    // crashed dispatches stay 'active' and the run card shows forever.
+    this.expire(input.threadId ? { threadId: input.threadId } : input.channelId ? { channelId: input.channelId } : undefined);
     if (input.threadId) {
       const row = this.db.prepare("SELECT * FROM agent_runs WHERE thread_id=? ORDER BY (status='active') DESC, updated_at DESC LIMIT 1").get(input.threadId);
       return row ? asRun(row) : null;

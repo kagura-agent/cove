@@ -425,11 +425,20 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (!target?.bot) return c.json({ message: "Unknown Agent", code: 10003 }, 404);
     // Abort targets an agent run, not a typing heartbeat: verify the run
     // belongs to this channel/agent and is still active before forwarding.
+    // Thread runs are anchored with channel_id = parent channel, so accept both
+    // the run's own channel and its thread id as the lookup boundary (the client
+    // may legitimately address the abort from either the thread or its parent).
     const run = repos.agentRuns.get(body.run_id);
-    if (!run || run.channel_id !== channelId || run.agent_id !== targetUserId || run.status !== "active") {
+    const runScopeMatches = run && (run.channel_id === channelId || run.thread_id === channelId);
+    if (!runScopeMatches || run.agent_id !== targetUserId || run.status !== "active") {
       return c.json({ status: "not_active" as const }, 409);
     }
-    const result = dispatcher?.requestAgentAbort(channelId, targetUserId, body.run_id, { id: requester.id, username: requester.username }) ?? { status: "unavailable" as const };
+    // Forward the abort to the scope the dispatch actually runs in: the plugin
+    // keys its live dispatch by the message's channel_id (the thread id for a
+    // thread turn), so aborting via the parent channel would validate here but
+    // never reach the running dispatch.
+    const dispatchChannelId = run.thread_id ?? run.channel_id;
+    const result = dispatcher?.requestAgentAbort(dispatchChannelId, targetUserId, body.run_id, { id: requester.id, username: requester.username }) ?? { status: "unavailable" as const };
     if (result.status === "not_active" || result.status === "unavailable") return c.json(result, 409);
     return c.json(result, result.status === "requested" ? 202 : 200);
   });
