@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus } from "@cove/shared";
+import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage } from "@cove/shared";
 
 const MAX_DETAIL = 8_000;
 /** Stale-claim window for a run with no event traffic. Long turns (model
@@ -106,8 +106,8 @@ export class AgentRunsRepo {
     const file = this.readableLogPath(runId); if (!existsSync(file)) return [];
     return readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as AgentRunEvent);
   }
-  timelineForRun(runId: string): { run: AgentRun | null; events: AgentRunEvent[] } { const run = this.get(runId); return { run, events: run ? this.events(runId) : [] }; }
-  timeline(input: { channelId?: string; threadId?: string; taskId?: string }): { run: AgentRun | null; events: AgentRunEvent[] } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [] }; }
+  timelineForRun(runId: string): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.get(runId); return { run, events: run ? this.events(runId) : [], usage: run ? this.usage(runId, true) : null }; }
+  timeline(input: { channelId?: string; threadId?: string; taskId?: string }): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [], usage: run ? this.usage(run.run_id, true) : null }; }
   append(runId: string, input: { type: AgentRunEventType; tool_call_id?: unknown; action?: unknown; detail?: unknown; status?: unknown; exit_code?: unknown; duration_ms?: unknown; cwd?: unknown }): AgentRun | null {
     const current = this.get(runId); if (!current || current.status !== "active") return null;
     const now = Date.now(); const terminal: Record<string, AgentRunStatus> = { run_finished: "completed", run_failed: "failed", run_aborted: "aborted" };
@@ -123,5 +123,55 @@ export class AgentRunsRepo {
     if (run.assistant_message_id && run.assistant_message_id !== assistantMessageId) return null;
     this.db.prepare("UPDATE agent_runs SET assistant_message_id=?, updated_at=? WHERE run_id=?").run(assistantMessageId, Date.now(), runId);
     const updated = this.get(runId)!; this.writeManifest(updated); return updated;
+  }
+
+  /** Record one LLM call's usage against a run. Cost is computed by the caller
+   * (price table lives beside the plugin, not in the SQL index). */
+  recordUsage(runId: string, input: { provider: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens?: number; cache_write_tokens?: number; cost?: number | null; currency?: string; cost_source?: "provider" | "price_table" | "none" }): void {
+    const now = Date.now();
+    const total = (input.input_tokens || 0) + (input.output_tokens || 0) + (input.cache_read_tokens || 0) + (input.cache_write_tokens || 0);
+    this.db.prepare(`INSERT INTO agent_run_usage (run_id,provider,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,cost,currency,cost_source,called_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(runId, input.provider, input.model, input.input_tokens || 0, input.output_tokens || 0, input.cache_read_tokens || 0, input.cache_write_tokens || 0, total, input.cost ?? null, input.currency ?? "USD", input.cost_source ?? "none", now);
+  }
+
+  /** Aggregate usage for a run, rolling up child/subagent runs when the caller
+   * passes `includeChildren` (a parent-run timeline view). */
+  usage(runId: string, includeChildren = false): AgentRunUsage | null {
+    const run = this.get(runId); if (!run) return null;
+    let rows: any[];
+    if (includeChildren) {
+      // Walk the run's own calls plus any descendant runs. Parent runs are the
+      // root of the subagent tree (plugin maps child sessions to the parent run).
+      rows = this.db.prepare(`SELECT u.* FROM agent_run_usage u
+        WHERE u.run_id IN (SELECT run_id FROM agent_runs WHERE parent_run_id=?
+          UNION SELECT ? )`).all(runId, runId);
+    } else {
+      rows = this.db.prepare("SELECT * FROM agent_run_usage WHERE run_id=?").all(runId);
+    }
+    if (!rows.length) return null;
+    const currency = "USD";
+    const sum = (k: string) => rows.reduce((acc, r) => acc + (r[k] || 0), 0);
+    const costRows = rows.filter((r) => typeof r.cost === "number");
+    const cost = costRows.length ? costRows.reduce((acc, r) => acc + (r.cost || 0), 0) : null;
+    const cost_source: AgentRunUsage["cost_source"] = cost === null ? "none" : (costRows.some((r) => r.cost_source === "provider") ? "provider" : "price_table");
+    const models = new Map<string, { model: string; calls: number; input_tokens: number; output_tokens: number; cost: number | null }>();
+    for (const r of rows) {
+      const key = r.model;
+      const m = models.get(key) ?? { model: key, calls: 0, input_tokens: 0, output_tokens: 0, cost: null };
+      m.calls += 1; m.input_tokens += r.input_tokens || 0; m.output_tokens += r.output_tokens || 0;
+      if (typeof r.cost === "number") m.cost = (m.cost ?? 0) + r.cost;
+      models.set(key, m);
+    }
+    return {
+      calls: rows.length,
+      input_tokens: sum("input_tokens"),
+      output_tokens: sum("output_tokens"),
+      cache_read_tokens: sum("cache_read_tokens"),
+      cache_write_tokens: sum("cache_write_tokens"),
+      total_tokens: sum("total_tokens"),
+      cost, currency, cost_source,
+      models: [...models.values()],
+    };
   }
 }

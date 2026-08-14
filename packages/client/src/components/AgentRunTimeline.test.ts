@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentRunEvent } from "@cove/shared";
-import { aggregateLifecycleEvents, conciseAction, executionSummary, ExecutionTimeline, formatDuration } from "./AgentRunTimeline";
+import { aggregateLifecycleEvents, conciseAction, executionSummary, ExecutionTimeline, formatDuration, formatTokens, formatUsd, usageLabel } from "./AgentRunTimeline";
 
 function event(overrides: Partial<AgentRunEvent>): AgentRunEvent {
   return { event_id: "event", run_id: "run", tool_call_id: null, type: "tool_started", action: null, detail: null, status: null, exit_code: null, duration_ms: null, cwd: null, created_at: 0, ...overrides };
@@ -59,5 +59,18 @@ describe("agent execution presentation", () => {
     const html = renderToStaticMarkup(createElement(ExecutionTimeline, { events }));
     expect(html.indexOf("Starting")).toBeLessThan(html.indexOf("pnpm test"));
     expect(html.indexOf("pnpm test")).toBeLessThan(html.indexOf("Completed"));
+  });
+
+  it("formats token counts and costs for the execution chip", () => {
+    expect(formatTokens(500)).toBe("500");
+    expect(formatTokens(12_400)).toBe("12.4k");
+    expect(formatTokens(3_200_000)).toBe("3.2M");
+    expect(formatUsd(0.004)).toBe("$0.0040");
+    expect(formatUsd(0.0312)).toBe("$0.031");
+    expect(formatUsd(12.5)).toBe("$12.50");
+    expect(usageLabel(null)).toBeNull();
+    expect(usageLabel({ calls: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, total_tokens: 0, cost: null, currency: "USD", cost_source: "none", models: [] })).toBeNull();
+    expect(usageLabel({ calls: 1, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, total_tokens: 12_400, cost: null, currency: "USD", cost_source: "none", models: [] })).toBe("12.4k tok");
+    expect(usageLabel({ calls: 1, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, total_tokens: 12_400, cost: 0.0312, currency: "USD", cost_source: "price_table", models: [] })).toBe("12.4k tok · $0.031");
   });
 });

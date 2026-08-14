@@ -429,7 +429,7 @@ export async function dispatchMessage(opts: DispatchMessageOptions): Promise<voi
       // requester key matches the parent bound here.
       const run = await restClient.startAgentRun({ channel_id: channelId, trigger_message_id: message.id ?? `cove-${Date.now()}`, ...(channel?.type === 11 ? { thread_id: channelId } : {}) });
       agentRun = { runId: run.run_id };
-      coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent);
+      coveAgentRunLifecycleBridge.bindParent(threadSession.sessionKey, run.run_id, reportAgentRunEvent, restClient);
     } catch (error: any) {
       // Observability must never turn an otherwise valid agent turn into failure.
       log?.warn?.(`cove: failed to start agent run: ${error.message}`);

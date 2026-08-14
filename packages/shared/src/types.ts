@@ -393,7 +393,23 @@ export interface AgentRunEvent {
   action: string | null; detail: string | null; status: string | null; exit_code: number | null;
   duration_ms: number | null; cwd: string | null; created_at: number;
 }
-export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; }
+/** Per-run LLM usage. Rolled up to include child/subagent runs when read on a parent. */
+export interface AgentRunUsage {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+  /** Estimated cost in `currency`; null when no provider price is known. */
+  cost: number | null;
+  currency: string;
+  /** Where `cost` came from: provider billing data, our price table, or unavailable. */
+  cost_source: "provider" | "price_table" | "none";
+  /** Per-model breakdown (top-level run only; children are rolled into totals). */
+  models: Array<{ model: string; calls: number; input_tokens: number; output_tokens: number; cost: number | null }>;
+}
+export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null; }
 
 /** A thread member entry. */
 export interface ThreadMember {
