@@ -63,9 +63,11 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build plugin
+      - name: Build plugin + workspace deps
         if: steps.check.outputs.skip != 'true'
-        run: pnpm --filter openclaw-cove build
+        # '...' includes dependencies (packages/shared) — vitest resolves @cove/shared
+        # from its dist, which must be built first in a clean checkout
+        run: pnpm --filter openclaw-cove... build
 
       - name: Test plugin
         if: steps.check.outputs.skip != 'true'
