@@ -146,7 +146,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
     };
     refresh();
     const onUsage = (run: { channel_id: string; thread_id: string | null }) => {
-      if (run.thread_id === threadIdVal || (run.channel_id === parentId && !run.thread_id)) refresh();
+      if (run.thread_id === threadIdVal) refresh();
     };
     dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
     return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };

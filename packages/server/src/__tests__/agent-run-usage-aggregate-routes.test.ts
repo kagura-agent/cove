@@ -194,6 +194,17 @@ describe("agent run usage aggregate routes", () => {
     db.close();
   });
 
+  it("rejects thread usage when the thread belongs to a different channel", async () => {
+    const { db, app, channel, repos } = setup();
+    // A second channel with its own thread: the caller has access to the first
+    // channel but must not read usage for a thread anchored elsewhere.
+    const otherChannel = repos.channels.create(channel.guild_id, "other", undefined, 0);
+    const foreignThread = repos.threads.createStandalone(channel.guild_id, otherChannel.id, "foreign-thread", "agent");
+    const res = await app.request(`${API_PREFIX}/channels/${channel.id}/threads/${foreignThread.id}/usage`, { headers: { Authorization: "Bot agent-token" } });
+    expect(res.status).toBe(404);
+    db.close();
+  });
+
   it("gates task usage behind VIEW_CHANNEL (non-member 404) and 404s for unknown tasks", async () => {
     const { db, app, channel, repos } = setup();
     const thread = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread", "agent");

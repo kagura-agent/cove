@@ -101,7 +101,7 @@ export class AgentRunsRepo {
     return readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as AgentRunEvent);
   }
   timelineForRun(runId: string): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.get(runId); return { run, events: run ? this.events(runId) : [], usage: run ? this.usage(runId, true) : null }; }
-  timeline(input: { channelId?: string; threadId?: string; taskId?: string }): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [], usage: run ? this.usage(run.run_id, true) : null }; }
+  timeline(input: { channelId?: string; threadId?: string }): { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null } { const run = this.latest(input); return { run, events: run ? this.events(run.run_id) : [], usage: run ? this.usage(run.run_id, true) : null }; }
   append(runId: string, input: { type: AgentRunEventType; tool_call_id?: unknown; action?: unknown; detail?: unknown; status?: unknown; exit_code?: unknown; duration_ms?: unknown; cwd?: unknown }): AgentRun | null {
     const current = this.get(runId); if (!current || current.status !== "active") return null;
     const now = Date.now(); const terminal: Record<string, AgentRunStatus> = { run_finished: "completed", run_failed: "failed", run_aborted: "aborted" };
@@ -195,8 +195,7 @@ export class AgentRunsRepo {
    */
   usageByTask(channelId: string): Record<string, AgentRunUsage> {
     // Tasks belong to the channel via tasks.channel_id; runs are matched by
-    // their thread (runs anchored to a thread may carry channel_id = thread id
-    // or parent channel id, so the thread link is the reliable join).
+    // their thread (the canonical task↔thread link).
     const rows = this.db.prepare(
       `SELECT u.*, t.task_id FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id

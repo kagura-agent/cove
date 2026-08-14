@@ -34,7 +34,9 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
  // Scope-aggregated usage: channel (ALL runs incl. threads), thread (spans sessions),
  // task (spans the task's sessions). Same AgentRunUsage shape as per-run usage.
  app.get("/channels/:channelId/usage", async c => { const channelId = c.req.param("channelId"); await requireChannelPermission(repos,channelId,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.usageByScope({ channelId })); });
- app.get("/channels/:channelId/threads/:threadId/usage", async c => { const { channelId, threadId } = c.req.param(); await requireChannelPermission(repos,channelId,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.usageByScope({ threadId })); });
+ app.get("/channels/:channelId/threads/:threadId/usage", async c => { const { channelId, threadId } = c.req.param(); await requireChannelPermission(repos,channelId,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); // The thread must actually belong to this channel — otherwise a caller with
+ // access to one channel could read usage for an arbitrary thread elsewhere.
+ const thread = repos.channels.getById(threadId); if (!thread || thread.parent_id !== channelId) return c.json({ message: "Unknown Thread", code: 10008 }, 404); return c.json(repos.agentRuns.usageByScope({ threadId })); });
  app.get("/tasks/:taskId/usage", async c => { const task = repos.tasks.getById(c.req.param("taskId")); if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404); await requireChannelPermission(repos,task.channel_id,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.usageByScope({ taskId: task.task_id })); });
  // Per-task usage for the task table: { task_id: AgentRunUsage }. Tasks without
  // usage are absent; the client renders an em dash for them.
