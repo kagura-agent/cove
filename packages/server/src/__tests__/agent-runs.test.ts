@@ -36,19 +36,4 @@ describe("generic file-backed agent runs", () => {
     expect(repos.agentRuns.associateMessage(two.run_id, "m2")?.assistant_message_id).toBe("m2");
     db.close(); rmSync(root, { recursive: true, force: true });
   });
-
-  it("derives task_id from the thread when the caller omits it", () => {
-    const db = initDb(); const repos = createRepos(db); const guild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
-    seedChannels(db, guild.id); const channel = db.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string };
-    db.prepare("INSERT INTO users (id,username,bot,created_at,updated_at) VALUES ('agent','agent',1,1,1)").run();
-    // Task thread with an associated task, and a plain thread with no task.
-    db.prepare("INSERT INTO channels (id,guild_id,name,type,parent_id) VALUES ('th-task',?,'task-thread',11,?),('th-plain',?,'plain-thread',11,?)").run(guild.id, channel.id, guild.id, channel.id);
-    db.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m1','th-task','agent','go',1),('m2','th-plain','agent','go',2)").run();
-    db.prepare("INSERT INTO tasks (task_id,channel_id,thread_id,message_id,created_by,title,seq,status,created_at,updated_at) VALUES ('task-1',?,'th-task','m1','agent','T',1,'open',1,1)").run(channel.id);
-    const taskRun = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: "th-task", trigger_message_id: "m1" });
-    const plainRun = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: "th-plain", trigger_message_id: "m2" });
-    expect(repos.agentRuns.get(taskRun.run_id)?.task_id).toBe("task-1");
-    expect(repos.agentRuns.get(plainRun.run_id)?.task_id).toBeNull();
-    db.close();
-  });
 });

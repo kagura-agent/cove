@@ -107,9 +107,11 @@ describe("agent run usage aggregate routes", () => {
     const thread = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread", "agent");
     const task = repos.tasks.create("task-1", channel.id, thread.id, "trigger", "agent", "Do the thing", 1, { guild_id: channel.guild_id, created_by: "agent" });
 
-    const run1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, task_id: task.task_id, trigger_message_id: "trigger" });
+    // NOTE: runs are created WITHOUT task_id — the plugin never sends it. The
+    // aggregate must derive the task through the tasks.thread_id link.
+    const run1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger" });
     await recordUsage(app, run1.run_id, "m1", 1000, 500, 0.01);
-    const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, task_id: task.task_id, trigger_message_id: "trigger2" });
+    const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger2" });
     await recordUsage(app, run2.run_id, "m1", 500, 250, 0.005);
 
     // Unrelated run in a different thread (no task) must not count.
@@ -139,11 +141,13 @@ describe("agent run usage aggregate routes", () => {
     const taskA = repos.tasks.create("task-a", channel.id, threadA.id, "trigger", "agent", "Task A", 1, { guild_id: channel.guild_id, created_by: "agent" });
     const taskB = repos.tasks.create("task-b", channel.id, threadB.id, "trigger2", "agent", "Task B", 2, { guild_id: channel.guild_id, created_by: "agent" });
 
-    const runA1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, task_id: taskA.task_id, trigger_message_id: "trigger" });
+    // Runs are created WITHOUT task_id (plugin behavior); association must come
+    // from the tasks.thread_id link.
+    const runA1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, trigger_message_id: "trigger" });
     await recordUsage(app, runA1.run_id, "m1", 1000, 500, 0.01);
-    const runA2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, task_id: taskA.task_id, trigger_message_id: "trigger" });
+    const runA2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadA.id, trigger_message_id: "trigger" });
     await recordUsage(app, runA2.run_id, "m1", 500, 250, 0.005);
-    const runB = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadB.id, task_id: taskB.task_id, trigger_message_id: "trigger2" });
+    const runB = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: threadB.id, trigger_message_id: "trigger2" });
     await recordUsage(app, runB.run_id, "m2", 100, 50, 0.001);
 
     // A direct (non-task) run must not appear in the task map.
