@@ -73,10 +73,12 @@ describe("agent execution presentation", () => {
     expect((html.match(/<li/g) ?? []).length).toBe(3);
     // Every row contributes a spine node (aria-hidden axis column).
     expect((html.match(/aria-hidden="true"/g) ?? []).length).toBe(3);
-    // Interior rows draw a dashed spine segment above the node; no row draws a
-    // full spine from edge to edge (the axis is built from per-row segments).
+    // The spine is dashed, faint, and uses negative offsets so it crosses the
+    // row padding — one continuous axis rather than per-row segments.
     expect(html).toContain("position:absolute");
     expect(html).toContain("border-left:2px dashed");
+    expect(html).toContain("opacity:0.3");
+    expect(html).toContain("bottom:-4px");
     expect(html).not.toContain("borderBottom");
   });
 
@@ -104,6 +106,8 @@ describe("agent execution presentation", () => {
     expect(html).toContain("We need to fix the flaky CI before shipping.");
     expect(html).not.toContain("Preamble");
     expect(html).toContain("Proposed two fixes.");
+    // The opener content is rendered as a heading-weight row (bold), not a muted detail line.
+    expect(html).toContain("font-weight:600");
   });
 
   it("treats an opener without detail as a normal labeled row", () => {
