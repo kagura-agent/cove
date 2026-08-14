@@ -88,9 +88,6 @@ importers:
 
   packages/plugin:
     dependencies:
-      '@cove/shared':
-        specifier: workspace:*
-        version: link:../shared
       openclaw:
         specifier: '>=2026.3.0'
         version: 2026.6.8
@@ -98,6 +95,9 @@ importers:
         specifier: ^8.18.0
         version: 8.21.0
     devDependencies:
+      '@cove/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/ws':
         specifier: ^8.18.0
         version: 8.18.1
