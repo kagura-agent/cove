@@ -382,7 +382,7 @@ export interface Task {
 export type AgentRunStatus = "active" | "completed" | "failed" | "aborted" | "stale";
 export type AgentRunEventType = "run_started" | "run_finished" | "run_failed" | "run_aborted" | "tool_started" | "tool_progress" | "tool_finished" | "tool_failed" | "command_output" | "patch_summary" | "approval_requested" | "subagent_started" | "subagent_progress" | "subagent_finished" | "subagent_failed";
 export interface AgentRun {
-  run_id: string; agent_id: string; channel_id: string; thread_id: string | null; task_id: string | null;
+  run_id: string; agent_id: string; channel_id: string; thread_id: string | null;
   trigger_message_id: string; assistant_message_id: string | null; parent_run_id: string | null;
   status: AgentRunStatus; current_action: string | null; started_at: number; updated_at: number;
   finished_at: number | null; expires_at: number; log_manifest_ref: string; log_hash: string | null;

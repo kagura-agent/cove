@@ -26,7 +26,6 @@ export function migrateV33(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_agent_runs_channel_updated ON agent_runs(channel_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_thread_updated ON agent_runs(thread_id, updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_task_updated ON agent_runs(task_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_assistant_message ON agent_runs(assistant_message_id);
   `);
 }

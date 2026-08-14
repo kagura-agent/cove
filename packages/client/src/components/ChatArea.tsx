@@ -11,9 +11,11 @@ import { MessageList } from "./MessageList";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
-import type { Task, TaskStatus } from "@cove/shared";
+import type { Task, TaskStatus, AgentRunUsage } from "@cove/shared";
 import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { UsageChip } from "./UsageChip";
+import { dispatcher } from "../lib/gateway-dispatcher";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
 import { STATUS_ICON_COMPONENTS, getStatusSelectOptions, getStatusFilterOptions, getStatusLabelOptions } from "../lib/taskStatusConfig";
@@ -60,6 +62,22 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
   const getChannels = useChannelStore((s) => s.getChannels);
   const channels = getChannels(guildId);
   const channel = channels.find((c) => c.id === channelId);
+  const [channelUsage, setChannelUsage] = useState<AgentRunUsage | null | undefined>(undefined);
+
+  // Channel-scope aggregate: ALL runs anchored to the channel (chat + every
+  // thread). Refetch when the channel changes; live-refresh on usage events;
+  // failures degrade to no chip.
+  useEffect(() => {
+    if (!channelId || channel?.type === 11) return;
+    let alive = true;
+    const refresh = () => {
+      api.fetchChannelUsage(channelId).then((u) => { if (alive) setChannelUsage(u); }).catch(() => { if (alive) setChannelUsage(null); });
+    };
+    refresh();
+    const onUsage = (run: { channel_id: string }) => { if (run.channel_id === channelId) refresh(); };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
+  }, [channelId, channel?.type]);
 
   if (!channel) {
     return (
@@ -80,6 +98,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
           <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-sm)", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{channel.topic ? <ChatMarkdown content={channel.topic} /> : "A cozy channel"}</Typography.Text>
         </div>
         {onMembersClick && <Button type="text" icon={<TeamOutlined />} onClick={onMembersClick} style={membersOpen ? styles.membersBtnActive : styles.membersBtn} />}
+        <UsageChip usage={channelUsage} scope="channel" />
       </div>
 
       {/* Tab bar */}
@@ -109,6 +128,7 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
 /** Inline task table for the Tasks tab */
 function InlineTaskList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
+  const [taskUsages, setTaskUsages] = useState<Record<string, AgentRunUsage>>({});
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -147,6 +167,19 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     setLoading(true);
     fetchTasks(channelId).finally(() => setLoading(false));
   }, [channelId, fetchTasks]);
+
+  // Per-task usage for the Usage column. Live-refresh on usage events so the
+  // column tracks a running agent without a manual reload.
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      api.fetchTaskUsages(channelId).then((u) => { if (alive) setTaskUsages(u); }).catch(() => {});
+    };
+    refresh();
+    const onUsage = (run: { channel_id: string }) => { if (run.channel_id === channelId) refresh(); };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
+  }, [channelId]);
 
   const handleOpenThread = useCallback((task: Task) => {
     if (guildId) {
@@ -291,6 +324,12 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       width: 150,
       sorter: (a, b) => a.updated_at - b.updated_at,
       render: (ts: number) => new Date(ts).toLocaleString(),
+    },
+    {
+      title: "Usage",
+      key: "usage",
+      width: 130,
+      render: (_, task) => <UsageChip usage={taskUsages[task.task_id]} scope="task" />,
     },
     {
       title: "Actions",

@@ -12,10 +12,10 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 34 with generic agent run ledger tables", () => {
+  it("fresh DB gets user_version = 38 with generic agent run ledger tables", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(34);
+    expect(version).toBe(38);
 
     const recurringColumns = db.prepare("PRAGMA table_info(recurring_tasks)").all() as Array<{ name: string; dflt_value: string | null }>;
     expect(recurringColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
@@ -156,7 +156,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(34);
+      expect(version).toBe(38);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -227,7 +227,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(34);
+      expect(version).toBe(38);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -253,7 +253,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(34);
+      expect(version).toBe(38);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -375,7 +375,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(34);
+      expect(version).toBe(38);
 
       db2.close();
     } finally {
@@ -447,7 +447,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(34);
+      expect(db.pragma("user_version", { simple: true })).toBe(38);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -625,7 +625,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(34);
+      expect(version).toBe(38);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -677,7 +677,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(34);
+      expect(db2.pragma("user_version", { simple: true })).toBe(38);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
@@ -690,6 +690,102 @@ describe("V17→V18 attachments table migration", () => {
         }
       }
 
+      db2.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+});
+
+describe("V36 drops denormalized agent_runs.task_id", () => {
+  it("removes the column and index while preserving thread linkage", () => {
+    const tmpFile = tmpDb();
+    try {
+      // Simulate a v35 database: agent_runs still carries the task_id column.
+      const db1 = new Database(tmpFile);
+      db1.pragma("foreign_keys = OFF");
+      db1.exec(`
+        CREATE TABLE tasks (task_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, thread_id TEXT NOT NULL, message_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', assignee_id TEXT, title TEXT NOT NULL, seq INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE agent_runs (
+          run_id TEXT PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          thread_id TEXT,
+          task_id TEXT REFERENCES tasks(task_id),
+          trigger_message_id TEXT NOT NULL,
+          assistant_message_id TEXT,
+          parent_run_id TEXT,
+          status TEXT NOT NULL,
+          current_action TEXT,
+          started_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          finished_at INTEGER,
+          expires_at INTEGER NOT NULL,
+          log_manifest_ref TEXT NOT NULL,
+          log_hash TEXT,
+          log_event_count INTEGER NOT NULL DEFAULT 0,
+          log_bytes INTEGER NOT NULL DEFAULT 0,
+          redaction_version INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX idx_agent_runs_task_updated ON agent_runs(task_id, updated_at DESC);
+        CREATE TABLE guilds (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE channels (id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, name TEXT NOT NULL, type INTEGER NOT NULL DEFAULT 0, parent_id TEXT);
+        CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL, bot INTEGER NOT NULL DEFAULT 0, token TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE messages (id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, sender TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL);
+        INSERT INTO guilds VALUES ('guild-1','G',1,1);
+        INSERT INTO channels VALUES ('ch-1','guild-1','general',0,NULL),('th-task','guild-1','task-thread',11,'ch-1');
+        INSERT INTO users VALUES ('agent','agent',1,'tok',1,1);
+        INSERT INTO messages VALUES ('m1','th-task','agent','go',1);
+        INSERT INTO tasks VALUES ('task-1','ch-1','th-task','m1','open',NULL,'T',1,1,1);
+        INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,task_id,trigger_message_id,status,started_at,updated_at,expires_at,log_manifest_ref,redaction_version) VALUES ('r1','agent','ch-1','th-task','task-1','m1','completed',1,1,2,'manifest.json',1);
+      `);
+      db1.pragma("user_version = 35");
+      db1.close();
+
+      const db2 = initDb(tmpFile);
+      expect(db2.pragma("user_version", { simple: true })).toBe(38);
+      const cols = db2.prepare("PRAGMA table_info(agent_runs)").all() as Array<{ name: string }>;
+      expect(cols.map((c) => c.name)).not.toContain("task_id");
+      const idx = db2.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_agent_runs_task_updated'").get();
+      expect(idx).toBeUndefined();
+      // Thread linkage (the source of truth for task association) survives.
+      const run = db2.prepare("SELECT thread_id FROM agent_runs WHERE run_id='r1'").get() as { thread_id: string };
+      expect(run.thread_id).toBe("th-task");
+      db2.close();
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+});
+
+describe("V37 normalizes agent_runs.channel_id to parent channel", () => {
+  it("rewrites thread runs whose channel_id pointed at the thread itself", () => {
+    const tmpFile = tmpDb();
+    try {
+      const db1 = initDb(tmpFile);
+      db1.pragma("user_version = 36");
+      const guild = db1.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+      seedChannels(db1, guild.id);
+      const channel = db1.prepare("SELECT id FROM channels LIMIT 1").get() as { id: string };
+      const now = Date.now();
+      db1.prepare("INSERT INTO users (id,username,bot,created_at,updated_at) VALUES ('agent','agent',1,?,?)").run(now, now);
+      db1.prepare("INSERT INTO channels (id, guild_id, name, type, parent_id) VALUES ('th-task',?, 'task-thread', 11, ?)").run(guild.id, channel.id);
+      db1.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m1','th-task','agent','go',?)").run(now);
+      // Old semantics: channel_id = thread id, thread_id = thread id.
+      db1.prepare("INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,trigger_message_id,status,started_at,updated_at,expires_at,log_manifest_ref,redaction_version) VALUES ('r1','agent','th-task','th-task','m1','completed',?,?,?,'manifest.json',1)").run(now, now, now + 3600000);
+      // Channel run: channel_id = channel itself, thread_id NULL — untouched.
+      db1.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m2',?,'agent','hi',?)").run(channel.id, now);
+      db1.prepare("INSERT INTO agent_runs (run_id,agent_id,channel_id,thread_id,trigger_message_id,status,started_at,updated_at,expires_at,log_manifest_ref,redaction_version) VALUES ('r2','agent',?,'th-task','m2','completed',?,?,?,'manifest.json',1)").run(channel.id, now, now, now + 3600000);
+      db1.close();
+
+      const db2 = initDb(tmpFile);
+      expect(db2.pragma("user_version", { simple: true })).toBe(38);
+      const r1 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r1'").get() as { channel_id: string; thread_id: string };
+      const r2 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r2'").get() as { channel_id: string; thread_id: string };
+      expect(r1.channel_id).toBe(channel.id); // rewritten to parent channel
+      expect(r1.thread_id).toBe("th-task");    // thread marker preserved
+      expect(r2.channel_id).toBe(channel.id);  // channel run untouched
+      expect(r2.thread_id).toBe("th-task");
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}

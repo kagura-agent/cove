@@ -13,6 +13,9 @@ import * as api from "../lib/api";
 import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 import { AgentRunCard } from "./AgentRunCard";
+import { UsageChip } from "./UsageChip";
+import { dispatcher } from "../lib/gateway-dispatcher";
+import type { AgentRunUsage } from "@cove/shared";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -24,6 +27,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const [parentMessage, setParentMessage] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [usage, setUsage] = useState<AgentRunUsage | null | undefined>(undefined);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const threadFetchRef = useRef<string | null>(null);
@@ -130,6 +134,24 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
       .catch(() => setParentMessage(null));
   }, [thread?.id, thread?.message_id, thread?.parent_id]);
 
+  // Aggregated thread usage: spans all sessions/runs in this thread. Refresh
+  // when the thread changes; live-refresh on usage events for this thread.
+  useEffect(() => {
+    const parentId = thread?.parent_id;
+    const threadIdVal = thread?.id;
+    if (!parentId || !threadIdVal) return;
+    let alive = true;
+    const refresh = () => {
+      api.fetchThreadUsage(parentId, threadIdVal).then((u) => { if (alive) setUsage(u); }).catch(() => { if (alive) setUsage(null); });
+    };
+    refresh();
+    const onUsage = (run: { channel_id: string; thread_id: string | null }) => {
+      if (run.thread_id === threadIdVal) refresh();
+    };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
+  }, [thread?.id, thread?.parent_id]);
+
   if (!thread) return null;
 
   async function handleArchive() {
@@ -204,6 +226,7 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
             }}
           />
         )}
+        {usage && <UsageChip usage={usage} scope="thread" />}
         <div style={{ position: "relative" }}>
           <button
             ref={menuBtnRef}
