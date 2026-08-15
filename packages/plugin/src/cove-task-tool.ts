@@ -85,6 +85,7 @@ export function createCoveTaskTool(opts: { cfg: any }) {
             title,
             ...(assigneeId ? { assignee_id: assigneeId } : {}),
             ...(description ? { description } : {}),
+            ...(heartbeatIntervalMs !== undefined ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
             ...(createRecurrenceFields ? { recurrence: createRecurrenceFields } : {}),
           });
           return jsonResult({

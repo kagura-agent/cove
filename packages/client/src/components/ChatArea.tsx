@@ -135,7 +135,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [editStatus, setEditStatus] = useState<TaskStatus>("open");
   const [editAssigneeId, setEditAssigneeId] = useState<string | undefined>(undefined);
   const [editHeartbeatEnabled, setEditHeartbeatEnabled] = useState(false);
-  const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(600000);
+  const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(3600000);
   const [editingRecurrence, setEditingRecurrence] = useState<Task["recurrence"]>(undefined);
   const [editRepeatEnabled, setEditRepeatEnabled] = useState(false);
   const [editRepeatSchedule, setEditRepeatSchedule] = useState<RepeatSchedule>("never");
@@ -212,7 +212,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     setEditStatus(task.status);
     setEditAssigneeId(task.assignee_id ?? undefined);
     setEditHeartbeatEnabled((task.heartbeat_interval_ms ?? 0) > 0);
-    setEditHeartbeatInterval(task.heartbeat_interval_ms > 0 ? task.heartbeat_interval_ms : 600000);
+    setEditHeartbeatInterval(task.heartbeat_interval_ms > 0 ? task.heartbeat_interval_ms : 3600000);
     setEditingRecurrence(task.recurrence);
     setSaveError(null);
 

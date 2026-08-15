@@ -76,11 +76,25 @@ describe("createTaskOccurrence", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(occurrence.thread.id)).toEqual({ count: 0 });
   });
 
+  it("does not enable heartbeat on assignment without an explicit interval (#559)", async () => {
+    const { createTaskOccurrence } = await import("../services/task-occurrence.js");
+    const occurrence = repos.db.transaction(() => createTaskOccurrence(repos, {
+      channel: repos.channels.getById(channelId)!,
+      creator: repos.users.getById("creator")!,
+      title: "Assigned but no heartbeat requested",
+      assigneeId: "assignee",
+    }))();
+
+    expect(occurrence.assignmentMessage).toBeDefined();
+    expect(occurrence.task).toMatchObject({ assignee_id: "assignee", heartbeat_interval_ms: 0, heartbeat_last_at: 0 });
+    expect(repos.threads.isMember(occurrence.thread.id, "assignee")).toBe(true);
+  });
+
   it("targets heartbeats to the assignee and excludes unassigned tasks", async () => {
     const { createTaskOccurrence } = await import("../services/task-occurrence.js");
     const channel = repos.channels.getById(channelId)!;
     const creator = repos.users.getById("creator")!;
-    const assigned = repos.db.transaction(() => createTaskOccurrence(repos, { channel, creator, title: "Assigned", assigneeId: "assignee" }))();
+    const assigned = repos.db.transaction(() => createTaskOccurrence(repos, { channel, creator, title: "Assigned", assigneeId: "assignee", heartbeatIntervalMs: 60_000 }))();
     const unassigned = repos.db.transaction(() => createTaskOccurrence(repos, { channel, creator, title: "Unassigned" }))();
     repos.tasks.update(assigned.task.task_id, { heartbeat_last_at: 0 });
     repos.tasks.update(unassigned.task.task_id, { heartbeat_interval_ms: 1, heartbeat_last_at: 0 });

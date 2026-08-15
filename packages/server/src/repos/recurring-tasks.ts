@@ -78,7 +78,7 @@ export class RecurringTasksRepo {
     const occurrenceMode = params.occurrence_mode ?? "same_task";
     const nextRunAt = now + params.interval_ms;
     const enabled = params.enabled ?? true;
-    const heartbeatMs = params.heartbeat_interval_ms ?? 300000;
+    const heartbeatMs = params.heartbeat_interval_ms ?? 0;
     this.db.prepare(
       `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, interval_ms, occurrence_mode, next_run_at, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)`

@@ -1,6 +1,6 @@
 import type { RecurringTask } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
-import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
+import { createTaskAssignmentMessage, createTaskOccurrence } from "../services/task-occurrence.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const TICK_MS = parseInt(process.env["RECURRING_TASK_TICK_MS"] ?? "30000", 10);
@@ -77,10 +77,9 @@ export class RecurringTaskWorker {
         }
 
         if (latestTemplate.occurrence_mode === "same_task") {
-          const heartbeatIntervalMs = previous.assignee_id
-            ? previous.heartbeat_interval_ms > 0
-              ? previous.heartbeat_interval_ms
-              : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS
+          // Preserve the task's own heartbeat config; never auto-enable a default.
+          const heartbeatIntervalMs = previous.assignee_id && previous.heartbeat_interval_ms > 0
+            ? previous.heartbeat_interval_ms
             : 0;
           const reopenedTask = this.repos.tasks.update(previous.task_id, {
             status: "open",

@@ -37,8 +37,9 @@ import { migrateV35 } from "./v35-backfill-task-id.js";
 import { migrateV36 } from "./v36-drop-task-id.js";
 import { migrateV37 } from "./v37-normalize-run-channel.js";
 import { migrateV38 } from "./v38-tasks-thread-index.js";
+import { migrateV39 } from "./v39-task-heartbeat-default-off.js";
 
-const LATEST_VERSION = 38;
+const LATEST_VERSION = 39;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -81,6 +82,7 @@ const migrations: Record<number, MigrationFn> = {
   36: migrateV36,
   37: migrateV37,
   38: migrateV38,
+  39: migrateV39,
 };
 
 export function runMigrations(db: Database.Database): void {

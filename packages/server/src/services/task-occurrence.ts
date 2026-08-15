@@ -27,7 +27,7 @@ export interface CreateTaskAssignmentInput {
   assigneeId: string;
 }
 
-export const DEFAULT_TASK_HEARTBEAT_INTERVAL_MS = 300_000;
+
 
 export function createTaskAssignmentMessage(repos: Repos, input: CreateTaskAssignmentInput): Message {
   const assignmentNow = Date.now();
@@ -130,11 +130,10 @@ export function createTaskOccurrence(repos: Repos, input: CreateTaskOccurrenceIn
       })
     : undefined;
 
-  if (assigneeId) {
-    const heartbeatIntervalMs = input.heartbeatIntervalMs && input.heartbeatIntervalMs > 0
-      ? input.heartbeatIntervalMs
-      : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS;
-    task = repos.tasks.update(taskId, { heartbeat_interval_ms: heartbeatIntervalMs, heartbeat_last_at: Date.now() })!;
+  // Heartbeat is opt-in: only enable when an explicit positive interval is provided.
+  // Omitting it (or passing 0) leaves heartbeat disabled — assignment alone never enables it.
+  if (assigneeId && input.heartbeatIntervalMs !== undefined && input.heartbeatIntervalMs > 0) {
+    task = repos.tasks.update(taskId, { heartbeat_interval_ms: input.heartbeatIntervalMs, heartbeat_last_at: Date.now() })!;
   }
 
   return { cardMessage, thread, assignmentMessage, task };
