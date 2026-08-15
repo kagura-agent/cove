@@ -25,7 +25,7 @@ type NativeContext = { runId?: string; sessionKey?: string; requesterSessionKey?
 type UsageRest = Pick<CoveRestClient, "recordRunUsage">;
 
 type Parent = { runId: string; report: Reporter; children: Set<string>; queue: Promise<void>; rest?: UsageRest };
-type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval> };
+type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval>; finished?: boolean };
 
 const HEARTBEAT_MS = 25_000;
 
@@ -67,12 +67,13 @@ export class CoveAgentRunLifecycleBridge {
     // Snapshot before stopChild mutates parent.children.
     const childKeys = [...parent.children];
     for (const childKey of childKeys) this.stopChild(childKey);
-    // Drop any unconsumed child fresh-claims with the parent. Claims must NOT
-    // be deleted in stopChild: agent_end handlers may run in either order
-    // (lifecycle finish vs usage collector), and deleting the claim there would
-    // let the first handler starve the second (#551). The set stays bounded by
-    // live parent runs.
-    for (const childKey of childKeys) this.freshSessions.delete(childKey);
+    // Children entries are intentionally kept alive until parent unbind (see
+    // stopChild) so the usage collector can resolve parentSessionFor during a
+    // child's agent_end regardless of hook ordering. Clean them all up here.
+    for (const childKey of childKeys) {
+      this.children.delete(childKey);
+      this.freshSessions.delete(childKey);
+    }
     this.parents.delete(sessionKey);
     this.freshSessions.delete(sessionKey);
     this.resolveWaiters(sessionKey);
@@ -168,7 +169,11 @@ export class CoveAgentRunLifecycleBridge {
 
   private finishChild(childKey: string, succeeded: boolean, status: string, detail: string): void {
     const child = this.children.get(childKey);
-    if (!child) return;
+    // The child entry stays in the map until parent unbind so the usage
+    // collector can still resolve parentSessionFor on the same agent_end; the
+    // finished flag prevents duplicate terminal reports from repeated hooks.
+    if (!child || child.finished) return;
+    child.finished = true;
     const parent = this.parents.get(child.parentSessionKey);
     this.stopChild(childKey);
     if (!parent) return;
@@ -184,8 +189,11 @@ export class CoveAgentRunLifecycleBridge {
   private stopChild(childKey: string): void {
     const child = this.children.get(childKey); if (!child) return;
     if (child.timer) clearInterval(child.timer);
-    this.children.delete(childKey);
-    // Deliberately NOT deleting freshSessions here — see unbindParent comment.
+    // Deliberately NOT deleting the children entry or fresh claim here. agent_end
+    // handlers run in registration order (lifecycle finish first, usage
+    // collector second); the collector resolves the parent via parentSessionFor
+    // which reads this map, so the entry must outlive both handlers. Entries are
+    // removed on parent unbind (#551).
     const parent = this.parents.get(child.parentSessionKey);
     parent?.children.delete(childKey);
     if (!parent?.children.size) this.resolveWaiters(child.parentSessionKey);

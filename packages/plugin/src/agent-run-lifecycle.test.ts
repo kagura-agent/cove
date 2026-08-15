@@ -61,6 +61,34 @@ describe("native OpenClaw subagent lifecycle bridge", () => {
     expect(bridge.consumeFreshSession(childKey3)).toBe(false);
   });
 
+  it("resolves the parent for usage attribution after lifecycle finish ran first (#551)", async () => {
+    // Real production sequence: the lifecycle bridge's agent_end handler runs
+    // BEFORE the usage collector's (registration order). finishChild → stopChild
+    // must keep the children entry resolvable so the collector can attribute
+    // the child's usage to the parent run.
+    const bridge = new CoveAgentRunLifecycleBridge();
+    const parentKey = "agent:kagura:cove:direct:1:thread:1";
+    const childKey = "agent:kagura:subagent:child-12";
+    bridge.bindParent(parentKey, "parent-run", () => {});
+    bridge.onSubagentSpawned({ childSessionKey: childKey, runId: "native-run", mode: "run" }, { requesterSessionKey: parentKey });
+
+    // Lifecycle agent_end handler first (as registered): finishes the child.
+    bridge.onAgentEnd({ runId: "native-run", messages: [], success: true }, { runId: "native-run", sessionKey: childKey });
+    // Collector's parentSessionFor must still resolve AFTER the finish.
+    expect(bridge.parentSessionFor(childKey)).toBe(parentKey);
+    expect(bridge.runForSession(parentKey)).toBe("parent-run");
+
+    // A second agent_end (repeated hook) must not duplicate the terminal report.
+    const events: any[] = [];
+    const b2 = new CoveAgentRunLifecycleBridge();
+    b2.bindParent(parentKey, "parent-run", (e) => events.push(e));
+    b2.onSubagentSpawned({ childSessionKey: childKey, runId: "native-run", mode: "run" }, { requesterSessionKey: parentKey });
+    b2.onAgentEnd({ runId: "native-run", messages: [], success: true }, { runId: "native-run", sessionKey: childKey });
+    b2.onAgentEnd({ runId: "native-run", messages: [], success: true }, { runId: "native-run", sessionKey: childKey });
+    await flushReports();
+    expect(events.filter((e) => e.type === "subagent_finished")).toHaveLength(1);
+  });
+
   it("maps the real sessions_spawn api.on payload/context to the parent Cove thread run", async () => {
     vi.useFakeTimers();
     const bridge = new CoveAgentRunLifecycleBridge();
