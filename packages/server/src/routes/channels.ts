@@ -66,6 +66,20 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
     const channel = repos.channels.create(guildId, name, body.topic, body.type ?? 0);
 
+    // Bots see channels through an explicit member allowlist (see
+    // GatewayDispatcher.broadcastToGuildWithChannelFilter): an absent
+    // overwrite means hidden even if a guild role grants VIEW_CHANNEL.
+    // When a bot creates a channel, auto-grant it member-level visibility
+    // so the creating agent can see and reply without a manual invite.
+    if (c.get("botUser").bot) {
+      const allow = (
+        PermissionBits.VIEW_CHANNEL |
+        PermissionBits.SEND_MESSAGES |
+        PermissionBits.READ_MESSAGE_HISTORY
+      ).toString();
+      repos.permissions.upsert(channel.id, userId, 1, allow, "0");
+    }
+
     repos.webhooks.createInternal(channel.id, guildId);
 
     dispatcher?.channelCreate(channel);

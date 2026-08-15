@@ -4,7 +4,7 @@ import { initDb, seedChannels } from "../db/schema.js";
 import { createRepos } from "../repos/index.js";
 import type Database from "better-sqlite3";
 import type { Channel, Message, CoveAgent, CoveGuildMember } from "@cove/shared";
-import { API_PREFIX, PermissionFlags } from "@cove/shared";
+import { API_PREFIX, PermissionFlags, PermissionBits } from "@cove/shared";
 import { GatewayDispatcher } from "../ws/dispatcher.js";
 
 describe("Cove API — Discord-compatible", () => {
@@ -692,6 +692,40 @@ describe("Cove API — Discord-compatible", () => {
       expect(ch.topic).toBe("A new channel");
       expect(ch.type).toBe(0);
       expect(ch.position).toBe(2); // after general(0) and random(1)
+    });
+
+    it("bot creator is auto-granted member-level VIEW_CHANNEL + SEND_MESSAGES overwrite (#556)", async () => {
+      const bot = await createBotUser("creator-bot", "CreatorBot");
+      // Give the bot MANAGE_CHANNELS at guild level so it can create channels
+      db.prepare(
+        "UPDATE roles SET permissions = permissions | ? WHERE id = ?"
+      ).run(PermissionBits.MANAGE_CHANNELS.toString(), defaultGuildId);
+
+      // Bot creates a channel
+      const createRes = await app.request(`${API_PREFIX}/guilds/${defaultGuildId}/channels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
+        body: JSON.stringify({ name: "bot-created", topic: "created by bot" }),
+      });
+      expect(createRes.status).toBe(201);
+      const ch: Channel = await createRes.json();
+
+      // Bot can read the channel (VIEW_CHANNEL via member overwrite)
+      const getRes = await app.request(`${API_PREFIX}/channels/${ch.id}`, {
+        headers: { Authorization: `Bot ${bot.token}` },
+      });
+      expect(getRes.status).toBe(200);
+
+      // Bot can post to it (SEND_MESSAGES via member overwrite)
+      const msgRes = await app.request(`${API_PREFIX}/channels/${ch.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${bot.token}` },
+        body: JSON.stringify({ content: "I can speak here" }),
+      });
+      expect(msgRes.status).toBe(201);
+      const msg: Message = await msgRes.json();
+      expect(msg.channel_id).toBe(ch.id);
+      expect(msg.author.id).toBe("creator-bot");
     });
   });
 
