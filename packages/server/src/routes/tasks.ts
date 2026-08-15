@@ -13,7 +13,7 @@ import {
   type UpdateTaskFields,
   type UpdateTaskRecurrence,
 } from "@cove/shared";
-import { createTaskAssignmentMessage, createTaskOccurrence, DEFAULT_TASK_HEARTBEAT_INTERVAL_MS } from "../services/task-occurrence.js";
+import { createTaskAssignmentMessage, createTaskOccurrence } from "../services/task-occurrence.js";
 import { createRecurringTaskOccurrence, validateTaskRecurrence } from "../services/task-recurrence.js";
 
 const VALID_STATUSES = new Set(TASK_STATUSES);
@@ -158,12 +158,11 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
         ? {}
         : { heartbeat_interval_ms: 0, heartbeat_last_at: 0 }
       : assigneeChanged
-        ? {
-            heartbeat_interval_ms: body.heartbeat_interval_ms && body.heartbeat_interval_ms > 0
-              ? body.heartbeat_interval_ms
-              : DEFAULT_TASK_HEARTBEAT_INTERVAL_MS,
-            heartbeat_last_at: Date.now(),
-          }
+        ? body.heartbeat_interval_ms !== undefined
+          ? body.heartbeat_interval_ms > 0
+            ? { heartbeat_interval_ms: body.heartbeat_interval_ms, heartbeat_last_at: Date.now() }
+            : { heartbeat_interval_ms: 0, heartbeat_last_at: 0 }
+          : {} // assignment alone never enables heartbeat — opt-in only
         : body.heartbeat_interval_ms !== undefined
           ? { heartbeat_interval_ms: body.heartbeat_interval_ms }
           : {};

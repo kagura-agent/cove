@@ -22,8 +22,8 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
-  const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
-  const [heartbeatInterval, setHeartbeatInterval] = useState(600000); // default 10min
+  const [heartbeatEnabled, setHeartbeatEnabled] = useState(false);
+  const [heartbeatInterval, setHeartbeatInterval] = useState(3600000); // default 1h
   const [repeatSchedule, setRepeatSchedule] = useState<RepeatSchedule>("never");
   const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("same_task");
   const [repeatIntervalValue, setRepeatIntervalValue] = useState(1);
@@ -57,8 +57,8 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       setTitle("");
       setDescription("");
       setAssigneeId(undefined);
-      setHeartbeatEnabled(true);
-      setHeartbeatInterval(600000);
+      setHeartbeatEnabled(false);
+      setHeartbeatInterval(3600000);
       setRepeatSchedule("never");
       setOccurrenceMode("same_task");
       setRepeatIntervalValue(1);

@@ -237,7 +237,7 @@ describe("recurring task templates API", () => {
       body: JSON.stringify({ title: "Assigned immediately", description: "Initial implementation scope", assignee_id: "assignee-a" }),
     });
     const initialTask = await initiallyAssigned.json() as { thread_id: string; heartbeat_interval_ms: number };
-    expect(initialTask.heartbeat_interval_ms).toBe(300_000);
+    expect(initialTask.heartbeat_interval_ms).toBe(0); // assignment alone does not enable heartbeat (#559)
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%'").get(initialTask.thread_id)).toEqual({
       content: expect.stringContaining("Description:\nInitial implementation scope\n\n工作属于这个 thread，就在这里做。"),
       metadata: JSON.stringify({ content_type: "task_assignment", assignee_id: "assignee-a" }),
@@ -268,7 +268,7 @@ describe("recurring task templates API", () => {
       headers: headers(),
       body: JSON.stringify({ assignee_id: "assignee-a" }),
     });
-    expect(await assigned.json()).toMatchObject({ assignee_id: "assignee-a", heartbeat_interval_ms: 300_000 });
+    expect(await assigned.json()).toMatchObject({ assignee_id: "assignee-a", heartbeat_interval_ms: 0 }); // assignment alone does not enable heartbeat (#559)
     expect(repos.threads.isMember(task.thread_id, "assignee-a")).toBe(true);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
       content: expect.stringContaining("Description:\nCanonical reassignment scope\n\n工作属于这个 thread，就在这里做。"),
@@ -280,7 +280,7 @@ describe("recurring task templates API", () => {
       headers: headers(),
       body: JSON.stringify({ assignee_id: "assignee-b" }),
     });
-    expect(await reassigned.json()).toMatchObject({ assignee_id: "assignee-b", heartbeat_interval_ms: 300_000 });
+    expect(await reassigned.json()).toMatchObject({ assignee_id: "assignee-b", heartbeat_interval_ms: 0 }); // assignment alone does not enable heartbeat (#559)
     expect(repos.threads.isMember(task.thread_id, "assignee-b")).toBe(true);
     expect(db.prepare("SELECT content, metadata FROM messages WHERE channel_id = ? AND metadata LIKE '%task_assignment%' ORDER BY timestamp DESC, id DESC LIMIT 1").get(task.thread_id)).toEqual({
       content: expect.stringContaining("Description:\nCanonical reassignment scope\n\n工作属于这个 thread，就在这里做。"),
