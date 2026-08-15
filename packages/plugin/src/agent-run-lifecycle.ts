@@ -25,25 +25,66 @@ type NativeContext = { runId?: string; sessionKey?: string; requesterSessionKey?
 type UsageRest = Pick<CoveRestClient, "recordRunUsage">;
 
 type Parent = { runId: string; report: Reporter; children: Set<string>; queue: Promise<void>; rest?: UsageRest };
-type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval> };
+type Child = { parentSessionKey: string; runId: string; label: string; timer?: ReturnType<typeof setInterval>; finished?: boolean };
 
 const HEARTBEAT_MS = 25_000;
+
+/**
+ * True for session kinds Cove creates fresh per run: task-thread sessions
+ * (`agent:<id>:cove:direct:<threadId>:thread:<threadId>`) are new channels per
+ * task, so their first observed turn has no pre-existing history; subagent
+ * child sessions are always UUID-new. Persistent channel/group sessions stay
+ * out of the fresh set — their first observation after a plugin upgrade must
+ * keep establishing a silent baseline to avoid double counting history (#551).
+ */
+function isFreshCoveSessionKey(sessionKey: string): boolean {
+  return sessionKey.includes(":thread:");
+}
 
 export class CoveAgentRunLifecycleBridge {
   private parents = new Map<string, Parent>();
   private children = new Map<string, Child>();
   private waiters = new Map<string, Set<() => void>>();
+  /** Session keys created by a Cove run in this process (bindParent at dispatch
+   * start, subagent spawn) whose first agent_end has not been consumed yet. The
+   * usage collector consumes these claims so a brand-new session's first turn
+   * is reported from a zero baseline instead of being silently dropped (#551).
+   * Entries are consumed by the collector on first observation or removed on
+   * unbind/stop, so the set never grows with historical sessions. */
+  private freshSessions = new Set<string>();
 
   bindParent(sessionKey: string, runId: string, report: Reporter, rest?: UsageRest): void {
+    // Only thread sessions (new channels per task) are claimed fresh: their
+    // first turn has no history. Persistent channel/group sessions are not
+    // fresh even though this process dispatches them. (#551)
+    if (isFreshCoveSessionKey(sessionKey)) this.freshSessions.add(sessionKey);
     this.parents.set(sessionKey, { runId, report, children: new Set(), queue: Promise.resolve(), rest });
   }
 
   unbindParent(sessionKey: string): void {
     const parent = this.parents.get(sessionKey);
     if (!parent) return;
-    for (const childKey of parent.children) this.stopChild(childKey);
+    // Snapshot before stopChild mutates parent.children.
+    const childKeys = [...parent.children];
+    for (const childKey of childKeys) this.stopChild(childKey);
+    // Children entries are intentionally kept alive until parent unbind (see
+    // stopChild) so the usage collector can resolve parentSessionFor during a
+    // child's agent_end regardless of hook ordering. Clean them all up here.
+    for (const childKey of childKeys) {
+      this.children.delete(childKey);
+      this.freshSessions.delete(childKey);
+    }
     this.parents.delete(sessionKey);
+    this.freshSessions.delete(sessionKey);
     this.resolveWaiters(sessionKey);
+  }
+
+  /** Consumes and returns the fresh-claim for a session. True exactly once per
+   * session when the session was created by a Cove run in this process and no
+   * agent_end has been observed yet — its first observation is the first turn,
+   * so the collector must report the full totals rather than a silent baseline. */
+  consumeFreshSession(sessionKey: string): boolean {
+    return this.freshSessions.delete(sessionKey);
   }
 
   onSubagentSpawned(event: NativeSpawned, context: NativeContext): void {
@@ -52,6 +93,9 @@ export class CoveAgentRunLifecycleBridge {
     if (!parent || this.children.has(event.childSessionKey)) return;
     const label = event.label || "Subagent";
     parent.children.add(event.childSessionKey);
+    // Subagent child session keys are always fresh (UUID per spawn) — one-shot
+    // children fire a single agent_end whose whole usage must be reported.
+    this.freshSessions.add(event.childSessionKey);
     this.children.set(event.childSessionKey, { parentSessionKey: parentKey!, runId: event.runId, label });
     // `runId` is a native child run id; the stable session key is used in Cove
     // evidence because Cove cannot create/own that OpenClaw child run.
@@ -125,7 +169,11 @@ export class CoveAgentRunLifecycleBridge {
 
   private finishChild(childKey: string, succeeded: boolean, status: string, detail: string): void {
     const child = this.children.get(childKey);
-    if (!child) return;
+    // The child entry stays in the map until parent unbind so the usage
+    // collector can still resolve parentSessionFor on the same agent_end; the
+    // finished flag prevents duplicate terminal reports from repeated hooks.
+    if (!child || child.finished) return;
+    child.finished = true;
     const parent = this.parents.get(child.parentSessionKey);
     this.stopChild(childKey);
     if (!parent) return;
@@ -141,7 +189,11 @@ export class CoveAgentRunLifecycleBridge {
   private stopChild(childKey: string): void {
     const child = this.children.get(childKey); if (!child) return;
     if (child.timer) clearInterval(child.timer);
-    this.children.delete(childKey);
+    // Deliberately NOT deleting the children entry or fresh claim here. agent_end
+    // handlers run in registration order (lifecycle finish first, usage
+    // collector second); the collector resolves the parent via parentSessionFor
+    // which reads this map, so the entry must outlive both handlers. Entries are
+    // removed on parent unbind (#551).
     const parent = this.parents.get(child.parentSessionKey);
     parent?.children.delete(childKey);
     if (!parent?.children.size) this.resolveWaiters(child.parentSessionKey);
