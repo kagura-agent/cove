@@ -103,6 +103,38 @@ export class TasksRepo {
     return rows.map(toTask);
   }
 
+  /**
+   * Cross-channel task aggregation for the server-level task board.
+   * Filters by guild, optional visible channel allowlist, assignee and statuses.
+   */
+  listByGuild(guildId: string, opts?: { channelIds?: string[]; assigneeId?: string | null; statuses?: string[]; limit?: number }): Task[] {
+    const where = ["t.guild_id = ?"];
+    const params: unknown[] = [guildId];
+
+    if (opts?.channelIds && opts.channelIds.length > 0) {
+      where.push(`t.channel_id IN (${opts.channelIds.map(() => "?").join(", ")})`);
+      params.push(...opts.channelIds);
+    }
+
+    if (opts?.assigneeId !== undefined) {
+      if (opts.assigneeId === null) {
+        where.push("t.assignee_id IS NULL");
+      } else {
+        where.push("t.assignee_id = ?");
+        params.push(opts.assigneeId);
+      }
+    }
+
+    if (opts?.statuses && opts.statuses.length > 0) {
+      where.push(`t.status IN (${opts.statuses.map(() => "?").join(", ")})`);
+      params.push(...opts.statuses);
+    }
+
+    const limit = Math.max(1, Math.min(opts?.limit ?? 200, 500));
+    const rows = this.db.prepare(`${TASK_SELECT} WHERE ${where.join(" AND ")} ORDER BY t.updated_at DESC LIMIT ?`).all(...params, limit) as TaskRow[];
+    return rows.map(toTask);
+  }
+
   listByRecurringId(recurringId: string): Task[] {
     const rows = this.db.prepare(`${TASK_SELECT} WHERE t.recurring_id = ? ORDER BY t.seq`).all(recurringId) as TaskRow[];
     return rows.map(toTask);

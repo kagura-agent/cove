@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireChannelPermission } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
 import {
   PermissionBits,
   TASK_STATUSES,
@@ -89,6 +89,56 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     await requireChannelPermission(repos, channelId, user.id, PermissionBits.VIEW_CHANNEL);
 
     const tasks = repos.tasks.listByChannel(channelId);
+    return c.json(tasks);
+  });
+
+  /**
+   * GET /guilds/:guildId/tasks — server-level task board aggregation.
+   * Cross-channel task list filtered to channels the caller can view.
+   * Query params:
+   *   - status: repeatable status filter (open, in_progress, in_review, done, cancelled)
+   *   - assignee: user id, or "none" for unassigned tasks
+   *   - mine: "1" to show only tasks assigned to the caller
+   *   - channel: repeatable channel id filter
+   */
+  app.get("/guilds/:guildId/tasks", async (c) => {
+    const guildId = c.req.param("guildId");
+    const user = c.get("botUser");
+
+    await requireGuildPermission(repos, guildId, user.id, PermissionBits.VIEW_CHANNEL);
+
+    const url = new URL(c.req.url);
+    const statuses = url.searchParams.getAll("status");
+    const statusFilter = statuses.length > 0 ? statuses.filter((s) => VALID_STATUSES.has(s as TaskStatus)) : undefined;
+    const assigneeParam = url.searchParams.get("assignee");
+    const assigneeFilter: string | null | undefined =
+      assigneeParam === null ? undefined
+        : assigneeParam === "none" ? null
+        : assigneeParam === "me" ? user.id
+        : assigneeParam;
+    const channelFilters = url.searchParams.getAll("channel");
+
+    // Resolve visible channels: all non-thread channels in the guild the user can view.
+    const guildChannels = repos.channels.list(guildId).filter((ch) => ch.type !== 11);
+    const visibleChannelIds: string[] = [];
+    for (const ch of guildChannels) {
+      if (channelFilters.length > 0 && !channelFilters.includes(ch.id)) continue;
+      try {
+        await requireChannelPermission(repos, ch.id, user.id, PermissionBits.VIEW_CHANNEL);
+        visibleChannelIds.push(ch.id);
+      } catch {
+        // Skip channels the user cannot view.
+      }
+    }
+    if (visibleChannelIds.length === 0) {
+      return c.json([]);
+    }
+
+    const tasks = repos.tasks.listByGuild(guildId, {
+      channelIds: visibleChannelIds,
+      assigneeId: assigneeFilter,
+      statuses: statusFilter,
+    });
     return c.json(tasks);
   });
 

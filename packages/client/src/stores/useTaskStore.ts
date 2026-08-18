@@ -9,6 +9,7 @@ interface TaskState {
   removeTask: (taskId: string) => void;
   getTasksForChannel: (channelId: string) => Task[];
   fetchTasks: (channelId: string) => Promise<void>;
+  fetchGuildTasks: (guildId: string) => Promise<void>;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -41,6 +42,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }
     } catch (err) {
       console.error("fetch tasks:", err);
+    }
+  },
+
+  fetchGuildTasks: async (guildId) => {
+    try {
+      const tasks = await api.fetchGuildTasks(guildId);
+      for (const task of tasks) {
+        get().upsertTask(task);
+      }
+    } catch (err) {
+      console.error("fetch guild tasks:", err);
     }
   },
 }));
