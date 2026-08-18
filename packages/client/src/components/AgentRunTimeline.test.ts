@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentRunEvent } from "@cove/shared";
-import { aggregateLifecycleEvents, conciseAction, executionSummary, ExecutionTimeline, formatDuration, formatTokens, formatUsd, usageLabel } from "./AgentRunTimeline";
+import { aggregateLifecycleEvents, conciseAction, executionSummary, ExecutionTimeline, formatDuration, formatTokens, formatUsd, narrativeOpenerText, usageLabel } from "./AgentRunTimeline";
 
 function event(overrides: Partial<AgentRunEvent>): AgentRunEvent {
   return { event_id: "event", run_id: "run", tool_call_id: null, type: "tool_started", action: null, detail: null, status: null, exit_code: null, duration_ms: null, cwd: null, created_at: 0, ...overrides };
@@ -115,6 +115,28 @@ describe("agent execution presentation", () => {
     // The action label is kept as the row heading when there is no content to stand in for it.
     expect(html).toContain("font-weight:600");
     expect(html).toContain("Preamble");
+  });
+
+  it("resolves narrative opener text for the active-run bar", () => {
+    const events = [
+      event({ event_id: "pre", type: "run_started", action: "Preamble", detail: "Let me investigate the flaky CI before touching anything." }),
+      event({ event_id: "tool", tool_call_id: "call-1", action: "Exec", detail: "pnpm test", status: "running" }),
+    ];
+    // The latest matching opener's detail is returned, flattened and truncated.
+    expect(narrativeOpenerText(events, "Preamble")).toBe("Let me investigate the flaky CI before touching anything.");
+    expect(narrativeOpenerText(events, "preamble:")).toBe("Let me investigate the flaky CI before touching anything.");
+    // Non-opener actions and missing current_action resolve to null.
+    expect(narrativeOpenerText(events, "Exec")).toBeNull();
+    expect(narrativeOpenerText(events, null)).toBeNull();
+  });
+
+  it("truncates long opener content for the bar", () => {
+    const long = "word ".repeat(60).trim();
+    const events = [event({ event_id: "pre", type: "run_started", action: "Preamble", detail: long })];
+    const text = narrativeOpenerText(events, "Preamble");
+    expect(text).not.toBeNull();
+    expect(text!.length).toBeLessThanOrEqual(140);
+    expect(text!.endsWith("…")).toBe(true);
   });
 
   it("formats token counts and costs for the execution chip", () => {

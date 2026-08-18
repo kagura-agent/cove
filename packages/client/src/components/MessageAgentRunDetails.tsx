@@ -106,7 +106,9 @@ function ExecutionDetailsSurface({ narrow, placement, surfaceRef, titleId, onClo
     {usageText && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{usageText}</span>}
     {closeButton}
   </header>;
-  const timeline = <div style={{ overflow: "auto", flex: 1, paddingTop: "var(--space-xs)" }}><ExecutionTimeline events={events} /></div>;
+  // Vertical-only scrolling: wide content (long URLs, unbroken strings) must
+  // wrap instead of introducing a horizontal scrollbar in the popover.
+  const timeline = <div style={{ overflowY: "auto", overflowX: "hidden", flex: 1, paddingTop: "var(--space-xs)", wordBreak: "break-word" }}><ExecutionTimeline events={events} /></div>;
   if (narrow) return <div style={{ position: "fixed", zIndex: 10000, inset: 0, display: "flex", alignItems: "flex-end", background: "rgba(0,0,0,.42)" }}>
     <section ref={surfaceRef as React.RefObject<HTMLElement>} role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ width: "100%", maxHeight: "82vh", height: surfaceHeight, overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--bg-floating)", borderRadius: "16px 16px 0 0", boxShadow: "0 -8px 28px rgba(0,0,0,.35)", padding: "var(--space-md)" }}>{heading}{timeline}</section>
   </div>;

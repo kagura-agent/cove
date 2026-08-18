@@ -99,6 +99,26 @@ function isNarrativeOpener(event: AgentRunEvent): boolean {
   return NARRATIVE_OPENER_ACTIONS.has(normalized);
 }
 
+/**
+ * When the run's current action is a narrative opener (e.g. "Preamble"), the
+ * readable content lives in the event detail — the bare action label is noise.
+ * Returns the latest matching opener's detail (flattened + truncated), or null
+ * when the current action isn't an opener or carries no content. Used by both
+ * the timeline rows and the active-run bar so they render the same text.
+ */
+export function narrativeOpenerText(events: AgentRunEvent[], currentAction: string | null): string | null {
+  if (!currentAction) return null;
+  const target = currentAction.trim().toLowerCase().replace(/[\s:]+$/u, "");
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (!event.detail) continue;
+    const normalized = (event.action ?? "").trim().toLowerCase().replace(/[\s:]+$/u, "");
+    if (normalized !== target || !isNarrativeOpener(event)) continue;
+    return conciseDetail(event.detail);
+  }
+  return null;
+}
+
 function conciseDetail(detail: string | null): string | null {
   if (!detail) return null;
   const flattened = detail.replace(/\s+/g, " ").trim();
