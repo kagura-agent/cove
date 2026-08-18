@@ -3,13 +3,18 @@ import type { AgentRunTimeline } from "@cove/shared";
 import * as api from "../lib/api";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import { useMemberStore } from "../stores/useMemberStore";
-import { ExecutionTimeline, elapsed, usageLabel } from "./AgentRunTimeline";
+import { ExecutionTimeline, elapsed, narrativeOpenerText } from "./AgentRunTimeline";
 import type { CSSProperties } from "react";
 
 const barStyle: CSSProperties = {
   padding: "var(--space-xs) var(--content-pad)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)",
   minHeight: "var(--space-xxl)", display: "flex", alignItems: "center", gap: "var(--space-xs)", flexWrap: "nowrap",
 };
+// The action label may be arbitrarily long; it must ellipsis-truncate instead
+// of pushing the time/usage (and the bar's single-line height) onto a new line.
+const labelStyle: CSSProperties = { border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", fontSize: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flexShrink: 1 };
+// Time is a fixed-width fact: never shrink or wrap, so the bar stays one line.
+const factStyle: CSSProperties = { flexShrink: 0, whiteSpace: "nowrap" };
 const stopStyle: CSSProperties = { border: 0, background: "transparent", color: "var(--danger)", cursor: "pointer", padding: 0, lineHeight: 1.15, fontSize: "10px", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0 };
 
 type StopState = "stopping" | "denied" | "failed" | "already_finished";
@@ -60,9 +65,11 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   const run = timeline?.run;
   if (!run || run.status !== "active") return null;
   const name = agentName ? `@${agentName}` : "Agent";
-  const label = stopState === "stopping" ? "Stopping…" : stopState === "denied" ? "Cannot stop this run" : stopState === "failed" ? "Stop failed" : stopState === "already_finished" ? "Run already finished" : `${name} ${run.current_action ?? "working"}`;
+  // Narrative openers ("Preamble") carry their readable text in the event detail;
+  // show that content in the bar instead of the bare action label.
+  const actionText = narrativeOpenerText(timeline?.events ?? [], run.current_action) ?? run.current_action ?? "working";
+  const label = stopState === "stopping" ? "Stopping…" : stopState === "denied" ? "Cannot stop this run" : stopState === "failed" ? "Stop failed" : stopState === "already_finished" ? "Run already finished" : `${name} ${actionText}`;
   const elapsedText = !stopState ? elapsed(run, now) : null;
-  const usageText = usageLabel(timeline?.usage);
   const canAbort = !stopState || stopState === "failed";
   async function stop() {
     setStopState("stopping");
@@ -75,12 +82,11 @@ export function AgentRunCard({ channelId, threadId, guildId }: { channelId: stri
   }
   return <div style={{ position: "relative" }}>
     <div style={barStyle} aria-live="polite">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle agent execution timeline" style={{ border: 0, background: "transparent", color: "inherit", padding: 0, cursor: "pointer", fontSize: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle agent execution timeline" style={labelStyle}>
         {label}
       </button>
       <span style={{ flex: 1 }} />
-      {elapsedText && <span>{elapsedText}</span>}
-      {usageText && <span style={{ color: "var(--text-muted)" }}>{usageText}</span>}
+      {elapsedText && <span style={factStyle}>{elapsedText}</span>}
       {canAbort && <button type="button" style={stopStyle} aria-label={`Stop ${name}`} title={`Stop ${name}`} onClick={stop}>stop</button>}
     </div>
     {open && <section aria-label="Active agent execution timeline" style={{ position: "absolute", zIndex: 20, bottom: "calc(100% + 4px)", left: "var(--space-md)", right: "var(--space-md)", maxHeight: 320, overflow: "auto", background: "var(--bg-floating)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)", padding: "var(--space-sm)" }}>
