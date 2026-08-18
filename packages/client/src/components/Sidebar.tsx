@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useUserPermissions } from "../lib/useUserPermissions";
 import { PermissionBits } from "@cove/shared";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useReadStateStore } from "../stores/useReadStateStore";
+import { useTaskStore } from "../stores/useTaskStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
 import { saveLastChannel } from "./GuildSidebar";
@@ -35,6 +36,10 @@ const styles = {
   threadConnector: { width: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-muted)", opacity: 0.3, fontSize: "var(--font-size-xs)" } as CSSProperties,
   threadIcon: { fontSize: "var(--font-size-sm)", opacity: 0.5, flexShrink: 0 } as CSSProperties,
   threadName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } as CSSProperties,
+  tasksEntry: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-xs) var(--space-sm)", borderRadius: "var(--space-xs)", cursor: "pointer", transition: "background 0.15s", fontSize: "var(--font-size-md)", color: "var(--interactive-normal)", marginTop: "var(--space-xs)" } as CSSProperties,
+  tasksEntryActive: { background: "var(--bg-modifier-active)", color: "var(--interactive-active)" } as CSSProperties,
+  tasksEntryHover: { background: "var(--bg-modifier-hover)", color: "var(--interactive-hover)" } as CSSProperties,
+  tasksBadge: { marginLeft: "auto", background: "var(--accent, #5865f2)", color: "#fff", borderRadius: 8, minWidth: 16, height: 16, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: "0 4px" } as CSSProperties,
 };
 
 function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSelect, onSettings }: {
@@ -68,6 +73,7 @@ function ChannelItem({ name, isActive, isUnread, isMentioned, mentionCount, onSe
 
 export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loading?: boolean; style?: CSSProperties }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { guildId: activeGuildId, channelId: activeChannelId } = useActiveIds();
   const { addChannel, getChannels } = useChannelStore();
   const guilds = useGuildStore((s) => s.guilds);
@@ -80,6 +86,26 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   const channels = getChannels(activeGuildId);
   const parentChannels = channels.filter((ch) => ch.type !== 11);
   const { unreadChannels, mentionCounts } = useReadStateStore();
+  const byTaskId = useTaskStore((s) => s.byTaskId);
+  const fetchGuildTasks = useTaskStore((s) => s.fetchGuildTasks);
+  const [tasksEntryHover, setTasksEntryHover] = useState(false);
+
+  // Load guild tasks for the sidebar badge
+  useEffect(() => {
+    if (guildId) fetchGuildTasks(guildId);
+  }, [guildId, fetchGuildTasks]);
+
+  const tasksBadge = useMemo(() => {
+    if (!guildId) return 0;
+    const all = Object.values(byTaskId).filter(
+      (t) => t.guild_id === guildId && ["open", "in_progress", "in_review"].includes(t.status),
+    );
+    if (all.length === 0) return 0;
+    const unassigned = all.filter((t) => t.assignee_id === null).length;
+    return unassigned > 0 ? unassigned : all.length;
+  }, [byTaskId, guildId]);
+
+  const tasksEntryActive = !!guildId && location.pathname === routes.guildTasks(guildId);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
@@ -160,6 +186,21 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           <div style={styles.loading}><Spin tip="Loading channels…" /></div>
         ) : (
           <>
+            {guildId && (
+              <div
+                style={{
+                  ...styles.tasksEntry,
+                  ...(tasksEntryActive ? styles.tasksEntryActive : tasksEntryHover ? styles.tasksEntryHover : {}),
+                }}
+                onClick={() => { navigate(routes.guildTasks(guildId)); onClose?.(); }}
+                onMouseEnter={() => setTasksEntryHover(true)}
+                onMouseLeave={() => setTasksEntryHover(false)}
+              >
+                <span style={{ fontSize: "var(--font-size-md)" }}>📋</span>
+                <span style={{ flex: 1 }}>Tasks</span>
+                {tasksBadge > 0 && <span style={styles.tasksBadge}>{tasksBadge > 99 ? "99+" : tasksBadge}</span>}
+              </div>
+            )}
             <div style={styles.categoryHeader}>
               <span>Channels</span>
               <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAdding(true)} style={{ color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)", opacity: 0.6 }} />

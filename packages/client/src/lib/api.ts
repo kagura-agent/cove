@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { AgentRunTimeline, AgentRunUsage, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, UpdateTaskFields, Webhook } from "@cove/shared";
+import type { AgentRunTimeline, AgentRunUsage, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, TaskStatus, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -339,6 +339,21 @@ export function deleteGuild(guildId: string) {
 
 export function fetchTasks(channelId: string) {
   return api<Task[]>(`${API_PREFIX}/channels/${channelId}/tasks`);
+}
+
+export interface GuildTaskQuery {
+  status?: TaskStatus[];
+  assignee?: string | "me" | "none";
+  channel?: string[];
+}
+
+export function fetchGuildTasks(guildId: string, query: GuildTaskQuery = {}) {
+  const params = new URLSearchParams();
+  for (const s of query.status ?? []) params.append("status", s);
+  if (query.assignee !== undefined) params.append("assignee", query.assignee);
+  for (const ch of query.channel ?? []) params.append("channel", ch);
+  const qs = params.toString();
+  return api<Task[]>(`${API_PREFIX}/guilds/${guildId}/tasks${qs ? `?${qs}` : ""}`);
 }
 export function createTask(channelId: string, fields: CreateTaskFields) {
   return api<Task>(`${API_PREFIX}/channels/${channelId}/tasks`, {
