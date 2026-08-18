@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Select, Table, Popconfirm, Tooltip } from "antd";
-import { CheckOutlined, ClockCircleOutlined, MessageOutlined, ReloadOutlined } from "@ant-design/icons";
+import { CheckOutlined, ClockCircleOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Task, TaskStatus, UpdateTaskFields } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
@@ -225,7 +225,7 @@ export function TaskBoard() {
   return (
     <div style={styles.root}>
       <div style={styles.header}>
-        <span style={{ fontSize: "var(--font-size-xl)" }}>📋</span>
+        <UnorderedListOutlined style={{ fontSize: "var(--font-size-xl)", color: "var(--text-normal)" }} />
         <h1 style={styles.headerTitle}>Tasks</h1>
         <span style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>{guilds[guildId ?? ""]?.name ?? ""}</span>
       </div>
@@ -299,7 +299,7 @@ export function TaskBoard() {
         )}
         {!loading && filtered.length === 0 && (
           <div style={styles.empty}>
-            <span style={{ fontSize: "var(--icon-emoji-size)" }}>🗂️</span>
+            <InboxOutlined style={{ fontSize: "var(--icon-emoji-size)", color: "var(--text-muted)" }} />
             <span>No tasks here</span>
           </div>
         )}

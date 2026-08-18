@@ -10,7 +10,7 @@ import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
 import { saveLastChannel } from "./GuildSidebar";
 import { Button, Input, Spin, Dropdown } from "antd";
-import { PlusOutlined, SettingOutlined, DownOutlined } from "@ant-design/icons";
+import { PlusOutlined, SettingOutlined, DownOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import type { MenuProps } from "antd";
@@ -196,7 +196,7 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
                 onMouseEnter={() => setTasksEntryHover(true)}
                 onMouseLeave={() => setTasksEntryHover(false)}
               >
-                <span style={{ fontSize: "var(--font-size-md)" }}>📋</span>
+                <UnorderedListOutlined style={{ fontSize: "var(--font-size-md)", color: "var(--interactive-normal)", flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>Tasks</span>
                 {tasksBadge > 0 && <span style={styles.tasksBadge}>{tasksBadge > 99 ? "99+" : tasksBadge}</span>}
               </div>
