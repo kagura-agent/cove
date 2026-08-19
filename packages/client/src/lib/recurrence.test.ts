@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeRecurringTasks, recurrenceEditorSettingsFromTemplate, recurrenceSaveAction, recurrenceScheduleFromInterval, recurrenceSeriesLabel, recurrenceUpdateFields, repeatScheduleIntervalMs } from "./recurrence";
+import { isValidCronExpression, mergeRecurringTasks, recurrenceEditorSettingsFromTemplate, recurrenceSaveAction, recurrenceScheduleFromInterval, recurrenceScheduleLabel, recurrenceSeriesLabel, recurrenceUpdateFields, repeatScheduleIntervalMs } from "./recurrence";
 
 describe("recurrence intervals", () => {
   it("converts quick and custom schedules to milliseconds", () => {
@@ -86,6 +86,107 @@ describe("recurrence intervals", () => {
     expect(recurrenceSeriesLabel(3, { occurrence_mode: "new_task" })).toBe("Repeat #3");
     expect(recurrenceSeriesLabel(3, { occurrence_mode: "same_task" })).toBeNull();
     expect(recurrenceSeriesLabel(3, undefined)).toBeNull();
+  });
+
+  it("detects cron templates and decodes them for the editor", () => {
+    expect(recurrenceEditorSettingsFromTemplate({
+      enabled: true,
+      interval_ms: 0,
+      occurrence_mode: "new_task",
+      cron_expr: "15,45 8-22 * * *",
+      cron_tz: "Asia/Shanghai",
+      catch_up: "run",
+    })).toEqual({
+      enabled: true,
+      schedule: "cron",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+      cronExpr: "15,45 8-22 * * *",
+      cronTz: "Asia/Shanghai",
+      catchUp: "run",
+    });
+
+    // interval templates stay on the interval path
+    expect(recurrenceEditorSettingsFromTemplate({
+      enabled: true,
+      interval_ms: 86_400_000,
+      occurrence_mode: "same_task",
+    })).toEqual({
+      enabled: true,
+      schedule: "daily",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "same_task",
+    });
+  });
+
+  it("patches only cron fields that changed and keeps stored cadence", () => {
+    expect(recurrenceUpdateFields({
+      enabled: true,
+      schedule: "cron",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "same_task",
+      cronExpr: "15,45 8-22 * * *",
+      cronTz: "Asia/Shanghai",
+      catchUp: "skip",
+      storedIntervalMs: 0,
+      storedOccurrenceMode: "same_task",
+      storedCronExpr: "15,45 8-22 * * *",
+      storedCronTz: "Asia/Shanghai",
+      storedCatchUp: "skip",
+    })).toEqual({ enabled: true });
+
+    expect(recurrenceUpdateFields({
+      enabled: true,
+      schedule: "cron",
+      intervalValue: 1,
+      intervalUnit: "days",
+      occurrenceMode: "new_task",
+      cronExpr: "0 20 * * 0",
+      cronTz: "UTC",
+      catchUp: "run",
+      storedIntervalMs: 0,
+      storedOccurrenceMode: "same_task",
+      storedCronExpr: "15,45 8-22 * * *",
+      storedCronTz: "Asia/Shanghai",
+      storedCatchUp: "skip",
+    })).toEqual({
+      enabled: true,
+      cron_expr: "0 20 * * 0",
+      cron_tz: "UTC",
+      catch_up: "run",
+      occurrence_mode: "new_task",
+    });
+  });
+
+  it("defaults missing cron fields to Asia/Shanghai and skip", () => {
+    expect(recurrenceEditorSettingsFromTemplate({
+      enabled: true,
+      interval_ms: 0,
+      occurrence_mode: "same_task",
+      cron_expr: "0 9 * * *",
+    })).toMatchObject({ cronTz: "Asia/Shanghai", catchUp: "skip" });
+  });
+
+  it("renders human-readable schedule labels for lists", () => {
+    expect(recurrenceScheduleLabel({ interval_ms: 3_600_000, cron_expr: null, cron_tz: null })).toBe("Every hour");
+    expect(recurrenceScheduleLabel({ interval_ms: 86_400_000, cron_expr: null, cron_tz: null })).toBe("Every day");
+    expect(recurrenceScheduleLabel({ interval_ms: 2 * 86_400_000, cron_expr: null, cron_tz: null })).toBe("Every 2 days");
+    expect(recurrenceScheduleLabel({ interval_ms: 0, cron_expr: "15,45 8-22 * * *", cron_tz: "Asia/Shanghai" })).toBe("cron 15,45 8-22 * * *");
+    expect(recurrenceScheduleLabel({ interval_ms: 0, cron_expr: "0 20 * * 0", cron_tz: "UTC" })).toBe("cron 0 20 * * 0 · UTC");
+    expect(recurrenceScheduleLabel(undefined)).toBeNull();
+  });
+
+  it("validates cron expressions loosely client-side", () => {
+    expect(isValidCronExpression("15,45 8-22 * * *")).toBe(true);
+    expect(isValidCronExpression("0 20 * * 0")).toBe(true);
+    expect(isValidCronExpression("0 8 * * 1")).toBe(true);
+    expect(isValidCronExpression("*/15 * * * *")).toBe(true);
+    expect(isValidCronExpression("not a cron")).toBe(false);
+    expect(isValidCronExpression("0 9")).toBe(false);
+    expect(isValidCronExpression("0 9 * *")).toBe(false);
   });
 
   it("keeps newer template data when an older fetch completes after a save", () => {

@@ -5,8 +5,11 @@ import { useMemberStore } from "../stores/useMemberStore";
 import * as api from "../lib/api";
 import { HEARTBEAT_OPTIONS } from "../lib/constants";
 import {
+  CRON_CATCH_UP_OPTIONS,
+  DEFAULT_CRON_TZ,
   REPEAT_INTERVAL_OPTIONS,
   REPEAT_SCHEDULE_OPTIONS,
+  isValidCronExpression,
   repeatScheduleIntervalMs,
   type RepeatIntervalUnit,
   type RepeatSchedule,
@@ -28,6 +31,9 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
   const [occurrenceMode, setOccurrenceMode] = useState<"same_task" | "new_task">("same_task");
   const [repeatIntervalValue, setRepeatIntervalValue] = useState(1);
   const [repeatIntervalUnit, setRepeatIntervalUnit] = useState<RepeatIntervalUnit>("days");
+  const [cronExpr, setCronExpr] = useState("");
+  const [cronTz, setCronTz] = useState(DEFAULT_CRON_TZ);
+  const [cronCatchUp, setCronCatchUp] = useState<"skip" | "run">("skip");
   const [submitting, setSubmitting] = useState(false);
   const { guildId } = useActiveIds();
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
@@ -35,9 +41,10 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
 
   const intervalMs = repeatScheduleIntervalMs(repeatSchedule, repeatIntervalValue, repeatIntervalUnit);
   const validRepeatInterval = Number.isFinite(intervalMs) && intervalMs > 0;
+  const validCron = repeatSchedule !== "cron" || isValidCronExpression(cronExpr);
 
   async function handleCreate() {
-    if (!title.trim() || (repeatSchedule === "custom" && !validRepeatInterval)) return;
+    if (!title.trim() || (repeatSchedule === "custom" && !validRepeatInterval) || (repeatSchedule === "cron" && !validCron)) return;
     setSubmitting(true);
     try {
       const heartbeatIntervalMs = heartbeatEnabled ? heartbeatInterval : undefined;
@@ -46,7 +53,15 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
         ...(assigneeId ? { assignee_id: assigneeId } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(heartbeatIntervalMs ? { heartbeat_interval_ms: heartbeatIntervalMs } : {}),
-        ...(repeatSchedule === "never" ? {} : {
+        ...(repeatSchedule === "never" ? {} : repeatSchedule === "cron" ? {
+          recurrence: {
+            cron_expr: cronExpr.trim(),
+            cron_tz: cronTz.trim() || DEFAULT_CRON_TZ,
+            catch_up: cronCatchUp,
+            occurrence_mode: occurrenceMode,
+            enabled: true,
+          },
+        } : {
           recurrence: {
             interval_ms: intervalMs,
             occurrence_mode: occurrenceMode,
@@ -63,6 +78,9 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       setOccurrenceMode("same_task");
       setRepeatIntervalValue(1);
       setRepeatIntervalUnit("days");
+      setCronExpr("");
+      setCronTz(DEFAULT_CRON_TZ);
+      setCronCatchUp("skip");
       onClose();
     } catch (err) {
       console.error("create task:", err);
@@ -78,7 +96,7 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
       onCancel={onClose}
       onOk={handleCreate}
       okText="Create"
-      okButtonProps={{ disabled: !title.trim() || (repeatSchedule === "custom" && !validRepeatInterval), loading: submitting }}
+      okButtonProps={{ disabled: !title.trim() || (repeatSchedule === "custom" && !validRepeatInterval) || (repeatSchedule === "cron" && !validCron), loading: submitting }}
       destroyOnClose
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md, 12px)" }}>
@@ -144,6 +162,33 @@ export function CreateTaskDialog({ channelId, open, onClose }: Props) {
             </div>
           )}
           {repeatSchedule === "custom" && !validRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}
+          {repeatSchedule === "cron" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              <Input
+                placeholder="e.g. 15,45 8-22 * * *  or  0 20 * * 0"
+                value={cronExpr}
+                onChange={(e) => setCronExpr(e.target.value)}
+              />
+              {!validCron && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)" }}>Enter a valid 5- or 6-field cron expression.</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <Select
+                  value={cronTz}
+                  onChange={setCronTz}
+                  style={{ flex: 1 }}
+                  options={[{ value: "Asia/Shanghai", label: "Asia/Shanghai" }, { value: "UTC", label: "UTC" }]}
+                />
+                <Select
+                  value={cronCatchUp}
+                  onChange={setCronCatchUp}
+                  style={{ flex: 1 }}
+                  options={CRON_CATCH_UP_OPTIONS}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                Standard cron: minute hour day-of-month month day-of-week. Skip missed runs avoids a burst after downtime; catch up backfills one run per missed fire.
+              </div>
+            </div>
+          )}
         </div>
         {repeatSchedule !== "never" && (
           <div>
