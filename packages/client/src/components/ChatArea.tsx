@@ -22,13 +22,18 @@ import { STATUS_ICON_COMPONENTS, getStatusSelectOptions, getStatusFilterOptions,
 import type { Channel } from "../types";
 import { HEARTBEAT_OPTIONS } from "../lib/constants";
 import {
+  CRON_CATCH_UP_OPTIONS,
+  DEFAULT_CRON_TZ,
   REPEAT_INTERVAL_OPTIONS,
   REPEAT_SCHEDULE_OPTIONS,
+  isValidCronExpression,
   recurrenceEditorSettingsFromTemplate,
+  recurrenceScheduleLabel,
   recurrenceSeriesLabel,
   repeatScheduleIntervalMs,
   type RepeatIntervalUnit,
   type RepeatSchedule,
+  type RecurrenceCatchUp,
 } from "../lib/recurrence";
 
 type ChannelTab = "chat" | "tasks" | "files" | "threads";
@@ -142,6 +147,9 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [editOccurrenceMode, setEditOccurrenceMode] = useState<api.RecurringTaskOccurrenceMode>("same_task");
   const [editRepeatIntervalValue, setEditRepeatIntervalValue] = useState(1);
   const [editRepeatIntervalUnit, setEditRepeatIntervalUnit] = useState<RepeatIntervalUnit>("days");
+  const [editCronExpr, setEditCronExpr] = useState("");
+  const [editCronTz, setEditCronTz] = useState(DEFAULT_CRON_TZ);
+  const [editCronCatchUp, setEditCronCatchUp] = useState<RecurrenceCatchUp>("skip");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
@@ -223,18 +231,27 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       setEditRepeatIntervalValue(settings.intervalValue);
       setEditRepeatIntervalUnit(settings.intervalUnit);
       setEditOccurrenceMode(settings.occurrenceMode);
+      setEditCronExpr(settings.cronExpr ?? "");
+      setEditCronTz(settings.cronTz ?? DEFAULT_CRON_TZ);
+      setEditCronCatchUp(settings.catchUp ?? "skip");
     } else {
       setEditRepeatEnabled(false);
       setEditRepeatSchedule("never");
       setEditRepeatIntervalValue(1);
       setEditRepeatIntervalUnit("days");
       setEditOccurrenceMode("same_task");
+      setEditCronExpr("");
+      setEditCronTz(DEFAULT_CRON_TZ);
+      setEditCronCatchUp("skip");
     }
   }, []);
 
   const editRepeatIntervalMs = repeatScheduleIntervalMs(editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit);
   const canEditRecurrence = !editingRecurrence || editingRecurrence.root_task_id === editingTask?.task_id;
-  const validEditRepeatInterval = editRepeatSchedule === "never" || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
+  // cron mode uses the expression input, not the interval fields
+  const validEditRepeatInterval = editRepeatSchedule === "never" || editRepeatSchedule === "cron"
+    || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
+  const validEditCron = editRepeatSchedule !== "cron" || isValidCronExpression(editCronExpr);
 
   const handleEditSave = useCallback(async () => {
     if (!editingTask || (canEditRecurrence && !validEditRepeatInterval)) return;
@@ -243,11 +260,19 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     try {
       const recurrence = !canEditRecurrence ? undefined : editRepeatSchedule === "never"
         ? (editingRecurrence ? null : undefined)
-        : {
-            interval_ms: editRepeatIntervalMs,
-            occurrence_mode: editOccurrenceMode,
-            enabled: editRepeatEnabled,
-          };
+        : editRepeatSchedule === "cron"
+          ? {
+              cron_expr: editCronExpr.trim(),
+              cron_tz: editCronTz.trim() || DEFAULT_CRON_TZ,
+              catch_up: editCronCatchUp,
+              occurrence_mode: editOccurrenceMode,
+              enabled: editRepeatEnabled,
+            }
+          : {
+              interval_ms: editRepeatIntervalMs,
+              occurrence_mode: editOccurrenceMode,
+              enabled: editRepeatEnabled,
+            };
       await api.updateTask(editingTask.task_id, {
         title: editTitle.trim(),
         description: editDescription.trim(),
@@ -263,7 +288,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [editingTask, editingRecurrence, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalMs, editOccurrenceMode, canEditRecurrence, validEditRepeatInterval]);
+  }, [editingTask, editingRecurrence, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalMs, editOccurrenceMode, editCronExpr, editCronTz, editCronCatchUp, canEditRecurrence, validEditRepeatInterval, validEditCron]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -281,10 +306,12 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       width: 300,
       render: (title: string, task) => {
         const seriesLabel = recurrenceSeriesLabel(task.recurring_seq, task.recurrence);
+        const scheduleLabel = recurrenceScheduleLabel(task.recurrence);
         return (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-            {seriesLabel && <Tag icon={<RetweetOutlined />} style={{ flexShrink: 0 }}>{seriesLabel}</Tag>}
+            {scheduleLabel && <Tag icon={<RetweetOutlined />} style={{ flexShrink: 0 }}>{scheduleLabel}</Tag>}
+            {seriesLabel && <Tag style={{ flexShrink: 0 }}>{seriesLabel}</Tag>}
           </div>
         );
       },
@@ -369,7 +396,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         }}
         onOk={handleEditSave}
         okText="Save"
-        okButtonProps={{ loading: saving, disabled: !editTitle.trim() || (canEditRecurrence && !validEditRepeatInterval) }}
+        okButtonProps={{ loading: saving, disabled: !editTitle.trim() || (canEditRecurrence && (!validEditRepeatInterval || !validEditCron)) }}
         destroyOnClose
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -427,6 +454,36 @@ function InlineTaskList({ channelId }: { channelId: string }) {
                     <span>Every</span>
                     <InputNumber disabled={!editRepeatEnabled} min={1} value={editRepeatIntervalValue} onChange={(value) => setEditRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
                     <Select disabled={!editRepeatEnabled} value={editRepeatIntervalUnit} onChange={setEditRepeatIntervalUnit} style={{ width: 120 }} options={REPEAT_INTERVAL_OPTIONS} />
+                  </div>
+                )}
+                {editRepeatSchedule === "cron" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    <Input
+                      disabled={!editRepeatEnabled}
+                      placeholder="e.g. 15,45 8-22 * * *  or  0 20 * * 0"
+                      value={editCronExpr}
+                      onChange={(e) => setEditCronExpr(e.target.value)}
+                    />
+                    {editRepeatEnabled && !validEditCron && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)" }}>Enter a valid 5- or 6-field cron expression.</div>}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Select
+                        disabled={!editRepeatEnabled}
+                        value={editCronTz}
+                        onChange={setEditCronTz}
+                        style={{ flex: 1 }}
+                        options={[{ value: "Asia/Shanghai", label: "Asia/Shanghai" }, { value: "UTC", label: "UTC" }]}
+                      />
+                      <Select
+                        disabled={!editRepeatEnabled}
+                        value={editCronCatchUp}
+                        onChange={setEditCronCatchUp}
+                        style={{ flex: 1 }}
+                        options={CRON_CATCH_UP_OPTIONS}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      Standard cron: minute hour day-of-month month day-of-week. Skip missed runs avoids a burst after downtime; catch up backfills one run per missed fire.
+                    </div>
                   </div>
                 )}
                 {editRepeatEnabled && editRepeatSchedule === "custom" && !validEditRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}

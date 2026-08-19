@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Select, Table, Popconfirm, Tooltip } from "antd";
-import { CheckOutlined, ClockCircleOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import { CheckOutlined, ClockCircleOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Task, TaskStatus, UpdateTaskFields } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
@@ -12,6 +12,7 @@ import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
+import { recurrenceScheduleLabel } from "../lib/recurrence";
 import { getStatusSelectOptions, STATUS_TITLE_STYLE } from "../lib/taskStatusConfig";
 import type { CSSProperties } from "react";
 
@@ -173,6 +174,11 @@ export function TaskBoard() {
       render: (title: string, task) => (
         <span style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", minWidth: 0, ...STATUS_TITLE_STYLE[task.status] }}>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+          {recurrenceScheduleLabel(task.recurrence) && (
+            <Tooltip title={recurrenceScheduleLabel(task.recurrence)!}>
+              <RetweetOutlined style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            </Tooltip>
+          )}
           {task.heartbeat_interval_ms > 0 && (
             <Tooltip title={`Heartbeat every ${Math.round(task.heartbeat_interval_ms / 60000)}m`}>
               <ClockCircleOutlined style={{ color: "var(--text-muted)", flexShrink: 0 }} />

@@ -2,8 +2,8 @@
 name: "cove-ops"
 description: "Cove platform operations: channel files, cove.md, webhooks, channels, messages, members, reactions, roles, permissions, and task management."
 status: active
-version: "2.0.0"
-date: "2026-08-03"
+version: "2.1.0"
+date: "2026-08-19"
 ---
 
 # Cove Ops
@@ -31,10 +31,15 @@ The `cove_task` tool is a first-class OpenClaw tool for managing tasks in Cove c
 
 | Action | Required params | Description |
 |--------|----------------|-------------|
-| `create` | channelId, title | Create a new task |
+| `create` | channelId, title | Create a new task (optional `recurrence` for scheduled repeats) |
 | `list` | channelId | List tasks in a channel |
 | `get` | taskId | Get task details |
-| `update` | taskId | Update status, assignee, description, heartbeat |
+| `update` | taskId | Update status, assignee, description, heartbeat, recurrence |
+| `recurring_create` | channelId, title, intervalMs **or** cronExpr | Create a recurring task template |
+| `recurring_list` | channelId | List recurring templates in a channel |
+| `recurring_get` | recurringTaskId | Get a recurring template |
+| `recurring_update` | recurringTaskId | Update a recurring template (schedule, catch-up, enabled) |
+| `recurring_delete` | recurringTaskId | Delete a recurring template and detach its occurrences |
 
 ### Task Lifecycle
 
@@ -85,6 +90,46 @@ cove_task(action: "update", taskId: "ID", status: "in_review")
 
 // Create a task for someone
 cove_task(action: "create", channelId: "CH_ID", title: "Fix bug", assigneeId: "USER_ID", description: "Details...")
+```
+
+### Recurring Tasks (scheduled repeats)
+
+Recurring tasks run on a schedule. Two mutually exclusive schedule types:
+
+- **intervalMs** — repeat every N milliseconds (e.g. `86400000` = daily)
+- **cronExpr** — standard cron expression (5 or 6 fields), evaluated in **cronTz** (IANA timezone, default `Asia/Shanghai`)
+
+> ⚠️ `intervalMs` and `cronExpr` are mutually exclusive — never pass both.
+
+Cron schedules support a **catchUp** policy for runs missed during downtime:
+- `skip` (default) — skip missed runs, next run lands on the next scheduled time
+- `run` — backfill one run per missed fire (until the task is complete)
+
+```javascript
+// Every 2 hours (interval schedule)
+cove_task(action: "recurring_create", channelId: "CH_ID", title: "Hourly check", intervalMs: 7200000, assigneeId: "USER_ID")
+
+// Daily at 09:00 Asia/Shanghai (cron schedule)
+cove_task(action: "recurring_create", channelId: "CH_ID", title: "Morning briefing", cronExpr: "0 9 * * *", cronTz: "Asia/Shanghai", catchUp: "skip")
+
+// Twice an hour during work hours, catch up missed runs
+cove_task(action: "recurring_create", channelId: "CH_ID", title: "Study loop", cronExpr: "15,45 8-22 * * *", catchUp: "run", occurrenceMode: "new_task")
+
+// Reschedule an existing template to weekly Monday 08:00
+cove_task(action: "recurring_update", recurringTaskId: "REC_ID", cronExpr: "0 8 * * 1")
+
+// Pause a template without deleting it
+cove_task(action: "recurring_update", recurringTaskId: "REC_ID", enabled: false)
+```
+
+`occurrenceMode` controls how each run manifests:
+- `same_task` (default) — reopens the same task/thread each run
+- `new_task` — creates a fresh task/thread per run (series labelled `Repeat #N`)
+
+A task-level recurrence can also be attached when creating/updating a normal task:
+
+```javascript
+cove_task(action: "create", channelId: "CH_ID", title: "Weekly report", recurrence: { cronExpr: "0 20 * * 0", occurrenceMode: "new_task" })
 ```
 
 ## Prerequisites

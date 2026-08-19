@@ -12,6 +12,7 @@
     "@cove/shared": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "better-sqlite3": "^12.10.0",
+    "croner": "^10.0.1",
     "hono": "^4.7.0",
     "ws": "^8.18.0"
   },

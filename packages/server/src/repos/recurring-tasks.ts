@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { generateSnowflake, type RecurringTask, type RecurringTaskOccurrenceMode } from "@cove/shared";
+import { generateSnowflake, type RecurringCatchUp, type RecurringTask, type RecurringTaskOccurrenceMode } from "@cove/shared";
+import { DEFAULT_CRON_TZ, nextCronFireTime } from "../services/recurrence-schedule.js";
 
 interface RecurringTaskRow {
   id: string;
@@ -10,6 +11,9 @@ interface RecurringTaskRow {
   assignee_id: string | null;
   created_by: string;
   interval_ms: number;
+  cron_expr: string | null;
+  cron_tz: string | null;
+  catch_up: string;
   occurrence_mode: string;
   next_run_at: number;
   enabled: number;
@@ -30,6 +34,9 @@ function toRecurringTask(row: RecurringTaskRow): RecurringTask {
     assignee_id: row.assignee_id,
     created_by: row.created_by,
     interval_ms: row.interval_ms,
+    cron_expr: row.cron_expr,
+    cron_tz: row.cron_tz,
+    catch_up: (row.catch_up ?? "skip") as RecurringCatchUp,
     occurrence_mode: row.occurrence_mode as RecurringTaskOccurrenceMode,
     next_run_at: row.next_run_at,
     enabled: row.enabled === 1,
@@ -47,6 +54,9 @@ export interface CreateRecurringTask {
   title: string;
   created_by: string;
   interval_ms: number;
+  cron_expr?: string | null;
+  cron_tz?: string | null;
+  catch_up?: RecurringCatchUp;
   occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
   description?: string;
@@ -59,6 +69,9 @@ export interface UpdateRecurringTask {
   description?: string;
   assignee_id?: string | null;
   interval_ms?: number;
+  cron_expr?: string | null;
+  cron_tz?: string | null;
+  catch_up?: RecurringCatchUp;
   occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
   last_task_id?: string | null;
@@ -76,13 +89,18 @@ export class RecurringTasksRepo {
     const description = params.description ?? "";
     const assigneeId = params.assignee_id ?? null;
     const occurrenceMode = params.occurrence_mode ?? "same_task";
-    const nextRunAt = now + params.interval_ms;
+    const cronExpr = params.cron_expr ?? null;
+    const cronTz = params.cron_tz ?? null;
+    const catchUp = params.catch_up ?? "skip";
+    const nextRunAt = cronExpr
+      ? (nextCronFireTime(cronExpr, cronTz ?? DEFAULT_CRON_TZ, now) ?? now)
+      : now + params.interval_ms;
     const enabled = params.enabled ?? true;
     const heartbeatMs = params.heartbeat_interval_ms ?? 0;
     this.db.prepare(
-      `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, interval_ms, occurrence_mode, next_run_at, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)`
-    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.interval_ms, occurrenceMode, nextRunAt, enabled ? 1 : 0, heartbeatMs, now, now);
+      `INSERT INTO recurring_tasks (id, guild_id, channel_id, title, description, assignee_id, created_by, interval_ms, cron_expr, cron_tz, catch_up, occurrence_mode, next_run_at, enabled, last_task_id, last_spawned_at, heartbeat_interval_ms, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)`
+    ).run(id, params.guild_id, params.channel_id, params.title, description, assigneeId, params.created_by, params.interval_ms, cronExpr, cronTz, catchUp, occurrenceMode, nextRunAt, enabled ? 1 : 0, heartbeatMs, now, now);
     return this.getById(id)!;
   }
 
@@ -104,6 +122,16 @@ export class RecurringTasksRepo {
   update(id: string, fields: UpdateRecurringTask): RecurringTask | null {
     const existing = this.getById(id);
     if (!existing) return null;
+
+    // Resolve the effective schedule type after this update.
+    // - interval_ms set → interval schedule (clear any lingering cron fields)
+    // - cron_expr set → cron schedule (zero interval_ms)
+    // - neither set → keep the existing schedule type
+    const switchingToInterval = fields.interval_ms !== undefined;
+    const switchingToCron = fields.cron_expr !== undefined;
+    const wasCron = existing.cron_expr !== null && existing.cron_expr !== undefined && existing.cron_expr.trim() !== "";
+    const effectiveCron = switchingToCron ? true : switchingToInterval ? false : wasCron;
+
     const sets: string[] = [];
     const values: unknown[] = [];
     if (fields.title !== undefined) { sets.push("title = ?"); values.push(fields.title); }
@@ -117,6 +145,37 @@ export class RecurringTasksRepo {
         values.push(Date.now() + fields.interval_ms);
       }
     }
+    if (fields.cron_expr !== undefined) { sets.push("cron_expr = ?"); values.push(fields.cron_expr); }
+    if (fields.cron_tz !== undefined) { sets.push("cron_tz = ?"); values.push(fields.cron_tz); }
+    if (fields.catch_up !== undefined) { sets.push("catch_up = ?"); values.push(fields.catch_up); }
+
+    // Keep the schedule consistent when switching types: a cron schedule
+    // clears interval_ms, an interval schedule clears cron fields.
+    if (effectiveCron && !switchingToInterval && !wasCron) {
+      // interval → cron: zero interval_ms so isCronScheduled wins, and anchor
+      // next_run_at at the next real fire time (avoid a stale interval anchor
+      // causing an immediate catch-up burst in catch_up=run mode).
+      sets.push("interval_ms = ?");
+      values.push(0);
+      if (fields.next_run_at === undefined && typeof fields.cron_expr === "string") {
+        sets.push("next_run_at = ?");
+        values.push(
+          nextCronFireTime(
+            fields.cron_expr,
+            fields.cron_tz ?? existing.cron_tz ?? DEFAULT_CRON_TZ,
+            Date.now(),
+          ) ?? Date.now(),
+        );
+      }
+    }
+    if (!effectiveCron && wasCron) {
+      // cron → interval: clear cron fields so the template is interval-based.
+      sets.push("cron_expr = ?");
+      values.push(null);
+      sets.push("cron_tz = ?");
+      values.push(null);
+    }
+
     if (fields.occurrence_mode !== undefined) { sets.push("occurrence_mode = ?"); values.push(fields.occurrence_mode); }
     if (fields.enabled !== undefined) { sets.push("enabled = ?"); values.push(fields.enabled ? 1 : 0); }
     if (fields.last_task_id !== undefined) { sets.push("last_task_id = ?"); values.push(fields.last_task_id); }

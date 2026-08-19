@@ -1,9 +1,28 @@
 import type { RecurringTask } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
 import { createTaskAssignmentMessage, createTaskOccurrence } from "../services/task-occurrence.js";
+import { advanceCronNextRun, isCronScheduled } from "../services/recurrence-schedule.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
 const TICK_MS = parseInt(process.env["RECURRING_TASK_TICK_MS"] ?? "30000", 10);
+
+/**
+ * Computes the next_run_at to persist after a spawn.
+ *
+ * - Interval schedules: fixed grid anchored at the original next_run_at
+ *   (existing behavior — the worker still advances past missed runs).
+ * - Cron schedules: next fire time after the previous fire time. With
+ *   catch_up=skip the template lands on the next scheduled wall-clock time
+ *   (missed runs during downtime are skipped); with catch_up=run it keeps
+ *   advancing until past now so the worker backfills one run per missed fire.
+ */
+function nextRunAfterSpawn(template: RecurringTask, now: number): number | null {
+  if (isCronScheduled(template)) {
+    return advanceCronNextRun(template, template.next_run_at, now);
+  }
+  const elapsedIntervals = Math.floor((now - template.next_run_at) / template.interval_ms) + 1;
+  return template.next_run_at + elapsedIntervals * template.interval_ms;
+}
 
 export class RecurringTaskWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -38,12 +57,7 @@ export class RecurringTaskWorker {
   }
 
   private isCalendarSchedule(template: RecurringTask): boolean {
-    return template.interval_ms > 0 && template.next_run_at > 0;
-  }
-
-  private nextCalendarRun(template: RecurringTask, now: number): number {
-    const elapsedIntervals = Math.floor((now - template.next_run_at) / template.interval_ms) + 1;
-    return template.next_run_at + elapsedIntervals * template.interval_ms;
+    return isCronScheduled(template) || (template.interval_ms > 0 && template.next_run_at > 0);
   }
 
   private shouldSpawn(template: RecurringTask, now: number): boolean {
@@ -57,10 +71,21 @@ export class RecurringTaskWorker {
         const now = Date.now();
         if (!latestTemplate || !latestTemplate.enabled || !this.shouldSpawn(latestTemplate, now)) return null;
 
-        const nextRunAt = this.nextCalendarRun(latestTemplate, now);
+        const nextRunAt = nextRunAfterSpawn(latestTemplate, now);
+        if (nextRunAt === null) {
+          this.repos.recurringTasks.update(latestTemplate.id, { enabled: false, next_run_at: 0 });
+          return null;
+        }
         const previous = latestTemplate.last_task_id ? this.repos.tasks.getById(latestTemplate.last_task_id) : null;
         if (!previous || previous.status === "open" || previous.status === "in_progress") {
-          this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          // Overlap guard: never spawn a second concurrent occurrence.
+          // - interval / cron skip: advance next_run_at so we stop re-checking.
+          // - cron catch_up=run: keep next_run_at at the missed fire; once the
+          //   task completes, the worker backfills the missed run.
+          const keepMissedFire = isCronScheduled(latestTemplate) && latestTemplate.catch_up === "run";
+          if (!keepMissedFire) {
+            this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          }
           return null;
         }
         if (previous.status === "cancelled") {
@@ -71,7 +96,10 @@ export class RecurringTaskWorker {
         const channel = this.repos.channels.getById(latestTemplate.channel_id);
         const creator = this.repos.users.getById(latestTemplate.created_by);
         if (!channel || !creator || !this.repos.members.exists(channel.guild_id, creator.id)) {
-          this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          const keepMissedFire = isCronScheduled(latestTemplate) && latestTemplate.catch_up === "run";
+          if (!keepMissedFire) {
+            this.repos.recurringTasks.update(latestTemplate.id, { next_run_at: nextRunAt });
+          }
           console.error(`Recurring task ${latestTemplate.id} cannot spawn because its channel or creator is unavailable`);
           return null;
         }
