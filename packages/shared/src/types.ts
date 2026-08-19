@@ -296,7 +296,14 @@ export const TASK_STATUSES: TaskStatus[] = ["open", "in_progress", "in_review", 
 /** A channel-level task with a linked thread. */
 export type RecurringTaskOccurrenceMode = "same_task" | "new_task";
 
-/** A recurring task template that creates ordinary task occurrences. */
+/** Catch-up policy for cron-scheduled recurring tasks after downtime. */
+export type RecurringCatchUp = "skip" | "run";
+
+/**
+ * A recurring task template that creates ordinary task occurrences.
+ * Schedules are either interval-based (interval_ms > 0) or cron-based
+ * (cron_expr set). The two are mutually exclusive.
+ */
 export interface RecurringTask {
   id: string;
   guild_id: string;
@@ -306,6 +313,12 @@ export interface RecurringTask {
   assignee_id: string | null;
   created_by: string;
   interval_ms: number;
+  /** Standard cron expression (5 or 6 fields), or null for interval schedules. */
+  cron_expr: string | null;
+  /** IANA timezone used to evaluate cron_expr, or null for interval schedules. */
+  cron_tz: string | null;
+  /** Catch-up policy for missed cron runs: skip (default) or run. */
+  catch_up: RecurringCatchUp;
   occurrence_mode: RecurringTaskOccurrenceMode;
   next_run_at: number;
   enabled: boolean;
@@ -321,6 +334,9 @@ export interface TaskRecurrence {
   root_task_id: string;
   id: string;
   interval_ms: number;
+  cron_expr: string | null;
+  cron_tz: string | null;
+  catch_up: RecurringCatchUp;
   occurrence_mode: RecurringTaskOccurrenceMode;
   next_run_at: number;
   enabled: boolean;
@@ -329,13 +345,23 @@ export interface TaskRecurrence {
 }
 
 export interface CreateTaskRecurrence {
-  interval_ms: number;
+  /** Interval in ms (interval schedule). Mutually exclusive with cron_expr. */
+  interval_ms?: number;
+  /** Standard cron expression (cron schedule). Mutually exclusive with interval_ms. */
+  cron_expr?: string;
+  /** IANA timezone for cron_expr (defaults to Asia/Shanghai). */
+  cron_tz?: string;
+  /** Catch-up policy for missed cron runs (defaults to skip). */
+  catch_up?: RecurringCatchUp;
   occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
 }
 
 export interface UpdateTaskRecurrence {
   interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  catch_up?: RecurringCatchUp;
   occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
 }

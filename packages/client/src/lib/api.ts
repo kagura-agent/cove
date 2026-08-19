@@ -375,7 +375,10 @@ export interface CreateRecurringTaskFields {
   title: string;
   description?: string;
   assignee_id?: string;
-  interval_ms: number;
+  interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  catch_up?: "skip" | "run";
   occurrence_mode: RecurringTaskOccurrenceMode;
   heartbeat_interval_ms?: number;
 }
@@ -385,6 +388,9 @@ export interface UpdateRecurringTaskFields {
   description?: string;
   assignee_id?: string | null;
   interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  catch_up?: "skip" | "run";
   occurrence_mode?: RecurringTaskOccurrenceMode;
   enabled?: boolean;
   heartbeat_interval_ms?: number;

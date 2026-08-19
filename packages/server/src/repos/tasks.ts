@@ -22,6 +22,9 @@ interface TaskRow {
   recurrence_id: string | null;
   recurrence_root_task_id: string | null;
   recurrence_interval_ms: number | null;
+  recurrence_cron_expr: string | null;
+  recurrence_cron_tz: string | null;
+  recurrence_catch_up: string | null;
   recurrence_occurrence_mode: string | null;
   recurrence_next_run_at: number | null;
   recurrence_enabled: number | null;
@@ -34,6 +37,9 @@ const TASK_SELECT = `
     rt.id AS recurrence_id,
     root_task.task_id AS recurrence_root_task_id,
     rt.interval_ms AS recurrence_interval_ms,
+    rt.cron_expr AS recurrence_cron_expr,
+    rt.cron_tz AS recurrence_cron_tz,
+    rt.catch_up AS recurrence_catch_up,
     rt.occurrence_mode AS recurrence_occurrence_mode,
     rt.next_run_at AS recurrence_next_run_at,
     rt.enabled AS recurrence_enabled,
@@ -49,6 +55,9 @@ function toTask(row: TaskRow): Task {
     root_task_id: row.recurrence_root_task_id!,
     id: row.recurrence_id,
     interval_ms: row.recurrence_interval_ms!,
+    cron_expr: row.recurrence_cron_expr,
+    cron_tz: row.recurrence_cron_tz,
+    catch_up: (row.recurrence_catch_up ?? "skip") as TaskRecurrence["catch_up"],
     occurrence_mode: row.recurrence_occurrence_mode as TaskRecurrence["occurrence_mode"],
     next_run_at: row.recurrence_next_run_at!,
     enabled: row.recurrence_enabled === 1,

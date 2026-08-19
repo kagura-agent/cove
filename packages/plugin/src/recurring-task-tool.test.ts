@@ -89,6 +89,78 @@ describe("cove_task recurring actions", () => {
     expect(restClient.deleteRecurringTask).toHaveBeenCalledWith("recurring-1");
   });
 
+  it("maps cron-expr recurring schedules through recurring REST methods", async () => {
+    restClient.createRecurringTask.mockResolvedValue({ id: "recurring-cron-1" });
+    restClient.updateRecurringTask.mockResolvedValue({ id: "recurring-cron-1", cron_expr: "0 9 * * *" });
+    const tool = createCoveTaskTool({ cfg: {} });
+
+    const create = await tool.execute("call-1", {
+      action: "recurring_create",
+      channelId: "channel-1",
+      title: "Daily 9am",
+      cronExpr: "0 9 * * *",
+      cronTz: "Asia/Shanghai",
+      catchUp: "skip",
+      occurrenceMode: "new_task",
+      assigneeId: "agent-1",
+    });
+    expect(create.details).toMatchObject({ ok: true, action: "recurring_create" });
+    expect(restClient.createRecurringTask).toHaveBeenCalledWith("channel-1", {
+      title: "Daily 9am", cron_expr: "0 9 * * *", cron_tz: "Asia/Shanghai", catch_up: "skip",
+      occurrence_mode: "new_task", assignee_id: "agent-1",
+    });
+
+    const update = await tool.execute("call-2", {
+      action: "recurring_update",
+      recurringTaskId: "recurring-cron-1",
+      cronExpr: "15,45 8-22 * * *",
+      catchUp: "run",
+    });
+    expect(update.details).toMatchObject({ ok: true, action: "recurring_update" });
+    expect(restClient.updateRecurringTask).toHaveBeenCalledWith("recurring-cron-1", {
+      cron_expr: "15,45 8-22 * * *", catch_up: "run",
+    });
+  });
+
+  it("maps cron recurrence through normal task actions", async () => {
+    restClient.createTask.mockResolvedValue({ task_id: "task-cron-1" });
+    const tool = createCoveTaskTool({ cfg: {} });
+
+    const create = await tool.execute("call-1", {
+      action: "create",
+      channelId: "channel-1",
+      title: "Weekly Monday",
+      recurrence: { cronExpr: "0 8 * * 1", cronTz: "Asia/Shanghai", occurrenceMode: "same_task", enabled: true },
+    });
+    expect(create.details).toMatchObject({ ok: true, action: "create" });
+    expect(restClient.createTask).toHaveBeenCalledWith("channel-1", {
+      title: "Weekly Monday",
+      recurrence: { cron_expr: "0 8 * * 1", cron_tz: "Asia/Shanghai", occurrence_mode: "same_task", enabled: true },
+    });
+  });
+
+  it("rejects interval+cron conflicts and requires one schedule for recurring_create", async () => {
+    const tool = createCoveTaskTool({ cfg: {} });
+
+    const both = await tool.execute("call-1", {
+      action: "recurring_create", channelId: "channel-1", title: "Both", intervalMs: 60_000, cronExpr: "0 9 * * *",
+    });
+    expect(both.details).toEqual({ ok: false, error: "intervalMs and cronExpr are mutually exclusive for recurring_create" });
+    expect(restClient.createRecurringTask).not.toHaveBeenCalled();
+
+    const neither = await tool.execute("call-2", {
+      action: "recurring_create", channelId: "channel-1", title: "Neither",
+    });
+    expect(neither.details).toEqual({ ok: false, error: "intervalMs or cronExpr is required for recurring_create" });
+    expect(restClient.createRecurringTask).not.toHaveBeenCalled();
+
+    const badCatchUp = await tool.execute("call-3", {
+      action: "recurring_create", channelId: "channel-1", title: "Bad catchup", cronExpr: "0 9 * * *", catchUp: "sometimes",
+    });
+    expect(badCatchUp.details).toEqual({ ok: false, error: "catchUp must be skip or run for recurring_create" });
+    expect(restClient.createRecurringTask).not.toHaveBeenCalled();
+  });
+
   it("requires a positive interval before creating a recurring template", async () => {
     const tool = createCoveTaskTool({ cfg: {} });
 

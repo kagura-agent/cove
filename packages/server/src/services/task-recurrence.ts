@@ -1,6 +1,7 @@
 import type { Channel, CreateTaskRecurrence, RecurringTask, RecurringTaskOccurrenceMode, User } from "@cove/shared";
 import type { Repos } from "../repos/index.js";
 import { validateFiniteNumber } from "../validation.js";
+import { validateCatchUp, validateCronExpression } from "./recurrence-schedule.js";
 import { createTaskOccurrence, type TaskOccurrence } from "./task-occurrence.js";
 
 const VALID_OCCURRENCE_MODES = new Set<RecurringTaskOccurrenceMode>(["same_task", "new_task"]);
@@ -19,14 +20,30 @@ export function validateOccurrenceMode(occurrenceMode: unknown, name = "occurren
   return null;
 }
 
-export function validateTaskRecurrence(value: unknown, requireInterval: boolean): string | null {
+/**
+ * Validates a recurrence schedule object. Exactly one of interval_ms and
+ * cron_expr must be provided (mutually exclusive); cron_tz/catch_up only
+ * apply to cron schedules.
+ */
+export function validateTaskRecurrence(value: unknown, requireSchedule: boolean): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "recurrence must be an object";
   const recurrence = value as Record<string, unknown>;
-  if (requireInterval && recurrence.interval_ms === undefined) return "recurrence.interval_ms is required";
-  if (recurrence.interval_ms !== undefined) {
+  const hasInterval = recurrence.interval_ms !== undefined;
+  const hasCron = recurrence.cron_expr !== undefined;
+  if (hasInterval && hasCron) return "recurrence.interval_ms and recurrence.cron_expr are mutually exclusive";
+  if (requireSchedule && !hasInterval && !hasCron) return "recurrence.interval_ms or recurrence.cron_expr is required";
+  if (hasInterval) {
     const error = validateInterval(recurrence.interval_ms, "recurrence.interval_ms");
     if (error) return error;
   }
+  if (hasCron) {
+    const error = validateCronExpression(recurrence.cron_expr, recurrence.cron_tz);
+    if (error) return `recurrence.${error}`;
+  }
+  if (recurrence.cron_tz !== undefined && typeof recurrence.cron_tz !== "string") return "recurrence.cron_tz must be a string";
+  if (hasCron && recurrence.cron_tz !== undefined && recurrence.cron_tz.trim() === "") return "recurrence.cron_tz must not be empty when provided";
+  const catchUpError = validateCatchUp(recurrence.catch_up, "recurrence.catch_up");
+  if (catchUpError) return catchUpError;
   if (recurrence.occurrence_mode !== undefined) {
     const error = validateOccurrenceMode(recurrence.occurrence_mode, "recurrence.occurrence_mode");
     if (error) return error;
@@ -58,7 +75,10 @@ export function createRecurringTaskOccurrence(repos: Repos, input: CreateRecurri
     description: input.description,
     assignee_id: input.assigneeId,
     created_by: input.creator.id,
-    interval_ms: input.recurrence.interval_ms,
+    interval_ms: input.recurrence.interval_ms ?? 0,
+    cron_expr: input.recurrence.cron_expr,
+    cron_tz: input.recurrence.cron_tz,
+    catch_up: input.recurrence.catch_up,
     occurrence_mode: input.recurrence.occurrence_mode,
     enabled: input.recurrence.enabled,
     heartbeat_interval_ms: input.heartbeatIntervalMs,

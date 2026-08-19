@@ -15,7 +15,10 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       channelId: Type.Optional(Type.String({ description: "Channel ID (required for create, list, recurring_create, recurring_list)" })),
       taskId: Type.Optional(Type.String({ description: "Task ID (required for get, update)" })),
       recurringTaskId: Type.Optional(Type.String({ description: "Recurring task template ID (required for recurring_get, recurring_update, recurring_delete)" })),
-      intervalMs: Type.Optional(Type.Number({ description: "Recurring calendar interval in ms (required for recurring_create)" })),
+      intervalMs: Type.Optional(Type.Number({ description: "Recurring calendar interval in ms (required for recurring_create when not using cron)" })),
+      cronExpr: Type.Optional(Type.String({ description: "Standard cron expression (5 or 6 fields) for recurring schedules, e.g. '15,45 8-22 * * *'. Mutually exclusive with intervalMs." })),
+      cronTz: Type.Optional(Type.String({ description: "IANA timezone for cronExpr (default Asia/Shanghai)" })),
+      catchUp: Type.Optional(Type.String({ description: "Catch-up policy for missed cron runs: skip (default) or run" })),
       occurrenceMode: Type.Optional(Type.String({ description: "Recurring occurrence mode: same_task or new_task" })),
       enabled: Type.Optional(Type.Boolean({ description: "Whether a recurring template is enabled" })),
       title: Type.Optional(Type.String({ description: "Task title (required for create)" })),
@@ -24,7 +27,10 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       heartbeatIntervalMs: Type.Optional(Type.Number({ description: "Heartbeat interval in ms. 0 = disabled (for update)" })),
       recurrence: Type.Optional(Type.Union([
         Type.Object({
-          intervalMs: Type.Optional(Type.Number({ description: "Recurrence interval in ms (required when adding recurrence to a task)" })),
+          intervalMs: Type.Optional(Type.Number({ description: "Recurrence interval in ms (mutually exclusive with cronExpr)" })),
+          cronExpr: Type.Optional(Type.String({ description: "Standard cron expression (mutually exclusive with intervalMs)" })),
+          cronTz: Type.Optional(Type.String({ description: "IANA timezone for cronExpr (default Asia/Shanghai)" })),
+          catchUp: Type.Optional(Type.String({ description: "Catch-up policy for missed cron runs: skip (default) or run" })),
           occurrenceMode: Type.Optional(Type.String({ description: "Recurrence occurrence mode: same_task or new_task" })),
           enabled: Type.Optional(Type.Boolean({ description: "Whether recurrence is enabled" })),
         }, { additionalProperties: false }),
@@ -42,11 +48,17 @@ export function createCoveTaskTool(opts: { cfg: any }) {
       const status = rawParams.status as string | undefined;
       const description = rawParams.description as string | undefined;
       const intervalMs = rawParams.intervalMs as number | undefined;
+      const cronExpr = rawParams.cronExpr as string | undefined;
+      const cronTz = rawParams.cronTz as string | undefined;
+      const catchUp = rawParams.catchUp as "skip" | "run" | undefined;
       const occurrenceMode = rawParams.occurrenceMode as "same_task" | "new_task" | undefined;
       const enabled = rawParams.enabled as boolean | undefined;
       const heartbeatIntervalMs = rawParams.heartbeatIntervalMs as number | undefined;
       const recurrence = rawParams.recurrence as {
         intervalMs?: number;
+        cronExpr?: string;
+        cronTz?: string;
+        catchUp?: "skip" | "run";
         occurrenceMode?: "same_task" | "new_task";
         enabled?: boolean;
       } | null | undefined;
@@ -56,13 +68,19 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           ? null
           : {
               ...(recurrence.intervalMs !== undefined ? { interval_ms: recurrence.intervalMs } : {}),
+              ...(recurrence.cronExpr !== undefined ? { cron_expr: recurrence.cronExpr } : {}),
+              ...(recurrence.cronTz !== undefined ? { cron_tz: recurrence.cronTz } : {}),
+              ...(recurrence.catchUp !== undefined ? { catch_up: recurrence.catchUp } : {}),
               ...(recurrence.occurrenceMode !== undefined ? { occurrence_mode: recurrence.occurrenceMode } : {}),
               ...(recurrence.enabled !== undefined ? { enabled: recurrence.enabled } : {}),
             };
-      const createRecurrenceFields = recurrence === undefined || recurrence === null || recurrence.intervalMs === undefined
+      const createRecurrenceFields = recurrence === undefined || recurrence === null || (recurrence.intervalMs === undefined && recurrence.cronExpr === undefined)
         ? undefined
         : {
-            interval_ms: recurrence.intervalMs,
+            ...(recurrence.intervalMs !== undefined ? { interval_ms: recurrence.intervalMs } : {}),
+            ...(recurrence.cronExpr !== undefined ? { cron_expr: recurrence.cronExpr } : {}),
+            ...(recurrence.cronTz !== undefined ? { cron_tz: recurrence.cronTz } : {}),
+            ...(recurrence.catchUp !== undefined ? { catch_up: recurrence.catchUp } : {}),
             ...(recurrence.occurrenceMode !== undefined ? { occurrence_mode: recurrence.occurrenceMode } : {}),
             ...(recurrence.enabled !== undefined ? { enabled: recurrence.enabled } : {}),
           };
@@ -80,7 +98,10 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for create" });
           if (recurrence === null) return jsonResult({ ok: false, error: "recurrence cannot be null for create" });
-          if (recurrence !== undefined && !createRecurrenceFields) return jsonResult({ ok: false, error: "recurrence.intervalMs is required for create" });
+          if (recurrence !== undefined && !createRecurrenceFields) return jsonResult({ ok: false, error: "recurrence.intervalMs or recurrence.cronExpr is required for create" });
+          if (recurrence !== undefined && recurrence.intervalMs !== undefined && recurrence.cronExpr !== undefined) {
+            return jsonResult({ ok: false, error: "recurrence.intervalMs and recurrence.cronExpr are mutually exclusive" });
+          }
           const task = await client.createTask(channelId, {
             title,
             ...(assigneeId ? { assignee_id: assigneeId } : {}),
@@ -120,13 +141,20 @@ export function createCoveTaskTool(opts: { cfg: any }) {
         case "recurring_create": {
           if (!channelId) return jsonResult({ ok: false, error: "channelId is required for recurring_create" });
           if (!title) return jsonResult({ ok: false, error: "title is required for recurring_create" });
-          if (!intervalMs || intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive for recurring_create" });
+          if (intervalMs !== undefined && intervalMs !== 0 && intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive for recurring_create" });
+          if (intervalMs !== undefined && cronExpr !== undefined) return jsonResult({ ok: false, error: "intervalMs and cronExpr are mutually exclusive for recurring_create" });
+          if (intervalMs === undefined && cronExpr === undefined) return jsonResult({ ok: false, error: "intervalMs or cronExpr is required for recurring_create" });
+          if (intervalMs !== undefined && intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive for recurring_create" });
           if (occurrenceMode !== undefined && occurrenceMode !== "same_task" && occurrenceMode !== "new_task") return jsonResult({ ok: false, error: "occurrenceMode must be same_task or new_task for recurring_create" });
+          if (catchUp !== undefined && catchUp !== "skip" && catchUp !== "run") return jsonResult({ ok: false, error: "catchUp must be skip or run for recurring_create" });
           const recurringTask = await client.createRecurringTask(channelId, {
             title,
             description,
             assignee_id: assigneeId,
-            interval_ms: intervalMs,
+            ...(intervalMs !== undefined ? { interval_ms: intervalMs } : {}),
+            ...(cronExpr !== undefined ? { cron_expr: cronExpr } : {}),
+            ...(cronTz !== undefined ? { cron_tz: cronTz } : {}),
+            ...(catchUp !== undefined ? { catch_up: catchUp } : {}),
             occurrence_mode: occurrenceMode,
             heartbeat_interval_ms: heartbeatIntervalMs,
           });
@@ -146,11 +174,16 @@ export function createCoveTaskTool(opts: { cfg: any }) {
           if (!recurringTaskId) return jsonResult({ ok: false, error: "recurringTaskId is required for recurring_update" });
           if (occurrenceMode !== undefined && occurrenceMode !== "same_task" && occurrenceMode !== "new_task") return jsonResult({ ok: false, error: "occurrenceMode must be same_task or new_task" });
           if (intervalMs !== undefined && intervalMs <= 0) return jsonResult({ ok: false, error: "intervalMs must be positive" });
+          if (intervalMs !== undefined && cronExpr !== undefined) return jsonResult({ ok: false, error: "intervalMs and cronExpr are mutually exclusive" });
+          if (catchUp !== undefined && catchUp !== "skip" && catchUp !== "run") return jsonResult({ ok: false, error: "catchUp must be skip or run" });
           const fields: Record<string, unknown> = {};
           if (title !== undefined) fields.title = title;
           if (description !== undefined) fields.description = description;
           if (assigneeId !== undefined) fields.assignee_id = assigneeId;
           if (intervalMs !== undefined) fields.interval_ms = intervalMs;
+          if (cronExpr !== undefined) fields.cron_expr = cronExpr;
+          if (cronTz !== undefined) fields.cron_tz = cronTz;
+          if (catchUp !== undefined) fields.catch_up = catchUp;
           if (occurrenceMode !== undefined) fields.occurrence_mode = occurrenceMode;
           if (enabled !== undefined) fields.enabled = enabled;
           if (heartbeatIntervalMs !== undefined) fields.heartbeat_interval_ms = heartbeatIntervalMs;

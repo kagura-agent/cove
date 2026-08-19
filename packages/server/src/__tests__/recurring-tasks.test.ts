@@ -314,4 +314,134 @@ describe("recurring task templates API", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  describe("cron schedules (#533)", () => {
+    it("creates a cron template with the next fire time in the configured timezone", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z")); // 17:50 Asia/Shanghai
+
+      const create = await createTemplate({ interval_ms: undefined, cron_expr: "0 9 * * *", cron_tz: "Asia/Shanghai" });
+      expect(create.status).toBe(201);
+      const template = await create.json() as Record<string, unknown>;
+      expect(template).toMatchObject({
+        title: "Daily standup",
+        interval_ms: 0,
+        cron_expr: "0 9 * * *",
+        cron_tz: "Asia/Shanghai",
+        catch_up: "skip",
+        next_run_at: Date.parse("2026-08-20T01:00:00.000Z"), // 09:00 Asia/Shanghai next day
+      });
+    });
+
+    it("defaults timezone to Asia/Shanghai and catch_up to skip", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z"));
+
+      const create = await createTemplate({ interval_ms: undefined, cron_expr: "15,45 8-22 * * *" });
+      expect(create.status).toBe(201);
+      const template = await create.json() as Record<string, unknown>;
+      expect(template).toMatchObject({ cron_tz: null, catch_up: "skip", next_run_at: Date.parse("2026-08-19T10:15:00.000Z") });
+    });
+
+    it("rejects invalid cron expressions, bad timezones and interval+cron conflicts", async () => {
+      const badCron = await createTemplate({ interval_ms: undefined, cron_expr: "99 99 * * *" });
+      expect(badCron.status).toBe(400);
+
+      const badTz = await createTemplate({ interval_ms: undefined, cron_expr: "0 9 * * *", cron_tz: "Mars/Olympus" });
+      expect(badTz.status).toBe(400);
+
+      const conflict = await createTemplate({ cron_expr: "0 9 * * *", interval_ms: 60_000 });
+      expect(conflict.status).toBe(400);
+
+      const missing = await createTemplate({ interval_ms: undefined });
+      expect(missing.status).toBe(400);
+
+      const badCatchUp = await createTemplate({ interval_ms: undefined, cron_expr: "0 9 * * *", catch_up: "sometimes" });
+      expect(badCatchUp.status).toBe(400);
+    });
+
+    it("updates cron fields and preserves interval templates untouched", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z"));
+      const created = await createTemplate({ interval_ms: undefined, cron_expr: "0 9 * * *" });
+      const template = await created.json() as { id: string; next_run_at: number };
+
+      const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ cron_expr: "0 8 * * 1", catch_up: "run" }),
+      });
+      expect(update.status).toBe(200);
+      expect(await update.json()).toMatchObject({
+        cron_expr: "0 8 * * 1",
+        catch_up: "run",
+        cron_tz: null,
+      });
+    });
+
+    it("switching from cron back to interval clears cron fields and re-anchors", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z"));
+      const created = await createTemplate({ interval_ms: undefined, cron_expr: "0 9 * * *" });
+      const template = await created.json() as { id: string };
+
+      vi.setSystemTime(new Date("2026-08-19T10:00:00.000Z"));
+      const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ interval_ms: 120_000 }),
+      });
+      expect(update.status).toBe(200);
+      const updated = await update.json() as Record<string, unknown>;
+      expect(updated).toMatchObject({
+        interval_ms: 120_000,
+        cron_expr: null,
+        cron_tz: null,
+        next_run_at: Date.parse("2026-08-19T10:02:00.000Z"),
+      });
+    });
+
+    it("switching from interval to cron clears interval and anchors at the next fire", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z"));
+      const created = await createTemplate({ interval_ms: 60_000 });
+      const template = await created.json() as { id: string };
+
+      vi.setSystemTime(new Date("2026-08-19T10:00:00.000Z")); // 18:00 Asia/Shanghai
+      const update = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ cron_expr: "30 11 * * *" }),
+      });
+      expect(update.status).toBe(200);
+      const updated = await update.json() as Record<string, unknown>;
+      expect(updated).toMatchObject({
+        interval_ms: 0,
+        cron_expr: "30 11 * * *",
+        cron_tz: null,
+        next_run_at: Date.parse("2026-08-20T03:30:00.000Z"), // 11:30 Asia/Shanghai tomorrow (18:00+08 today is past 11:30)
+      });
+    });
+
+    it("creates a task-level recurrence with cron fields", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-19T09:50:00.000Z"));
+      const create = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          title: "Monday morning",
+          recurrence: { cron_expr: "0 8 * * 1", cron_tz: "Asia/Shanghai", occurrence_mode: "same_task" },
+        }),
+      });
+      expect(create.status).toBe(201);
+      const task = await create.json() as { recurrence: { cron_expr: string; cron_tz: string; catch_up: string; next_run_at: number } };
+      expect(task.recurrence).toMatchObject({
+        cron_expr: "0 8 * * 1",
+        cron_tz: "Asia/Shanghai",
+        catch_up: "skip",
+        next_run_at: Date.parse("2026-08-24T00:00:00.000Z"), // Monday 08:00 Asia/Shanghai
+      });
+    });
+  });
 });

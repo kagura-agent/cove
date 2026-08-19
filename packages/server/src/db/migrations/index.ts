@@ -38,8 +38,9 @@ import { migrateV36 } from "./v36-drop-task-id.js";
 import { migrateV37 } from "./v37-normalize-run-channel.js";
 import { migrateV38 } from "./v38-tasks-thread-index.js";
 import { migrateV39 } from "./v39-task-heartbeat-default-off.js";
+import { migrateV40 } from "./v40-recurring-cron.js";
 
-const LATEST_VERSION = 39;
+const LATEST_VERSION = 40;
 
 type MigrationFn = (db: Database.Database) => void;
 
@@ -83,6 +84,7 @@ const migrations: Record<number, MigrationFn> = {
   37: migrateV37,
   38: migrateV38,
   39: migrateV39,
+  40: migrateV40,
 };
 
 export function runMigrations(db: Database.Database): void {

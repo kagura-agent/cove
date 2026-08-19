@@ -12,19 +12,23 @@ function tmpDb(): string {
 }
 
 describe("versioned migration system", () => {
-  it("fresh DB gets user_version = 39 with generic agent run ledger tables", () => {
+  it("fresh DB gets user_version = 40 with cron-capable recurring task tables", () => {
     const db = initDb();
     const version = db.pragma("user_version", { simple: true });
-    expect(version).toBe(39);
+    expect(version).toBe(40);
 
     const recurringColumns = db.prepare("PRAGMA table_info(recurring_tasks)").all() as Array<{ name: string; dflt_value: string | null }>;
     expect(recurringColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
       "id", "channel_id", "guild_id", "created_by", "title", "interval_ms",
+      "cron_expr", "cron_tz", "catch_up",
       "enabled", "assignee_id", "heartbeat_interval_ms", "last_task_id", "last_spawned_at", "occurrence_mode", "next_run_at",
     ]));
     expect(recurringColumns.map((column) => column.name)).not.toContain("schedule_type");
     expect(recurringColumns.find((column) => column.name === "occurrence_mode")).toMatchObject({ dflt_value: "'same_task'" });
     expect(recurringColumns.find((column) => column.name === "next_run_at")).toMatchObject({ dflt_value: "0" });
+    expect(recurringColumns.find((column) => column.name === "catch_up")).toMatchObject({ dflt_value: "'skip'" });
+    expect(recurringColumns.find((column) => column.name === "cron_expr")).toMatchObject({ dflt_value: "NULL" });
+    expect(recurringColumns.find((column) => column.name === "cron_tz")).toMatchObject({ dflt_value: "NULL" });
     const taskColumns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>;
     expect(taskColumns.map((column) => column.name)).toEqual(expect.arrayContaining(["recurring_id", "recurring_seq"]));
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='task_runs'").get()).toBeTruthy();
@@ -156,7 +160,7 @@ describe("versioned migration system", () => {
 
       const db = initDb(tmpFile);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(39);
+      expect(version).toBe(40);
 
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='read_states'").all();
       expect(tables).toHaveLength(1);
@@ -227,7 +231,7 @@ describe("versioned migration system", () => {
       // ID should now be a snowflake
       expect(String(msg.id)).toMatch(/^\d+$/);
       const version = db.pragma("user_version", { simple: true });
-      expect(version).toBe(39);
+      expect(version).toBe(40);
       db.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -253,7 +257,7 @@ describe("scenes→channels migration guard", () => {
       expect(rows[0].name).toBe("Scene1");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(39);
+      expect(version).toBe(40);
       db2.close();
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
@@ -375,7 +379,7 @@ describe("island→discord schema migration", () => {
       expect(rows[0].topic).toBe("Living room");
 
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(39);
+      expect(version).toBe(40);
 
       db2.close();
     } finally {
@@ -447,7 +451,7 @@ describe("V2→V3 migration (UUID→Snowflake)", () => {
       const db = initDb(tmpFile);
 
       // Version should be 3
-      expect(db.pragma("user_version", { simple: true })).toBe(39);
+      expect(db.pragma("user_version", { simple: true })).toBe(40);
 
       // Guild ID should be a snowflake (numeric string)
       const guild = db.prepare("SELECT id, name FROM guilds WHERE name = 'TestGuild'").get() as { id: string; name: string };
@@ -625,7 +629,7 @@ describe("V17→V18 attachments table migration", () => {
       // Re-open — should run v18 and create the attachments table
       const db2 = initDb(tmpFile);
       const version = db2.pragma("user_version", { simple: true });
-      expect(version).toBe(39);
+      expect(version).toBe(40);
 
       const tables = db2.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -677,7 +681,7 @@ describe("V17→V18 attachments table migration", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(39);
+      expect(db2.pragma("user_version", { simple: true })).toBe(40);
 
       if (guild && channel) {
         const att = db2.prepare("SELECT * FROM attachments WHERE id = 'att-1'").get() as Record<string, unknown> | undefined;
@@ -743,7 +747,7 @@ describe("V36 drops denormalized agent_runs.task_id", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(39);
+      expect(db2.pragma("user_version", { simple: true })).toBe(40);
       const cols = db2.prepare("PRAGMA table_info(agent_runs)").all() as Array<{ name: string }>;
       expect(cols.map((c) => c.name)).not.toContain("task_id");
       const idx = db2.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_agent_runs_task_updated'").get();
@@ -779,7 +783,7 @@ describe("V37 normalizes agent_runs.channel_id to parent channel", () => {
       db1.close();
 
       const db2 = initDb(tmpFile);
-      expect(db2.pragma("user_version", { simple: true })).toBe(39);
+      expect(db2.pragma("user_version", { simple: true })).toBe(40);
       const r1 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r1'").get() as { channel_id: string; thread_id: string };
       const r2 = db2.prepare("SELECT channel_id, thread_id FROM agent_runs WHERE run_id='r2'").get() as { channel_id: string; thread_id: string };
       expect(r1.channel_id).toBe(channel.id); // rewritten to parent channel
