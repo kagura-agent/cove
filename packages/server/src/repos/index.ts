@@ -15,8 +15,9 @@ import { RolesRepo } from "./roles.js";
 import { TasksRepo } from "./tasks.js";
 import { RecurringTasksRepo } from "./recurring-tasks.js";
 import { AgentRunsRepo } from "./agent-runs.js";
+import { TaskEfficiencyRepo } from "./task-efficiency.js";
 
-export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo, RolesRepo, TasksRepo, RecurringTasksRepo, AgentRunsRepo };
+export { MessagesRepo, ChannelsRepo, UsersRepo, MembersRepo, GuildsRepo, ReadStatesRepo, ReactionsRepo, WebhooksRepo, PermissionsRepo, ChannelFilesRepo, ThreadsRepo, AttachmentRepo, RolesRepo, TasksRepo, RecurringTasksRepo, AgentRunsRepo, TaskEfficiencyRepo };
 
 export interface Repos {
   db: Database.Database;
@@ -36,6 +37,7 @@ export interface Repos {
   tasks: TasksRepo;
   recurringTasks: RecurringTasksRepo;
   agentRuns: AgentRunsRepo;
+  taskEfficiency: TaskEfficiencyRepo;
 }
 
 export function createRepos(db: Database.Database): Repos {
@@ -43,6 +45,8 @@ export function createRepos(db: Database.Database): Repos {
   const permissions = new PermissionsRepo(db);
   const channels = new ChannelsRepo(db);
   channels.setPermissionsRepo(permissions);
+  const tasksRepo = new TasksRepo(db);
+  const agentRuns = new AgentRunsRepo(db);
   return {
     db,
     messages: new MessagesRepo(db, reactions),
@@ -58,8 +62,9 @@ export function createRepos(db: Database.Database): Repos {
     threads: new ThreadsRepo(db, channels),
     attachments: new AttachmentRepo(db),
     roles: new RolesRepo(db),
-    tasks: new TasksRepo(db),
+    tasks: tasksRepo,
     recurringTasks: new RecurringTasksRepo(db),
-    agentRuns: new AgentRunsRepo(db),
+    agentRuns,
+    taskEfficiency: new TaskEfficiencyRepo(db, tasksRepo, agentRuns),
   };
 }

@@ -437,6 +437,69 @@ export interface AgentRunUsage {
 }
 export interface AgentRunTimeline { run: AgentRun | null; events: AgentRunEvent[]; usage: AgentRunUsage | null; }
 
+/** Tool-execution health for a task: call/failure ledger from events.jsonl evidence. */
+export interface TaskToolHealth {
+  /** Total tool_started events across the task's runs. */
+  tool_calls: number;
+  /** Total tool_failed events. */
+  failures: number;
+  /** failures / tool_calls; null when there were no tool calls. */
+  failure_rate: number | null;
+  /** Top failing commands (normalized action text), most failures first. */
+  top_failing_commands: Array<{ command: string; failures: number }>;
+  /** Commands invoked more than once (normalized), most occurrences first. */
+  repeated_commands: Array<{ command: string; occurrences: number }>;
+}
+
+/** Run-ledger health for a task (agent_runs rows in the task's thread). */
+export interface TaskRunHealth {
+  /** Total runs in the task's thread (root + child/subagent runs). */
+  runs: number;
+  /** Distinct agents that executed runs in the thread (session proxy). */
+  sessions: number;
+  completed: number;
+  failed: number;
+  aborted: number;
+  stale: number;
+  active: number;
+  /** completed / (completed+failed+aborted); null when no run reached a terminal status. */
+  completion_rate: number | null;
+  /** Median duration (finished_at - started_at) across finished runs, ms. */
+  duration_ms_median: number | null;
+  /** Sum of durations across finished runs, ms. */
+  duration_ms_total: number | null;
+}
+
+/** Comparison baseline: median cost / tool failure rate across sibling tasks. */
+export interface TaskEfficiencyBaseline {
+  scope: "channel" | "all";
+  /** Tasks included in the median (excludes the reported task itself). */
+  tasks_included: number;
+  /** Median cost across sibling tasks with recorded usage; null when none. */
+  median_cost: number | null;
+  /** Median tool failure rate across sibling tasks with tool calls; null when none. */
+  median_failure_rate: number | null;
+}
+
+/** Per-task execution efficiency, computed from existing run/usage/event data. */
+export interface TaskEfficiencyReport {
+  task_id: string;
+  /** False when the task has no runs and no usage rows at all. */
+  has_data: boolean;
+  /** LLM usage rollup (same shape as usage endpoints); null when no usage. */
+  cost: AgentRunUsage | null;
+  /** Tool execution health; null when no tool events were recorded. */
+  tool_health: TaskToolHealth | null;
+  /** Run ledger health; null when the task has no runs. */
+  run_health: TaskRunHealth | null;
+  /** Baseline comparison against sibling tasks. */
+  baseline: TaskEfficiencyBaseline;
+  /** cost - baseline.median_cost (null when either side is missing). */
+  cost_delta_vs_median: number | null;
+  /** tool failure_rate - baseline.median_failure_rate (null when either side is missing). */
+  failure_rate_delta_vs_median: number | null;
+}
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id
