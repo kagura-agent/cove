@@ -52,10 +52,18 @@ export function TaskHealthLine({ report, hideDelta }: TaskHealthLineProps) {
   const failureColor = deltaColor(failureDelta, false);
   const deltas: Array<{ text: string; color: string | null }> = [];
   if (costColor && costDelta !== null) {
-    deltas.push({ text: `${costDelta > 0 ? "+" : "−"}${formatUsd(Math.abs(costDelta))} vs median`, color: costColor });
+    const abs = Math.abs(costDelta);
+    // Skip display when the delta rounds to zero (would render "−$0.0000").
+    if (abs >= 0.001) {
+      deltas.push({ text: `${costDelta > 0 ? "+" : "−"}${formatUsd(abs)} vs median`, color: costColor });
+    }
   }
   if (failureColor && failureDelta !== null) {
-    deltas.push({ text: `${failureDelta > 0 ? "+" : "−"}${(Math.abs(failureDelta) * 100).toFixed(0)}pp fail vs median`, color: failureColor });
+    const pp = Math.round(Math.abs(failureDelta) * 100);
+    // Skip display when the delta rounds to zero (would render "−0pp").
+    if (pp > 0) {
+      deltas.push({ text: `${failureDelta > 0 ? "+" : "−"}${pp}pp fail vs median`, color: failureColor });
+    }
   }
 
   return (

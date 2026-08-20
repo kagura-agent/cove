@@ -51,6 +51,14 @@ describe("TaskHealthLine", () => {
     expect(html).not.toContain("vs median");
   });
 
+  it("hides a delta that rounds to zero instead of rendering −0pp / −$0.000", () => {
+    const tinyFailure = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ failure_rate_delta_vs_median: -0.004 }) }));
+    expect(tinyFailure).not.toContain("pp fail vs median");
+    // With both deltas near zero, no "vs median" text appears at all.
+    const tinyBoth = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ cost_delta_vs_median: 0.0004, failure_rate_delta_vs_median: -0.004 }) }));
+    expect(tinyBoth).not.toContain("vs median");
+  });
+
   it("omits the failure segment when there are no failures", () => {
     const html = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ tool_health: { tool_calls: 3, failures: 0, failure_rate: 0, top_failing_commands: [], repeated_commands: [] } }) }));
     expect(html).not.toContain("failed");
