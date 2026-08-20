@@ -14,8 +14,9 @@ import type { Message, Channel } from "../types";
 import { ThreadIcon } from "./ThreadIcon";
 import { AgentRunCard } from "./AgentRunCard";
 import { UsageChip } from "./UsageChip";
+import { EfficiencyCard } from "./EfficiencyCard";
 import { dispatcher } from "../lib/gateway-dispatcher";
-import type { AgentRunUsage } from "@cove/shared";
+import type { AgentRunUsage, TaskEfficiencyReport } from "@cove/shared";
 
 interface ThreadPanelProps {
   threadId: string;
@@ -28,6 +29,8 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [usage, setUsage] = useState<AgentRunUsage | null | undefined>(undefined);
+  const [efficiencyOpen, setEfficiencyOpen] = useState(false);
+  const [efficiency, setEfficiency] = useState<TaskEfficiencyReport | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const threadFetchRef = useRef<string | null>(null);
@@ -152,6 +155,25 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
     return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
   }, [thread?.id, thread?.parent_id]);
 
+  // Task efficiency card: opened from the UsageChip click, refreshed on usage
+  // events (same live-refresh pattern as the usage chip above).
+  useEffect(() => {
+    if (!efficiencyOpen || !task) {
+      setEfficiency(null);
+      return;
+    }
+    let alive = true;
+    const refresh = () => {
+      api.fetchTaskEfficiency(task.task_id).then((r) => { if (alive) setEfficiency(r); }).catch(() => { if (alive) setEfficiency(null); });
+    };
+    refresh();
+    const onUsage = (run: { thread_id: string | null }) => {
+      if (run.thread_id === threadId) refresh();
+    };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
+  }, [efficiencyOpen, task, threadId]);
+
   if (!thread) return null;
 
   async function handleArchive() {
@@ -226,7 +248,26 @@ export function ThreadPanel({ threadId, onClose }: ThreadPanelProps) {
             }}
           />
         )}
-        {usage && <UsageChip usage={usage} scope="thread" />}
+        {usage && (
+          <div style={{ position: "relative" }}>
+            <UsageChip usage={usage} scope="thread" onClick={task ? () => setEfficiencyOpen((v) => !v) : undefined} />
+            {efficiencyOpen && task && (
+              <div style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                right: 0,
+                zIndex: 1100,
+                background: "var(--bg-floating, var(--bg-secondary))",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--space-xs)",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                overflow: "hidden",
+              }}>
+                <EfficiencyCard report={efficiency} taskId={task.task_id} />
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ position: "relative" }}>
           <button
             ref={menuBtnRef}

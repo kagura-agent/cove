@@ -1,5 +1,5 @@
 import type { Channel, Message, BotCreateResponse, GuildMember } from "../types";
-import type { AgentRunTimeline, AgentRunUsage, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, TaskStatus, UpdateTaskFields, Webhook } from "@cove/shared";
+import type { AgentRunTimeline, AgentRunUsage, CreateTaskFields, RecurringTask, RecurringTaskOccurrenceMode, Role, Task, TaskEfficiencyReport, TaskRunStat, TaskStatus, UpdateTaskFields, Webhook } from "@cove/shared";
 import { API_PREFIX } from "@cove/shared";
 
 const API_BASE = import.meta.env.VITE_COVE_API_URL ?? "";
@@ -249,6 +249,15 @@ export function fetchThreadUsage(channelId: string, threadId: string) {
 }
 export function fetchTaskUsage(taskId: string) {
   return api<AgentRunUsage | null>(`${API_PREFIX}/tasks/${taskId}/usage`);
+}
+export function fetchTaskEfficiency(taskId: string) {
+  return api<TaskEfficiencyReport>(`${API_PREFIX}/tasks/${taskId}/efficiency`);
+}
+export function fetchTaskRunStats(taskId: string) {
+  return api<TaskRunStat[]>(`${API_PREFIX}/tasks/${taskId}/runs/stats`);
+}
+export function fetchChannelTaskEfficiency(channelId: string) {
+  return api<TaskEfficiencyReport[]>(`${API_PREFIX}/channels/${channelId}/tasks/efficiency`);
 }
 export function fetchTaskUsages(channelId: string) {
   return api<Record<string, AgentRunUsage>>(`${API_PREFIX}/channels/${channelId}/tasks/usage`);

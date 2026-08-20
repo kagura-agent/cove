@@ -10,6 +10,8 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
+import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
+import { TaskHealthLine } from "./TaskHealthLine";
 import { ThreadPanel } from "./ThreadPanel";
 import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
@@ -52,6 +54,8 @@ export function TaskBoard() {
   const selfId = useUserStore((s) => s.id);
   const byTaskId = useTaskStore((s) => s.byTaskId);
   const fetchGuildTasks = useTaskStore((s) => s.fetchGuildTasks);
+  const efficiencyByChannel = useTaskEfficiencyStore((s) => s.byChannel);
+  const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
   const [view, setView] = useState<BoardView>("open");
   const [groupBy, setGroupBy] = useState<GroupBy>("channel");
   const [loading, setLoading] = useState(false);
@@ -86,6 +90,17 @@ export function TaskBoard() {
     () => (guildId ? Object.values(byTaskId).filter((t) => t.guild_id === guildId) : []),
     [byTaskId, guildId],
   );
+
+  // Channel-wide efficiency as the shared baseline for row-level health lines.
+  // The board spans many channels, so fetch each channel that has tasks once
+  // (store dedupes in-flight requests per channel).
+  useEffect(() => {
+    if (!guildId) return;
+    const channelIds = new Set(guildTasks.map((t) => t.channel_id));
+    for (const channelId of channelIds) {
+      fetchChannelEfficiency(channelId);
+    }
+  }, [guildId, guildTasks, fetchChannelEfficiency]);
 
   const filtered = useMemo(() => {
     let list = guildTasks;
@@ -228,6 +243,14 @@ export function TaskBoard() {
             </Tooltip>
           )}
         </span>
+      ),
+    },
+    {
+      title: "Health",
+      key: "health",
+      width: 230,
+      render: (_, task) => (
+        <TaskHealthLine report={efficiencyByChannel[task.channel_id]?.[task.task_id]} />
       ),
     },
     {

@@ -8,6 +8,7 @@ import type {
   TaskEfficiencyBaseline,
   TaskEfficiencyReport,
   TaskRunHealth,
+  TaskRunStat,
   TaskToolHealth,
 } from "@cove/shared";
 
@@ -137,6 +138,36 @@ export class TaskEfficiencyRepo {
     return tasks
       .map((t) => this.report(t.task_id, { baseline }))
       .filter((r): r is TaskEfficiencyReport => r !== null);
+  }
+
+  /** Per-run efficiency stats for the task's thread, newest first. The chart
+   *  source for #574 Phase 2 — one row per run (materialized agent_run_stats
+   *  with lazy backfill, same path as the aggregates). Null when the task
+   *  doesn't exist or has no thread. */
+  runStats(taskId: string): TaskRunStat[] | null {
+    const task = this.tasks.getById(taskId);
+    if (!task || !task.thread_id) return null;
+    const runs = this.runsForThread(task.thread_id);
+    const stats = this.statsForRuns(runs.map((r) => r.run_id));
+    return runs
+      .map((r) => {
+        const s = stats.get(r.run_id);
+        return {
+          run_id: r.run_id,
+          started_at: r.started_at,
+          status: r.status,
+          cost: s?.cost ?? null,
+          tool_calls: s?.tool_calls ?? 0,
+          tool_failures: s?.tool_failures ?? 0,
+          duration_ms: s?.duration_ms ?? null,
+          input_tokens: s?.input_tokens ?? 0,
+          output_tokens: s?.output_tokens ?? 0,
+          cache_read_tokens: s?.cache_read_tokens ?? 0,
+          cache_write_tokens: s?.cache_write_tokens ?? 0,
+          total_tokens: s?.total_tokens ?? 0,
+        };
+      })
+      .sort((a, b) => b.started_at - a.started_at);
   }
 
   private runsForThread(threadId: string): AgentRun[] {
