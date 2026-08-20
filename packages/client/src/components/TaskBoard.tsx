@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Select, Table, Popconfirm, Tooltip } from "antd";
-import { CheckOutlined, ClockCircleOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import { Button, Select, Table, Popconfirm, Tooltip, Space } from "antd";
+import { CheckOutlined, ClockCircleOutlined, EditOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Task, TaskStatus, UpdateTaskFields } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
@@ -11,6 +11,7 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
 import { ThreadPanel } from "./ThreadPanel";
+import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import { recurrenceScheduleLabel } from "../lib/recurrence";
@@ -57,6 +58,7 @@ export function TaskBoard() {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [channelFilter, setChannelFilter] = useState<string[]>([]);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   // Validate guild exists after data loads
   useEffect(() => {
@@ -185,20 +187,22 @@ export function TaskBoard() {
   }, [selectedRowKeys]);
 
   const columns: ColumnsType<Task> = [
-    {
-      title: "Channel",
-      key: "channel",
-      width: 140,
-      ellipsis: true,
-      render: (_, task) => (
-        <a
-          style={styles.channelLink}
-          onClick={(e) => { e.stopPropagation(); if (guildId) navigate(routes.channel(guildId, task.channel_id)); }}
-        >
-          #{channelMap[task.channel_id]?.name ?? task.channel_id.slice(0, 8)}
-        </a>
-      ),
-    },
+    ...(groupBy !== "channel"
+      ? [{
+          title: "Channel",
+          key: "channel",
+          width: 140,
+          ellipsis: true,
+          render: (_: unknown, task: Task) => (
+            <a
+              style={styles.channelLink}
+              onClick={(e) => { e.stopPropagation(); if (guildId) navigate(routes.channel(guildId, task.channel_id)); }}
+            >
+              #{channelMap[task.channel_id]?.name ?? task.channel_id.slice(0, 8)}
+            </a>
+          ),
+        } satisfies ColumnsType<Task>[number]]
+      : []),
     {
       title: "#",
       dataIndex: "seq",
@@ -242,14 +246,16 @@ export function TaskBoard() {
         />
       ),
     },
-    {
-      title: "Assignee",
-      dataIndex: "assignee_id",
-      key: "assignee_id",
-      width: 120,
-      ellipsis: true,
-      render: (id: string | null) => (id ? userNameMap[id] || id : <span style={{ color: "var(--text-muted)" }}>—</span>),
-    },
+    ...(groupBy !== "assignee"
+      ? [{
+          title: "Assignee",
+          dataIndex: "assignee_id",
+          key: "assignee_id",
+          width: 120,
+          ellipsis: true,
+          render: (id: string | null) => (id ? userNameMap[id] || id : <span style={{ color: "var(--text-muted)" }}>—</span>),
+        } satisfies ColumnsType<Task>[number]]
+      : []),
     {
       title: "Updated",
       dataIndex: "updated_at",
@@ -260,15 +266,24 @@ export function TaskBoard() {
     {
       title: "Actions",
       key: "actions",
-      width: 80,
+      width: 100,
       render: (_, task) => (
-        <Button
-          type="text"
-          size="small"
-          icon={<MessageOutlined />}
-          onClick={(e) => { e.stopPropagation(); handleOpenThread(task); }}
-          title="Open thread"
-        />
+        <Space size={0}>
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={(e) => { e.stopPropagation(); setEditingTask(task); }}
+            title="Edit task"
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<MessageOutlined />}
+            onClick={(e) => { e.stopPropagation(); handleOpenThread(task); }}
+            title="Open thread"
+          />
+        </Space>
       ),
     },
   ];
@@ -410,6 +425,9 @@ export function TaskBoard() {
             <ThreadPanel threadId={selectedThreadId} onClose={closeThread} />
           </div>
         </>
+      )}
+      {editingTask && (
+        <TaskEditDialog key={editingTask.task_id} task={editingTask} open onClose={() => setEditingTask(null)} />
       )}
     </div>
   );
