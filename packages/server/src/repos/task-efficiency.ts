@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import type { AgentRunsRepo } from "./agent-runs.js";
 import type { TasksRepo } from "./tasks.js";
+import { computeRunStats, type RunStatsRow } from "./run-stats.js";
 import type {
   AgentRun,
   Task,
@@ -35,6 +36,27 @@ function median(values: number[]): number | null {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Materialized agent_run_stats row as stored (JSON columns still encoded). */
+interface StatsRowRaw {
+  run_id: string;
+  status: string;
+  tool_calls: number;
+  tool_failures: number;
+  failure_rate: number | null;
+  top_failing_commands: string | null;
+  repeated_commands: string | null;
+  cost: number | null;
+  usage_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+  duration_ms: number | null;
+  usage_finalized: number;
+  computed_at: number;
 }
 
 interface ToolStats {
@@ -75,7 +97,9 @@ export class TaskEfficiencyRepo {
 
   /** Full efficiency report for one task. Null when the task doesn't exist or
    *  has no thread. Tasks without runs/usage are handled gracefully:
-   *  has_data=false, cost/run_health/tool_health null, baseline still computed. */
+   *  has_data=false, cost/run_health/tool_health null, baseline still computed.
+   *  Reads the materialized agent_run_stats cache where present (fast); runs
+   *  without a row (legacy/rebuild) are computed on demand from events.jsonl. */
   report(taskId: string, opts: { baselineScope?: "channel" | "all"; baseline?: TaskEfficiencyBaseline } = {}): TaskEfficiencyReport | null {
     const task = this.tasks.getById(taskId);
     if (!task || !task.thread_id) return null;
@@ -119,30 +143,93 @@ export class TaskEfficiencyRepo {
     return this.db.prepare("SELECT * FROM agent_runs WHERE thread_id = ? ORDER BY started_at").all(threadId) as AgentRun[];
   }
 
+  /**
+   * Per-run stats for the given run ids, from the materialized cache where
+   * present. Missing rows (legacy runs before V41, rebuilt DB, active runs
+   * that never terminalized) are computed on demand from events.jsonl + usage
+   * and written back to the cache — the derived table is rebuildable by
+   * construction, so a missing row is never a data gap, only a cache miss.
+   */
+  private statsForRuns(runIds: string[]): Map<string, RunStatsRow> {
+    const out = new Map<string, RunStatsRow>();
+    if (!runIds.length) return out;
+    const rows = this.db.prepare(
+      `SELECT * FROM agent_run_stats WHERE run_id IN (${runIds.map(() => "?").join(",")})`,
+    ).all(...runIds) as StatsRowRaw[];
+    const found = new Set(rows.map((r) => r.run_id));
+    for (const r of rows) {
+      out.set(r.run_id, {
+        ...r,
+        top_failing_commands: r.top_failing_commands ? JSON.parse(r.top_failing_commands) : [],
+        repeated_commands: r.repeated_commands ? JSON.parse(r.repeated_commands) : [],
+      });
+    }
+    for (const runId of runIds) {
+      if (found.has(runId)) continue;
+      const run = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId) as AgentRun | undefined;
+      if (!run) continue;
+      const events = this.agentRuns.events(runId);
+      const usage = this.agentRuns.usage(runId, true);
+      const stats = { run_id: runId, computed_at: Date.now(), ...computeRunStats({ run, events, usage }) };
+      out.set(runId, stats);
+      this.materializeRow(stats);
+    }
+    return out;
+  }
+
+  /** Insert/upsert one stats row (shared by lazy backfill and cache writes). */
+  private materializeRow(row: RunStatsRow): void {
+    this.db.prepare(`
+      INSERT INTO agent_run_stats (run_id,status,tool_calls,tool_failures,failure_rate,top_failing_commands,repeated_commands,cost,usage_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,duration_ms,usage_finalized,computed_at)
+      VALUES (@run_id,@status,@tool_calls,@tool_failures,@failure_rate,@top_failing_commands,@repeated_commands,@cost,@usage_calls,@input_tokens,@output_tokens,@cache_read_tokens,@cache_write_tokens,@total_tokens,@duration_ms,@usage_finalized,@computed_at)
+      ON CONFLICT(run_id) DO UPDATE SET
+        status=excluded.status, tool_calls=excluded.tool_calls, tool_failures=excluded.tool_failures,
+        failure_rate=excluded.failure_rate, top_failing_commands=excluded.top_failing_commands,
+        repeated_commands=excluded.repeated_commands, cost=excluded.cost, usage_calls=excluded.usage_calls,
+        input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
+        cache_read_tokens=excluded.cache_read_tokens, cache_write_tokens=excluded.cache_write_tokens,
+        total_tokens=excluded.total_tokens, duration_ms=excluded.duration_ms,
+        usage_finalized=excluded.usage_finalized, computed_at=excluded.computed_at
+    `).run({
+      run_id: row.run_id, status: row.status, tool_calls: row.tool_calls, tool_failures: row.tool_failures,
+      failure_rate: row.failure_rate, top_failing_commands: JSON.stringify(row.top_failing_commands),
+      repeated_commands: JSON.stringify(row.repeated_commands), cost: row.cost, usage_calls: row.usage_calls,
+      input_tokens: row.input_tokens, output_tokens: row.output_tokens,
+      cache_read_tokens: row.cache_read_tokens, cache_write_tokens: row.cache_write_tokens,
+      total_tokens: row.total_tokens, duration_ms: row.duration_ms,
+      usage_finalized: row.usage_finalized, computed_at: row.computed_at,
+    });
+  }
+
   private allTaskIds(): Array<{ task_id: string }> {
     return this.db.prepare("SELECT task_id FROM tasks").all() as Array<{ task_id: string }>;
   }
 
-  /** Tool ledger health from events.jsonl evidence for the given runs. */
+  /** Tool ledger health for the given runs — aggregates the per-run stats
+   *  (materialized cache with lazy backfill). */
   private toolHealth(runIds: string[]): TaskToolHealth | null {
     if (!runIds.length) return null;
-    const events = runIds.flatMap((id) => this.agentRuns.events(id));
-    const started = events.filter((e) => e.type === "tool_started");
-    const failed = events.filter((e) => e.type === "tool_failed");
-    if (!started.length && !failed.length) return null;
+    const stats = [...this.statsForRuns(runIds).values()];
+    const calls = stats.reduce((acc, s) => acc + s.tool_calls, 0);
+    const failures = stats.reduce((acc, s) => acc + s.tool_failures, 0);
+    if (!calls && !failures) return null;
     const failByCmd = new Map<string, number>();
-    for (const e of failed) {
-      if (!e.action) continue;
-      const key = normalizeCommand(e.action);
-      failByCmd.set(key, (failByCmd.get(key) ?? 0) + 1);
+    for (const s of stats) {
+      for (const c of s.top_failing_commands) failByCmd.set(c.command, (failByCmd.get(c.command) ?? 0) + c.failures);
     }
-    const sorted = [...failByCmd.entries()].sort((a, b) => b[1] - a[1]);
+    const top = [...failByCmd.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP_FAILING_LIMIT)
+      .map(([command, failures]) => ({ command, failures }));
     return {
-      tool_calls: started.length,
-      failures: failed.length,
-      failure_rate: started.length ? failed.length / started.length : null,
-      top_failing_commands: sorted.slice(0, TOP_FAILING_LIMIT).map(([command, failures]) => ({ command, failures })),
-      repeated_commands: sorted.filter(([, n]) => n > 1).map(([command, occurrences]) => ({ command, occurrences })),
+      tool_calls: calls,
+      failures,
+      failure_rate: calls ? failures / calls : null,
+      top_failing_commands: top,
+      // Task-level "repeated" = the same normalized command failed more than
+      // once across the task's runs (retry-waste signal, #572). Per-run stats
+      // already collapsed variants; summing their top-failure buckets gives the
+      // total occurrences per command, then filter >1.
+      repeated_commands: [...failByCmd.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1])
+        .map(([command, occurrences]) => ({ command, occurrences })),
     };
   }
 
@@ -196,7 +283,8 @@ export class TaskEfficiencyRepo {
   }
 
   /** Lightweight per-task tool stats (calls/failures) — baseline needs only
-   *  the failure rate, not the full top-command breakdown. */
+   *  the failure rate, not the full top-command breakdown. Reads the
+   *  materialized cache with lazy backfill. */
   private taskToolStats(taskIds: string[]): Map<string, ToolStats> {
     const stats = new Map<string, ToolStats>(taskIds.map((id) => [id, { calls: 0, failures: 0 }]));
     if (!taskIds.length) return stats;
@@ -209,14 +297,14 @@ export class TaskEfficiencyRepo {
     const runs = this.db.prepare(
       `SELECT run_id, thread_id FROM agent_runs WHERE thread_id IN (${threads.map(() => "?").join(",")})`,
     ).all(...threads) as Array<{ run_id: string; thread_id: string }>;
+    const runStats = this.statsForRuns(runs.map((r) => r.run_id));
     for (const run of runs) {
       const taskId = taskByThread.get(run.thread_id);
       const s = taskId ? stats.get(taskId) : undefined;
-      if (!s) continue;
-      for (const ev of this.agentRuns.events(run.run_id)) {
-        if (ev.type === "tool_started") s.calls += 1;
-        else if (ev.type === "tool_failed") s.failures += 1;
-      }
+      const rs = runStats.get(run.run_id);
+      if (!s || !rs) continue;
+      s.calls += rs.tool_calls;
+      s.failures += rs.tool_failures;
     }
     return stats;
   }
