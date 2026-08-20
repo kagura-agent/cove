@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Select, Table, Popconfirm, Tooltip } from "antd";
 import { CheckOutlined, ClockCircleOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -10,6 +10,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
+import { ThreadPanel } from "./ThreadPanel";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import { recurrenceScheduleLabel } from "../lib/recurrence";
@@ -37,6 +38,12 @@ const styles = {
 
 export function TaskBoard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedThreadId = searchParams.get("thread");
+  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [resizeDragging, setResizeDragging] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(400);
   const { guildId } = useActiveIds();
   const guilds = useGuildStore((s) => s.guilds);
   const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
@@ -121,8 +128,40 @@ export function TaskBoard() {
   }, [filtered, groupBy, channelMap, userNameMap]);
 
   const handleOpenThread = useCallback((task: Task) => {
-    if (guildId) navigate(routes.thread(guildId, task.channel_id, task.thread_id));
-  }, [guildId, navigate]);
+    // Master-detail: keep the board mounted, show the thread in the right panel.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("thread", task.thread_id);
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const closeThread = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("thread");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = threadPanelWidth;
+    setResizeDragging(true);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = dragStartX.current - ev.clientX;
+      setThreadPanelWidth(Math.min(600, Math.max(280, dragStartWidth.current + delta)));
+    };
+    const onMouseUp = () => {
+      setResizeDragging(false);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [threadPanelWidth]);
 
   const handleStatusChange = useCallback(async (task: Task, newStatus: TaskStatus) => {
     try {
@@ -223,13 +262,20 @@ export function TaskBoard() {
       key: "actions",
       width: 80,
       render: (_, task) => (
-        <Button type="text" size="small" icon={<MessageOutlined />} onClick={() => handleOpenThread(task)} title="Open thread" />
+        <Button
+          type="text"
+          size="small"
+          icon={<MessageOutlined />}
+          onClick={(e) => { e.stopPropagation(); handleOpenThread(task); }}
+          title="Open thread"
+        />
       ),
     },
   ];
 
   return (
-    <div style={styles.root}>
+    <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" }}>
+      <div style={styles.root}>
       <div style={styles.header}>
         <UnorderedListOutlined style={{ fontSize: "var(--font-size-xl)", color: "var(--text-normal)" }} />
         <h1 style={styles.headerTitle}>Tasks</h1>
@@ -332,10 +378,39 @@ export function TaskBoard() {
               }}
               locale={{ emptyText: "No tasks" }}
               scroll={{ x: "max-content" }}
+              rowClassName={(record) => (record.thread_id === selectedThreadId ? "task-row-active-thread" : "")}
+              onRow={(record) => ({
+                onClick: (e) => {
+                  const target = e.target as HTMLElement;
+                  // Let interactive cells (links, selects, checkboxes, buttons) handle their own clicks.
+                  if (target.closest("input, button, a, .ant-select, .ant-checkbox-wrapper, .ant-checkbox")) return;
+                  handleOpenThread(record);
+                },
+              })}
             />
           </div>
         ))}
       </div>
+      </div>
+      {selectedThreadId && (
+        <>
+          <div
+            style={{
+              width: 4,
+              flexShrink: 0,
+              cursor: "col-resize",
+              background: resizeDragging ? "var(--accent)" : undefined,
+              transition: "background 0.15s",
+            }}
+            onMouseDown={handleResizeMouseDown}
+            onMouseEnter={(e) => { if (!resizeDragging) (e.currentTarget.style.background = "var(--border-subtle)"); }}
+            onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
+          />
+          <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
+            <ThreadPanel threadId={selectedThreadId} onClose={closeThread} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
