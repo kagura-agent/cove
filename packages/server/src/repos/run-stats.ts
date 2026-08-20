@@ -74,6 +74,11 @@ export function computeRunStats(input: RunStatsInput): Omit<RunStatsRow, "run_id
     tool_failures: failed.length,
     failure_rate: started.length ? failed.length / started.length : null,
     top_failing_commands: sorted.slice(0, TOP_FAILING_LIMIT).map(([command, failures]) => ({ command, failures })),
+    // Run-level repeated failures: the same normalized command failed >1× within
+    // THIS run. The task aggregation layer does not consume this column (it
+    // recomputes the cross-run "repeated" signal from top_failing_commands), but
+    // it is a first-class per-run fact for the Phase 2 per-run chart (which
+    // command was retried inside one run).
     repeated_commands: sorted.filter(([, n]) => n > 1).map(([command, occurrences]) => ({ command, occurrences })),
     cost: usage?.cost ?? null,
     usage_calls: usage?.calls ?? 0,

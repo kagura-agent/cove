@@ -169,7 +169,9 @@ export class TaskEfficiencyRepo {
       const run = this.db.prepare("SELECT * FROM agent_runs WHERE run_id=?").get(runId) as AgentRun | undefined;
       if (!run) continue;
       const events = this.agentRuns.events(runId);
-      const usage = this.agentRuns.usage(runId, true);
+      // Same scope as materializeStats: the run's own usage only, so cost and
+      // tool counts always describe the same evidence set.
+      const usage = this.agentRuns.usage(runId, false);
       const stats = { run_id: runId, computed_at: Date.now(), ...computeRunStats({ run, events, usage }) };
       out.set(runId, stats);
       this.materializeRow(stats);

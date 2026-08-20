@@ -56,9 +56,15 @@ export class AgentRunsRepo {
     else if (scope?.channelId) { where = " AND channel_id=? AND thread_id IS NULL"; args.push(scope.channelId); }
     const result = this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
     // Stale runs never emit a terminal event (crash / timeout / superseded) —
-    // materialize their stats here so the cache covers every run type.
+    // materialize their stats here so the cache covers every run type. Match
+    // the same scope as the UPDATE above so we never re-materialize unrelated
+    // stale runs from other threads/channels.
     if (result.changes > 0) {
-      const rows = this.db.prepare("SELECT run_id FROM agent_runs WHERE status='stale' AND expires_at < ? ORDER BY updated_at DESC LIMIT ?").all(Date.now(), result.changes) as Array<{ run_id: string }>;
+      const staleWhere = scope?.threadId ? " AND thread_id=?" : scope?.channelId ? " AND channel_id=? AND thread_id IS NULL" : "";
+      const staleArgs: unknown[] = [Date.now()];
+      if (scope?.threadId) staleArgs.push(scope.threadId);
+      else if (scope?.channelId) staleArgs.push(scope.channelId);
+      const rows = this.db.prepare(`SELECT run_id FROM agent_runs WHERE status='stale' AND expires_at < ?${staleWhere} ORDER BY updated_at DESC LIMIT ?`).all(...staleArgs, result.changes) as Array<{ run_id: string }>;
       for (const { run_id } of rows) this.materializeStats(run_id);
     }
   }
@@ -73,7 +79,11 @@ export class AgentRunsRepo {
   materializeStats(runId: string): void {
     const run = this.get(runId);
     if (!run) return;
-    const stats = computeRunStats({ run, events: this.events(runId), usage: this.usage(runId, true) });
+    // Cost is attributed to the run's own usage rows only (includeChildren=false):
+    // subagent cost lands on the parent run's usage row already, and subagent
+    // tool calls are not recorded in any events.jsonl, so children must stay out
+    // of both sides of the stat to keep cost and tool counts on the same scope.
+    const stats = computeRunStats({ run, events: this.events(runId), usage: this.usage(runId, false) });
     const row: RunStatsRow = { run_id: runId, computed_at: Date.now(), ...stats };
     this.db.prepare(`
       INSERT INTO agent_run_stats (run_id,status,tool_calls,tool_failures,failure_rate,top_failing_commands,repeated_commands,cost,usage_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,duration_ms,usage_finalized,computed_at)
@@ -114,7 +124,7 @@ export class AgentRunsRepo {
   refreshStatsUsage(runId: string): void {
     const run = this.get(runId);
     if (!run) return;
-    const usage = this.usage(runId, true);
+    const usage = this.usage(runId, false);
     this.db.prepare(`
       UPDATE agent_run_stats SET
         cost=?, usage_calls=?, input_tokens=?, output_tokens=?, cache_read_tokens=?,
@@ -214,6 +224,8 @@ export class AgentRunsRepo {
     const result = this.get(runId)!; this.writeManifest(result);
     // Terminal event → tool counts / duration are final; materialize once. Usage
     // may still arrive (agent_end fires just after), refreshStatsUsage handles it.
+    // Cost of this read: one full events.jsonl read at run end only — median
+    // 13KB (~1ms), worst 1.2MB (~20-40ms), never on the per-event hot path.
     if (nextStatus !== "active") this.materializeStats(runId);
     return result;
   }
