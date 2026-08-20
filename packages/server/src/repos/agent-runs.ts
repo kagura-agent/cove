@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage } from "@cove/shared";
+import { computeRunStats, type RunStatsRow } from "./run-stats.js";
 
 const MAX_DETAIL = 8_000;
 /** Stale-claim window for a run with no event traffic. Long turns (model
@@ -53,8 +54,101 @@ export class AgentRunsRepo {
     // thread scope explicitly instead.
     if (scope?.threadId) { where = " AND thread_id=?"; args.push(scope.threadId); }
     else if (scope?.channelId) { where = " AND channel_id=? AND thread_id IS NULL"; args.push(scope.channelId); }
-    this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
+    const result = this.db.prepare(`UPDATE agent_runs SET status='stale', finished_at=?, updated_at=? WHERE status='active' AND expires_at < ?${where}`).run(...args);
+    // Stale runs never emit a terminal event (crash / timeout / superseded) —
+    // materialize their stats here so the cache covers every run type. Match
+    // the same scope as the UPDATE above so we never re-materialize unrelated
+    // stale runs from other threads/channels.
+    if (result.changes > 0) {
+      const staleWhere = scope?.threadId ? " AND thread_id=?" : scope?.channelId ? " AND channel_id=? AND thread_id IS NULL" : "";
+      const staleArgs: unknown[] = [Date.now()];
+      if (scope?.threadId) staleArgs.push(scope.threadId);
+      else if (scope?.channelId) staleArgs.push(scope.channelId);
+      const rows = this.db.prepare(`SELECT run_id FROM agent_runs WHERE status='stale' AND expires_at < ?${staleWhere} ORDER BY updated_at DESC LIMIT ?`).all(...staleArgs, result.changes) as Array<{ run_id: string }>;
+      for (const { run_id } of rows) this.materializeStats(run_id);
+    }
   }
+  /**
+   * Materialize the per-run stats row for a run (derived cache, #572).
+   * Source of truth stays events.jsonl + agent_run_usage; this row is a
+   * rebuildable cache for fast cross-run aggregation. Tool counts / duration
+   * are final once the run is terminal; usage may still arrive (agent_end
+   * hook), so usage fields are refreshed by recordUsage until the finalize
+   * window closes (see usage_finalized).
+   */
+  materializeStats(runId: string): void {
+    const run = this.get(runId);
+    if (!run) return;
+    // Cost is attributed to the run's own usage rows only (includeChildren=false):
+    // subagent cost lands on the parent run's usage row already, and subagent
+    // tool calls are not recorded in any events.jsonl, so children must stay out
+    // of both sides of the stat to keep cost and tool counts on the same scope.
+    const stats = computeRunStats({ run, events: this.events(runId), usage: this.usage(runId, false) });
+    const row: RunStatsRow = { run_id: runId, computed_at: Date.now(), ...stats };
+    this.db.prepare(`
+      INSERT INTO agent_run_stats (run_id,status,tool_calls,tool_failures,failure_rate,top_failing_commands,repeated_commands,cost,usage_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,duration_ms,usage_finalized,computed_at)
+      VALUES (@run_id,@status,@tool_calls,@tool_failures,@failure_rate,@top_failing_commands,@repeated_commands,@cost,@usage_calls,@input_tokens,@output_tokens,@cache_read_tokens,@cache_write_tokens,@total_tokens,@duration_ms,@usage_finalized,@computed_at)
+      ON CONFLICT(run_id) DO UPDATE SET
+        status=excluded.status, tool_calls=excluded.tool_calls, tool_failures=excluded.tool_failures,
+        failure_rate=excluded.failure_rate, top_failing_commands=excluded.top_failing_commands,
+        repeated_commands=excluded.repeated_commands, cost=excluded.cost, usage_calls=excluded.usage_calls,
+        input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
+        cache_read_tokens=excluded.cache_read_tokens, cache_write_tokens=excluded.cache_write_tokens,
+        total_tokens=excluded.total_tokens, duration_ms=excluded.duration_ms,
+        usage_finalized=excluded.usage_finalized, computed_at=excluded.computed_at
+    `).run({
+      run_id: row.run_id,
+      status: row.status,
+      tool_calls: row.tool_calls,
+      tool_failures: row.tool_failures,
+      failure_rate: row.failure_rate,
+      top_failing_commands: JSON.stringify(row.top_failing_commands),
+      repeated_commands: JSON.stringify(row.repeated_commands),
+      cost: row.cost,
+      usage_calls: row.usage_calls,
+      input_tokens: row.input_tokens,
+      output_tokens: row.output_tokens,
+      cache_read_tokens: row.cache_read_tokens,
+      cache_write_tokens: row.cache_write_tokens,
+      total_tokens: row.total_tokens,
+      duration_ms: row.duration_ms,
+      usage_finalized: row.usage_finalized,
+      computed_at: row.computed_at,
+    });
+  }
+
+  /** Refresh the usage portion of an existing stats row (agent_end may report
+   *  after run_finished). Only touches usage fields; tool/duration facts are
+   *  final. No-op when the run has no stats row yet (legacy/rebuild — the
+   *  query layer lazily backfills it). */
+  refreshStatsUsage(runId: string): void {
+    const run = this.get(runId);
+    if (!run) return;
+    const usage = this.usage(runId, false);
+    this.db.prepare(`
+      UPDATE agent_run_stats SET
+        cost=?, usage_calls=?, input_tokens=?, output_tokens=?, cache_read_tokens=?,
+        cache_write_tokens=?, total_tokens=?, usage_finalized=0, computed_at=?
+      WHERE run_id=?
+    `).run(
+      usage?.cost ?? null, usage?.calls ?? 0, usage?.input_tokens ?? 0, usage?.output_tokens ?? 0,
+      usage?.cache_read_tokens ?? 0, usage?.cache_write_tokens ?? 0, usage?.total_tokens ?? 0,
+      Date.now(), runId,
+    );
+  }
+
+  /** Mark stats rows finalized for terminal runs whose last usage refresh is
+   *  older than the finalize window — after this, late usage is considered
+   *  impossible and queries stop re-checking events for these runs. */
+  finalizeStats(windowMs = 60_000): number {
+    const cutoff = Date.now() - windowMs;
+    const result = this.db.prepare(
+      `UPDATE agent_run_stats SET usage_finalized=1
+       WHERE usage_finalized=0 AND status != 'active' AND computed_at < ?`,
+    ).run(cutoff);
+    return result.changes;
+  }
+
   /**
    * Same-scope turns are serialized by the plugin's per-channel debouncer, so a
    * second active run for the same (channel, thread, agent) can only be a
@@ -127,7 +221,13 @@ export class AgentRunsRepo {
     const line = JSON.stringify(event) + "\n"; mkdirSync(this.dir(runId), { recursive: true, mode: 0o700 }); appendFileSync(this.logPath(runId), line, { mode: 0o600 });
     const nextStatus = terminal[input.type] ?? "active"; const bytes = current.log_bytes + Buffer.byteLength(line); const hash = createHash("sha256").update(current.log_hash ?? "").update(line).digest("hex");
     this.db.prepare("UPDATE agent_runs SET status=?,current_action=?,updated_at=?,finished_at=?,expires_at=?,log_hash=?,log_event_count=?,log_bytes=? WHERE run_id=?").run(nextStatus,event.action ?? current.current_action,now,nextStatus === "active" ? null : now,nextStatus === "active" ? now+RUN_STALE_AFTER_MS : now,hash,current.log_event_count+1,bytes,runId);
-    const result = this.get(runId)!; this.writeManifest(result); return result;
+    const result = this.get(runId)!; this.writeManifest(result);
+    // Terminal event → tool counts / duration are final; materialize once. Usage
+    // may still arrive (agent_end fires just after), refreshStatsUsage handles it.
+    // Cost of this read: one full events.jsonl read at run end only — median
+    // 13KB (~1ms), worst 1.2MB (~20-40ms), never on the per-event hot path.
+    if (nextStatus !== "active") this.materializeStats(runId);
+    return result;
   }
   associateMessage(runId: string, assistantMessageId: string): AgentRun | null {
     const run = this.get(runId); if (!run) return null;
@@ -145,6 +245,10 @@ export class AgentRunsRepo {
     this.db.prepare(`INSERT INTO agent_run_usage (run_id,provider,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,cost,currency,cost_source,called_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(runId, input.provider, input.model, input.input_tokens || 0, input.output_tokens || 0, input.cache_read_tokens || 0, input.cache_write_tokens || 0, total, input.cost ?? null, input.currency ?? "USD", input.cost_source ?? "none", now);
+    // Usage may arrive after the run reached a terminal state (agent_end hook
+    // reports just after run_finished) — refresh the stats row's usage fields.
+    // No-op for active runs (they have no row yet; terminal materializes it).
+    if (this.get(runId)?.status !== "active") this.refreshStatsUsage(runId);
   }
 
   /** Aggregate usage for a run, rolling up child/subagent runs when the caller

@@ -48,4 +48,64 @@ describe("generic file-backed agent runs", () => {
     expect(repos.agentRuns.associateMessage(two.run_id, "m2")?.assistant_message_id).toBe("m2");
     db.close(); rmSync(root, { recursive: true, force: true });
   });
+
+  it("expire materializes stats only for runs in the same scope as the UPDATE", () => {
+    const db = initDb(); const repos = createRepos(db);
+    const guild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+    seedChannels(db, guild.id);
+    const [chA, chB] = db.prepare("SELECT id FROM channels ORDER BY position LIMIT 2").all() as Array<{ id: string }>;
+    db.prepare("INSERT INTO users (id,username,bot,created_at,updated_at) VALUES ('agent','agent',1,1,1)").run();
+    db.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m1',?,'agent','go',1),('m2',?,'agent','go',2),('m3',?,'agent','go',3)").run(chA.id, chB.id, chA.id);
+    const root = mkdtempSync(join(tmpdir(), "cove-expire-scope-")); (repos.agentRuns as any).root = root;
+    const statsRow = (runId: string) => db.prepare("SELECT run_id FROM agent_run_stats WHERE run_id=?").get(runId);
+    const past = Date.now() - 31 * 60 * 1000;
+
+    // chA: an active run past its expiry window (the expire target).
+    const inScope = repos.agentRuns.start({ agent_id: "agent", channel_id: chA.id, trigger_message_id: "m1" });
+    // chB: a stale, expired run from another channel. The pre-fix SELECT swept
+    // every stale run regardless of scope, so this would be materialized too.
+    const outOfScope = repos.agentRuns.start({ agent_id: "agent", channel_id: chB.id, trigger_message_id: "m2" });
+    // chA thread: another stale candidate the parent-channel scope must not touch.
+    const threadRun = repos.agentRuns.start({ agent_id: "agent", channel_id: chA.id, thread_id: chB.id, trigger_message_id: "m3" });
+    // All runs created first (start() expires its own channel internally), then
+    // expire them together so the scope filter is the only thing under test.
+    db.prepare("UPDATE agent_runs SET expires_at=? WHERE run_id=?").run(past, inScope.run_id);
+    db.prepare("UPDATE agent_runs SET status='stale', expires_at=? WHERE run_id=?").run(past, outOfScope.run_id);
+    db.prepare("UPDATE agent_runs SET expires_at=? WHERE run_id=?").run(past, threadRun.run_id);
+
+    repos.agentRuns.expire({ channelId: chA.id });
+
+    expect(repos.agentRuns.get(inScope.run_id)?.status).toBe("stale");
+    expect(statsRow(inScope.run_id)).toBeDefined();       // in-scope run materialized
+    expect(statsRow(outOfScope.run_id)).toBeUndefined();  // other channel untouched
+    expect(statsRow(threadRun.run_id)).toBeUndefined();   // thread run untouched by parent scope
+    db.close(); rmSync(root, { recursive: true, force: true });
+  });
+
+  it("thread-scoped expire materializes the thread run only", () => {
+    const db = initDb(); const repos = createRepos(db);
+    const guild = db.prepare("SELECT id FROM guilds LIMIT 1").get() as { id: string };
+    seedChannels(db, guild.id);
+    const [chA, chB] = db.prepare("SELECT id FROM channels ORDER BY position LIMIT 2").all() as Array<{ id: string }>;
+    db.prepare("INSERT INTO users (id,username,bot,created_at,updated_at) VALUES ('agent','agent',1,1,1)").run();
+    db.prepare("INSERT INTO messages (id,channel_id,sender,content,timestamp) VALUES ('m1',?,'agent','go',1),('m2',?,'agent','go',2)").run(chA.id, chA.id);
+    const root = mkdtempSync(join(tmpdir(), "cove-expire-thread-")); (repos.agentRuns as any).root = root;
+    const statsRow = (runId: string) => db.prepare("SELECT run_id FROM agent_run_stats WHERE run_id=?").get(runId);
+    const past = Date.now() - 31 * 60 * 1000;
+
+    const parent = repos.agentRuns.start({ agent_id: "agent", channel_id: chA.id, trigger_message_id: "m1" });
+    const threaded = repos.agentRuns.start({ agent_id: "agent", channel_id: chA.id, thread_id: chB.id, trigger_message_id: "m2" });
+    // Both created first (start() expires the parent channel internally), then
+    // expired together so the thread scope is the only thing under test.
+    db.prepare("UPDATE agent_runs SET expires_at=? WHERE run_id=?").run(past, parent.run_id);
+    db.prepare("UPDATE agent_runs SET expires_at=? WHERE run_id=?").run(past, threaded.run_id);
+
+    repos.agentRuns.expire({ channelId: chA.id, threadId: chB.id });
+
+    expect(repos.agentRuns.get(threaded.run_id)?.status).toBe("stale");
+    expect(statsRow(threaded.run_id)).toBeDefined();   // thread run materialized
+    expect(repos.agentRuns.get(parent.run_id)?.status).toBe("active"); // parent untouched
+    expect(statsRow(parent.run_id)).toBeUndefined();   // parent-channel run untouched
+    db.close(); rmSync(root, { recursive: true, force: true });
+  });
 });
