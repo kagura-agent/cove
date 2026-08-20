@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskEfficiencyReport } from "@cove/shared";
 import { EfficiencyCard } from "./EfficiencyCard";
 
-function report(overrides: Partial<TaskEfficiencyReport>): TaskEfficiencyReport {
+function report(overrides: Partial<TaskEfficiencyReport> = {}): TaskEfficiencyReport {
   return {
     task_id: "task-1",
     has_data: true,
