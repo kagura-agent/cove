@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
-import { useChannelFilesStore } from "../stores/useChannelFilesStore";
 import { useMemberStore } from "../stores/useMemberStore";
-import { Typography, Button, Popconfirm, Table, Tag, Space, Input, InputNumber, Radio, Select, Modal, Switch } from "antd";
+import { Typography, Button, Popconfirm, Table, Tag, Space, Select } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined, RetweetOutlined } from "@ant-design/icons";
 import { MessageList } from "./MessageList";
+import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
@@ -18,22 +18,11 @@ import { UsageChip } from "./UsageChip";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
-import { STATUS_ICON_COMPONENTS, getStatusSelectOptions, getStatusFilterOptions, getStatusLabelOptions } from "../lib/taskStatusConfig";
+import { getStatusSelectOptions, getStatusFilterOptions } from "../lib/taskStatusConfig";
 import type { Channel } from "../types";
-import { HEARTBEAT_OPTIONS } from "../lib/constants";
 import {
-  CRON_CATCH_UP_OPTIONS,
-  DEFAULT_CRON_TZ,
-  REPEAT_INTERVAL_OPTIONS,
-  REPEAT_SCHEDULE_OPTIONS,
-  isValidCronExpression,
-  recurrenceEditorSettingsFromTemplate,
   recurrenceScheduleLabel,
   recurrenceSeriesLabel,
-  repeatScheduleIntervalMs,
-  type RepeatIntervalUnit,
-  type RepeatSchedule,
-  type RecurrenceCatchUp,
 } from "../lib/recurrence";
 
 type ChannelTab = "chat" | "tasks" | "files" | "threads";
@@ -135,25 +124,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
   const [taskUsages, setTaskUsages] = useState<Record<string, AgentRunUsage>>({});
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState<TaskStatus>("open");
-  const [editAssigneeId, setEditAssigneeId] = useState<string | undefined>(undefined);
-  const [editHeartbeatEnabled, setEditHeartbeatEnabled] = useState(false);
-  const [editHeartbeatInterval, setEditHeartbeatInterval] = useState(3600000);
-  const [editingRecurrence, setEditingRecurrence] = useState<Task["recurrence"]>(undefined);
-  const [editRepeatEnabled, setEditRepeatEnabled] = useState(false);
-  const [editRepeatSchedule, setEditRepeatSchedule] = useState<RepeatSchedule>("never");
-  const [editOccurrenceMode, setEditOccurrenceMode] = useState<api.RecurringTaskOccurrenceMode>("same_task");
-  const [editRepeatIntervalValue, setEditRepeatIntervalValue] = useState(1);
-  const [editRepeatIntervalUnit, setEditRepeatIntervalUnit] = useState<RepeatIntervalUnit>("days");
-  const [editCronExpr, setEditCronExpr] = useState("");
-  const [editCronTz, setEditCronTz] = useState(DEFAULT_CRON_TZ);
-  const [editCronCatchUp, setEditCronCatchUp] = useState<RecurrenceCatchUp>("skip");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { guildId, threadId } = useActiveIds();
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
   const removeTask = useTaskStore((s) => s.removeTask);
@@ -212,83 +183,6 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       console.error("update status:", err);
     }
   }, []);
-
-  const handleEditOpen = useCallback((task: Task) => {
-    setEditingTask(task);
-    setEditTitle(task.title);
-    setEditDescription(task.description ?? "");
-    setEditStatus(task.status);
-    setEditAssigneeId(task.assignee_id ?? undefined);
-    setEditHeartbeatEnabled((task.heartbeat_interval_ms ?? 0) > 0);
-    setEditHeartbeatInterval(task.heartbeat_interval_ms > 0 ? task.heartbeat_interval_ms : 3600000);
-    setEditingRecurrence(task.recurrence);
-    setSaveError(null);
-
-    if (task.recurrence) {
-      const settings = recurrenceEditorSettingsFromTemplate(task.recurrence);
-      setEditRepeatEnabled(settings.enabled);
-      setEditRepeatSchedule(settings.schedule);
-      setEditRepeatIntervalValue(settings.intervalValue);
-      setEditRepeatIntervalUnit(settings.intervalUnit);
-      setEditOccurrenceMode(settings.occurrenceMode);
-      setEditCronExpr(settings.cronExpr ?? "");
-      setEditCronTz(settings.cronTz ?? DEFAULT_CRON_TZ);
-      setEditCronCatchUp(settings.catchUp ?? "skip");
-    } else {
-      setEditRepeatEnabled(false);
-      setEditRepeatSchedule("never");
-      setEditRepeatIntervalValue(1);
-      setEditRepeatIntervalUnit("days");
-      setEditOccurrenceMode("same_task");
-      setEditCronExpr("");
-      setEditCronTz(DEFAULT_CRON_TZ);
-      setEditCronCatchUp("skip");
-    }
-  }, []);
-
-  const editRepeatIntervalMs = repeatScheduleIntervalMs(editRepeatSchedule, editRepeatIntervalValue, editRepeatIntervalUnit);
-  const canEditRecurrence = !editingRecurrence || editingRecurrence.root_task_id === editingTask?.task_id;
-  // cron mode uses the expression input, not the interval fields
-  const validEditRepeatInterval = editRepeatSchedule === "never" || editRepeatSchedule === "cron"
-    || (Number.isFinite(editRepeatIntervalMs) && editRepeatIntervalMs > 0);
-  const validEditCron = editRepeatSchedule !== "cron" || isValidCronExpression(editCronExpr);
-
-  const handleEditSave = useCallback(async () => {
-    if (!editingTask || (canEditRecurrence && !validEditRepeatInterval)) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const recurrence = !canEditRecurrence ? undefined : editRepeatSchedule === "never"
-        ? (editingRecurrence ? null : undefined)
-        : editRepeatSchedule === "cron"
-          ? {
-              cron_expr: editCronExpr.trim(),
-              cron_tz: editCronTz.trim() || DEFAULT_CRON_TZ,
-              catch_up: editCronCatchUp,
-              occurrence_mode: editOccurrenceMode,
-              enabled: editRepeatEnabled,
-            }
-          : {
-              interval_ms: editRepeatIntervalMs,
-              occurrence_mode: editOccurrenceMode,
-              enabled: editRepeatEnabled,
-            };
-      await api.updateTask(editingTask.task_id, {
-        title: editTitle.trim(),
-        description: editDescription.trim(),
-        status: editStatus,
-        assignee_id: editAssigneeId ?? null,
-        heartbeat_interval_ms: editHeartbeatEnabled ? editHeartbeatInterval : 0,
-        ...(recurrence !== undefined ? { recurrence } : {}),
-      });
-      setEditingTask(null);
-    } catch (err) {
-      console.error("update task:", err);
-      setSaveError("Task changes could not be saved.");
-    } finally {
-      setSaving(false);
-    }
-  }, [editingTask, editingRecurrence, editTitle, editDescription, editStatus, editAssigneeId, editHeartbeatEnabled, editHeartbeatInterval, editRepeatEnabled, editRepeatSchedule, editRepeatIntervalMs, editOccurrenceMode, editCronExpr, editCronTz, editCronCatchUp, canEditRecurrence, validEditRepeatInterval, validEditCron]);
 
   const columns: ColumnsType<Task> = [
     {
@@ -364,7 +258,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       width: 120,
       render: (_, task) => (
         <Space size="small">
-          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(task)} title="Edit" />
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => setEditingTask(task)} title="Edit" />
           <Button type="text" size="small" icon={<MessageOutlined />} onClick={() => handleOpenThread(task)} title="Open thread" />
           <Popconfirm title="Delete this task?" onConfirm={() => handleDelete(task)} okText="Delete" okButtonProps={{ danger: true }}>
             <Button type="text" size="small" icon={<DeleteOutlined />} danger title="Delete" />
@@ -387,136 +281,9 @@ function InlineTaskList({ channelId }: { channelId: string }) {
         rowClassName={(record) => record.thread_id === threadId ? "task-row-active-thread" : ""}
         locale={{ emptyText: 'No tasks yet. Click "+ New Task" to create one.' }}
       />
-      <Modal
-        title="Edit Task"
-        open={!!editingTask}
-        onCancel={() => {
-          setEditingTask(null);
-          setSaveError(null);
-        }}
-        onOk={handleEditSave}
-        okText="Save"
-        okButtonProps={{ loading: saving, disabled: !editTitle.trim() || (canEditRecurrence && (!validEditRepeatInterval || !validEditCron)) }}
-        destroyOnClose
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {saveError && <div style={{ fontSize: 12, color: "var(--danger, #ed4245)" }}>{saveError}</div>}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Title</label>
-            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Description</label>
-            <Input.TextArea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
-          </div>
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Status</label>
-            <Select
-              value={editStatus}
-              onChange={setEditStatus}
-              style={{ width: "100%" }}
-              options={getStatusLabelOptions()}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Assignee</label>
-            <Select
-              placeholder="Select assignee"
-              value={editAssigneeId}
-              onChange={setEditAssigneeId}
-              allowClear
-              style={{ width: "100%" }}
-              options={members.map((m) => ({
-                label: m.nick || m.user.global_name || m.user.username,
-                value: m.user.id,
-              }))}
-            />
-          </div>
-          {canEditRecurrence && (
-            <>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Repeat enabled</label>
-                <Switch checked={editRepeatEnabled} onChange={setEditRepeatEnabled} size="small" />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Repeat</label>
-                <Select
-                  value={editRepeatSchedule}
-                  onChange={(schedule) => {
-                    setEditRepeatSchedule(schedule);
-                    setEditRepeatEnabled(schedule !== "never");
-                  }}
-                  style={{ width: "100%" }}
-                  options={REPEAT_SCHEDULE_OPTIONS}
-                />
-                {editRepeatSchedule === "custom" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                    <span>Every</span>
-                    <InputNumber disabled={!editRepeatEnabled} min={1} value={editRepeatIntervalValue} onChange={(value) => setEditRepeatIntervalValue(value ?? 0)} style={{ flex: 1 }} />
-                    <Select disabled={!editRepeatEnabled} value={editRepeatIntervalUnit} onChange={setEditRepeatIntervalUnit} style={{ width: 120 }} options={REPEAT_INTERVAL_OPTIONS} />
-                  </div>
-                )}
-                {editRepeatSchedule === "cron" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-                    <Input
-                      disabled={!editRepeatEnabled}
-                      placeholder="e.g. 15,45 8-22 * * *  or  0 20 * * 0"
-                      value={editCronExpr}
-                      onChange={(e) => setEditCronExpr(e.target.value)}
-                    />
-                    {editRepeatEnabled && !validEditCron && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)" }}>Enter a valid 5- or 6-field cron expression.</div>}
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <Select
-                        disabled={!editRepeatEnabled}
-                        value={editCronTz}
-                        onChange={setEditCronTz}
-                        style={{ flex: 1 }}
-                        options={[{ value: "Asia/Shanghai", label: "Asia/Shanghai" }, { value: "UTC", label: "UTC" }]}
-                      />
-                      <Select
-                        disabled={!editRepeatEnabled}
-                        value={editCronCatchUp}
-                        onChange={setEditCronCatchUp}
-                        style={{ flex: 1 }}
-                        options={CRON_CATCH_UP_OPTIONS}
-                      />
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                      Standard cron: minute hour day-of-month month day-of-week. Skip missed runs avoids a burst after downtime; catch up backfills one run per missed fire.
-                    </div>
-                  </div>
-                )}
-                {editRepeatEnabled && editRepeatSchedule === "custom" && !validEditRepeatInterval && <div style={{ fontSize: 11, color: "var(--danger, #ed4245)", marginTop: 4 }}>Enter a positive interval.</div>}
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Next occurrence</label>
-                <Radio.Group disabled={!editRepeatEnabled} value={editOccurrenceMode} onChange={(event) => setEditOccurrenceMode(event.target.value)}>
-                  <Radio value="same_task">In this task</Radio>
-                  <Radio value="new_task">New task</Radio>
-                </Radio.Group>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                  In this task reopens the current task and conversation. New task creates a separate task and conversation.
-                </div>
-              </div>
-            </>
-          )}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, display: "block" }}>Heartbeat</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Switch checked={editHeartbeatEnabled} onChange={setEditHeartbeatEnabled} size="small" />
-              {editHeartbeatEnabled && (
-                <Select
-                  value={editHeartbeatInterval}
-                  onChange={setEditHeartbeatInterval}
-                  style={{ width: 120 }}
-                  options={HEARTBEAT_OPTIONS}
-                />
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Nudge agent when thread goes silent</div>
-          </div>
-        </div>
-      </Modal>
+      {editingTask && (
+        <TaskEditDialog key={editingTask.task_id} task={editingTask} open onClose={() => setEditingTask(null)} />
+      )}
     </div>
   );
 }
