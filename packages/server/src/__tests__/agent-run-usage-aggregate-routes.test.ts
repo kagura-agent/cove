@@ -217,4 +217,40 @@ describe("agent run usage aggregate routes", () => {
     expect(unknown.status).toBe(404);
     db.close();
   });
+
+  it("returns per-run stats for a task's runs/stats endpoint (#574 chart source)", async () => {
+    const { db, app, channel, repos } = setup();
+    const thread = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread", "agent");
+    const task = repos.tasks.create("task-1", channel.id, thread.id, "trigger", "agent", "Do the thing", 1, { guild_id: channel.guild_id, created_by: "agent" });
+
+    // Two runs in the task's thread: one clean, one with tool failures + usage.
+    const run1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger" });
+    await recordUsage(app, run1.run_id, "m1", 1000, 500, 0.01);
+    repos.agentRuns.append(run1.run_id, { type: "run_started" as never });
+    repos.agentRuns.append(run1.run_id, { type: "tool_started" as never, action: "exec" });
+    repos.agentRuns.append(run1.run_id, { type: "tool_failed" as never, action: "gh pr checks 529" });
+    repos.agentRuns.append(run1.run_id, { type: "run_finished" as never });
+
+    const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger2" });
+    repos.agentRuns.append(run2.run_id, { type: "run_started" as never });
+    repos.agentRuns.append(run2.run_id, { type: "run_finished" as never });
+
+    const res = await app.request(`${API_PREFIX}/tasks/${task.task_id}/runs/stats`, { headers: { Authorization: "Bot viewer-token" } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(2);
+    // Newest first.
+    expect(body[0].started_at).toBeGreaterThanOrEqual(body[1].started_at);
+    // The failing run carries its per-run facts.
+    const failing = body.find((s: { tool_failures: number }) => s.tool_failures > 0)!;
+    expect(failing.tool_failures).toBe(1);
+    expect(failing.cost).toBeCloseTo(0.01);
+    expect(failing.status).toBe("completed");
+
+    // Unknown task → 404.
+    const unknown = await app.request(`${API_PREFIX}/tasks/nope/runs/stats`, { headers: { Authorization: "Bot viewer-token" } });
+    expect(unknown.status).toBe(404);
+    db.close();
+  });
 });

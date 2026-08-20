@@ -500,6 +500,23 @@ export interface TaskEfficiencyReport {
   failure_rate_delta_vs_median: number | null;
 }
 
+/** One per-run efficiency stat (Phase 2 chart source — an agent_run_stats row). */
+export interface TaskRunStat {
+  run_id: string;
+  started_at: number;
+  status: AgentRunStatus;
+  /** Estimated cost in `currency`; null when no provider price is known. */
+  cost: number | null;
+  tool_calls: number;
+  tool_failures: number;
+  duration_ms: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+}
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id

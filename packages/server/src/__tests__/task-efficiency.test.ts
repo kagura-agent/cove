@@ -262,4 +262,42 @@ describe("task efficiency query layer (#572)", () => {
     expect(report.tool_health).toBeNull();
     expect(report.run_health!.runs).toBe(1);
   });
+
+  describe("runStats (#574 Phase 2 chart source)", () => {
+    it("returns one row per run with the per-run facts, newest first", () => {
+      const task = createTask("Run stats task");
+      executeTaskRun(task, [
+        { type: "run_started" },
+        { type: "tool_started", action: "exec" },
+        { type: "tool_started", action: "exec" },
+        { type: "tool_failed", action: "command gh pr checks 529 2>&1" },
+        { type: "run_finished" },
+      ], { input: 1_000, output: 500, cacheRead: 2_000, cost: 0.25 });
+      executeTaskRun(task, [
+        { type: "run_started" },
+        { type: "tool_started", action: "read" },
+        { type: "run_finished" },
+      ], { input: 100, output: 50, cost: 0.10 });
+
+      const stats = repos.taskEfficiency.runStats(task.task_id)!;
+      expect(stats).toHaveLength(2);
+      // Newest first.
+      expect(stats[0].started_at).toBeGreaterThanOrEqual(stats[1].started_at);
+      // The failing run: 2 tool calls, 1 failure, usage recorded.
+      const failing = stats.find((s) => s.tool_failures > 0)!;
+      expect(failing.tool_calls).toBe(2);
+      expect(failing.tool_failures).toBe(1);
+      expect(failing.cost).toBeCloseTo(0.25);
+      expect(failing.input_tokens).toBe(1_000);
+      expect(failing.output_tokens).toBe(500);
+      expect(failing.cache_read_tokens).toBe(2_000);
+      expect(failing.total_tokens).toBe(3_500);
+      // The clean run has no failures and its own cost.
+      const clean = stats.find((s) => s.tool_failures === 0)!;
+      expect(clean.cost).toBeCloseTo(0.10);
+      expect(clean.status).toBe("completed");
+      // Unknown task → null.
+      expect(repos.taskEfficiency.runStats("nope")).toBeNull();
+    });
+  });
 });

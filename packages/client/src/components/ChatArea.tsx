@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
+import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { Typography, Button, Popconfirm, Table, Tag, Space, Select } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined, RetweetOutlined } from "@ant-design/icons";
@@ -15,6 +16,7 @@ import type { Task, TaskStatus, AgentRunUsage } from "@cove/shared";
 import type { ColumnsType } from "antd/es/table";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { UsageChip } from "./UsageChip";
+import { TaskHealthLine } from "./TaskHealthLine";
 import { dispatcher } from "../lib/gateway-dispatcher";
 import { ThreadIcon } from "./ThreadIcon";
 import { FilesSidebar } from "./FilesSidebar";
@@ -129,6 +131,8 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
   const removeTask = useTaskStore((s) => s.removeTask);
   const byTaskId = useTaskStore((s) => s.byTaskId);
+  const efficiencyByTask = useTaskEfficiencyStore((s) => s.byChannel[channelId]);
+  const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
   const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => b.updated_at - a.updated_at), [byTaskId, channelId]);
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
@@ -146,6 +150,11 @@ function InlineTaskList({ channelId }: { channelId: string }) {
     setLoading(true);
     fetchTasks(channelId).finally(() => setLoading(false));
   }, [channelId, fetchTasks]);
+
+  // Channel-wide efficiency as the shared baseline for row-level health lines.
+  useEffect(() => {
+    fetchChannelEfficiency(channelId);
+  }, [channelId, fetchChannelEfficiency]);
 
   // Per-task usage for the Usage column. Live-refresh on usage events so the
   // column tracks a running agent without a manual reload.
@@ -251,6 +260,14 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       key: "usage",
       width: 130,
       render: (_, task) => <UsageChip usage={taskUsages[task.task_id]} scope="task" />,
+    },
+    {
+      title: "Health",
+      key: "health",
+      width: 230,
+      render: (_, task) => (
+        <TaskHealthLine report={efficiencyByTask?.[task.task_id]} />
+      ),
     },
     {
       title: "Actions",
