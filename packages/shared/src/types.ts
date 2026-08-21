@@ -524,6 +524,8 @@ export interface GuildDailyUsage {
   cost: number | null;
   total_tokens: number;
   calls: number;
+  /** Distinct tasks with usage that day (via tasks.thread_id). */
+  tasks: number;
   /** Per-model slices for the day (stacked bar source; empty when no data). */
   models: GuildUsageModel[];
 }
@@ -548,6 +550,16 @@ export interface GuildChannelUsage {
   models: GuildUsageModel[];
 }
 
+/** Per-task cost slice across the guild (top-tasks ranking source). */
+export interface GuildTaskUsage {
+  task_id: string;
+  title: string;
+  channel_id: string;
+  cost: number | null;
+  calls: number;
+  status: TaskStatus;
+}
+
 /** KPI + per-channel rollup for one guild. */
 export interface GuildUsageOverview {
   guild_id: string;
@@ -559,9 +571,13 @@ export interface GuildUsageOverview {
   total_cost: number | null;
   today_calls: number;
   today_tokens: number;
+  /** Distinct tasks with usage today. */
+  today_tasks: number;
   active_channels: number;
   active_tasks: number;
   channels: GuildChannelUsage[];
+  /** Per-task cost rollup, highest cost first (top-tasks ranking). */
+  tasks: GuildTaskUsage[];
 }
 
 /** A thread member entry. */

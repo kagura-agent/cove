@@ -79,13 +79,21 @@ export function tokenTick(value: number | string): string {
 interface CostTooltipProps {
   /** Optional formatter override; default renders $ + calls + tokens. */
   valueFormatter?: (value: string | number) => string;
+  /** Per-series formatters keyed by series name (e.g. cost → $, tokens → tok,
+   *  tasks → plain number). Falls back to valueFormatter, then formatUsd. */
+  formatters?: Record<string, (value: string | number) => string>;
   /** Extra lines from the payload entry (e.g. token count). */
   renderEntry?: (entry: { name?: string | number; value?: string | number; color?: string }) => ReactNode;
 }
 
-export function CostTooltip({ active, payload, label, valueFormatter, renderEntry }: Partial<TooltipContentProps<number, string>> & CostTooltipProps) {
+export function CostTooltip({ active, payload, label, valueFormatter, formatters, renderEntry }: Partial<TooltipContentProps<number, string>> & CostTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
-  const fmt = (v: string | number) => (valueFormatter ? valueFormatter(v) : formatUsd(Number(v)));
+  const fmt = (name: string | number | undefined, v: string | number) => {
+    const key = String(name);
+    if (formatters?.[key]) return formatters[key](v);
+    if (valueFormatter) return valueFormatter(v);
+    return formatUsd(Number(v));
+  };
   return (
     <div
       style={{
@@ -104,7 +112,7 @@ export function CostTooltip({ active, payload, label, valueFormatter, renderEntr
           <span style={{ width: 8, height: 8, borderRadius: 2, background: entry.color ?? "#5865f2", flexShrink: 0 }} />
           <span style={{ color: "var(--text-muted)" }}>{entry.name}</span>
           <span style={{ marginLeft: "auto", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {fmt(entry.value as string | number)}
+            {fmt(entry.name, entry.value as string | number)}
           </span>
         </div>
       ))}
@@ -133,8 +141,8 @@ export const CostLegend = () => <Legend wrapperStyle={{ fontSize: "var(--font-si
 
 /** Full tooltip wrapper with dark-theme content pre-wired. Use this in charts:
  *  <CostTooltipBox /> — cursor/trigger props pass through to recharts Tooltip. */
-export function CostTooltipBox(props: { cursor?: { fill?: string } }) {
-  return <Tooltip content={<CostTooltip />} cursor={props.cursor} />;
+export function CostTooltipBox(props: { cursor?: { fill?: string }; formatters?: Record<string, (value: string | number) => string> }) {
+  return <Tooltip content={<CostTooltip formatters={props.formatters} />} cursor={props.cursor} />;
 }
 
 /** Convenience re-exports so the page never imports recharts directly. */

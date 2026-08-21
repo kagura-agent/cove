@@ -72,6 +72,7 @@ describe("guild usage overview routes", () => {
     expect(body.total_cost).toBeCloseTo(0.02);
     expect(body.today_cost).toBeCloseTo(0.02);
     expect(body.today_calls).toBe(4);
+    expect(body.today_tasks).toBe(2);
     // 2 channels with usage, 2 distinct tasks.
     expect(body.active_channels).toBe(2);
     expect(body.active_tasks).toBe(2);
@@ -85,6 +86,13 @@ describe("guild usage overview routes", () => {
     expect(general.models.map((m: { model: string }) => m.model).sort()).toEqual(["m1", "m2"]);
     expect(devRow.models).toHaveLength(1);
     expect(devRow.models[0]).toMatchObject({ model: "m3", calls: 2, cost: 0.005 });
+    // Task ranking: highest cost first, carries title/channel/status.
+    expect(body.tasks).toHaveLength(2);
+    // Both tasks cost 0.005 → tie broken by title: "Dev thing" < "Do the thing".
+    expect(body.tasks[0]).toMatchObject({ task_id: devTask.task_id, calls: 2, cost: 0.005, channel_id: dev.id, title: "Dev thing" });
+    expect(body.tasks[1]).toMatchObject({ task_id: task.task_id, calls: 1, cost: 0.005, channel_id: channel.id, title: "Do the thing" });
+    expect(body.tasks.map((t: { task_id: string }) => t.task_id)).toEqual([devTask.task_id, task.task_id]);
+    expect(body.tasks.every((t: { status: string }) => ["open", "in_progress", "in_review", "done", "cancelled"].includes(t.status))).toBe(true);
     db.close();
   });
 
@@ -96,7 +104,10 @@ describe("guild usage overview routes", () => {
     const t0 = startOfToday.getTime();
     const run1 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger" });
     await recordUsage(app, run1.run_id, "m1", 1000, 500, 0.01, t0 - 2 * dayMs);
-    const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger2" });
+    // Yesterday's run belongs to a task (thread link) — exercises daily task counts.
+    const thread = repos.threads.createStandalone(channel.guild_id, channel.id, "task-thread", "agent");
+    repos.tasks.create("task-daily", channel.id, thread.id, "trigger", "agent", "Daily task", 1, { guild_id: channel.guild_id, created_by: "agent" });
+    const run2 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, thread_id: thread.id, trigger_message_id: "trigger2" });
     await recordUsage(app, run2.run_id, "m2", 100, 50, 0.005, t0 - dayMs);
     const run3 = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger" });
     await recordUsage(app, run3.run_id, "m3", 200, 100, 0.002, t0 + 1);
@@ -107,6 +118,9 @@ describe("guild usage overview routes", () => {
     expect(body).toHaveLength(14);
     // Zero-filled days have cost null.
     expect(body.filter((d: { cost: number | null }) => d.cost !== null)).toHaveLength(3);
+    // Task counts: only yesterday's run belongs to a task (1 day with tasks).
+    expect(body.filter((d: { tasks: number }) => d.tasks > 0)).toHaveLength(1);
+    expect(body[body.length - 2].tasks).toBe(1);
     // Today's slice.
     const today = body[body.length - 1];
     expect(today.cost).toBeCloseTo(0.002);

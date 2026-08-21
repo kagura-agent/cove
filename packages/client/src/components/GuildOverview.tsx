@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Spin, Empty } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
-import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
+import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, GuildTaskUsage, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useChannelStore } from "../stores/useChannelStore";
@@ -10,6 +10,7 @@ import { routes } from "../lib/routes";
 import * as api from "../lib/api";
 import { formatUsd, formatTokens } from "./AgentRunTimeline";
 import { flattenDailyForChart, topModelsByCost } from "../lib/guild-usage";
+import { STATUS_COLORS } from "../lib/taskStatusConfig";
 import { EfficiencyCard } from "./EfficiencyCard";
 import {
   CostChartFrame, CostGrid, CostXAxis, CostYAxis, CostTooltipBox, CostLegend,
@@ -89,6 +90,41 @@ function ChannelRanking({ channels, channelName, onSelect }: {
           </span>
           <span style={styles.rankMeta}>
             {c.cost != null ? formatUsd(c.cost) : "—"} · {c.tasks} task{c.tasks === 1 ? "" : "s"} · {c.calls} call{c.calls === 1 ? "" : "s"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Top tasks by cost — "where the money actually went". Clicking a row opens
+ *  the task's efficiency card (same drilldown as channel → task list). */
+function TaskRanking({ tasks, channelName, onSelect }: {
+  tasks: GuildTaskUsage[];
+  channelName: (id: string) => string;
+  onSelect: (taskId: string) => void;
+}) {
+  const max = Math.max(0, ...tasks.map((t) => t.cost ?? 0));
+  return (
+    <div>
+      {tasks.length === 0 && (
+        <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No task spending yet" /></div>
+      )}
+      {tasks.slice(0, 12).map((t) => (
+        <div key={t.task_id} style={styles.rankRow} onClick={() => onSelect(t.task_id)}>
+          <span style={styles.taskTitle} title={`${t.title} (#${channelName(t.channel_id)})`}>
+            <span style={{ color: STATUS_COLORS[t.status] ?? "var(--text-muted)", fontSize: 10, marginRight: 4 }}>●</span>
+            {t.title}
+          </span>
+          <span style={styles.rankBarWrap}>
+            <span style={{ ...styles.rankBar, width: max > 0 ? `${Math.max(2, ((t.cost ?? 0) / max) * 100)}%` : "0%", background: "var(--accent, #5865f2)", display: "block" }} />
+          </span>
+          <span style={styles.rankMeta}>
+            <span style={{ width: "100%", display: "flex", justifyContent: "flex-end", gap: "var(--space-sm)" }}>
+              <span style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>#{channelName(t.channel_id)}</span>
+              <span style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>{t.calls} call{t.calls === 1 ? "" : "s"}</span>
+              <span style={{ color: "var(--header-primary)", fontWeight: 600, whiteSpace: "nowrap" }}>{t.cost != null ? formatUsd(t.cost) : "—"}</span>
+            </span>
           </span>
         </div>
       ))}
@@ -247,6 +283,7 @@ export function GuildOverview() {
             {/* KPI cards */}
             <div style={styles.kpiRow}>
               <KpiCard label="Today" value={today != null ? formatUsd(today) : "—"} sub={today != null ? `${overview.today_calls} calls · ${formatTokens(overview.today_tokens)} tok` : undefined} />
+              <KpiCard label="Today tasks" value={String(overview.today_tasks)} sub={overview.today_tasks > 0 ? "tasks with usage today" : undefined} />
               <KpiCard label="Yesterday" value={yesterday != null ? formatUsd(yesterday) : "—"} sub={<DeltaBadge delta={overview.delta} />} />
               <KpiCard label="This month" value={overview.month_cost != null ? formatUsd(overview.month_cost) : "—"} />
               <KpiCard label="All time" value={overview.total_cost != null ? formatUsd(overview.total_cost) : "—"} />
@@ -254,7 +291,7 @@ export function GuildOverview() {
               <KpiCard label="Active tasks" value={String(overview.active_tasks)} />
             </div>
 
-            {/* 14-day spend trend (bar = cost, line = tokens) */}
+            {/* 14-day spend trend (bar = cost, line = tokens, dashed = tasks) */}
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Daily spend · last 14 days</h3>
               <CostChartFrame height={220}>
@@ -263,12 +300,27 @@ export function GuildOverview() {
                   <CostXAxis dataKey="date" interval="preserveStartEnd" />
                   <CostYAxis tickFormatter={costTick} />
                   <CostYAxis yAxisId="tokens" orientation="right" tickFormatter={tokenTick} width={48} />
-                  <CostTooltipBox cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                  <CostTooltipBox
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    formatters={{
+                      cost: (v) => formatUsd(Number(v)),
+                      tokens: (v) => formatTokens(Number(v)),
+                      tasks: (v) => `${Number(v)} tasks`,
+                    }}
+                  />
                   <CostLegend />
                   <Bar dataKey="cost" name="cost" fill="#5865f2" radius={[3, 3, 0, 0]} maxBarSize={32} />
                   <Line yAxisId="tokens" dataKey="tokens" name="tokens" stroke="#23a55a" strokeWidth={1.5} dot={false} />
+                  {/* tasks counts are small (0–~20), same scale as cost → left axis */}
+                  <Line dataKey="tasks" name="tasks" stroke="#f0b232" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
                 </ComposedChart>
               </CostChartFrame>
+            </div>
+
+            {/* Top tasks by cost — where the money went */}
+            <div style={styles.card}>
+              <h3 style={styles.cardTitle}>Top tasks by cost</h3>
+              <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={(taskId) => { setSelectedTask(taskId); setTaskReport(null); }} />
             </div>
 
             {/* Channel ranking */}

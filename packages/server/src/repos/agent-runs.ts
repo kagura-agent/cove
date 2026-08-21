@@ -2,10 +2,11 @@ import type Database from "better-sqlite3";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage, GuildChannelUsage, GuildDailyUsage, GuildUsageModel, GuildUsageOverview } from "@cove/shared";
+import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage, GuildChannelUsage, GuildDailyUsage, GuildUsageModel, GuildUsageOverview, TaskStatus } from "@cove/shared";
 import { computeRunStats, type RunStatsRow } from "./run-stats.js";
 
-const MAX_DETAIL = 8_000;/** Stale-claim window for a run with no event traffic. Long turns (model
+const MAX_DETAIL = 8_000;
+/** Stale-claim window for a run with no event traffic. Long turns (model
  * thinking, file reads, subagent work) routinely exceed a 90s heartbeat gap,
  * so a short window mislabels live runs as stale and the terminal event then
  * bounces with 409. This is a crash-only safety net, not a liveness signal. */
@@ -373,15 +374,16 @@ export class AgentRunsRepo {
       guild_id: guildId,
       today_cost: null, yesterday_cost: null, delta: null,
       month_cost: null, total_cost: null,
-      today_calls: 0, today_tokens: 0,
+      today_calls: 0, today_tokens: 0, today_tasks: 0,
       active_channels: 0, active_tasks: 0,
       channels: [],
+      tasks: [],
     };
     if (channelIds.length === 0) return placeholder;
 
     const placeholders = new Array(channelIds.length).fill("?").join(",");
     const rows = this.db.prepare(
-      `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id
+      `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id, t.title, t.status
        FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
        LEFT JOIN tasks t ON t.thread_id = r.thread_id
@@ -389,6 +391,7 @@ export class AgentRunsRepo {
     ).all(...channelIds) as Array<{
       called_at: number; cost: number | null; total_tokens: number; model: string;
       channel_id: string; thread_id: string | null; task_id: string | null;
+      title: string | null; status: string | null;
     }>;
     if (rows.length === 0) return placeholder;
 
@@ -396,9 +399,12 @@ export class AgentRunsRepo {
     // Internal channel accumulator: models collected in a Map, materialized to
     // an array (sorted) at the end.
     type ChannelAcc = { channel_id: string; cost: number | null; calls: number; tasks: number; modelsMap: Map<string, GuildUsageModel> };
+    // Per-task accumulator for the top-tasks ranking.
+    type TaskAcc = { task_id: string; title: string; channel_id: string; cost: number | null; calls: number; status: TaskStatus };
     const byChannel = new Map<string, ChannelAcc>();
-    const tasksWithUsage = new Set<string>();
+    const tasksWithUsage = new Map<string, TaskAcc>();
     const channelTaskIds = new Map<string, Set<string>>();
+    const todayTaskIds = new Set<string>();
     const addModel = (m: Map<string, GuildUsageModel>, model: string, cost: number | null, tokens: number) => {
       const e = m.get(model) ?? { model, cost: null, calls: 0, total_tokens: 0 };
       e.calls += 1;
@@ -406,6 +412,7 @@ export class AgentRunsRepo {
       if (cost !== null) e.cost = (e.cost ?? 0) + cost;
       m.set(model, e);
     };
+    const todayStart = dayStart(now);
     for (const row of rows) {
       let c = byChannel.get(row.channel_id);
       if (!c) {
@@ -416,10 +423,15 @@ export class AgentRunsRepo {
       if (row.cost !== null) c.cost = (c.cost ?? 0) + row.cost;
       addModel(c.modelsMap, row.model, row.cost, row.total_tokens || 0);
       if (row.task_id) {
-        tasksWithUsage.add(row.task_id);
-        let set = channelTaskIds.get(row.channel_id);
-        if (!set) { set = new Set(); channelTaskIds.set(row.channel_id, set); }
-        set.add(row.task_id);
+        channelTaskIds.get(row.channel_id)?.add(row.task_id) ?? channelTaskIds.set(row.channel_id, new Set([row.task_id]));
+        let acc = tasksWithUsage.get(row.task_id);
+        if (!acc) {
+          acc = { task_id: row.task_id, title: row.title ?? row.task_id, channel_id: row.channel_id, cost: null, calls: 0, status: (row.status ?? "open") as TaskStatus };
+          tasksWithUsage.set(row.task_id, acc);
+        }
+        acc.calls += 1;
+        if (row.cost !== null) acc.cost = (acc.cost ?? 0) + row.cost;
+        if (row.called_at >= todayStart) todayTaskIds.add(row.task_id);
       }
     }
     const channels: GuildChannelUsage[] = [...byChannel.values()].map((c) => ({
@@ -431,7 +443,6 @@ export class AgentRunsRepo {
     })).sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
 
     // ── KPI time buckets (Asia/Shanghai = server local UTC+8) ──
-    const todayStart = dayStart(now);
     const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
     const monthStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), 1).getTime();
     let todayCost = 0, todayCostCount = 0, todayTokens = 0, todayCalls = 0;
@@ -458,9 +469,12 @@ export class AgentRunsRepo {
       total_cost: nz(totalCost, totalCostCount),
       today_calls: todayCalls,
       today_tokens: todayTokens,
+      today_tasks: todayTaskIds.size,
       active_channels: channels.length,
       active_tasks: tasksWithUsage.size,
       channels,
+      tasks: [...tasksWithUsage.values()]
+        .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0) || a.title.localeCompare(b.title)),
     };
   }
 
@@ -474,29 +488,31 @@ export class AgentRunsRepo {
     if (channelIds.length === 0) {
       return Array.from({ length: clamped }, (_, i) => ({
         date: fmtLocalDay(now - (clamped - 1 - i) * 24 * 60 * 60 * 1000),
-        cost: null, total_tokens: 0, calls: 0, models: [],
+        cost: null, total_tokens: 0, calls: 0, tasks: 0, models: [],
       }));
     }
     const placeholders = new Array(channelIds.length).fill("?").join(",");
     const rows = this.db.prepare(
-      `SELECT u.called_at, u.cost, u.total_tokens, u.model
+      `SELECT u.called_at, u.cost, u.total_tokens, u.model, t.task_id
        FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
+       LEFT JOIN tasks t ON t.thread_id = r.thread_id
        WHERE r.channel_id IN (${placeholders}) AND u.called_at >= ?`
     ).all(...channelIds, now - clamped * 24 * 60 * 60 * 1000) as Array<{
-      called_at: number; cost: number | null; total_tokens: number; model: string;
+      called_at: number; cost: number | null; total_tokens: number; model: string; task_id: string | null;
     }>;
 
     // Day index: Asia/Shanghai epoch-day offset (safe across year boundaries).
     const todayOffset = localDayOffset(now);
-    const byDay = new Map<number, { cost: number; costCount: number; tokens: number; calls: number; models: Map<string, GuildUsageModel> }>();
+    const byDay = new Map<number, { cost: number; costCount: number; tokens: number; calls: number; taskIds: Set<string>; models: Map<string, GuildUsageModel> }>();
     for (const row of rows) {
       const off = localDayOffset(row.called_at);
       if (off < todayOffset - clamped + 1 || off > todayOffset) continue;
       let d = byDay.get(off);
-      if (!d) { d = { cost: 0, costCount: 0, tokens: 0, calls: 0, models: new Map() }; byDay.set(off, d); }
+      if (!d) { d = { cost: 0, costCount: 0, tokens: 0, calls: 0, taskIds: new Set(), models: new Map() }; byDay.set(off, d); }
       d.calls += 1;
       d.tokens += row.total_tokens || 0;
+      if (row.task_id) d.taskIds.add(row.task_id);
       if (row.cost !== null) { d.cost += row.cost; d.costCount++; }
       const e = d.models.get(row.model) ?? { model: row.model, cost: null, calls: 0, total_tokens: 0 };
       e.calls += 1; e.total_tokens += row.total_tokens || 0;
@@ -514,6 +530,7 @@ export class AgentRunsRepo {
         cost: d && d.costCount > 0 ? d.cost : null,
         total_tokens: d?.tokens ?? 0,
         calls: d?.calls ?? 0,
+        tasks: d?.taskIds.size ?? 0,
         models: d ? [...d.models.values()].sort((a, b) => a.model.localeCompare(b.model)) : [],
       });
     }

@@ -1,13 +1,14 @@
 import type { GuildDailyUsage } from "@cove/shared";
 
-/** One row of the daily spend chart: date label + cost/tokens/calls + one
- *  numeric column per model (cost slice) for the stacked model chart. */
+/** One row of the daily spend chart: date label + cost/tokens/calls/tasks +
+ *  one numeric column per model (cost slice) for the stacked model chart. */
 export interface DailyChartRow {
   date: string;
   fullDate: string;
   cost: number | null;
   tokens: number;
   calls: number;
+  tasks: number;
   [model: string]: string | number | null;
 }
 
@@ -24,6 +25,7 @@ export function flattenDailyForChart(daily: GuildDailyUsage[]): DailyChartRow[] 
       cost: d.cost,
       tokens: d.total_tokens,
       calls: d.calls,
+      tasks: d.tasks,
     };
     for (const m of d.models) row[m.model] = m.cost ?? 0;
     return row;
