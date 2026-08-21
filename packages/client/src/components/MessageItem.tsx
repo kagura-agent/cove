@@ -18,8 +18,6 @@ import { ImageLightbox } from "./ImageLightbox";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { MessageAgentRunDetails } from "./MessageAgentRunDetails";
 
-const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂"];
-
 function parseMetadataContentType(message: Message): string | null {
   if (!message.metadata) return null;
   try {
@@ -111,17 +109,6 @@ function MessageActions({ message }: { message: Message }) {
           ✏
         </button>
       )}
-      {QUICK_EMOJIS.map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          className="message-actions-btn"
-          onClick={() => api.addReaction(message.channel_id, message.id, emoji)}
-          title={emoji}
-        >
-          {emoji}
-        </button>
-      ))}
     </div>
   );
 }
