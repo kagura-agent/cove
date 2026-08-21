@@ -6,6 +6,9 @@ interface TaskHealthLineProps {
   report: TaskEfficiencyReport | null | undefined;
   /** When true, delta coloring is suppressed (e.g. no baseline siblings). */
   hideDelta?: boolean;
+  /** When the report has no data, render this placeholder instead of nothing
+   *  (keeps the column visible in dense tables). Defaults to no placeholder. */
+  emptyPlaceholder?: string;
 }
 
 const MUTED = "var(--text-muted)";
@@ -30,7 +33,7 @@ function pct(rate: number | null): string | null {
  *   `$1.37 · 11 calls · 5 failed · 92% done` + delta vs channel median.
  * Zero-data tasks render nothing (the caller hides the row entirely).
  */
-export function TaskHealthLine({ report, hideDelta }: TaskHealthLineProps) {
+export function TaskHealthLine({ report, hideDelta, emptyPlaceholder }: TaskHealthLineProps) {
   const parts = useMemo(() => {
     const out: string[] = [];
     const cost = report?.cost?.cost;
@@ -44,7 +47,12 @@ export function TaskHealthLine({ report, hideDelta }: TaskHealthLineProps) {
     return out;
   }, [report]);
 
-  if (!report?.has_data || parts.length === 0) return null;
+  if (!report?.has_data || parts.length === 0) {
+    if (emptyPlaceholder) {
+      return <span style={{ color: MUTED, fontSize: "var(--font-size-xs)" }}>{emptyPlaceholder}</span>;
+    }
+    return null;
+  }
 
   const costDelta = hideDelta ? null : report.cost_delta_vs_median;
   const failureDelta = hideDelta ? null : report.failure_rate_delta_vs_median;

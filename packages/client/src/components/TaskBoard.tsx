@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Select, Table, Popconfirm, Tooltip, Space } from "antd";
 import { CheckOutlined, ClockCircleOutlined, EditOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { Task, TaskStatus, UpdateTaskFields } from "@cove/shared";
+import type { Task, TaskStatus, UpdateTaskFields, AgentRunUsage } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useChannelStore } from "../stores/useChannelStore";
@@ -12,6 +12,8 @@ import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
 import { TaskHealthLine } from "./TaskHealthLine";
+import { UsageChip } from "./UsageChip";
+import { dispatcher } from "../lib/gateway-dispatcher";
 import { ThreadPanel } from "./ThreadPanel";
 import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
@@ -56,6 +58,11 @@ export function TaskBoard() {
   const fetchGuildTasks = useTaskStore((s) => s.fetchGuildTasks);
   const efficiencyByChannel = useTaskEfficiencyStore((s) => s.byChannel);
   const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
+  // Per-channel task usage rollups (taskId → AgentRunUsage), same shape as the
+  // InlineTaskList Usage column. Fetched once per channel, deduped in-flight,
+  // invalidated on usage events so the column tracks a running agent.
+  const [taskUsagesByChannel, setTaskUsagesByChannel] = useState<Record<string, Record<string, AgentRunUsage>>>({});
+  const fetchedUsageChannels = useRef(new Set<string>());
   const [view, setView] = useState<BoardView>("open");
   const [groupBy, setGroupBy] = useState<GroupBy>("channel");
   const [loading, setLoading] = useState(false);
@@ -101,6 +108,36 @@ export function TaskBoard() {
       fetchChannelEfficiency(channelId);
     }
   }, [guildId, guildTasks, fetchChannelEfficiency]);
+
+  // Per-task usage rollups, fetched once per channel (in-flight deduped).
+  useEffect(() => {
+    if (!guildId) return;
+    const channelIds = new Set(guildTasks.map((t) => t.channel_id));
+    let alive = true;
+    const refresh = (channelId: string) => {
+      if (fetchedUsageChannels.current.has(channelId)) return;
+      fetchedUsageChannels.current.add(channelId);
+      api.fetchTaskUsages(channelId)
+        .then((usages) => { if (alive) setTaskUsagesByChannel((prev) => ({ ...prev, [channelId]: usages })); })
+        .catch((err) => {
+          console.error("fetch task usages:", err);
+          // Allow retry on next effect run instead of poisoning the cache.
+          fetchedUsageChannels.current.delete(channelId);
+        });
+    };
+    for (const channelId of channelIds) refresh(channelId);
+    // Live-refresh: a usage event for a channel invalidates its cached rollup.
+    const onUsage = (run: { channel_id: string }) => {
+      fetchedUsageChannels.current.delete(run.channel_id);
+      setTaskUsagesByChannel((prev) => {
+        if (!prev[run.channel_id]) return prev;
+        const { [run.channel_id]: _, ...rest } = prev;
+        return rest;
+      });
+    };
+    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
+    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
+  }, [guildId, guildTasks]);
 
   const filtered = useMemo(() => {
     let list = guildTasks;
@@ -250,8 +287,14 @@ export function TaskBoard() {
       key: "health",
       width: 230,
       render: (_, task) => (
-        <TaskHealthLine report={efficiencyByChannel[task.channel_id]?.[task.task_id]} />
+        <TaskHealthLine report={efficiencyByChannel[task.channel_id]?.[task.task_id]} emptyPlaceholder="—" />
       ),
+    },
+    {
+      title: "Usage",
+      key: "usage",
+      width: 130,
+      render: (_, task) => <UsageChip usage={taskUsagesByChannel[task.channel_id]?.[task.task_id]} scope="task" />,
     },
     {
       title: "Status",

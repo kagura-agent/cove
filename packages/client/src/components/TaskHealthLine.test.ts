@@ -37,6 +37,19 @@ describe("TaskHealthLine", () => {
     expect(renderToStaticMarkup(createElement(TaskHealthLine, { report: undefined }))).toBe("");
   });
 
+  it("renders the placeholder instead of nothing when emptyPlaceholder is set", () => {
+    const html = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ has_data: false, cost: null, tool_health: null, run_health: null }), emptyPlaceholder: "—" }));
+    expect(html).toContain("—");
+    const noReport = renderToStaticMarkup(createElement(TaskHealthLine, { report: null, emptyPlaceholder: "—" }));
+    expect(noReport).toContain("—");
+  });
+
+  it("keeps the real health summary when emptyPlaceholder is set but data exists", () => {
+    const html = renderToStaticMarkup(createElement(TaskHealthLine, { report: report(), emptyPlaceholder: "—" }));
+    expect(html).toContain("$1.37");
+    expect(html).not.toContain("—");
+  });
+
   it("colors the cost delta red when above the channel median, green when below", () => {
     const above = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ cost_delta_vs_median: 0.87 }) }));
     expect(above).toContain("+$0.870 vs median"); // formatUsd: <$1 → 3 decimals
