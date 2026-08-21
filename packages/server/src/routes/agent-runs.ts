@@ -4,8 +4,25 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { PermissionBits, type AgentRunEventType } from "@cove/shared";
 import { parseJsonBody, validationError } from "../validation.js";
-import { requireChannelPermission } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
 const TYPES = new Set<AgentRunEventType>(["run_started","run_finished","run_failed","run_aborted","tool_started","tool_progress","tool_finished","tool_failed","command_output","patch_summary","approval_requested","subagent_started","subagent_progress","subagent_finished","subagent_failed"]);
+
+/** Channels in a guild the user can VIEW_CHANNEL on (non-thread only — usage
+ *  aggregates attribute thread runs to their parent channel). Mirrors the
+ *  visibility filter used by GET /guilds/:guildId/tasks. */
+async function visibleChannelIds(repos: Repos, guildId: string, userId: string): Promise<string[]> {
+  const guildChannels = repos.channels.list(guildId).filter((ch) => ch.type !== 11);
+  const visible: string[] = [];
+  for (const ch of guildChannels) {
+    try {
+      await requireChannelPermission(repos, ch.id, userId, PermissionBits.VIEW_CHANNEL);
+      visible.push(ch.id);
+    } catch {
+      // Skip channels the user cannot view.
+    }
+  }
+  return visible;
+}
 
 export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
  const app = new Hono<AppEnv>();
@@ -41,6 +58,26 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
  // Per-task usage for the task table: { task_id: AgentRunUsage }. Tasks without
  // usage are absent; the client renders an em dash for them.
  app.get("/channels/:channelId/tasks/usage", async c => { const channelId = c.req.param("channelId"); await requireChannelPermission(repos,channelId,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); return c.json(repos.agentRuns.usageByTask(channelId)); });
+ // Guild-level usage overview (#584): KPI cards + per-channel breakdown. Data
+ // is restricted to channels the caller can VIEW_CHANNEL on (same rule as
+ // GET /guilds/:guildId/tasks). Non-member → 404 via requireGuildPermission.
+ app.get("/guilds/:guildId/usage/overview", async c => {
+   const guildId = c.req.param("guildId");
+   const user = c.get("botUser");
+   await requireGuildPermission(repos, guildId, user.id, PermissionBits.VIEW_CHANNEL);
+   const visible = await visibleChannelIds(repos, guildId, user.id);
+   return c.json(repos.agentRuns.usageByGuild(guildId, visible));
+ });
+ // Guild-level daily usage series (#584): Asia/Shanghai day buckets, zero-filled.
+ app.get("/guilds/:guildId/usage/daily", async c => {
+   const guildId = c.req.param("guildId");
+   const user = c.get("botUser");
+   await requireGuildPermission(repos, guildId, user.id, PermissionBits.VIEW_CHANNEL);
+   const days = Number(c.req.query("days"));
+   const clamped = Number.isFinite(days) ? Math.floor(days) : 14;
+   const visible = await visibleChannelIds(repos, guildId, user.id);
+   return c.json(repos.agentRuns.usageDailyByGuild(guildId, visible, clamped));
+ });
  // Per-task efficiency report (#572 Phase 1): cost + tool health + run health
  // + baseline comparison, all computed from existing data.
  app.get("/tasks/:taskId/efficiency", async c => { const task = repos.tasks.getById(c.req.param("taskId")); if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404); await requireChannelPermission(repos,task.channel_id,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); const scope = c.req.query("baseline") === "all" ? "all" : "channel"; const report = repos.taskEfficiency.report(task.task_id, { baselineScope: scope }); return c.json(report); });
@@ -49,7 +86,7 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
  // Per-task efficiency for every task in a channel (one shared channel baseline).
  app.get("/channels/:channelId/tasks/efficiency", async c => { const channelId = c.req.param("channelId"); await requireChannelPermission(repos,channelId,c.get("botUser").id,PermissionBits.VIEW_CHANNEL); const scope = c.req.query("baseline") === "all" ? "all" : "channel"; return c.json(repos.taskEfficiency.channelReports(channelId, { baselineScope: scope })); });
  app.post("/agent-runs/:runId/events", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); const user=c.get("botUser"); await requireChannelPermission(repos,run.channel_id,user.id,PermissionBits.SEND_MESSAGES|PermissionBits.VIEW_CHANNEL); if(run.agent_id!==user.id) return c.json({message:"Missing Permissions",code:50013},403); const body=await parseJsonBody<Record<string,unknown>>(c); if(!body || typeof body.type!=="string" || !TYPES.has(body.type as AgentRunEventType)) return validationError(c,"Invalid agent run event type"); const updated=repos.agentRuns.append(run.run_id,body as {type:AgentRunEventType}); if(!updated) return c.json({message:"Unknown or inactive agent run",code:10081},409); dispatcher?.agentRunUpdated(updated); return c.json(updated); });
- app.post("/agent-runs/:runId/usage", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); const user=c.get("botUser"); await requireChannelPermission(repos,run.channel_id,user.id,PermissionBits.SEND_MESSAGES|PermissionBits.VIEW_CHANNEL); if(run.agent_id!==user.id) return c.json({message:"Missing Permissions",code:50013},403); const body=await parseJsonBody<Record<string,unknown>>(c); if(!body || typeof body.provider!=="string" || typeof body.model!=="string") return validationError(c,"provider and model are required"); const tokens = (n: unknown) => (Number.isFinite(n) && (n as number) > 0) ? Math.floor(n as number) : 0; const cost = body.cost == null ? null : (Number.isFinite(body.cost) ? Number(body.cost) : null); const cost_source = cost === null ? "none" : (body.cost_source === "provider" || body.cost_source === "price_table" ? body.cost_source : "price_table"); repos.agentRuns.recordUsage(run.run_id, { provider: String(body.provider), model: String(body.model), input_tokens: tokens(body.input_tokens), output_tokens: tokens(body.output_tokens), cache_read_tokens: tokens(body.cache_read_tokens), cache_write_tokens: tokens(body.cache_write_tokens), cost, cost_source }); // Broadcast so aggregate chips (channel/thread/task headers, task table)
+ app.post("/agent-runs/:runId/usage", async c => { const run = repos.agentRuns.get(c.req.param("runId")); if (!run) return c.json({ message: "Unknown agent run", code: 10081 }, 404); const user=c.get("botUser"); await requireChannelPermission(repos,run.channel_id,user.id,PermissionBits.SEND_MESSAGES|PermissionBits.VIEW_CHANNEL); if(run.agent_id!==user.id) return c.json({message:"Missing Permissions",code:50013},403); const body=await parseJsonBody<Record<string,unknown>>(c); if(!body || typeof body.provider!=="string" || typeof body.model!=="string") return validationError(c,"provider and model are required"); const tokens = (n: unknown) => (Number.isFinite(n) && (n as number) > 0) ? Math.floor(n as number) : 0; const cost = body.cost == null ? null : (Number.isFinite(body.cost) ? Number(body.cost) : null); const cost_source = cost === null ? "none" : (body.cost_source === "provider" || body.cost_source === "price_table" ? body.cost_source : "price_table"); const calledAt = Number.isFinite(body.called_at) ? Math.floor(Number(body.called_at)) : Date.now(); repos.agentRuns.recordUsage(run.run_id, { provider: String(body.provider), model: String(body.model), input_tokens: tokens(body.input_tokens), output_tokens: tokens(body.output_tokens), cache_read_tokens: tokens(body.cache_read_tokens), cache_write_tokens: tokens(body.cache_write_tokens), cost, cost_source }, calledAt); // Broadcast so aggregate chips (channel/thread/task headers, task table)
  // refresh live instead of waiting for a manual reload.
  dispatcher?.usageUpdated(run);
  return c.json({ ok: true }); });

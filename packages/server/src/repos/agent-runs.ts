@@ -2,11 +2,10 @@ import type Database from "better-sqlite3";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage } from "@cove/shared";
+import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage, GuildChannelUsage, GuildDailyUsage, GuildUsageModel, GuildUsageOverview } from "@cove/shared";
 import { computeRunStats, type RunStatsRow } from "./run-stats.js";
 
-const MAX_DETAIL = 8_000;
-/** Stale-claim window for a run with no event traffic. Long turns (model
+const MAX_DETAIL = 8_000;/** Stale-claim window for a run with no event traffic. Long turns (model
  * thinking, file reads, subagent work) routinely exceed a 90s heartbeat gap,
  * so a short window mislabels live runs as stale and the terminal event then
  * bounces with 409. This is a crash-only safety net, not a liveness signal. */
@@ -21,6 +20,23 @@ function safeText(value: unknown, max = MAX_DETAIL): string | null {
 }
 function asRun(row: any): AgentRun { return row as AgentRun; }
 function cleanId(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, "_"); }
+
+/** Asia/Shanghai calendar-day helpers (#584). The deployment runs with the
+ *  server clock in Asia/Shanghai (UTC+8), so local Date fields give the
+ *  Shanghai day boundary without a tz database dependency. */
+function dayStart(t: number): number {
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+/** Format a timestamp as YYYY-MM-DD in Asia/Shanghai local time. */
+function fmtLocalDay(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Epoch-day offset of a timestamp in Asia/Shanghai local time. */
+function localDayOffset(t: number): number {
+  return Math.floor(dayStart(t) / 86_400_000);
+}
 
 /** SQL remains a permission/query index; durable evidence lives under one private directory per run. */
 export class AgentRunsRepo {
@@ -239,8 +255,8 @@ export class AgentRunsRepo {
 
   /** Record one LLM call's usage against a run. Cost is computed by the caller
    * (price table lives beside the plugin, not in the SQL index). */
-  recordUsage(runId: string, input: { provider: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens?: number; cache_write_tokens?: number; cost?: number | null; currency?: string; cost_source?: "provider" | "price_table" | "none" }): void {
-    const now = Date.now();
+  recordUsage(runId: string, input: { provider: string; model: string; input_tokens: number; output_tokens: number; cache_read_tokens?: number; cache_write_tokens?: number; cost?: number | null; currency?: string; cost_source?: "provider" | "price_table" | "none" }, calledAt: number = Date.now()): void {
+    const now = calledAt;
     const total = (input.input_tokens || 0) + (input.output_tokens || 0) + (input.cache_read_tokens || 0) + (input.cache_write_tokens || 0);
     this.db.prepare(`INSERT INTO agent_run_usage (run_id,provider,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens,cost,currency,cost_source,called_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -334,6 +350,172 @@ export class AgentRunsRepo {
     for (const [taskId, taskRows] of byTask) {
       const agg = this.aggregateUsageRows(taskRows);
       if (agg) out[taskId] = agg;
+    }
+    return out;
+  }
+
+  /**
+   * Guild-level usage overview (#584): KPI cards + per-channel breakdown.
+   *
+   * Channels are restricted to non-thread channels of the guild; direct runs
+   * and every run in the channel's threads are attributed to their parent
+   * channel (agent_runs.channel_id is the permission/index anchor, see v37).
+   * Task counts use the canonical tasks.thread_id link (same rule as
+   * usageByScope): a task counts when at least one usage row in the channel
+   * belongs to one of its threads. Direct (non-task) channel runs do not count
+   * toward task totals but do count toward channel cost/calls.
+   *
+   * Time buckets use Asia/Shanghai calendar days (server local time for the
+   * deployment, UTC+8).
+   */
+  usageByGuild(guildId: string, channelIds: string[], now: number = Date.now()): GuildUsageOverview {
+    const placeholder: GuildUsageOverview = {
+      guild_id: guildId,
+      today_cost: null, yesterday_cost: null, delta: null,
+      month_cost: null, total_cost: null,
+      today_calls: 0, today_tokens: 0,
+      active_channels: 0, active_tasks: 0,
+      channels: [],
+    };
+    if (channelIds.length === 0) return placeholder;
+
+    const placeholders = new Array(channelIds.length).fill("?").join(",");
+    const rows = this.db.prepare(
+      `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id
+       FROM agent_run_usage u
+       JOIN agent_runs r ON r.run_id = u.run_id
+       LEFT JOIN tasks t ON t.thread_id = r.thread_id
+       WHERE r.channel_id IN (${placeholders})`
+    ).all(...channelIds) as Array<{
+      called_at: number; cost: number | null; total_tokens: number; model: string;
+      channel_id: string; thread_id: string | null; task_id: string | null;
+    }>;
+    if (rows.length === 0) return placeholder;
+
+    // ── Per-channel + per-task aggregation ──
+    // Internal channel accumulator: models collected in a Map, materialized to
+    // an array (sorted) at the end.
+    type ChannelAcc = { channel_id: string; cost: number | null; calls: number; tasks: number; modelsMap: Map<string, GuildUsageModel> };
+    const byChannel = new Map<string, ChannelAcc>();
+    const tasksWithUsage = new Set<string>();
+    const channelTaskIds = new Map<string, Set<string>>();
+    const addModel = (m: Map<string, GuildUsageModel>, model: string, cost: number | null, tokens: number) => {
+      const e = m.get(model) ?? { model, cost: null, calls: 0, total_tokens: 0 };
+      e.calls += 1;
+      e.total_tokens += tokens;
+      if (cost !== null) e.cost = (e.cost ?? 0) + cost;
+      m.set(model, e);
+    };
+    for (const row of rows) {
+      let c = byChannel.get(row.channel_id);
+      if (!c) {
+        c = { channel_id: row.channel_id, cost: null, calls: 0, tasks: 0, modelsMap: new Map() };
+        byChannel.set(row.channel_id, c);
+      }
+      c.calls += 1;
+      if (row.cost !== null) c.cost = (c.cost ?? 0) + row.cost;
+      addModel(c.modelsMap, row.model, row.cost, row.total_tokens || 0);
+      if (row.task_id) {
+        tasksWithUsage.add(row.task_id);
+        let set = channelTaskIds.get(row.channel_id);
+        if (!set) { set = new Set(); channelTaskIds.set(row.channel_id, set); }
+        set.add(row.task_id);
+      }
+    }
+    const channels: GuildChannelUsage[] = [...byChannel.values()].map((c) => ({
+      channel_id: c.channel_id,
+      cost: c.cost,
+      calls: c.calls,
+      tasks: channelTaskIds.get(c.channel_id)?.size ?? 0,
+      models: [...c.modelsMap.values()].sort((a, b) => a.model.localeCompare(b.model)),
+    })).sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
+
+    // ── KPI time buckets (Asia/Shanghai = server local UTC+8) ──
+    const todayStart = dayStart(now);
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+    const monthStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), 1).getTime();
+    let todayCost = 0, todayCostCount = 0, todayTokens = 0, todayCalls = 0;
+    let yesterdayCost = 0, yesterdayCostCount = 0;
+    let monthCost = 0, monthCostCount = 0;
+    let totalCost = 0, totalCostCount = 0;
+    for (const row of rows) {
+      if (row.cost !== null) {
+        totalCost += row.cost; totalCostCount++;
+        if (row.called_at >= monthStart) { monthCost += row.cost; monthCostCount++; }
+        if (row.called_at >= yesterdayStart && row.called_at < todayStart) { yesterdayCost += row.cost; yesterdayCostCount++; }
+        if (row.called_at >= todayStart) { todayCost += row.cost; todayCostCount++; }
+      }
+      if (row.called_at >= todayStart) { todayTokens += row.total_tokens || 0; todayCalls++; }
+    }
+    const nz = (sum: number, count: number) => count > 0 ? sum : null;
+
+    return {
+      guild_id: guildId,
+      today_cost: nz(todayCost, todayCostCount),
+      yesterday_cost: nz(yesterdayCost, yesterdayCostCount),
+      delta: todayCostCount > 0 && yesterdayCostCount > 0 ? todayCost - yesterdayCost : null,
+      month_cost: nz(monthCost, monthCostCount),
+      total_cost: nz(totalCost, totalCostCount),
+      today_calls: todayCalls,
+      today_tokens: todayTokens,
+      active_channels: channels.length,
+      active_tasks: tasksWithUsage.size,
+      channels,
+    };
+  }
+
+  /**
+   * Daily guild usage series (#584): last N days, Asia/Shanghai day buckets,
+   * zero-filled so the chart always has one bar per day. Each day carries its
+   * own per-model slices for the stacked model breakdown.
+   */
+  usageDailyByGuild(guildId: string, channelIds: string[], days: number = 14, now: number = Date.now()): GuildDailyUsage[] {
+    const clamped = Math.max(1, Math.min(90, Math.floor(days)));
+    if (channelIds.length === 0) {
+      return Array.from({ length: clamped }, (_, i) => ({
+        date: fmtLocalDay(now - (clamped - 1 - i) * 24 * 60 * 60 * 1000),
+        cost: null, total_tokens: 0, calls: 0, models: [],
+      }));
+    }
+    const placeholders = new Array(channelIds.length).fill("?").join(",");
+    const rows = this.db.prepare(
+      `SELECT u.called_at, u.cost, u.total_tokens, u.model
+       FROM agent_run_usage u
+       JOIN agent_runs r ON r.run_id = u.run_id
+       WHERE r.channel_id IN (${placeholders}) AND u.called_at >= ?`
+    ).all(...channelIds, now - clamped * 24 * 60 * 60 * 1000) as Array<{
+      called_at: number; cost: number | null; total_tokens: number; model: string;
+    }>;
+
+    // Day index: Asia/Shanghai epoch-day offset (safe across year boundaries).
+    const todayOffset = localDayOffset(now);
+    const byDay = new Map<number, { cost: number; costCount: number; tokens: number; calls: number; models: Map<string, GuildUsageModel> }>();
+    for (const row of rows) {
+      const off = localDayOffset(row.called_at);
+      if (off < todayOffset - clamped + 1 || off > todayOffset) continue;
+      let d = byDay.get(off);
+      if (!d) { d = { cost: 0, costCount: 0, tokens: 0, calls: 0, models: new Map() }; byDay.set(off, d); }
+      d.calls += 1;
+      d.tokens += row.total_tokens || 0;
+      if (row.cost !== null) { d.cost += row.cost; d.costCount++; }
+      const e = d.models.get(row.model) ?? { model: row.model, cost: null, calls: 0, total_tokens: 0 };
+      e.calls += 1; e.total_tokens += row.total_tokens || 0;
+      if (row.cost !== null) e.cost = (e.cost ?? 0) + row.cost;
+      d.models.set(row.model, e);
+    }
+
+    const out: GuildDailyUsage[] = [];
+    for (let i = 0; i < clamped; i++) {
+      const off = todayOffset - clamped + 1 + i;
+      const date = fmtLocalDay(off * 86_400_000);
+      const d = byDay.get(off);
+      out.push({
+        date,
+        cost: d && d.costCount > 0 ? d.cost : null,
+        total_tokens: d?.tokens ?? 0,
+        calls: d?.calls ?? 0,
+        models: d ? [...d.models.values()].sort((a, b) => a.model.localeCompare(b.model)) : [],
+      });
     }
     return out;
   }

@@ -10,7 +10,7 @@ import { useActiveIds } from "../hooks/useActiveIds";
 import { routes } from "../lib/routes";
 import { saveLastChannel } from "./GuildSidebar";
 import { Button, Input, Spin, Dropdown } from "antd";
-import { PlusOutlined, SettingOutlined, DownOutlined, UnorderedListOutlined } from "@ant-design/icons";
+import { PlusOutlined, SettingOutlined, DownOutlined, UnorderedListOutlined, FundOutlined } from "@ant-design/icons";
 import * as api from "../lib/api";
 import type { CSSProperties } from "react";
 import type { MenuProps } from "antd";
@@ -106,6 +106,8 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
   }, [byTaskId, guildId]);
 
   const tasksEntryActive = !!guildId && location.pathname === routes.guildTasks(guildId);
+  const overviewEntryActive = !!guildId && location.pathname === routes.guildOverview(guildId);
+  const [overviewEntryHover, setOverviewEntryHover] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [settingsChannelId, setSettingsChannelId] = useState<string | null>(null);
@@ -186,6 +188,20 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           <div style={styles.loading}><Spin tip="Loading channels…" /></div>
         ) : (
           <>
+            {guildId && (
+              <div
+                style={{
+                  ...styles.tasksEntry,
+                  ...(overviewEntryActive ? styles.tasksEntryActive : overviewEntryHover ? styles.tasksEntryHover : {}),
+                }}
+                onClick={() => { navigate(routes.guildOverview(guildId)); onClose?.(); }}
+                onMouseEnter={() => setOverviewEntryHover(true)}
+                onMouseLeave={() => setOverviewEntryHover(false)}
+              >
+                <FundOutlined style={{ fontSize: "var(--font-size-md)", color: "var(--interactive-normal)", flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>Overview</span>
+              </div>
+            )}
             {guildId && (
               <div
                 style={{

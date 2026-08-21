@@ -1,0 +1,327 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Spin, Empty } from "antd";
+import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
+import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
+import { useActiveIds } from "../hooks/useActiveIds";
+import { useGuildStore } from "../stores/useGuildStore";
+import { useChannelStore } from "../stores/useChannelStore";
+import { routes } from "../lib/routes";
+import * as api from "../lib/api";
+import { formatUsd, formatTokens } from "./AgentRunTimeline";
+import { flattenDailyForChart, topModelsByCost } from "../lib/guild-usage";
+import { EfficiencyCard } from "./EfficiencyCard";
+import {
+  CostChartFrame, CostGrid, CostXAxis, CostYAxis, CostTooltipBox, CostLegend,
+  Bar, BarChart, ComposedChart, Line, modelColor, costTick, tokenTick,
+} from "./CostChart";
+import type { ReactNode, CSSProperties } from "react";
+
+const MUTED = "var(--text-muted)";
+const GOOD = "#23a55a";
+const BAD = "var(--status-danger, #ed4245)";
+
+const styles = {
+  root: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" } as CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: "var(--content-gap)", padding: "0 var(--content-pad)", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-subtle)", height: "var(--header-height)", flexShrink: 0 } as CSSProperties,
+  headerTitle: { margin: 0, color: "var(--header-primary)", fontSize: "var(--font-size-lg)", fontWeight: 700 } as CSSProperties,
+  content: { flex: 1, overflowY: "auto", padding: "var(--space-lg)", display: "flex", flexDirection: "column", gap: "var(--space-lg)" } as CSSProperties,
+  kpiRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "var(--space-md)" } as CSSProperties,
+  kpiCard: { background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", padding: "var(--space-md)", display: "flex", flexDirection: "column", gap: 2 } as CSSProperties,
+  kpiLabel: { fontSize: "var(--font-size-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: MUTED } as CSSProperties,
+  kpiValue: { fontSize: "var(--font-size-xl)", fontWeight: 700, color: "var(--header-primary)", fontVariantNumeric: "tabular-nums" } as CSSProperties,
+  kpiSub: { fontSize: "var(--font-size-xs)", color: MUTED } as CSSProperties,
+  card: { background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", padding: "var(--space-md)" } as CSSProperties,
+  cardTitle: { fontSize: "var(--font-size-sm)", fontWeight: 700, color: "var(--header-primary)", margin: "0 0 var(--space-sm)" } as CSSProperties,
+  rankRow: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px 4px", borderRadius: "var(--space-xs)", cursor: "pointer", transition: "background 0.15s" } as CSSProperties,
+  rankName: { width: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, color: "var(--interactive-normal)", fontSize: "var(--font-size-sm)" } as CSSProperties,
+  rankBarWrap: { flex: 1, height: 14, background: "var(--bg-modifier-hover, rgba(255,255,255,0.04))", borderRadius: 7, overflow: "hidden" } as CSSProperties,
+  rankBar: { height: "100%", borderRadius: 7, transition: "width 0.3s ease" } as CSSProperties,
+  rankMeta: { width: 170, textAlign: "right", fontSize: "var(--font-size-xs)", color: MUTED, flexShrink: 0, fontVariantNumeric: "tabular-nums" } as CSSProperties,
+  drillHeader: { display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" } as CSSProperties,
+  backBtn: { background: "none", border: "1px solid var(--border-subtle)", color: "var(--interactive-normal)", borderRadius: "var(--space-xs)", padding: "2px 10px", fontSize: "var(--font-size-xs)", cursor: "pointer" } as CSSProperties,
+  taskRow: { display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px 4px", borderRadius: "var(--space-xs)", cursor: "pointer", fontSize: "var(--font-size-sm)" } as CSSProperties,
+  taskTitle: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--interactive-active)" } as CSSProperties,
+  taskMeta: { fontSize: "var(--font-size-xs)", color: MUTED, flexShrink: 0, fontVariantNumeric: "tabular-nums", display: "flex", gap: "var(--space-sm)" } as CSSProperties,
+  empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: MUTED, gap: "var(--space-sm)", padding: "var(--space-xxl)" } as CSSProperties,
+  drillCard: { background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", padding: "var(--space-md)", marginTop: "var(--space-md)" } as CSSProperties,
+} as const;
+
+function KpiCard({ label, value, sub, subColor }: { label: string; value: string; sub?: ReactNode; subColor?: string }) {
+  return (
+    <div style={styles.kpiCard}>
+      <span style={styles.kpiLabel}>{label}</span>
+      <span style={styles.kpiValue}>{value}</span>
+      {sub && <span style={{ ...styles.kpiSub, ...(subColor ? { color: subColor, fontWeight: 600 } : {}) }}>{sub}</span>}
+    </div>
+  );
+}
+
+function DeltaBadge({ delta }: { delta: number | null }) {
+  if (delta === null) return <span style={styles.kpiSub}>vs yesterday —</span>;
+  const up = delta >= 0;
+  const color = delta === 0 ? MUTED : up ? BAD : GOOD;
+  const Icon = up ? ArrowUpOutlined : ArrowDownOutlined;
+  return (
+    <span style={{ ...styles.kpiSub, color, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3 }}>
+      <Icon style={{ fontSize: 10 }} />
+      {formatUsd(Math.abs(delta))} vs yesterday
+    </span>
+  );
+}
+
+function ChannelRanking({ channels, channelName, onSelect }: {
+  channels: GuildChannelUsage[];
+  channelName: (id: string) => string;
+  onSelect: (channelId: string) => void;
+}) {
+  const max = Math.max(0, ...channels.map((c) => c.cost ?? 0));
+  return (
+    <div>
+      {channels.length === 0 && (
+        <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No channel spending yet" /></div>
+      )}
+      {channels.map((c) => (
+        <div key={c.channel_id} style={styles.rankRow} onClick={() => onSelect(c.channel_id)}>
+          <span style={styles.rankName} title={channelName(c.channel_id)}>#{channelName(c.channel_id)}</span>
+          <span style={styles.rankBarWrap}>
+            <span style={{ ...styles.rankBar, width: max > 0 ? `${Math.max(2, ((c.cost ?? 0) / max) * 100)}%` : "0%", background: "var(--accent, #5865f2)", display: "block" }} />
+          </span>
+          <span style={styles.rankMeta}>
+            {c.cost != null ? formatUsd(c.cost) : "—"} · {c.tasks} task{c.tasks === 1 ? "" : "s"} · {c.calls} call{c.calls === 1 ? "" : "s"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }: {
+  channelId: string;
+  channelName: (id: string) => string;
+  guildId: string;
+  onBack: () => void;
+  onSelectTask: (taskId: string) => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Array<{ task_id: string; title: string; status: string; usage: AgentRunUsage | null }>>([]);
+  const [reports, setReports] = useState<Record<string, TaskEfficiencyReport>>({});
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setTasks([]);
+    setReports({});
+    api.fetchGuildTasks(guildId).then((guildTasks) => {
+      if (!alive) return;
+      const inChannel = guildTasks.filter((t) => t.channel_id === channelId);
+      setTasks(inChannel.map((t) => ({ task_id: t.task_id, title: t.title, status: t.status, usage: null })));
+    }).catch(() => { if (alive) setTasks([]); }).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [channelId, guildId]);
+
+  // Usage + efficiency per task (reuse the task-board endpoints).
+  useEffect(() => {
+    let alive = true;
+    if (!channelId) return;
+    api.fetchTaskUsages(channelId).then((usages) => {
+      if (!alive) return;
+      setTasks((prev) => prev.map((t) => ({ ...t, usage: usages[t.task_id] ?? null })));
+    }).catch(() => {});
+    api.fetchChannelTaskEfficiency(channelId).then((reports) => {
+      if (!alive) return;
+      const byId: Record<string, TaskEfficiencyReport> = {};
+      for (const r of reports) byId[r.task_id] = r;
+      setReports(byId);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [channelId]);
+
+  if (loading) return <div style={{ padding: "var(--space-lg)", textAlign: "center" }}><Spin /></div>;
+
+  return (
+    <div>
+      <div style={styles.drillHeader}>
+        <button style={styles.backBtn} onClick={onBack}>← Channels</button>
+        <span style={{ fontWeight: 700, color: "var(--header-primary)", fontSize: "var(--font-size-sm)" }}>#{channelName(channelId)}</span>
+      </div>
+      {tasks.length === 0 && (
+        <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tasks in this channel yet" /></div>
+      )}
+      {tasks.map((t) => {
+        const report = reports[t.task_id];
+        const usage = t.usage;
+        const failureRate = report?.tool_health?.failure_rate;
+        return (
+          <div key={t.task_id} style={styles.taskRow} onClick={() => onSelectTask(t.task_id)}>
+            <span style={styles.taskTitle} title={t.title}>{t.title}</span>
+            <span style={styles.taskMeta}>
+              {usage?.cost != null ? <span>{formatUsd(usage.cost)}</span> : <span>—</span>}
+              <span>{usage?.calls ?? 0} calls</span>
+              {failureRate != null && <span style={{ color: failureRate > 0.2 ? BAD : MUTED }}>{Math.round(failureRate * 100)}% fail</span>}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function GuildOverview() {
+  const navigate = useNavigate();
+  const { guildId } = useActiveIds();
+  const guilds = useGuildStore((s) => s.guilds);
+  const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
+  const [overview, setOverview] = useState<GuildUsageOverview | null>(null);
+  const [daily, setDaily] = useState<GuildDailyUsage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [taskReport, setTaskReport] = useState<TaskEfficiencyReport | null>(null);
+
+  const channels = useMemo(() => (guildId ? channelsByGuildId[guildId] ?? [] : []), [channelsByGuildId, guildId]);
+  const channelName = useCallback((id: string) => channels.find((c) => c.id === id)?.name ?? id.slice(0, 8), [channels]);
+
+  // Validate guild exists.
+  useEffect(() => {
+    if (guildId && Object.keys(guilds).length > 0 && !guilds[guildId]) {
+      navigate(routes.root(), { replace: true });
+    }
+  }, [guildId, guilds, navigate]);
+
+  useEffect(() => {
+    if (!guildId) return;
+    setLoading(true);
+    setSelectedChannel(null);
+    setSelectedTask(null);
+    setTaskReport(null);
+    Promise.all([api.fetchGuildUsageOverview(guildId), api.fetchGuildUsageDaily(guildId, 14)])
+      .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
+      .catch((err) => console.error("fetch guild overview:", err))
+      .finally(() => setLoading(false));
+  }, [guildId]);
+
+  // Task efficiency card for the selected task (drilldown level 2).
+  useEffect(() => {
+    let alive = true;
+    setTaskReport(null);
+    if (!selectedTask) return;
+    api.fetchTaskEfficiency(selectedTask).then((report) => { if (alive) setTaskReport(report); }).catch(() => {});
+    return () => { alive = false; };
+  }, [selectedTask]);
+
+  // Top models by cost (capped for the stacked chart).
+  const topModels = useMemo(() => topModelsByCost(daily, 8), [daily]);
+
+  // Daily chart data: flatten per-day models into { date, cost, tokens, calls, <model>: cost }.
+  const dailyData = useMemo(() => flattenDailyForChart(daily), [daily]);
+
+  if (loading) {
+    return (
+      <div style={styles.root}>
+        <div style={styles.header}><h1 style={styles.headerTitle}>Usage Overview</h1></div>
+        <div style={{ ...styles.empty, flex: 1 }}><Spin tip="Loading usage…" /></div>
+      </div>
+    );
+  }
+
+  const today = overview?.today_cost ?? null;
+  const yesterday = overview?.yesterday_cost ?? null;
+
+  // Selected channel's task list comes from TaskDrilldown; selection flow:
+  // channel → task list; task → efficiency card.
+  return (
+    <div style={styles.root}>
+      <div style={styles.header}>
+        <h1 style={styles.headerTitle}>Usage Overview</h1>
+        <span style={{ fontSize: "var(--font-size-xs)", color: MUTED }}>Cost where the agents work</span>
+      </div>
+      <div style={styles.content}>
+        {!overview || (overview.channels.length === 0 && overview.total_cost === null) ? (
+          <div style={styles.empty}>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No usage recorded yet" />
+            <span style={{ fontSize: "var(--font-size-xs)" }}>Run an agent in this server and it will show up here.</span>
+          </div>
+        ) : (
+          <>
+            {/* KPI cards */}
+            <div style={styles.kpiRow}>
+              <KpiCard label="Today" value={today != null ? formatUsd(today) : "—"} sub={today != null ? `${overview.today_calls} calls · ${formatTokens(overview.today_tokens)} tok` : undefined} />
+              <KpiCard label="Yesterday" value={yesterday != null ? formatUsd(yesterday) : "—"} sub={<DeltaBadge delta={overview.delta} />} />
+              <KpiCard label="This month" value={overview.month_cost != null ? formatUsd(overview.month_cost) : "—"} />
+              <KpiCard label="All time" value={overview.total_cost != null ? formatUsd(overview.total_cost) : "—"} />
+              <KpiCard label="Active channels" value={String(overview.active_channels)} sub={`${channels.length} total channels`} />
+              <KpiCard label="Active tasks" value={String(overview.active_tasks)} />
+            </div>
+
+            {/* 14-day spend trend (bar = cost, line = tokens) */}
+            <div style={styles.card}>
+              <h3 style={styles.cardTitle}>Daily spend · last 14 days</h3>
+              <CostChartFrame height={220}>
+                <ComposedChart data={dailyData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CostGrid />
+                  <CostXAxis dataKey="date" interval="preserveStartEnd" />
+                  <CostYAxis tickFormatter={costTick} />
+                  <CostYAxis yAxisId="tokens" orientation="right" tickFormatter={tokenTick} width={48} />
+                  <CostTooltipBox cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                  <CostLegend />
+                  <Bar dataKey="cost" name="cost" fill="#5865f2" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                  <Line yAxisId="tokens" dataKey="tokens" name="tokens" stroke="#23a55a" strokeWidth={1.5} dot={false} />
+                </ComposedChart>
+              </CostChartFrame>
+            </div>
+
+            {/* Channel ranking */}
+            <div style={styles.card}>
+              <h3 style={styles.cardTitle}>Channel spend</h3>
+              <ChannelRanking channels={overview.channels} channelName={channelName} onSelect={(id) => { setSelectedChannel(id); setSelectedTask(null); }} />
+            </div>
+
+            {/* Model breakdown (stacked) */}
+            {topModels.length > 0 && (
+              <div style={styles.card}>
+                <h3 style={styles.cardTitle}>Spend by model</h3>
+                <CostChartFrame height={200}>
+                  <BarChart data={dailyData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <CostGrid />
+                    <CostXAxis dataKey="date" interval="preserveStartEnd" />
+                    <CostYAxis tickFormatter={costTick} />
+                    <CostTooltipBox cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <CostLegend />
+                    {topModels.map((m) => (
+                      <Bar key={m} dataKey={m} name={m} stackId="cost" fill={modelColor(m)} maxBarSize={32} />
+                    ))}
+                  </BarChart>
+                </CostChartFrame>
+              </div>
+            )}
+
+            {/* Drilldown: channel → tasks */}
+            {selectedChannel && (
+              <div style={styles.drillCard}>
+                <TaskDrilldown
+                  channelId={selectedChannel}
+                  channelName={channelName}
+                  guildId={guildId!}
+                  onBack={() => setSelectedChannel(null)}
+                  onSelectTask={(taskId) => setSelectedTask(taskId)}
+                />
+              </div>
+            )}
+
+            {/* Drilldown level 2: task efficiency card */}
+            {selectedTask && taskReport && (
+              <div style={styles.drillCard}>
+                <div style={styles.drillHeader}>
+                  <button style={styles.backBtn} onClick={() => setSelectedTask(null)}>← Tasks</button>
+                  <span style={{ fontWeight: 700, color: "var(--header-primary)", fontSize: "var(--font-size-sm)" }}>Task efficiency</span>
+                </div>
+                <EfficiencyCard report={taskReport} taskId={selectedTask} inline />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

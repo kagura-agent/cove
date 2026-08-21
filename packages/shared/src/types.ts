@@ -517,6 +517,53 @@ export interface TaskRunStat {
   total_tokens: number;
 }
 
+/** One day of guild-level usage (Asia/Shanghai day bucketing). */
+export interface GuildDailyUsage {
+  /** Local (Asia/Shanghai) calendar day, YYYY-MM-DD. */
+  date: string;
+  cost: number | null;
+  total_tokens: number;
+  calls: number;
+  /** Per-model slices for the day (stacked bar source; empty when no data). */
+  models: GuildUsageModel[];
+}
+
+/** Per-model slice of a cost total (stacked bar source). */
+export interface GuildUsageModel {
+  model: string;
+  cost: number | null;
+  calls: number;
+  total_tokens: number;
+}
+
+/** One channel's share of guild usage (channel ranking / drilldown source). */
+export interface GuildChannelUsage {
+  channel_id: string;
+  /** Direct runs in the channel + every run in its threads. */
+  cost: number | null;
+  calls: number;
+  /** Distinct tasks (by tasks.thread_id) with usage in this channel. */
+  tasks: number;
+  /** Per-model breakdown for the channel. */
+  models: GuildUsageModel[];
+}
+
+/** KPI + per-channel rollup for one guild. */
+export interface GuildUsageOverview {
+  guild_id: string;
+  today_cost: number | null;
+  yesterday_cost: number | null;
+  /** today - yesterday; null when either side is missing. */
+  delta: number | null;
+  month_cost: number | null;
+  total_cost: number | null;
+  today_calls: number;
+  today_tokens: number;
+  active_channels: number;
+  active_tasks: number;
+  channels: GuildChannelUsage[];
+}
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id
