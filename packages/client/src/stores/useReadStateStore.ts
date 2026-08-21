@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { compareIds } from "../lib/compare-ids";
 
 interface ReadStateState {
   readStates: Record<string, string>; // channelId → lastReadMessageId
@@ -11,17 +12,6 @@ interface ReadStateState {
   clearUnread: (channelId: string) => void;
   removeChannel: (channelId: string) => void;
   getLastReadId: (channelId: string) => string | undefined;
-}
-
-/**
- * Compare two message ids. Message ids are snowflakes (numeric strings);
- * compare as BigInt to avoid float precision loss on 64-bit ids.
- * Returns <0 if a < b, 0 if equal, >0 if a > b.
- */
-function compareIds(a: string, b: string): number {
-  const ai = BigInt(a);
-  const bi = BigInt(b);
-  return ai < bi ? -1 : ai > bi ? 1 : 0;
 }
 
 export const useReadStateStore = create<ReadStateState>((set, get) => ({
@@ -53,7 +43,9 @@ export const useReadStateStore = create<ReadStateState>((set, get) => ({
       } else if (st.last_message_id) {
         delete unread[st.channel_id];
       }
-      if (st.mention_count && st.mention_count > 0) {
+      // Only adopt server mention counts for channels that are actually unread;
+      // a locally-read channel must not resurrect its mention badge.
+      if (st.mention_count && st.mention_count > 0 && unread[st.channel_id]) {
         mentions[st.channel_id] = st.mention_count;
       }
     }

@@ -95,5 +95,19 @@ describe("useReadStateStore", () => {
 
       expect(useReadStateStore.getState().mentionCounts["c1"]).toBe(3);
     });
+
+    it("does not resurrect mention count on a locally-read channel", () => {
+      // Local state: user already read c1 (mention badge cleared locally)
+      useReadStateStore.getState().markRead("c1", "150");
+
+      // Server is behind: still thinks cursor is at 100 and has a stale mention
+      useReadStateStore.getState().initReadStates([
+        { channel_id: "c1", last_read_message_id: "100", last_message_id: "150", mention_count: 3 },
+      ]);
+
+      const s = useReadStateStore.getState();
+      expect(s.unreadChannels["c1"] ?? false).toBe(false);
+      expect(s.mentionCounts["c1"] ?? 0).toBe(0);
+    });
   });
 });
