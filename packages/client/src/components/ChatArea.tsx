@@ -252,7 +252,7 @@ function InlineTaskList({ channelId }: { channelId: string }) {
       title: "Usage",
       key: "usage",
       width: 130,
-      render: (_, task) => <UsageChip usage={taskUsages[task.task_id]} scope="task" />,
+      render: (_, task) => <UsageChip usage={taskUsages?.[task.task_id]} scope="task" />,
     },
     {
       title: "Health",
