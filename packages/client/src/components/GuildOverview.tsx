@@ -52,6 +52,9 @@ const styles = {
 } as const;
 
 /** Range label for card titles, e.g. "last 14 days" / "all time". */
+/** Range label for card titles, e.g. "last 14 days". The daily trend caps at
+ *  90 buckets (server), so there is no "all time" trend — KPI cards (all-time)
+ *  are labeled separately and never follow the range. */
 function rangeLabel(range: GuildUsageRange): string {
   return range === "all" ? "all time" : `last ${range} days`;
 }
@@ -60,7 +63,6 @@ const RANGE_OPTIONS: Array<{ value: GuildUsageRange; label: string }> = [
   { value: 14, label: "14d" },
   { value: 30, label: "30d" },
   { value: 90, label: "90d" },
-  { value: "all", label: "All" },
 ];
 
 function KpiCard({ label, value, sub, subColor }: { label: string; value: string; sub?: ReactNode; subColor?: string }) {
@@ -98,7 +100,15 @@ function ChannelRanking({ channels, channelName, onSelect }: {
         <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No channel spending yet" /></div>
       )}
       {channels.map((c) => (
-        <div key={c.channel_id} style={styles.rankRow} onClick={() => onSelect(c.channel_id)}>
+        <div
+          key={c.channel_id}
+          role="button"
+          tabIndex={0}
+          aria-label={`Channel #${channelName(c.channel_id)}`}
+          style={styles.rankRow}
+          onClick={() => onSelect(c.channel_id)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(c.channel_id); } }}
+        >
           <span style={styles.rankName} title={channelName(c.channel_id)}>#{channelName(c.channel_id)}</span>
           <span style={styles.rankBarWrap}>
             <span style={{ ...styles.rankBar, width: max > 0 ? `${Math.max(2, ((c.cost ?? 0) / max) * 100)}%` : "0%", background: "var(--accent, #5865f2)", display: "block" }} />
@@ -127,7 +137,15 @@ function TaskRanking({ tasks, channelName, onSelect }: {
         <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No task spending yet" /></div>
       )}
       {tasks.slice(0, 12).map((t) => (
-        <div key={t.task_id} style={styles.rankRow} onClick={() => onSelect(t.thread_id)}>
+        <div
+          key={t.task_id}
+          role="button"
+          tabIndex={0}
+          aria-label={`Task ${t.title}`}
+          style={styles.rankRow}
+          onClick={() => onSelect(t.thread_id)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(t.thread_id); } }}
+        >
           <span style={styles.taskTitle} title={`${t.title} (#${channelName(t.channel_id)})`}>
             <span style={{ color: STATUS_COLORS[t.status] ?? "var(--text-muted)", fontSize: 10, marginRight: 4 }}>●</span>
             {t.title}
@@ -164,30 +182,29 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
     setLoading(true);
     setTasks([]);
     setReports({});
-    api.fetchGuildTasks(guildId).then((guildTasks) => {
+    // Load tasks + usage + efficiency together: a separate usage request that
+    // resolves before the task list would be dropped (prev is still empty),
+    // leaving every row at "— / 0 calls" (review finding).
+    Promise.all([
+      api.fetchGuildTasks(guildId),
+      api.fetchTaskUsages(channelId).catch(() => ({}) as Record<string, AgentRunUsage>),
+      api.fetchChannelTaskEfficiency(channelId).catch(() => [] as TaskEfficiencyReport[]),
+    ]).then(([guildTasks, usages, efficiency]) => {
       if (!alive) return;
       const inChannel = guildTasks.filter((t) => t.channel_id === channelId);
-      setTasks(inChannel.map((t) => ({ task_id: t.task_id, thread_id: t.thread_id, title: t.title, status: t.status, usage: null })));
+      setTasks(inChannel.map((t) => ({
+        task_id: t.task_id,
+        thread_id: t.thread_id,
+        title: t.title,
+        status: t.status,
+        usage: usages[t.task_id] ?? null,
+      })));
+      const byId: Record<string, TaskEfficiencyReport> = {};
+      for (const r of efficiency) byId[r.task_id] = r;
+      setReports(byId);
     }).catch(() => { if (alive) setTasks([]); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [channelId, guildId]);
-
-  // Usage + efficiency per task (reuse the task-board endpoints).
-  useEffect(() => {
-    let alive = true;
-    if (!channelId) return;
-    api.fetchTaskUsages(channelId).then((usages) => {
-      if (!alive) return;
-      setTasks((prev) => prev.map((t) => ({ ...t, usage: usages[t.task_id] ?? null })));
-    }).catch(() => {});
-    api.fetchChannelTaskEfficiency(channelId).then((reports) => {
-      if (!alive) return;
-      const byId: Record<string, TaskEfficiencyReport> = {};
-      for (const r of reports) byId[r.task_id] = r;
-      setReports(byId);
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [channelId]);
 
   if (loading) return <div style={{ padding: "var(--space-lg)", textAlign: "center" }}><Spin /></div>;
 
@@ -205,7 +222,15 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
         const usage = t.usage;
         const failureRate = report?.tool_health?.failure_rate;
         return (
-          <div key={t.task_id} style={styles.taskRow} onClick={() => onSelectTask(t.thread_id)}>
+          <div
+            key={t.task_id}
+            role="button"
+            tabIndex={0}
+            aria-label={`Task ${t.title}`}
+            style={styles.taskRow}
+            onClick={() => onSelectTask(t.thread_id)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectTask(t.thread_id); } }}
+          >
             <span style={styles.taskTitle} title={t.title}>{t.title}</span>
             <span style={styles.taskMeta}>
               {usage?.cost != null ? <span>{formatUsd(usage.cost)}</span> : <span>—</span>}
@@ -241,6 +266,8 @@ export function GuildOverview() {
   // Guild we have loaded data for — used to detect a real guild switch so the
   // thread panel is only cleared then (not on URL search edits).
   const loadedGuildRef = useRef<string | null>(null);
+  // Fetch sequence: guards against a slow request overwriting a newer one.
+  const fetchSeqRef = useRef(0);
 
   const channels = useMemo(() => (guildId ? channelsByGuildId[guildId] ?? [] : []), [channelsByGuildId, guildId]);
   const channelName = useCallback((id: string) => channels.find((c) => c.id === id)?.name ?? id.slice(0, 8), [channels]);
@@ -284,12 +311,19 @@ export function GuildOverview() {
         return next;
       }, { replace: true });
     }
+    // Lifecycle guard: a slow request for a previous guild/range must not
+    // overwrite the current selection (review finding). Each fetch bumps the
+    // sequence; only the latest sequence may write state.
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     setSelectedChannel(null);
     Promise.all([api.fetchGuildUsageOverview(guildId, range), api.fetchGuildUsageDaily(guildId, range)])
-      .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
-      .catch((err) => console.error("fetch guild overview:", err))
-      .finally(() => setLoading(false));
+      .then(([ov, dl]) => {
+        if (fetchSeqRef.current !== seq) return;
+        setOverview(ov); setDaily(dl);
+      })
+      .catch((err) => { if (fetchSeqRef.current === seq) console.error("fetch guild overview:", err); })
+      .finally(() => { if (fetchSeqRef.current === seq) setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guildId, range]);
 
@@ -389,8 +423,9 @@ export function GuildOverview() {
                   <CostLegend />
                   <Bar dataKey="cost" name="cost" fill="#5865f2" radius={[3, 3, 0, 0]} maxBarSize={32} />
                   <Line yAxisId="tokens" dataKey="tokens" name="tokens" stroke="#23a55a" strokeWidth={1.5} dot={false} />
-                  {/* tasks counts are small (0–~20), same scale as cost → left axis */}
-                  <Line dataKey="tasks" name="tasks" stroke="#f0b232" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+                  {/* No tasks series: task counts (0–20) share the USD axis and
+                      would compress the spend bars into invisibility. Today's
+                      task count is already a KPI card. */}
                 </ComposedChart>
               </CostChartFrame>
             </div>

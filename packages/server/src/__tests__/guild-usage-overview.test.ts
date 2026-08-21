@@ -193,18 +193,23 @@ describe("guild usage overview routes", () => {
     const nowRun = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger2" });
     await recordUsage(app, nowRun.run_id, "m2", 100, 50, 0.01, t0 + 1);
 
-    // Default (14d): only today's row.
+    // Default (14d): total_cost is ALL-TIME (KPIs are never truncated by the
+    // selected range — that was the review finding), while the channel/task
+    // rankings are range-scoped: the 40-day-old row only shows up in 90d/all.
     const r14 = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/overview`, { headers: { Authorization: "Bot viewer-token" } });
     const b14 = await r14.json();
     expect(b14.range).toBe(14);
-    expect(b14.total_cost).toBeCloseTo(0.01);
+    expect(b14.total_cost).toBeCloseTo(0.51);
+    expect(b14.month_cost).toBeCloseTo(0.01);
+    expect(b14.active_channels).toBe(1);
     expect(b14.active_tasks).toBe(0);
 
-    // range=90: both rows.
+    // range=90: both rows in the rankings too.
     const r90 = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/overview?range=90`, { headers: { Authorization: "Bot viewer-token" } });
     const b90 = await r90.json();
     expect(b90.range).toBe(90);
     expect(b90.total_cost).toBeCloseTo(0.51);
+    expect(b90.active_channels).toBe(1);
     expect(b90.active_tasks).toBe(0);
 
     // range=all: both rows.

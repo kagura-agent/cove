@@ -190,11 +190,15 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
           <>
             {guildId && (
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="Overview"
                 style={{
                   ...styles.tasksEntry,
                   ...(overviewEntryActive ? styles.tasksEntryActive : overviewEntryHover ? styles.tasksEntryHover : {}),
                 }}
                 onClick={() => { navigate(routes.guildOverview(guildId)); onClose?.(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(routes.guildOverview(guildId)); onClose?.(); } }}
                 onMouseEnter={() => setOverviewEntryHover(true)}
                 onMouseLeave={() => setOverviewEntryHover(false)}
               >
@@ -204,11 +208,15 @@ export function Sidebar({ onClose, loading, style }: { onClose?: () => void; loa
             )}
             {guildId && (
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="Tasks"
                 style={{
                   ...styles.tasksEntry,
                   ...(tasksEntryActive ? styles.tasksEntryActive : tasksEntryHover ? styles.tasksEntryHover : {}),
                 }}
                 onClick={() => { navigate(routes.guildTasks(guildId)); onClose?.(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(routes.guildTasks(guildId)); onClose?.(); } }}
                 onMouseEnter={() => setTasksEntryHover(true)}
                 onMouseLeave={() => setTasksEntryHover(false)}
               >

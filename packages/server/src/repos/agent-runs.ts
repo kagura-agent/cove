@@ -22,21 +22,26 @@ function safeText(value: unknown, max = MAX_DETAIL): string | null {
 function asRun(row: any): AgentRun { return row as AgentRun; }
 function cleanId(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, "_"); }
 
-/** Asia/Shanghai calendar-day helpers (#584). The deployment runs with the
- *  server clock in Asia/Shanghai (UTC+8), so local Date fields give the
- *  Shanghai day boundary without a tz database dependency. */
-function dayStart(t: number): number {
-  const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-/** Format a timestamp as YYYY-MM-DD in Asia/Shanghai local time. */
-function fmtLocalDay(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-/** Epoch-day offset of a timestamp in Asia/Shanghai local time. */
+/** Asia/Shanghai (UTC+8) calendar-day helpers (#584). Explicit offset instead
+ *  of process-local Date fields: the deployed service does not set TZ, so hosts
+ *  in UTC would bucket 00:00–08:00 Shanghai calls onto the previous day. */
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 86_400_000;
+
+/** Epoch-day index of a timestamp's Asia/Shanghai calendar day (UTC+8). */
 function localDayOffset(t: number): number {
-  return Math.floor(dayStart(t) / 86_400_000);
+  return Math.floor((t + SHANGHAI_OFFSET_MS) / DAY_MS);
+}
+
+/** Asia/Shanghai midnight (epoch ms) of the calendar day containing t. */
+function dayStart(t: number): number {
+  return localDayOffset(t) * DAY_MS - SHANGHAI_OFFSET_MS;
+}
+
+/** Format a timestamp as YYYY-MM-DD in Asia/Shanghai (UTC+8). */
+function fmtLocalDay(t: number): string {
+  const d = new Date(t + SHANGHAI_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 /** SQL remains a permission/query index; durable evidence lives under one private directory per run. */
@@ -383,21 +388,37 @@ export class AgentRunsRepo {
     if (channelIds.length === 0) return placeholder;
 
     const placeholders = new Array(channelIds.length).fill("?").join(",");
-    const rangeStart = range === "all" ? 0 : now - range * 24 * 60 * 60 * 1000;
+    // One full-history query: KPI buckets (today/yesterday/month/all-time) must
+    // not be truncated by the selected range, so they are computed from every
+    // row. Rankings (channels/tasks) and today-task counts are range-scoped
+    // below with a calendar-day boundary so they stay aligned with the daily
+    // series (no partial 15th day from a rolling now-N*24h window).
     const rows = this.db.prepare(
       `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id, t.thread_id AS task_thread_id, t.title, t.status
        FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
        LEFT JOIN tasks t ON t.thread_id = r.thread_id
-       WHERE r.channel_id IN (${placeholders}) AND u.called_at >= ?`
-    ).all(...channelIds, rangeStart) as Array<{
+       WHERE r.channel_id IN (${placeholders})`
+    ).all(...channelIds) as Array<{
       called_at: number; cost: number | null; total_tokens: number; model: string;
       channel_id: string; thread_id: string | null; task_id: string | null;
       task_thread_id: string | null; title: string | null; status: string | null;
     }>;
     if (rows.length === 0) return placeholder;
 
-    // ── Per-channel + per-task aggregation ──
+    // Asia/Shanghai calendar boundaries (UTC+8, see helpers above).
+    const todayStart = dayStart(now);
+    const yesterdayStart = todayStart - DAY_MS;
+    const monthStart = Date.UTC(
+      new Date(now + SHANGHAI_OFFSET_MS).getUTCFullYear(),
+      new Date(now + SHANGHAI_OFFSET_MS).getUTCMonth(),
+      1,
+    ) - SHANGHAI_OFFSET_MS;
+    // Range lower bound aligned to calendar days: N buckets ending today (the
+    // same window the daily series renders), not a rolling now-N*24h cut.
+    const rangeStart = range === "all" ? 0 : todayStart - (range - 1) * DAY_MS;
+
+    // ── Per-channel + per-task aggregation (range-scoped) ──
     // Internal channel accumulator: models collected in a Map, materialized to
     // an array (sorted) at the end.
     type ChannelAcc = { channel_id: string; cost: number | null; calls: number; tasks: number; modelsMap: Map<string, GuildUsageModel> };
@@ -414,8 +435,23 @@ export class AgentRunsRepo {
       if (cost !== null) e.cost = (e.cost ?? 0) + cost;
       m.set(model, e);
     };
-    const todayStart = dayStart(now);
+
+    // ── KPI buckets (full history) ──
+    let todayCost = 0, todayCostCount = 0, todayTokens = 0, todayCalls = 0;
+    let yesterdayCost = 0, yesterdayCostCount = 0;
+    let monthCost = 0, monthCostCount = 0;
+    let totalCost = 0, totalCostCount = 0;
     for (const row of rows) {
+      if (row.cost !== null) {
+        totalCost += row.cost; totalCostCount++;
+        if (row.called_at >= monthStart) { monthCost += row.cost; monthCostCount++; }
+        if (row.called_at >= yesterdayStart && row.called_at < todayStart) { yesterdayCost += row.cost; yesterdayCostCount++; }
+        if (row.called_at >= todayStart) { todayCost += row.cost; todayCostCount++; }
+      }
+      if (row.called_at >= todayStart) { todayTokens += row.total_tokens || 0; todayCalls++; }
+
+      // Rankings only count rows inside the selected range.
+      if (row.called_at < rangeStart) continue;
       let c = byChannel.get(row.channel_id);
       if (!c) {
         c = { channel_id: row.channel_id, cost: null, calls: 0, tasks: 0, modelsMap: new Map() };
@@ -444,22 +480,6 @@ export class AgentRunsRepo {
       models: [...c.modelsMap.values()].sort((a, b) => a.model.localeCompare(b.model)),
     })).sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
 
-    // ── KPI time buckets (Asia/Shanghai = server local UTC+8) ──
-    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-    const monthStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), 1).getTime();
-    let todayCost = 0, todayCostCount = 0, todayTokens = 0, todayCalls = 0;
-    let yesterdayCost = 0, yesterdayCostCount = 0;
-    let monthCost = 0, monthCostCount = 0;
-    let totalCost = 0, totalCostCount = 0;
-    for (const row of rows) {
-      if (row.cost !== null) {
-        totalCost += row.cost; totalCostCount++;
-        if (row.called_at >= monthStart) { monthCost += row.cost; monthCostCount++; }
-        if (row.called_at >= yesterdayStart && row.called_at < todayStart) { yesterdayCost += row.cost; yesterdayCostCount++; }
-        if (row.called_at >= todayStart) { todayCost += row.cost; todayCostCount++; }
-      }
-      if (row.called_at >= todayStart) { todayTokens += row.total_tokens || 0; todayCalls++; }
-    }
     const nz = (sum: number, count: number) => count > 0 ? sum : null;
 
     return {
