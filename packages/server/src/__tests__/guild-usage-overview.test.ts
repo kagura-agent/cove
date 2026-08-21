@@ -89,8 +89,8 @@ describe("guild usage overview routes", () => {
     // Task ranking: highest cost first, carries title/channel/status.
     expect(body.tasks).toHaveLength(2);
     // Both tasks cost 0.005 → tie broken by title: "Dev thing" < "Do the thing".
-    expect(body.tasks[0]).toMatchObject({ task_id: devTask.task_id, calls: 2, cost: 0.005, channel_id: dev.id, title: "Dev thing" });
-    expect(body.tasks[1]).toMatchObject({ task_id: task.task_id, calls: 1, cost: 0.005, channel_id: channel.id, title: "Do the thing" });
+    expect(body.tasks[0]).toMatchObject({ task_id: devTask.task_id, thread_id: devThread.id, calls: 2, cost: 0.005, channel_id: dev.id, title: "Dev thing" });
+    expect(body.tasks[1]).toMatchObject({ task_id: task.task_id, thread_id: thread.id, calls: 1, cost: 0.005, channel_id: channel.id, title: "Do the thing" });
     expect(body.tasks.map((t: { task_id: string }) => t.task_id)).toEqual([devTask.task_id, task.task_id]);
     expect(body.tasks.every((t: { status: string }) => ["open", "in_progress", "in_review", "done", "cancelled"].includes(t.status))).toBe(true);
     db.close();

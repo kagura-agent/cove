@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Spin, Empty } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
@@ -11,7 +11,7 @@ import * as api from "../lib/api";
 import { formatUsd, formatTokens } from "./AgentRunTimeline";
 import { flattenDailyForChart, topModelsByCost } from "../lib/guild-usage";
 import { STATUS_COLORS } from "../lib/taskStatusConfig";
-import { EfficiencyCard } from "./EfficiencyCard";
+import { ThreadPanel } from "./ThreadPanel";
 import {
   CostChartFrame, CostGrid, CostXAxis, CostYAxis, CostTooltipBox, CostLegend,
   Bar, BarChart, ComposedChart, Line, modelColor, costTick, tokenTick,
@@ -113,11 +113,12 @@ function ChannelRanking({ channels, channelName, onSelect }: {
 }
 
 /** Top tasks by cost — "where the money actually went". Clicking a row opens
- *  the task's efficiency card (same drilldown as channel → task list). */
+ *  the task's thread in the right-side panel (master-detail, like the task
+ *  board). */
 function TaskRanking({ tasks, channelName, onSelect }: {
   tasks: GuildTaskUsage[];
   channelName: (id: string) => string;
-  onSelect: (taskId: string) => void;
+  onSelect: (threadId: string) => void;
 }) {
   const max = Math.max(0, ...tasks.map((t) => t.cost ?? 0));
   return (
@@ -126,7 +127,7 @@ function TaskRanking({ tasks, channelName, onSelect }: {
         <div style={styles.empty}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No task spending yet" /></div>
       )}
       {tasks.slice(0, 12).map((t) => (
-        <div key={t.task_id} style={styles.rankRow} onClick={() => onSelect(t.task_id)}>
+        <div key={t.task_id} style={styles.rankRow} onClick={() => onSelect(t.thread_id)}>
           <span style={styles.taskTitle} title={`${t.title} (#${channelName(t.channel_id)})`}>
             <span style={{ color: STATUS_COLORS[t.status] ?? "var(--text-muted)", fontSize: 10, marginRight: 4 }}>●</span>
             {t.title}
@@ -152,10 +153,10 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
   channelName: (id: string) => string;
   guildId: string;
   onBack: () => void;
-  onSelectTask: (taskId: string) => void;
+  onSelectTask: (threadId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<Array<{ task_id: string; title: string; status: string; usage: AgentRunUsage | null }>>([]);
+  const [tasks, setTasks] = useState<Array<{ task_id: string; thread_id: string; title: string; status: string; usage: AgentRunUsage | null }>>([]);
   const [reports, setReports] = useState<Record<string, TaskEfficiencyReport>>({});
 
   useEffect(() => {
@@ -166,7 +167,7 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
     api.fetchGuildTasks(guildId).then((guildTasks) => {
       if (!alive) return;
       const inChannel = guildTasks.filter((t) => t.channel_id === channelId);
-      setTasks(inChannel.map((t) => ({ task_id: t.task_id, title: t.title, status: t.status, usage: null })));
+      setTasks(inChannel.map((t) => ({ task_id: t.task_id, thread_id: t.thread_id, title: t.title, status: t.status, usage: null })));
     }).catch(() => { if (alive) setTasks([]); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [channelId, guildId]);
@@ -204,7 +205,7 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
         const usage = t.usage;
         const failureRate = report?.tool_health?.failure_rate;
         return (
-          <div key={t.task_id} style={styles.taskRow} onClick={() => onSelectTask(t.task_id)}>
+          <div key={t.task_id} style={styles.taskRow} onClick={() => onSelectTask(t.thread_id)}>
             <span style={styles.taskTitle} title={t.title}>{t.title}</span>
             <span style={styles.taskMeta}>
               {usage?.cost != null ? <span>{formatUsd(usage.cost)}</span> : <span>—</span>}
@@ -228,8 +229,13 @@ export function GuildOverview() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<GuildUsageRange>(14);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
-  const [taskReport, setTaskReport] = useState<TaskEfficiencyReport | null>(null);
+  // Master-detail: clicking a task opens its thread in a right-side panel
+  // (same interaction as the task board).
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [resizeDragging, setResizeDragging] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(400);
 
   const channels = useMemo(() => (guildId ? channelsByGuildId[guildId] ?? [] : []), [channelsByGuildId, guildId]);
   const channelName = useCallback((id: string) => channels.find((c) => c.id === id)?.name ?? id.slice(0, 8), [channels]);
@@ -245,22 +251,31 @@ export function GuildOverview() {
     if (!guildId) return;
     setLoading(true);
     setSelectedChannel(null);
-    setSelectedTask(null);
-    setTaskReport(null);
+    setSelectedThreadId(null);
     Promise.all([api.fetchGuildUsageOverview(guildId, range), api.fetchGuildUsageDaily(guildId, range)])
       .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
       .catch((err) => console.error("fetch guild overview:", err))
       .finally(() => setLoading(false));
   }, [guildId, range]);
 
-  // Task efficiency card for the selected task (drilldown level 2).
-  useEffect(() => {
-    let alive = true;
-    setTaskReport(null);
-    if (!selectedTask) return;
-    api.fetchTaskEfficiency(selectedTask).then((report) => { if (alive) setTaskReport(report); }).catch(() => {});
-    return () => { alive = false; };
-  }, [selectedTask]);
+  // Resize the right-side thread panel (same drag pattern as TaskBoard).
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = threadPanelWidth;
+    setResizeDragging(true);
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = dragStartX.current - ev.clientX;
+      setThreadPanelWidth(Math.min(600, Math.max(280, dragStartWidth.current + delta)));
+    };
+    const onMouseUp = () => {
+      setResizeDragging(false);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [threadPanelWidth]);
 
   // Top models by cost (capped for the stacked chart).
   const topModels = useMemo(() => topModelsByCost(daily, 8), [daily]);
@@ -280,9 +295,8 @@ export function GuildOverview() {
   const today = overview?.today_cost ?? null;
   const yesterday = overview?.yesterday_cost ?? null;
 
-  // Selected channel's task list comes from TaskDrilldown; selection flow:
-  // channel → task list; task → efficiency card.
   return (
+    <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0, overflow: "hidden", background: "var(--bg-primary)" }}>
     <div style={styles.root}>
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Usage Overview</h1>
@@ -349,13 +363,13 @@ export function GuildOverview() {
             {/* Top tasks by cost — where the money went */}
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Top tasks by cost · {rangeLabel(range)}</h3>
-              <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={(taskId) => { setSelectedTask(taskId); setTaskReport(null); }} />
+              <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={(threadId) => { setSelectedThreadId(threadId); }} />
             </div>
 
             {/* Channel ranking */}
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Channel spend</h3>
-              <ChannelRanking channels={overview.channels} channelName={channelName} onSelect={(id) => { setSelectedChannel(id); setSelectedTask(null); }} />
+              <ChannelRanking channels={overview.channels} channelName={channelName} onSelect={(id) => { setSelectedChannel(id); setSelectedThreadId(null); }} />
             </div>
 
             {/* Model breakdown (stacked) */}
@@ -385,24 +399,34 @@ export function GuildOverview() {
                   channelName={channelName}
                   guildId={guildId!}
                   onBack={() => setSelectedChannel(null)}
-                  onSelectTask={(taskId) => setSelectedTask(taskId)}
+                  onSelectTask={(threadId) => { setSelectedThreadId(threadId); }}
                 />
-              </div>
-            )}
-
-            {/* Drilldown level 2: task efficiency card */}
-            {selectedTask && taskReport && (
-              <div style={styles.drillCard}>
-                <div style={styles.drillHeader}>
-                  <button style={styles.backBtn} onClick={() => setSelectedTask(null)}>← Tasks</button>
-                  <span style={{ fontWeight: 700, color: "var(--header-primary)", fontSize: "var(--font-size-sm)" }}>Task efficiency</span>
-                </div>
-                <EfficiencyCard report={taskReport} taskId={selectedTask} inline />
               </div>
             )}
           </>
         )}
       </div>
+      {/* Master-detail: task thread panel on the right (like the task board) */}
+      {selectedThreadId && (
+        <>
+          <div
+            style={{
+              width: 4,
+              flexShrink: 0,
+              cursor: "col-resize",
+              background: resizeDragging ? "var(--accent)" : undefined,
+              transition: "background 0.15s",
+            }}
+            onMouseDown={handleResizeMouseDown}
+            onMouseEnter={(e) => { if (!resizeDragging) (e.currentTarget.style.background = "var(--border-subtle)"); }}
+            onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
+          />
+          <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
+            <ThreadPanel threadId={selectedThreadId} onClose={() => setSelectedThreadId(null)} />
+          </div>
+        </>
+      )}
+    </div>
     </div>
   );
 }

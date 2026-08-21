@@ -553,6 +553,8 @@ export interface GuildChannelUsage {
 /** Per-task cost slice across the guild (top-tasks ranking source). */
 export interface GuildTaskUsage {
   task_id: string;
+  /** The task's thread — used to open the thread panel on click. */
+  thread_id: string;
   title: string;
   channel_id: string;
   cost: number | null;

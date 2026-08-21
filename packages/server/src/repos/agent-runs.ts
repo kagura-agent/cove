@@ -385,7 +385,7 @@ export class AgentRunsRepo {
     const placeholders = new Array(channelIds.length).fill("?").join(",");
     const rangeStart = range === "all" ? 0 : now - range * 24 * 60 * 60 * 1000;
     const rows = this.db.prepare(
-      `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id, t.title, t.status
+      `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id, t.thread_id AS task_thread_id, t.title, t.status
        FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
        LEFT JOIN tasks t ON t.thread_id = r.thread_id
@@ -393,7 +393,7 @@ export class AgentRunsRepo {
     ).all(...channelIds, rangeStart) as Array<{
       called_at: number; cost: number | null; total_tokens: number; model: string;
       channel_id: string; thread_id: string | null; task_id: string | null;
-      title: string | null; status: string | null;
+      task_thread_id: string | null; title: string | null; status: string | null;
     }>;
     if (rows.length === 0) return placeholder;
 
@@ -402,7 +402,7 @@ export class AgentRunsRepo {
     // an array (sorted) at the end.
     type ChannelAcc = { channel_id: string; cost: number | null; calls: number; tasks: number; modelsMap: Map<string, GuildUsageModel> };
     // Per-task accumulator for the top-tasks ranking.
-    type TaskAcc = { task_id: string; title: string; channel_id: string; cost: number | null; calls: number; status: TaskStatus };
+    type TaskAcc = { task_id: string; thread_id: string; title: string; channel_id: string; cost: number | null; calls: number; status: TaskStatus };
     const byChannel = new Map<string, ChannelAcc>();
     const tasksWithUsage = new Map<string, TaskAcc>();
     const channelTaskIds = new Map<string, Set<string>>();
@@ -428,7 +428,7 @@ export class AgentRunsRepo {
         channelTaskIds.get(row.channel_id)?.add(row.task_id) ?? channelTaskIds.set(row.channel_id, new Set([row.task_id]));
         let acc = tasksWithUsage.get(row.task_id);
         if (!acc) {
-          acc = { task_id: row.task_id, title: row.title ?? row.task_id, channel_id: row.channel_id, cost: null, calls: 0, status: (row.status ?? "open") as TaskStatus };
+          acc = { task_id: row.task_id, thread_id: row.task_thread_id ?? row.thread_id ?? "", title: row.title ?? row.task_id, channel_id: row.channel_id, cost: null, calls: 0, status: (row.status ?? "open") as TaskStatus };
           tasksWithUsage.set(row.task_id, acc);
         }
         acc.calls += 1;
