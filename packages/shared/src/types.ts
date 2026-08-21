@@ -517,6 +517,80 @@ export interface TaskRunStat {
   total_tokens: number;
 }
 
+/** One day of guild-level usage (Asia/Shanghai day bucketing). */
+export interface GuildDailyUsage {
+  /** Local (Asia/Shanghai) calendar day, YYYY-MM-DD. */
+  date: string;
+  cost: number | null;
+  total_tokens: number;
+  calls: number;
+  /** Distinct tasks with usage that day (via tasks.thread_id). */
+  tasks: number;
+  /** Per-model slices for the day (stacked bar source; empty when no data). */
+  models: GuildUsageModel[];
+}
+
+/** Per-model slice of a cost total (stacked bar source). */
+export interface GuildUsageModel {
+  model: string;
+  cost: number | null;
+  calls: number;
+  total_tokens: number;
+}
+
+/** One channel's share of guild usage (channel ranking / drilldown source). */
+export interface GuildChannelUsage {
+  channel_id: string;
+  /** Direct runs in the channel + every run in its threads. */
+  cost: number | null;
+  calls: number;
+  /** Distinct tasks (by tasks.thread_id) with usage in this channel. */
+  tasks: number;
+  /** Per-model breakdown for the channel. */
+  models: GuildUsageModel[];
+}
+
+/** Per-task cost slice across the guild (top-tasks ranking source). */
+export interface GuildTaskUsage {
+  task_id: string;
+  /** The task's thread — used to open the thread panel on click. */
+  thread_id: string;
+  title: string;
+  channel_id: string;
+  cost: number | null;
+  calls: number;
+  status: TaskStatus;
+}
+
+/** Time window for guild usage aggregations. "all" = no lower bound. */
+export type GuildUsageRange = 14 | 30 | 90 | "all";
+
+/** KPI + per-channel rollup for one guild. */
+export interface GuildUsageOverview {
+  guild_id: string;
+  /** Time window this overview was aggregated over (14d / 30d / 90d / all). */
+  range: GuildUsageRange;
+  today_cost: number | null;
+  yesterday_cost: number | null;
+  /** today - yesterday; null when either side is missing. */
+  delta: number | null;
+  month_cost: number | null;
+  /** Total cost within `range` (null when no cost rows in range). */
+  total_cost: number | null;
+  today_calls: number;
+  today_tokens: number;
+  /** Distinct tasks with usage today. */
+  today_tasks: number;
+  /** Channels with usage within `range`. */
+  active_channels: number;
+  /** Distinct tasks with usage within `range`. */
+  active_tasks: number;
+  /** Per-channel rollup within `range`, highest cost first. */
+  channels: GuildChannelUsage[];
+  /** Per-task cost rollup within `range`, highest cost first. */
+  tasks: GuildTaskUsage[];
+}
+
 /** A thread member entry. */
 export interface ThreadMember {
   id?: string; // thread id

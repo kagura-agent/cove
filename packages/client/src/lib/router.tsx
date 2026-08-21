@@ -28,6 +28,10 @@ export const router = createBrowserRouter([
         path: "guilds/:guildId/tasks",
         lazy: () => import("../components/TaskBoard").then((m) => ({ Component: m.TaskBoard })),
       },
+      {
+        path: "guilds/:guildId/overview",
+        lazy: () => import("../components/GuildOverview").then((m) => ({ Component: m.GuildOverview })),
+      },
     ],
   },
 ]);
