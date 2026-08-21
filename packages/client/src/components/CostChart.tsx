@@ -48,10 +48,10 @@ export const MODEL_PALETTE = [
   "#a855f7",
 ];
 
-const AXIS = "#949ba4";
-const GRID = "#3f4147";
-const TOOLTIP_BG = "#2b2d31";
-const TOOLTIP_BORDER = "#3f4147";
+const AXIS = "var(--text-muted)";
+const GRID = "var(--border-subtle)";
+const TOOLTIP_BG = "var(--bg-floating)";
+const TOOLTIP_BORDER = "var(--border-subtle)";
 
 export const costChartTheme = {
   axis: AXIS,
