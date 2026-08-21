@@ -64,7 +64,7 @@ export function setupGatewaySubscriptions(): void {
 
     // Auto-ack incoming messages in the active channel from other users
     if (msg.author.id !== selfId && msg.channel_id === activeChannelId) {
-      api.ackMessage(msg.channel_id, msg.id).catch(() => {});
+      api.ackMessage(msg.channel_id, msg.id).catch((err) => console.error("ackMessage (gateway auto-ack):", err));
     }
   });
 
