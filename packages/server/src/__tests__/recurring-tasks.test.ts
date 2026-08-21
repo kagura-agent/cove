@@ -180,7 +180,7 @@ describe("recurring task templates API", () => {
       headers: headers(),
     });
     expect(remove.status).toBe(200);
-    expect(await remove.json()).toEqual({ deleted: true });
+    expect(await remove.json()).toEqual({ deleted: true, affected_task_ids: [] });
   });
 
   it("deletes a template and clears recurrence associations from every occurrence", async () => {
@@ -220,6 +220,67 @@ describe("recurring task templates API", () => {
       recurring_id: null,
       recurring_seq: 0,
     });
+  });
+
+  it("cancels open/in_progress instances of a new_task template on delete and reports affected ids", async () => {
+    const created = await createTemplate({ occurrence_mode: "new_task" });
+    const template = await created.json() as { id: string; last_task_id: string };
+    const firstOccurrence = repos.tasks.getById(template.last_task_id)!;
+    expect(firstOccurrence.status).toBe("open");
+
+    // Simulate a second spawned instance, mid-work.
+    const secondCreate = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Second occurrence", description: "In flight" }),
+    });
+    const secondOccurrence = await secondCreate.json() as { task_id: string };
+    db.prepare("UPDATE tasks SET recurring_id = ?, recurring_seq = ? WHERE task_id = ?").run(template.id, 2, secondOccurrence.task_id);
+    repos.tasks.update(secondOccurrence.task_id, { status: "in_progress" });
+
+    // A done occurrence must be left alone.
+    const doneCreate = await app.request(`${API_PREFIX}/channels/${channelId}/tasks`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ title: "Done occurrence" }),
+    });
+    const doneOccurrence = await doneCreate.json() as { task_id: string };
+    db.prepare("UPDATE tasks SET recurring_id = ?, recurring_seq = ? WHERE task_id = ?").run(template.id, 3, doneOccurrence.task_id);
+    repos.tasks.update(doneOccurrence.task_id, { status: "done" });
+
+    const remove = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+
+    expect(remove.status).toBe(200);
+    const body = await remove.json() as { deleted: boolean; affected_task_ids: string[] };
+    expect(body.deleted).toBe(true);
+    expect(body.affected_task_ids.sort()).toEqual([firstOccurrence.task_id, secondOccurrence.task_id].sort());
+    expect(repos.tasks.getById(firstOccurrence.task_id)!.status).toBe("cancelled");
+    expect(repos.tasks.getById(secondOccurrence.task_id)!.status).toBe("cancelled");
+    expect(repos.tasks.getById(doneOccurrence.task_id)!.status).toBe("done");
+    // Recurrence association cleared for all occurrences.
+    for (const taskId of [firstOccurrence.task_id, secondOccurrence.task_id, doneOccurrence.task_id]) {
+      expect(repos.tasks.getById(taskId)).toMatchObject({ recurring_id: null, recurring_seq: 0 });
+    }
+  });
+
+  it("does not cancel the shared task of a same_task template on delete", async () => {
+    const created = await createTemplate(); // default occurrence_mode: same_task
+    const template = await created.json() as { id: string; last_task_id: string };
+    const sharedTask = repos.tasks.getById(template.last_task_id)!;
+    repos.tasks.update(sharedTask.task_id, { status: "in_progress" });
+
+    const remove = await app.request(`${API_PREFIX}/recurring-tasks/${template.id}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+
+    expect(remove.status).toBe(200);
+    const body = await remove.json() as { deleted: boolean; affected_task_ids: string[] };
+    expect(body.affected_task_ids).toEqual([]);
+    expect(repos.tasks.getById(sharedTask.task_id)!.status).toBe("in_progress");
   });
 
   it("separates thread membership from assignment and heartbeat execution", async () => {

@@ -422,5 +422,5 @@ export function updateRecurringTask(recurringTaskId: string, fields: UpdateRecur
   });
 }
 export function deleteRecurringTask(recurringTaskId: string) {
-  return api<{ deleted: boolean }>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, { method: "DELETE" });
+  return api<{ deleted: boolean; affected_task_ids: string[] }>(`${API_PREFIX}/recurring-tasks/${recurringTaskId}`, { method: "DELETE" });
 }

@@ -152,14 +152,28 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
         return c.json({ message: "Missing Permissions", code: 50013 }, 403);
       }
     }
-    const affected = repos.db.transaction(() => {
-      const taskIds = repos.tasks.listByRecurringId(recurringTask.id).map((task) => task.task_id);
+    const result = repos.db.transaction(() => {
+      const occurrences = repos.tasks.listByRecurringId(recurringTask.id);
+      const cancelledTaskIds: string[] = [];
+      // new_task templates spawn independent task instances per run; deleting
+      // the template orphans still-open instances (stale assignee, stuck on the
+      // board). Cancel open/in_progress instances so they leave the board.
+      // same_task templates reuse one long-lived task, which must not be
+      // cancelled by template deletion.
+      if (recurringTask.occurrence_mode === "new_task") {
+        for (const task of occurrences) {
+          if (task.status === "open" || task.status === "in_progress") {
+            repos.tasks.update(task.task_id, { status: "cancelled" });
+            cancelledTaskIds.push(task.task_id);
+          }
+        }
+      }
       repos.tasks.clearRecurrenceAssociation(recurringTask.id);
       repos.recurringTasks.delete(recurringTask.id);
-      return taskIds.map((taskId) => repos.tasks.getById(taskId)!);
+      return { tasks: occurrences.map((t) => repos.tasks.getById(t.task_id)!), cancelledTaskIds };
     })();
-    for (const task of affected) dispatcher?.taskUpdated(task);
-    return c.json({ deleted: true });
+    for (const task of result.tasks) dispatcher?.taskUpdated(task);
+    return c.json({ deleted: true, affected_task_ids: result.cancelledTaskIds });
   });
 
   return app;
