@@ -238,6 +238,9 @@ export function GuildOverview() {
   const [resizeDragging, setResizeDragging] = useState(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(400);
+  // Guild we have loaded data for — used to detect a real guild switch so the
+  // thread panel is only cleared then (not on URL search edits).
+  const loadedGuildRef = useRef<string | null>(null);
 
   const channels = useMemo(() => (guildId ? channelsByGuildId[guildId] ?? [] : []), [channelsByGuildId, guildId]);
   const channelName = useCallback((id: string) => channels.find((c) => c.id === id)?.name ?? id.slice(0, 8), [channels]);
@@ -267,14 +270,28 @@ export function GuildOverview() {
 
   useEffect(() => {
     if (!guildId) return;
+    // Only clear the thread panel when switching guilds. Do NOT put
+    // setSearchParams/closeThread in the deps: in react-router v6 the
+    // setSearchParams identity changes whenever the search string changes, so
+    // depending on it here would re-run this effect on every task click →
+    // loading flash + the ?thread= param getting deleted right after it is set.
+    const switchedGuild = loadedGuildRef.current !== guildId;
+    loadedGuildRef.current = guildId;
+    if (switchedGuild) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("thread");
+        return next;
+      }, { replace: true });
+    }
     setLoading(true);
     setSelectedChannel(null);
-    closeThread();
     Promise.all([api.fetchGuildUsageOverview(guildId, range), api.fetchGuildUsageDaily(guildId, range)])
       .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
       .catch((err) => console.error("fetch guild overview:", err))
       .finally(() => setLoading(false));
-  }, [guildId, range, closeThread]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, range]);
 
   // Resize the right-side thread panel (same drag pattern as TaskBoard).
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
