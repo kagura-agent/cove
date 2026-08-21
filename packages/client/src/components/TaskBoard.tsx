@@ -59,10 +59,9 @@ export function TaskBoard() {
   const efficiencyByChannel = useTaskEfficiencyStore((s) => s.byChannel);
   const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
   // Per-channel task usage rollups (taskId → AgentRunUsage), same shape as the
-  // InlineTaskList Usage column. Fetched once per channel, deduped in-flight,
-  // invalidated on usage events so the column tracks a running agent.
+  // InlineTaskList Usage column. Fetched per channel; usage events trigger a
+  // refetch for that channel so the column tracks a running agent.
   const [taskUsagesByChannel, setTaskUsagesByChannel] = useState<Record<string, Record<string, AgentRunUsage>>>({});
-  const fetchedUsageChannels = useRef(new Set<string>());
   const [view, setView] = useState<BoardView>("open");
   const [groupBy, setGroupBy] = useState<GroupBy>("channel");
   const [loading, setLoading] = useState(false);
@@ -109,35 +108,35 @@ export function TaskBoard() {
     }
   }, [guildId, guildTasks, fetchChannelEfficiency]);
 
-  // Per-task usage rollups, fetched once per channel (in-flight deduped).
+  // Stable key of the channels that currently have tasks. Derived from
+  // guildTasks but changes only when the *set* of channels changes (upserts of
+  // existing tasks keep the key stable), so the fetch effect below doesn't
+  // tear down and restart on every task store update — which would race the
+  // in-flight usage fetches and drop their results.
+  const usageChannelsKey = useMemo(() => {
+    const ids = Array.from(new Set(guildTasks.map((t) => t.channel_id))).sort();
+    return ids.join(",");
+  }, [guildTasks]);
+
+  // Per-task usage rollups, fetched once per channel present in the key.
   useEffect(() => {
-    if (!guildId) return;
-    const channelIds = new Set(guildTasks.map((t) => t.channel_id));
+    if (!guildId || !usageChannelsKey) return;
+    const channelIds = usageChannelsKey.split(",").filter(Boolean);
     let alive = true;
     const refresh = (channelId: string) => {
-      if (fetchedUsageChannels.current.has(channelId)) return;
-      fetchedUsageChannels.current.add(channelId);
       api.fetchTaskUsages(channelId)
         .then((usages) => { if (alive) setTaskUsagesByChannel((prev) => ({ ...prev, [channelId]: usages })); })
-        .catch((err) => {
-          console.error("fetch task usages:", err);
-          // Allow retry on next effect run instead of poisoning the cache.
-          fetchedUsageChannels.current.delete(channelId);
-        });
+        .catch((err) => console.error("fetch task usages:", err));
     };
     for (const channelId of channelIds) refresh(channelId);
-    // Live-refresh: a usage event for a channel invalidates its cached rollup.
+    // Live-refresh: a usage event for a channel refetches that channel's rollup.
     const onUsage = (run: { channel_id: string }) => {
-      fetchedUsageChannels.current.delete(run.channel_id);
-      setTaskUsagesByChannel((prev) => {
-        if (!prev[run.channel_id]) return prev;
-        const { [run.channel_id]: _, ...rest } = prev;
-        return rest;
-      });
+      if (!channelIds.includes(run.channel_id)) return;
+      refresh(run.channel_id);
     };
     dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
     return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
-  }, [guildId, guildTasks]);
+  }, [guildId, usageChannelsKey]);
 
   const filtered = useMemo(() => {
     let list = guildTasks;
