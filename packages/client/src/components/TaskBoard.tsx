@@ -11,7 +11,9 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
+import { useTaskUsageStore } from "../stores/useTaskUsageStore";
 import { TaskHealthLine } from "./TaskHealthLine";
+import { UsageChip } from "./UsageChip";
 import { ThreadPanel } from "./ThreadPanel";
 import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
@@ -56,6 +58,10 @@ export function TaskBoard() {
   const fetchGuildTasks = useTaskStore((s) => s.fetchGuildTasks);
   const efficiencyByChannel = useTaskEfficiencyStore((s) => s.byChannel);
   const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
+  // Per-channel task usage rollups, shared via the task usage store (cached +
+  // in-flight deduped, invalidated by AGENT_USAGE_UPDATED inside the store).
+  const taskUsagesByChannel = useTaskUsageStore((s) => s.byChannel);
+  const fetchChannelUsage = useTaskUsageStore((s) => s.fetchChannel);
   const [view, setView] = useState<BoardView>("open");
   const [groupBy, setGroupBy] = useState<GroupBy>("channel");
   const [loading, setLoading] = useState(false);
@@ -99,8 +105,11 @@ export function TaskBoard() {
     const channelIds = new Set(guildTasks.map((t) => t.channel_id));
     for (const channelId of channelIds) {
       fetchChannelEfficiency(channelId);
+      // Usage rollups live in the task usage store; repeated calls are
+      // idempotent (cached + in-flight deduped), so effect churn is harmless.
+      fetchChannelUsage(channelId);
     }
-  }, [guildId, guildTasks, fetchChannelEfficiency]);
+  }, [guildId, guildTasks, fetchChannelEfficiency, fetchChannelUsage]);
 
   const filtered = useMemo(() => {
     let list = guildTasks;
@@ -250,8 +259,14 @@ export function TaskBoard() {
       key: "health",
       width: 230,
       render: (_, task) => (
-        <TaskHealthLine report={efficiencyByChannel[task.channel_id]?.[task.task_id]} />
+        <TaskHealthLine report={efficiencyByChannel[task.channel_id]?.[task.task_id]} emptyPlaceholder="—" />
       ),
+    },
+    {
+      title: "Usage",
+      key: "usage",
+      width: 130,
+      render: (_, task) => <UsageChip usage={taskUsagesByChannel[task.channel_id]?.[task.task_id]} scope="task" />,
     },
     {
       title: "Status",
