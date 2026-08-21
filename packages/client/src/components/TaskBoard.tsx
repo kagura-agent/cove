@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Select, Table, Popconfirm, Tooltip, Space } from "antd";
 import { CheckOutlined, ClockCircleOutlined, EditOutlined, InboxOutlined, MessageOutlined, ReloadOutlined, RetweetOutlined, UnorderedListOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { Task, TaskStatus, UpdateTaskFields, AgentRunUsage } from "@cove/shared";
+import type { Task, TaskStatus, UpdateTaskFields } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useChannelStore } from "../stores/useChannelStore";
@@ -11,9 +11,9 @@ import { useMemberStore } from "../stores/useMemberStore";
 import { useUserStore } from "../stores/useUserStore";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
+import { useTaskUsageStore } from "../stores/useTaskUsageStore";
 import { TaskHealthLine } from "./TaskHealthLine";
 import { UsageChip } from "./UsageChip";
-import { dispatcher } from "../lib/gateway-dispatcher";
 import { ThreadPanel } from "./ThreadPanel";
 import { TaskEditDialog } from "./TaskEditDialog";
 import { routes } from "../lib/routes";
@@ -58,10 +58,10 @@ export function TaskBoard() {
   const fetchGuildTasks = useTaskStore((s) => s.fetchGuildTasks);
   const efficiencyByChannel = useTaskEfficiencyStore((s) => s.byChannel);
   const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
-  // Per-channel task usage rollups (taskId → AgentRunUsage), same shape as the
-  // InlineTaskList Usage column. Fetched per channel; usage events trigger a
-  // refetch for that channel so the column tracks a running agent.
-  const [taskUsagesByChannel, setTaskUsagesByChannel] = useState<Record<string, Record<string, AgentRunUsage>>>({});
+  // Per-channel task usage rollups, shared via the task usage store (cached +
+  // in-flight deduped, invalidated by AGENT_USAGE_UPDATED inside the store).
+  const taskUsagesByChannel = useTaskUsageStore((s) => s.byChannel);
+  const fetchChannelUsage = useTaskUsageStore((s) => s.fetchChannel);
   const [view, setView] = useState<BoardView>("open");
   const [groupBy, setGroupBy] = useState<GroupBy>("channel");
   const [loading, setLoading] = useState(false);
@@ -105,38 +105,11 @@ export function TaskBoard() {
     const channelIds = new Set(guildTasks.map((t) => t.channel_id));
     for (const channelId of channelIds) {
       fetchChannelEfficiency(channelId);
+      // Usage rollups live in the task usage store; repeated calls are
+      // idempotent (cached + in-flight deduped), so effect churn is harmless.
+      fetchChannelUsage(channelId);
     }
-  }, [guildId, guildTasks, fetchChannelEfficiency]);
-
-  // Stable key of the channels that currently have tasks. Derived from
-  // guildTasks but changes only when the *set* of channels changes (upserts of
-  // existing tasks keep the key stable), so the fetch effect below doesn't
-  // tear down and restart on every task store update — which would race the
-  // in-flight usage fetches and drop their results.
-  const usageChannelsKey = useMemo(() => {
-    const ids = Array.from(new Set(guildTasks.map((t) => t.channel_id))).sort();
-    return ids.join(",");
-  }, [guildTasks]);
-
-  // Per-task usage rollups, fetched once per channel present in the key.
-  useEffect(() => {
-    if (!guildId || !usageChannelsKey) return;
-    const channelIds = usageChannelsKey.split(",").filter(Boolean);
-    let alive = true;
-    const refresh = (channelId: string) => {
-      api.fetchTaskUsages(channelId)
-        .then((usages) => { if (alive) setTaskUsagesByChannel((prev) => ({ ...prev, [channelId]: usages })); })
-        .catch((err) => console.error("fetch task usages:", err));
-    };
-    for (const channelId of channelIds) refresh(channelId);
-    // Live-refresh: a usage event for a channel refetches that channel's rollup.
-    const onUsage = (run: { channel_id: string }) => {
-      if (!channelIds.includes(run.channel_id)) return;
-      refresh(run.channel_id);
-    };
-    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
-    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
-  }, [guildId, usageChannelsKey]);
+  }, [guildId, guildTasks, fetchChannelEfficiency, fetchChannelUsage]);
 
   const filtered = useMemo(() => {
     let list = guildTasks;

@@ -4,6 +4,7 @@ import { useChannelStore } from "../stores/useChannelStore";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useTaskStore } from "../stores/useTaskStore";
 import { useTaskEfficiencyStore } from "../stores/useTaskEfficiencyStore";
+import { useTaskUsageStore } from "../stores/useTaskUsageStore";
 import { useMemberStore } from "../stores/useMemberStore";
 import { Typography, Button, Popconfirm, Table, Tag, Space, Select } from "antd";
 import { MenuOutlined, DeleteOutlined, TeamOutlined, EditOutlined, MessageOutlined, RetweetOutlined } from "@ant-design/icons";
@@ -124,7 +125,6 @@ export function ChatArea({ onMenuClick, onMembersClick, membersOpen, activeTab, 
 /** Inline task table for the Tasks tab */
 function InlineTaskList({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(false);
-  const [taskUsages, setTaskUsages] = useState<Record<string, AgentRunUsage>>({});
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const navigate = useNavigate();
   const { guildId, threadId } = useActiveIds();
@@ -133,6 +133,10 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   const byTaskId = useTaskStore((s) => s.byTaskId);
   const efficiencyByTask = useTaskEfficiencyStore((s) => s.byChannel[channelId]);
   const fetchChannelEfficiency = useTaskEfficiencyStore((s) => s.fetchChannel);
+  // Per-task usage rollups via the shared task usage store (cached + in-flight
+  // deduped, invalidated by AGENT_USAGE_UPDATED inside the store).
+  const taskUsages = useTaskUsageStore((s) => s.byChannel[channelId]);
+  const fetchChannelUsage = useTaskUsageStore((s) => s.fetchChannel);
   const tasks = useMemo(() => Object.values(byTaskId).filter((t) => t.channel_id === channelId).sort((a, b) => b.updated_at - a.updated_at), [byTaskId, channelId]);
   const membersByGuildId = useMemberStore((s) => s.membersByGuildId);
   const members = useMemo(() => Object.values(guildId ? membersByGuildId[guildId] ?? {} : {}), [membersByGuildId, guildId]);
@@ -154,20 +158,9 @@ function InlineTaskList({ channelId }: { channelId: string }) {
   // Channel-wide efficiency as the shared baseline for row-level health lines.
   useEffect(() => {
     fetchChannelEfficiency(channelId);
-  }, [channelId, fetchChannelEfficiency]);
-
-  // Per-task usage for the Usage column. Live-refresh on usage events so the
-  // column tracks a running agent without a manual reload.
-  useEffect(() => {
-    let alive = true;
-    const refresh = () => {
-      api.fetchTaskUsages(channelId).then((u) => { if (alive) setTaskUsages(u); }).catch(() => {});
-    };
-    refresh();
-    const onUsage = (run: { channel_id: string }) => { if (run.channel_id === channelId) refresh(); };
-    dispatcher.on("AGENT_USAGE_UPDATED", onUsage);
-    return () => { alive = false; dispatcher.off("AGENT_USAGE_UPDATED", onUsage); };
-  }, [channelId]);
+    // Usage rollups: idempotent (cached + in-flight deduped in the store).
+    fetchChannelUsage(channelId);
+  }, [channelId, fetchChannelEfficiency, fetchChannelUsage]);
 
   const handleOpenThread = useCallback((task: Task) => {
     if (guildId) {
