@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Spin, Empty } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
 import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, GuildTaskUsage, GuildUsageRange, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
@@ -221,6 +221,7 @@ function TaskDrilldown({ channelId, channelName, guildId, onBack, onSelectTask }
 
 export function GuildOverview() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { guildId } = useActiveIds();
   const guilds = useGuildStore((s) => s.guilds);
   const channelsByGuildId = useChannelStore((s) => s.channelsByGuildId);
@@ -230,8 +231,9 @@ export function GuildOverview() {
   const [range, setRange] = useState<GuildUsageRange>(14);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   // Master-detail: clicking a task opens its thread in a right-side panel
-  // (same interaction as the task board).
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  // (same interaction as the task board). Selection lives in the URL so
+  // refresh/back keep working, matching TaskBoard.
+  const selectedThreadId = searchParams.get("thread");
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [resizeDragging, setResizeDragging] = useState(false);
   const dragStartX = useRef(0);
@@ -247,16 +249,32 @@ export function GuildOverview() {
     }
   }, [guildId, guilds, navigate]);
 
+  const handleOpenThread = useCallback((threadId: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("thread", threadId);
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const closeThread = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("thread");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   useEffect(() => {
     if (!guildId) return;
     setLoading(true);
     setSelectedChannel(null);
-    setSelectedThreadId(null);
+    closeThread();
     Promise.all([api.fetchGuildUsageOverview(guildId, range), api.fetchGuildUsageDaily(guildId, range)])
       .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
       .catch((err) => console.error("fetch guild overview:", err))
       .finally(() => setLoading(false));
-  }, [guildId, range]);
+  }, [guildId, range, closeThread]);
 
   // Resize the right-side thread panel (same drag pattern as TaskBoard).
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -363,13 +381,13 @@ export function GuildOverview() {
             {/* Top tasks by cost — where the money went */}
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Top tasks by cost · {rangeLabel(range)}</h3>
-              <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={(threadId) => { setSelectedThreadId(threadId); }} />
+              <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={handleOpenThread} />
             </div>
 
             {/* Channel ranking */}
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Channel spend</h3>
-              <ChannelRanking channels={overview.channels} channelName={channelName} onSelect={(id) => { setSelectedChannel(id); setSelectedThreadId(null); }} />
+              <ChannelRanking channels={overview.channels} channelName={channelName} onSelect={(id) => { setSelectedChannel(id); closeThread(); }} />
             </div>
 
             {/* Model breakdown (stacked) */}
@@ -399,14 +417,17 @@ export function GuildOverview() {
                   channelName={channelName}
                   guildId={guildId!}
                   onBack={() => setSelectedChannel(null)}
-                  onSelectTask={(threadId) => { setSelectedThreadId(threadId); }}
+                  onSelectTask={handleOpenThread}
                 />
               </div>
             )}
           </>
         )}
       </div>
-      {/* Master-detail: task thread panel on the right (like the task board) */}
+      </div>
+      {/* Master-detail: task thread panel on the right (like the task board).
+          Must be a sibling of the root column inside the outer row flex, or it
+          stacks below the content instead of sliding in from the right. */}
       {selectedThreadId && (
         <>
           <div
@@ -422,11 +443,10 @@ export function GuildOverview() {
             onMouseLeave={(e) => { if (!resizeDragging) (e.currentTarget.style.background = ""); }}
           />
           <div style={{ width: threadPanelWidth, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border-subtle)" }}>
-            <ThreadPanel threadId={selectedThreadId} onClose={() => setSelectedThreadId(null)} />
+            <ThreadPanel threadId={selectedThreadId} onClose={closeThread} />
           </div>
         </>
       )}
-    </div>
     </div>
   );
 }
