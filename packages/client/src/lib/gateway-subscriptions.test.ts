@@ -22,7 +22,7 @@ vi.mock("../stores/useTypingStore", () => ({
   typingTimeoutIds: new Set(),
 }));
 vi.mock("../stores/useReadStateStore", () => ({
-  useReadStateStore: { getState: vi.fn(() => ({ initReadStates: vi.fn(), setUnread: vi.fn(), markRead: vi.fn(), removeChannel: vi.fn() })) },
+  useReadStateStore: { getState: vi.fn(() => ({ initReadStates: vi.fn(), setUnread: vi.fn(), markRead: vi.fn(), removeChannel: vi.fn(), readStates: {} })) },
 }));
 vi.mock("../stores/useGuildStore", () => ({
   useGuildStore: { getState: vi.fn(() => ({ setGuilds: vi.fn(), addGuild: vi.fn(), removeGuild: vi.fn(), guilds: {} })) },
@@ -60,6 +60,8 @@ import { setupGatewaySubscriptions, teardownGatewaySubscriptions } from "./gatew
 import { useMessageStore } from "../stores/useMessageStore";
 import { useTypingStore } from "../stores/useTypingStore";
 import { useRoleStore } from "../stores/useRoleStore";
+import { useReadStateStore } from "../stores/useReadStateStore";
+import { ackMessage } from "./api";
 
 describe("gateway-subscriptions", () => {
   beforeEach(() => {
@@ -125,6 +127,54 @@ describe("gateway-subscriptions", () => {
     const update = vi.mocked(useTypingStore.setState).mock.calls.at(-1)?.[0] as (state: any) => any;
     expect(update({ typingUsers: {} }).typingUsers.c1[0]).toMatchObject({
       userId: "agent-1", username: "Agent", abortable: true, runId: "run-1",
+    });
+  });
+
+  describe("READY read-state reconcile", () => {
+    it("re-acks channels where the local cursor is ahead of the server", () => {
+      vi.mocked(useReadStateStore.getState).mockReturnValue({
+        initReadStates: vi.fn(),
+        setUnread: vi.fn(),
+        markRead: vi.fn(),
+        removeChannel: vi.fn(),
+        readStates: { c1: "200", c2: "50" },
+      } as never);
+
+      setupGatewaySubscriptions();
+      dispatcher.emit("READY", {
+        user: { id: "self", username: "self" },
+        guilds: [],
+        read_state: [
+          { channel_id: "c1", last_read_message_id: "100", last_message_id: "150" }, // local 200 > server 100
+          { channel_id: "c2", last_read_message_id: "50", last_message_id: "60" },   // local == server
+          { channel_id: "c3", last_read_message_id: null, last_message_id: "10" },    // no local cursor
+        ],
+      } as never);
+
+      expect(ackMessage).toHaveBeenCalledTimes(1);
+      expect(ackMessage).toHaveBeenCalledWith("c1", "200");
+    });
+
+    it("does not re-ack when local cursor is not ahead", () => {
+      vi.mocked(useReadStateStore.getState).mockReturnValue({
+        initReadStates: vi.fn(),
+        setUnread: vi.fn(),
+        markRead: vi.fn(),
+        removeChannel: vi.fn(),
+        readStates: { c1: "50", c2: "10" },
+      } as never);
+
+      setupGatewaySubscriptions();
+      dispatcher.emit("READY", {
+        user: { id: "self", username: "self" },
+        guilds: [],
+        read_state: [
+          { channel_id: "c1", last_read_message_id: "100", last_message_id: "150" }, // server 100 > local 50
+          { channel_id: "c2", last_read_message_id: "10", last_message_id: "60" },   // equal
+        ],
+      } as never);
+
+      expect(ackMessage).not.toHaveBeenCalled();
     });
   });
 

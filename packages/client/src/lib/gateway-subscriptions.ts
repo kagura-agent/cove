@@ -18,6 +18,7 @@ import { routes } from "./routes";
 import type { Channel } from "../types";
 import * as api from "./api";
 import { pruneSetIfNeeded } from "./prune-set.js";
+import { compareIds } from "./compare-ids";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let handlers: Array<{ event: keyof GatewayEventMap; handler: (data: any) => void }> = [];
@@ -64,7 +65,7 @@ export function setupGatewaySubscriptions(): void {
 
     // Auto-ack incoming messages in the active channel from other users
     if (msg.author.id !== selfId && msg.channel_id === activeChannelId) {
-      api.ackMessage(msg.channel_id, msg.id).catch(() => {});
+      api.ackMessage(msg.channel_id, msg.id).catch((err) => console.error("ackMessage (gateway auto-ack):", err));
     }
   });
 
@@ -184,6 +185,16 @@ export function setupGatewaySubscriptions(): void {
     }
     if (data.read_state) {
       useReadStateStore.getState().initReadStates(data.read_state);
+      // Reconcile: if the local read cursor is ahead of the server's (a previous
+      // ack failed or was lost), re-ack so the server cursor converges. Without
+      // this the local UI is correct but the server — and other devices — still
+      // think the channel is unread.
+      for (const st of data.read_state) {
+        const local = useReadStateStore.getState().readStates[st.channel_id];
+        if (local && (!st.last_read_message_id || compareIds(local, st.last_read_message_id) > 0)) {
+          api.ackMessage(st.channel_id, local).catch((err) => console.error("ackMessage (READY reconcile):", err));
+        }
+      }
     }
   });
 

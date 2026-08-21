@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { compareIds } from "../lib/compare-ids";
 
 interface ReadStateState {
   readStates: Record<string, string>; // channelId → lastReadMessageId
@@ -17,24 +18,39 @@ export const useReadStateStore = create<ReadStateState>((set, get) => ({
   readStates: {},
   unreadChannels: {},
   mentionCounts: {},
-  initReadStates: (states) => {
-    const rs: Record<string, string> = {};
-    const unread: Record<string, boolean> = {};
-    const mentions: Record<string, number> = {};
-    for (const s of states) {
-      if (s.last_read_message_id) {
-        rs[s.channel_id] = s.last_read_message_id;
+  initReadStates: (states) => set((s) => {
+    const rs = { ...s.readStates };
+    const unread = { ...s.unreadChannels };
+    const mentions = { ...s.mentionCounts };
+    for (const st of states) {
+      if (st.last_read_message_id) {
+        // Merge instead of overwrite: a local cursor that is already ahead of
+        // the server value wins (keeps the channel read after refresh/reconnect
+        // even if the server ack was delayed or lost).
+        const local = s.readStates[st.channel_id];
+        if (!local || compareIds(local, st.last_read_message_id) < 0) {
+          rs[st.channel_id] = st.last_read_message_id;
+        }
       }
-      // Channel is unread if it has messages and either no read cursor or cursor != latest message
-      if (s.last_message_id && s.last_read_message_id !== s.last_message_id) {
-        unread[s.channel_id] = true;
+      // Channel is unread if it has messages and either no read cursor or cursor != latest message.
+      // Local unread=false wins when the local cursor is at/after the server's latest.
+      if (st.last_message_id && st.last_read_message_id !== st.last_message_id) {
+        const localCursor = rs[st.channel_id];
+        const alreadyRead = localCursor && compareIds(localCursor, st.last_message_id) >= 0;
+        if (!alreadyRead) {
+          unread[st.channel_id] = true;
+        }
+      } else if (st.last_message_id) {
+        delete unread[st.channel_id];
       }
-      if (s.mention_count && s.mention_count > 0) {
-        mentions[s.channel_id] = s.mention_count;
+      // Only adopt server mention counts for channels that are actually unread;
+      // a locally-read channel must not resurrect its mention badge.
+      if (st.mention_count && st.mention_count > 0 && unread[st.channel_id]) {
+        mentions[st.channel_id] = st.mention_count;
       }
     }
-    set({ readStates: rs, unreadChannels: unread, mentionCounts: mentions });
-  },
+    return { readStates: rs, unreadChannels: unread, mentionCounts: mentions };
+  }),
   markRead: (channelId, messageId) => set((s) => ({
     readStates: { ...s.readStates, [channelId]: messageId },
     unreadChannels: { ...s.unreadChannels, [channelId]: false },

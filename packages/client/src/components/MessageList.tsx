@@ -411,8 +411,8 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
         !lastMsg.id.startsWith("pending-")
       ) {
         cappedMapSet(lastAckedIds, channelId, lastMsg.id);
-        useReadStateStore.getState().clearUnread(channelId);
-        api.ackMessage(channelId, lastMsg.id).catch(() => {});
+        useReadStateStore.getState().markRead(channelId, lastMsg.id);
+        api.ackMessage(channelId, lastMsg.id).catch((err) => console.error("ackMessage (cached):", err));
       }
       return;
     }
@@ -446,8 +446,8 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
             !lastMsg.id.startsWith("pending-")
           ) {
             cappedMapSet(lastAckedIds, channelId, lastMsg.id);
-            useReadStateStore.getState().clearUnread(channelId);
-            api.ackMessage(channelId, lastMsg.id).catch(() => {});
+            useReadStateStore.getState().markRead(channelId, lastMsg.id);
+            api.ackMessage(channelId, lastMsg.id).catch((err) => console.error("ackMessage (fresh fetch):", err));
           }
         }
       })
@@ -631,7 +631,7 @@ export function MessageList({ channelId, parentMessage }: { channelId: string; p
                   const lastMsg = messages[messages.length - 1];
                   if (lastMsg && !lastMsg.id.startsWith("pending-")) {
                     useReadStateStore.getState().markRead(channelId, lastMsg.id);
-                    api.ackMessage(channelId, lastMsg.id).catch(() => {});
+                    api.ackMessage(channelId, lastMsg.id).catch((err) => console.error("ackMessage (mark-read banner):", err));
                   }
                 }
                 scrollToBottom();
