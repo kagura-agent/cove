@@ -2,10 +2,18 @@ import { Hono } from "hono";
 import type { AppEnv } from "../auth.js";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
-import { PermissionBits, type AgentRunEventType } from "@cove/shared";
+import { PermissionBits, type AgentRunEventType, type GuildUsageRange } from "@cove/shared";
 import { parseJsonBody, validationError } from "../validation.js";
 import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
 const TYPES = new Set<AgentRunEventType>(["run_started","run_finished","run_failed","run_aborted","tool_started","tool_progress","tool_finished","tool_failed","command_output","patch_summary","approval_requested","subagent_started","subagent_progress","subagent_finished","subagent_failed"]);
+
+/** Parse ?range=14|30|90|all for guild usage endpoints; default 14. */
+function parseGuildUsageRange(raw: string | undefined): GuildUsageRange {
+  if (raw === "30") return 30;
+  if (raw === "90") return 90;
+  if (raw === "all") return "all";
+  return 14;
+}
 
 /** Channels in a guild the user can VIEW_CHANNEL on (non-thread only — usage
  *  aggregates attribute thread runs to their parent channel). Mirrors the
@@ -65,18 +73,28 @@ export function agentRunRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
    const guildId = c.req.param("guildId");
    const user = c.get("botUser");
    await requireGuildPermission(repos, guildId, user.id, PermissionBits.VIEW_CHANNEL);
+   const range = parseGuildUsageRange(c.req.query("range"));
    const visible = await visibleChannelIds(repos, guildId, user.id);
-   return c.json(repos.agentRuns.usageByGuild(guildId, visible));
+   return c.json(repos.agentRuns.usageByGuild(guildId, visible, range));
  });
  // Guild-level daily usage series (#584): Asia/Shanghai day buckets, zero-filled.
+ // days is capped at 90; range=all maps to 90.
  app.get("/guilds/:guildId/usage/daily", async c => {
    const guildId = c.req.param("guildId");
    const user = c.get("botUser");
    await requireGuildPermission(repos, guildId, user.id, PermissionBits.VIEW_CHANNEL);
-   const days = Number(c.req.query("days"));
-   const clamped = Number.isFinite(days) ? Math.floor(days) : 14;
+   // range takes precedence when present; otherwise honor the legacy days param.
+   const rangeRaw = c.req.query("range");
+   let days: number;
+   if (rangeRaw !== undefined) {
+     const range = parseGuildUsageRange(rangeRaw);
+     days = range === "all" ? 90 : range;
+   } else {
+     const d = Number(c.req.query("days"));
+     days = Number.isFinite(d) ? Math.floor(d) : 14;
+   }
    const visible = await visibleChannelIds(repos, guildId, user.id);
-   return c.json(repos.agentRuns.usageDailyByGuild(guildId, visible, clamped));
+   return c.json(repos.agentRuns.usageDailyByGuild(guildId, visible, days));
  });
  // Per-task efficiency report (#572 Phase 1): cost + tool health + run health
  // + baseline comparison, all computed from existing data.

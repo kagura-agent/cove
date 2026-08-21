@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Spin, Empty } from "antd";
 import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
-import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, GuildTaskUsage, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
+import type { GuildChannelUsage, GuildDailyUsage, GuildUsageOverview, GuildTaskUsage, GuildUsageRange, TaskEfficiencyReport, AgentRunUsage } from "@cove/shared";
 import { useActiveIds } from "../hooks/useActiveIds";
 import { useGuildStore } from "../stores/useGuildStore";
 import { useChannelStore } from "../stores/useChannelStore";
@@ -46,7 +46,22 @@ const styles = {
   taskMeta: { fontSize: "var(--font-size-xs)", color: MUTED, flexShrink: 0, fontVariantNumeric: "tabular-nums", display: "flex", gap: "var(--space-sm)" } as CSSProperties,
   empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: MUTED, gap: "var(--space-sm)", padding: "var(--space-xxl)" } as CSSProperties,
   drillCard: { background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--space-sm)", padding: "var(--space-md)", marginTop: "var(--space-md)" } as CSSProperties,
+  rangeTabs: { display: "flex", gap: 2, background: "var(--bg-modifier-hover, rgba(255,255,255,0.04))", borderRadius: "var(--space-xs)", padding: 2, marginLeft: "auto" } as CSSProperties,
+  rangeTab: { background: "none", border: "none", borderRadius: 6, padding: "2px 10px", fontSize: "var(--font-size-xs)", color: MUTED, cursor: "pointer" } as CSSProperties,
+  rangeTabActive: { background: "var(--bg-floating, #232428)", color: "var(--header-primary)", fontWeight: 600 } as CSSProperties,
 } as const;
+
+/** Range label for card titles, e.g. "last 14 days" / "all time". */
+function rangeLabel(range: GuildUsageRange): string {
+  return range === "all" ? "all time" : `last ${range} days`;
+}
+
+const RANGE_OPTIONS: Array<{ value: GuildUsageRange; label: string }> = [
+  { value: 14, label: "14d" },
+  { value: 30, label: "30d" },
+  { value: 90, label: "90d" },
+  { value: "all", label: "All" },
+];
 
 function KpiCard({ label, value, sub, subColor }: { label: string; value: string; sub?: ReactNode; subColor?: string }) {
   return (
@@ -211,6 +226,7 @@ export function GuildOverview() {
   const [overview, setOverview] = useState<GuildUsageOverview | null>(null);
   const [daily, setDaily] = useState<GuildDailyUsage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<GuildUsageRange>(14);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [taskReport, setTaskReport] = useState<TaskEfficiencyReport | null>(null);
@@ -231,11 +247,11 @@ export function GuildOverview() {
     setSelectedChannel(null);
     setSelectedTask(null);
     setTaskReport(null);
-    Promise.all([api.fetchGuildUsageOverview(guildId), api.fetchGuildUsageDaily(guildId, 14)])
+    Promise.all([api.fetchGuildUsageOverview(guildId, range), api.fetchGuildUsageDaily(guildId, range)])
       .then(([ov, dl]) => { setOverview(ov); setDaily(dl); })
       .catch((err) => console.error("fetch guild overview:", err))
       .finally(() => setLoading(false));
-  }, [guildId]);
+  }, [guildId, range]);
 
   // Task efficiency card for the selected task (drilldown level 2).
   useEffect(() => {
@@ -271,6 +287,19 @@ export function GuildOverview() {
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Usage Overview</h1>
         <span style={{ fontSize: "var(--font-size-xs)", color: MUTED }}>Cost where the agents work</span>
+        <div style={styles.rangeTabs} role="tablist" aria-label="Time range">
+          {RANGE_OPTIONS.map((opt) => (
+            <button
+              key={String(opt.value)}
+              role="tab"
+              aria-selected={range === opt.value}
+              style={range === opt.value ? styles.rangeTabActive : styles.rangeTab}
+              onClick={() => setRange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div style={styles.content}>
         {!overview || (overview.channels.length === 0 && overview.total_cost === null) ? (
@@ -286,14 +315,14 @@ export function GuildOverview() {
               <KpiCard label="Today tasks" value={String(overview.today_tasks)} sub={overview.today_tasks > 0 ? "tasks with usage today" : undefined} />
               <KpiCard label="Yesterday" value={yesterday != null ? formatUsd(yesterday) : "—"} sub={<DeltaBadge delta={overview.delta} />} />
               <KpiCard label="This month" value={overview.month_cost != null ? formatUsd(overview.month_cost) : "—"} />
-              <KpiCard label="All time" value={overview.total_cost != null ? formatUsd(overview.total_cost) : "—"} />
+              <KpiCard label={`Total · ${rangeLabel(range)}`} value={overview.total_cost != null ? formatUsd(overview.total_cost) : "—"} />
               <KpiCard label="Active channels" value={String(overview.active_channels)} sub={`${channels.length} total channels`} />
               <KpiCard label="Active tasks" value={String(overview.active_tasks)} />
             </div>
 
-            {/* 14-day spend trend (bar = cost, line = tokens, dashed = tasks) */}
+            {/* Daily spend trend (bar = cost, line = tokens, dashed = tasks) */}
             <div style={styles.card}>
-              <h3 style={styles.cardTitle}>Daily spend · last 14 days</h3>
+              <h3 style={styles.cardTitle}>Daily spend · {rangeLabel(range)}</h3>
               <CostChartFrame height={220}>
                 <ComposedChart data={dailyData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <CostGrid />
@@ -319,7 +348,7 @@ export function GuildOverview() {
 
             {/* Top tasks by cost — where the money went */}
             <div style={styles.card}>
-              <h3 style={styles.cardTitle}>Top tasks by cost</h3>
+              <h3 style={styles.cardTitle}>Top tasks by cost · {rangeLabel(range)}</h3>
               <TaskRanking tasks={overview.tasks} channelName={channelName} onSelect={(taskId) => { setSelectedTask(taskId); setTaskReport(null); }} />
             </div>
 

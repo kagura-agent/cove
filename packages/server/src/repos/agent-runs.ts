@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage, GuildChannelUsage, GuildDailyUsage, GuildUsageModel, GuildUsageOverview, TaskStatus } from "@cove/shared";
+import type { AgentRun, AgentRunEvent, AgentRunEventType, AgentRunStatus, AgentRunUsage, GuildChannelUsage, GuildDailyUsage, GuildUsageModel, GuildUsageOverview, GuildUsageRange, TaskStatus } from "@cove/shared";
 import { computeRunStats, type RunStatsRow } from "./run-stats.js";
 
 const MAX_DETAIL = 8_000;
@@ -369,9 +369,10 @@ export class AgentRunsRepo {
    * Time buckets use Asia/Shanghai calendar days (server local time for the
    * deployment, UTC+8).
    */
-  usageByGuild(guildId: string, channelIds: string[], now: number = Date.now()): GuildUsageOverview {
+  usageByGuild(guildId: string, channelIds: string[], range: GuildUsageRange = 14, now: number = Date.now()): GuildUsageOverview {
     const placeholder: GuildUsageOverview = {
       guild_id: guildId,
+      range,
       today_cost: null, yesterday_cost: null, delta: null,
       month_cost: null, total_cost: null,
       today_calls: 0, today_tokens: 0, today_tasks: 0,
@@ -382,13 +383,14 @@ export class AgentRunsRepo {
     if (channelIds.length === 0) return placeholder;
 
     const placeholders = new Array(channelIds.length).fill("?").join(",");
+    const rangeStart = range === "all" ? 0 : now - range * 24 * 60 * 60 * 1000;
     const rows = this.db.prepare(
       `SELECT u.called_at, u.cost, u.total_tokens, u.model, r.channel_id, r.thread_id, t.task_id, t.title, t.status
        FROM agent_run_usage u
        JOIN agent_runs r ON r.run_id = u.run_id
        LEFT JOIN tasks t ON t.thread_id = r.thread_id
-       WHERE r.channel_id IN (${placeholders})`
-    ).all(...channelIds) as Array<{
+       WHERE r.channel_id IN (${placeholders}) AND u.called_at >= ?`
+    ).all(...channelIds, rangeStart) as Array<{
       called_at: number; cost: number | null; total_tokens: number; model: string;
       channel_id: string; thread_id: string | null; task_id: string | null;
       title: string | null; status: string | null;
@@ -462,6 +464,7 @@ export class AgentRunsRepo {
 
     return {
       guild_id: guildId,
+      range,
       today_cost: nz(todayCost, todayCostCount),
       yesterday_cost: nz(yesterdayCost, yesterdayCostCount),
       delta: todayCostCount > 0 && yesterdayCostCount > 0 ? todayCost - yesterdayCost : null,

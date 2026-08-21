@@ -180,4 +180,44 @@ describe("guild usage overview routes", () => {
     expect(body.channels[0].channel_id).toBe(channel.id);
     db.close();
   });
+
+  it("filters overview by range (only rows within the window)", async () => {
+    const { db, app, channel, repos } = setup();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+    const t0 = startOfToday.getTime();
+    // 40 days ago: outside 14d but inside 90d/all.
+    const old = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger" });
+    await recordUsage(app, old.run_id, "m1", 1000, 500, 0.5, t0 - 40 * dayMs);
+    // Today: inside every range.
+    const nowRun = repos.agentRuns.start({ agent_id: "agent", channel_id: channel.id, trigger_message_id: "trigger2" });
+    await recordUsage(app, nowRun.run_id, "m2", 100, 50, 0.01, t0 + 1);
+
+    // Default (14d): only today's row.
+    const r14 = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/overview`, { headers: { Authorization: "Bot viewer-token" } });
+    const b14 = await r14.json();
+    expect(b14.range).toBe(14);
+    expect(b14.total_cost).toBeCloseTo(0.01);
+    expect(b14.active_tasks).toBe(0);
+
+    // range=90: both rows.
+    const r90 = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/overview?range=90`, { headers: { Authorization: "Bot viewer-token" } });
+    const b90 = await r90.json();
+    expect(b90.range).toBe(90);
+    expect(b90.total_cost).toBeCloseTo(0.51);
+    expect(b90.active_tasks).toBe(0);
+
+    // range=all: both rows.
+    const rall = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/overview?range=all`, { headers: { Authorization: "Bot viewer-token" } });
+    const ball = await rall.json();
+    expect(ball.range).toBe("all");
+    expect(ball.total_cost).toBeCloseTo(0.51);
+
+    // daily honors range=30 (30 buckets, only today's bucket has cost).
+    const d30 = await app.request(`${API_PREFIX}/guilds/${channel.guild_id}/usage/daily?range=30`, { headers: { Authorization: "Bot viewer-token" } });
+    const dd30 = await d30.json();
+    expect(dd30).toHaveLength(30);
+    expect(dd30[29].cost).toBeCloseTo(0.01);
+    db.close();
+  });
 });

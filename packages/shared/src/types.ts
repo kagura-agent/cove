@@ -560,23 +560,32 @@ export interface GuildTaskUsage {
   status: TaskStatus;
 }
 
+/** Time window for guild usage aggregations. "all" = no lower bound. */
+export type GuildUsageRange = 14 | 30 | 90 | "all";
+
 /** KPI + per-channel rollup for one guild. */
 export interface GuildUsageOverview {
   guild_id: string;
+  /** Time window this overview was aggregated over (14d / 30d / 90d / all). */
+  range: GuildUsageRange;
   today_cost: number | null;
   yesterday_cost: number | null;
   /** today - yesterday; null when either side is missing. */
   delta: number | null;
   month_cost: number | null;
+  /** Total cost within `range` (null when no cost rows in range). */
   total_cost: number | null;
   today_calls: number;
   today_tokens: number;
   /** Distinct tasks with usage today. */
   today_tasks: number;
+  /** Channels with usage within `range`. */
   active_channels: number;
+  /** Distinct tasks with usage within `range`. */
   active_tasks: number;
+  /** Per-channel rollup within `range`, highest cost first. */
   channels: GuildChannelUsage[];
-  /** Per-task cost rollup, highest cost first (top-tasks ranking). */
+  /** Per-task cost rollup within `range`, highest cost first. */
   tasks: GuildTaskUsage[];
 }
 
