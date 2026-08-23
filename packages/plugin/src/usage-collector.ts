@@ -93,6 +93,12 @@ export interface UsageBridge {
 export class CoveUsageCollector {
   /** Per-session cumulative token/cost baseline (for delta computation). */
   private baselines = new Map<string, TokenTotals>();
+  /** Last observed OpenClaw session id per sessionKey. A change means the
+   * transcript was rotated (new session id, cumulative messages restart from
+   * zero) — the next agent_end is the new session's first turn and its full
+   * totals must be reported, not diffed against the pre-rotation baseline
+   * (which would produce an all-negative delta and silently drop the run, #588). */
+  private sessionIds = new Map<string, string | null>();
 
   constructor(
     private readonly bridge: UsageBridge,
@@ -127,9 +133,27 @@ export class CoveUsageCollector {
   onAgentEnd(event: AgentEndEvent, ctx: AgentEndContext): void {
     const sessionKey = ctx.sessionKey ?? ctx.sessionId;
     if (!sessionKey) return;
+    const sessionId = ctx.sessionId ?? null;
     const totals = sumUsage(event.messages ?? []);
     const baseline = this.baselines.get(sessionKey);
-    if (!baseline) {
+    // OpenClaw rotates the transcript (new session id) when the session grows
+    // too large; after rotation the cumulative messages restart from zero. The
+    // first agent_end of the new session therefore reports its full totals as
+    // this turn's consumption instead of a negative delta against the
+    // pre-rotation baseline (#588).
+    const rotated = sessionId !== null && this.sessionIds.has(sessionKey) && this.sessionIds.get(sessionKey) !== sessionId;
+    if (!baseline || rotated) {
+      if (rotated) {
+        // Transcript rotation: the new session's cumulative totals ARE this
+        // turn's consumption (fresh history). Report full totals, then keep
+        // the new session id so the next turn diffs against this baseline.
+        this.log?.warn?.(`cove: session ${sessionKey} rotated (${this.sessionIds.get(sessionKey)} -> ${sessionId}); reporting full totals as first turn of new session`);
+        this.baselines.set(sessionKey, totals);
+        this.persistBaselines();
+        this.sessionIds.set(sessionKey, sessionId);
+        this.reportDelta(sessionKey, totals, event, ctx);
+        return;
+      }
       const fresh = this.bridge.consumeFreshSession(sessionKey);
       if (fresh) {
         // The session was created by this Cove run and this is its first turn:
@@ -138,6 +162,7 @@ export class CoveUsageCollector {
         // (#551 — one-shot subagents and fresh task threads were 100% missed).
         this.baselines.set(sessionKey, totals);
         this.persistBaselines();
+        this.sessionIds.set(sessionKey, sessionId);
         this.reportDelta(sessionKey, totals, event, ctx);
         return;
       }
@@ -145,8 +170,10 @@ export class CoveUsageCollector {
       // without reporting (the messages include pre-existing history).
       this.baselines.set(sessionKey, totals);
       this.persistBaselines();
+      this.sessionIds.set(sessionKey, sessionId);
       return;
     }
+    this.sessionIds.set(sessionKey, sessionId);
     const delta = this.computeDelta(sessionKey, totals, baseline);
     this.baselines.set(sessionKey, totals);
     this.persistBaselines();
