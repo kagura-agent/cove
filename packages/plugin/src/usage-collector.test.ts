@@ -266,4 +266,57 @@ describe("CoveUsageCollector (agent_end source)", () => {
     expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 2000, output_tokens: 900 });
     expect(record.mock.calls[0][1].cost).toBeCloseTo(0.09, 10);
   });
+
+  it("reports full totals after a transcript rotation (new session id) instead of a negative delta (#588)", async () => {
+    // #588: OpenClaw rotates the transcript (new session id) when the session
+    // grows too large. Cumulative messages restart from zero, so diffing the
+    // new session's totals against the pre-rotation baseline yields an
+    // all-negative delta that would silently drop the entire run's usage.
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "agent:kagura:cove:direct:thread-1";
+    // Turn 1: old session id, 300k input (large history), silent baseline.
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(300000, 50000, 0, 1.5)], success: true }, { sessionKey, sessionId: "old-session-aaa" });
+    expect(record).not.toHaveBeenCalled();
+    // Turn 2: session rotated — new session id, cumulative totals restart from
+    // the current turn's consumption (e.g. 15000 input). Must report the full
+    // totals (15000), NOT a clamped-to-0 delta against 300000.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(15000, 4000, 0, 0.08)], success: true }, { sessionKey, sessionId: "new-session-bbb" });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][0]).toBe("cove-run-1");
+    expect(record.mock.calls[0][1]).toMatchObject({
+      input_tokens: 15000, output_tokens: 4000, cost: 0.08, cost_source: "provider",
+    });
+    // Turn 3: same (rotated) session id — normal delta path from the new baseline.
+    collector.onAgentEnd({ runId: "r3", messages: [usageMsg(18000, 4500, 0, 0.09)], success: true }, { sessionKey, sessionId: "new-session-bbb" });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(2));
+    expect(record.mock.calls[1][1]).toMatchObject({ input_tokens: 3000, output_tokens: 500 });
+  });
+
+  it("does not double-report after rotation when the run has no new usage (#588)", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "agent:kagura:cove:direct:thread-1";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500)], success: true }, { sessionKey, sessionId: "s1" });
+    expect(record).not.toHaveBeenCalled();
+    // Rotation with zero-total first turn (tool-only turn, no LLM call).
+    collector.onAgentEnd({ runId: "r2", messages: [], success: true }, { sessionKey, sessionId: "s2" });
+    expect(record).not.toHaveBeenCalled();
+    // No baseline regression warning fired for the empty rotation.
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("ignores sessionId absence (null) and keeps using sessionKey identity (#588 guard)", async () => {
+    // Some harness paths omit sessionId; identity must fall back to sessionKey
+    // without treating a null sessionId as a rotation.
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(100, 50)], success: true }, { sessionKey, sessionId: "s1" });
+    expect(record).not.toHaveBeenCalled();
+    // sessionId absent (undefined → null): NOT a rotation; normal delta path.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(100, 50), usageMsg(500, 200)], success: true }, { sessionKey });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 500, output_tokens: 200 });
+  });
 });
