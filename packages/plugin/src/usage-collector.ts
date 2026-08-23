@@ -111,11 +111,22 @@ export class CoveUsageCollector {
   private loadBaselines(): void {
     try {
       if (!existsSync(this.stateFile)) return;
-      const raw = JSON.parse(readFileSync(this.stateFile, "utf8")) as Record<string, TokenTotals>;
-      for (const [key, value] of Object.entries(raw)) {
+      const raw = JSON.parse(readFileSync(this.stateFile, "utf8")) as
+        | Record<string, TokenTotals>
+        | { baselines?: Record<string, TokenTotals>; sessionIds?: Record<string, string | null> };
+      // v2 format: { baselines, sessionIds }. v1 was a bare baselines map —
+      // detect by the presence of a `baselines` object and load both maps so
+      // rotation detection survives gateway restarts (#588 restart gap).
+      const baselines = "baselines" in raw && raw.baselines ? raw.baselines : (raw as Record<string, TokenTotals>);
+      for (const [key, value] of Object.entries(baselines)) {
         if (value && typeof value === "object") this.baselines.set(key, value);
       }
-      this.log?.warn?.(`cove: restored ${this.baselines.size} usage baseline(s) from ${this.stateFile}`);
+      if ("sessionIds" in raw && raw.sessionIds) {
+        for (const [key, value] of Object.entries(raw.sessionIds)) {
+          if (typeof value === "string" || value === null) this.sessionIds.set(key, value);
+        }
+      }
+      this.log?.warn?.(`cove: restored ${this.baselines.size} usage baseline(s) + ${this.sessionIds.size} session id(s) from ${this.stateFile}`);
     } catch (error) {
       this.log?.warn?.(`cove: failed to load usage baselines: ${(error as Error)?.message ?? String(error)}`);
     }
@@ -124,7 +135,11 @@ export class CoveUsageCollector {
   private persistBaselines(): void {
     try {
       mkdirSync(this.stateFile.substring(0, this.stateFile.lastIndexOf("/")), { recursive: true });
-      writeFileSync(this.stateFile, JSON.stringify(Object.fromEntries(this.baselines)), { mode: 0o600 });
+      writeFileSync(
+        this.stateFile,
+        JSON.stringify({ baselines: Object.fromEntries(this.baselines), sessionIds: Object.fromEntries(this.sessionIds) }),
+        { mode: 0o600 },
+      );
     } catch (error) {
       this.log?.warn?.(`cove: failed to persist usage baselines: ${(error as Error)?.message ?? String(error)}`);
     }
@@ -149,8 +164,8 @@ export class CoveUsageCollector {
         // the new session id so the next turn diffs against this baseline.
         this.log?.warn?.(`cove: session ${sessionKey} rotated (${this.sessionIds.get(sessionKey)} -> ${sessionId}); reporting full totals as first turn of new session`);
         this.baselines.set(sessionKey, totals);
-        this.persistBaselines();
         this.sessionIds.set(sessionKey, sessionId);
+        this.persistBaselines();
         this.reportDelta(sessionKey, totals, event, ctx);
         return;
       }
@@ -161,16 +176,16 @@ export class CoveUsageCollector {
         // full totals from a zero baseline instead of silently dropping it
         // (#551 — one-shot subagents and fresh task threads were 100% missed).
         this.baselines.set(sessionKey, totals);
-        this.persistBaselines();
         this.sessionIds.set(sessionKey, sessionId);
+        this.persistBaselines();
         this.reportDelta(sessionKey, totals, event, ctx);
         return;
       }
       // First observed end for a pre-existing session: record the baseline
       // without reporting (the messages include pre-existing history).
       this.baselines.set(sessionKey, totals);
-      this.persistBaselines();
       this.sessionIds.set(sessionKey, sessionId);
+      this.persistBaselines();
       return;
     }
     this.sessionIds.set(sessionKey, sessionId);
