@@ -63,14 +63,14 @@ export function TaskHealthLine({ report, hideDelta, emptyPlaceholder }: TaskHeal
     const abs = Math.abs(costDelta);
     // Skip display when the delta rounds to zero (would render "−$0.0000").
     if (abs >= 0.001) {
-      deltas.push({ text: `${costDelta > 0 ? "+" : "−"}${formatUsd(abs)} vs median`, color: costColor });
+      deltas.push({ text: `${costDelta > 0 ? "↑" : "↓"} ${formatUsd(abs)} vs median`, color: costColor });
     }
   }
   if (failureColor && failureDelta !== null) {
     const pp = Math.round(Math.abs(failureDelta) * 100);
     // Skip display when the delta rounds to zero (would render "−0pp").
     if (pp > 0) {
-      deltas.push({ text: `${failureDelta > 0 ? "+" : "−"}${pp}pp fail vs median`, color: failureColor });
+      deltas.push({ text: `${failureDelta > 0 ? "↑" : "↓"} ${pp}pp fail vs median`, color: failureColor });
     }
   }
 
@@ -90,7 +90,7 @@ export function TaskHealthLine({ report, hideDelta, emptyPlaceholder }: TaskHeal
       <span>{parts.join(" · ")}</span>
       {deltas.map((d, i) => (
         <span key={i} style={{ color: d.color ?? MUTED, fontWeight: 600 }}>
-          ↑ {d.text}
+          {d.text}
         </span>
       ))}
     </div>
