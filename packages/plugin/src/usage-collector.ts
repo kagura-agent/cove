@@ -147,7 +147,26 @@ export class CoveUsageCollector {
       this.persistBaselines();
       return;
     }
-    const delta: TokenTotals = {
+    const delta = this.computeDelta(sessionKey, totals, baseline);
+    this.baselines.set(sessionKey, totals);
+    this.persistBaselines();
+    if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
+      return;
+    }
+    this.reportDelta(sessionKey, delta, event, ctx);
+  }
+
+  /**
+   * Compute the per-turn delta from a baseline, guarding against cumulative
+   * usage regression. The agent_end message list is cumulative, but the list
+   * can be trimmed or usage recomputed between turns, which makes the raw
+   * delta negative on some dimension (e.g. cost drops while cacheRead grows).
+   * A negative cost would under-report the run and poison the aggregate
+   * (observed as negative-cost rows in agent_run_usage, #586), so each
+   * dimension is clamped at 0 and the regression is surfaced in the log.
+   */
+  private computeDelta(sessionKey: string, totals: TokenTotals, baseline: TokenTotals): TokenTotals {
+    const raw = {
       input: totals.input - baseline.input,
       output: totals.output - baseline.output,
       cacheRead: totals.cacheRead - baseline.cacheRead,
@@ -155,12 +174,19 @@ export class CoveUsageCollector {
       cost: totals.cost - baseline.cost,
       hasCost: totals.hasCost,
     };
-    this.baselines.set(sessionKey, totals);
-    this.persistBaselines();
-    if (delta.input <= 0 && delta.output <= 0 && delta.cacheRead <= 0 && delta.cacheWrite <= 0) {
-      return;
+    const clamped: TokenTotals = {
+      input: Math.max(0, raw.input),
+      output: Math.max(0, raw.output),
+      cacheRead: Math.max(0, raw.cacheRead),
+      cacheWrite: Math.max(0, raw.cacheWrite),
+      cost: Math.max(0, raw.cost),
+      hasCost: raw.hasCost,
+    };
+    if (raw.input < 0 || raw.output < 0 || raw.cacheRead < 0 || raw.cacheWrite < 0 || raw.cost < 0) {
+      this.log?.warn?.(`cove: usage baseline regression for ${sessionKey}: ` +
+        `raw=${JSON.stringify(raw)} clamped=${JSON.stringify(clamped)}`);
     }
-    this.reportDelta(sessionKey, delta, event, ctx);
+    return clamped;
   }
 
   private reportDelta(sessionKey: string, delta: TokenTotals, event: AgentEndEvent, ctx: AgentEndContext): void {

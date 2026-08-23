@@ -205,4 +205,65 @@ describe("CoveUsageCollector (agent_end source)", () => {
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
     expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 1000, output_tokens: 500 });
   });
+
+  it("clamps negative cost delta to 0 and logs the regression (#586)", async () => {
+    // #586: cumulative cost can regress between turns (message list trimmed /
+    // usage recomputed) while cacheRead still grows. The raw delta would be a
+    // negative cost; it must be clamped to 0 instead of under-reporting the run.
+    const record = vi.fn().mockResolvedValue(undefined);
+    const warn = vi.fn();
+    const collector = newCollector(record, {}, warn);
+    const sessionKey = "k";
+    // Turn 1: baseline cost 0.05.
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500, 0, 0.05)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+    // Turn 2: cost regressed to 0.027 but cacheRead grew 8064 → raw cost delta
+    // is negative. Must report cacheRead with cost clamped to 0.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(1000, 500, 8064, 0.027)], success: true }, { sessionKey });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({
+      input_tokens: 0, output_tokens: 0, cache_read_tokens: 8064,
+      cost: 0, cost_source: "provider",
+    });
+    expect(warn.mock.calls.some((c: any) => String(c[0]).includes("usage baseline regression"))).toBe(true);
+  });
+
+  it("clamps negative token deltas to 0 as well (#586)", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500, 10000, 0.05)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+    // Input/output regressed (trimmed history) while cacheRead grew: only the
+    // growth is reported, negatives never reach the wire.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(500, 200, 16000, 0.03)], success: true }, { sessionKey });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({
+      input_tokens: 0, output_tokens: 0, cache_read_tokens: 6000,
+      cost: 0,
+    });
+  });
+
+  it("drops the turn entirely when every dimension regressed (#586)", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500, 10000, 0.05)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+    // Full regression: no positive delta anywhere → nothing to report.
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(900, 400, 9000, 0.04)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("keeps a positive cost delta untouched (#586 guard)", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "k";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500, 0, 0.05)], success: true }, { sessionKey });
+    expect(record).not.toHaveBeenCalled();
+    collector.onAgentEnd({ runId: "r2", messages: [usageMsg(1000, 500, 0, 0.05), usageMsg(2000, 900, 0, 0.09)], success: true }, { sessionKey });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 2000, output_tokens: 900 });
+    expect(record.mock.calls[0][1].cost).toBeCloseTo(0.09, 10);
+  });
 });
