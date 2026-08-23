@@ -45,9 +45,16 @@ describe("EfficiencyCard", () => {
     expect(html).toContain("92%");
     expect(html).toContain("1m 0s");
     expect(html).toContain("13m 0s total");
-    // Baseline deltas
-    expect(html).toContain("+$0.870 vs median"); // formatUsd: <$1 → 3 decimals
-    expect(html).toContain("25pp vs median"); // 45% - 20%
+    // Baseline deltas: arrow carries direction (up = above median, down = below), no sign.
+    expect(html).toContain("↑ $0.870 vs median"); // 0.87 above median
+    expect(html).toContain("↑ 25pp vs median"); // 45% - 20% above median
+  });
+
+  it("renders delta arrows pointing down (green) when below the median", () => {
+    const html = renderToStaticMarkup(createElement(EfficiencyCard, { report: report({ cost_delta_vs_median: -0.20, failure_rate_delta_vs_median: -0.1 }) }));
+    expect(html).toContain("↓ $0.200 vs median");
+    expect(html).toContain("↓ 10pp vs median");
+    expect(html).not.toContain("+$0.200");
   });
 
   it("shows a friendly empty state for zero-data tasks", () => {

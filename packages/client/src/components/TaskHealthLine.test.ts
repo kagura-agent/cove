@@ -52,11 +52,26 @@ describe("TaskHealthLine", () => {
 
   it("colors the cost delta red when above the channel median, green when below", () => {
     const above = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ cost_delta_vs_median: 0.87 }) }));
-    expect(above).toContain("+$0.870 vs median"); // formatUsd: <$1 → 3 decimals
+    expect(above).toContain("↑ $0.870 vs median"); // arrow up + red = more expensive
     expect(above).toContain("color:var(--status-danger, #ed4245)");
     const below = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ cost_delta_vs_median: -0.20 }) }));
-    expect(below).toContain("−$0.200 vs median");
+    expect(below).toContain("↓ $0.200 vs median"); // arrow down + green = cheaper
     expect(below).toContain("color:#23a55a");
+  });
+
+  it("points the failure delta arrow down (green) when below median, up (red) when above", () => {
+    const below = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ failure_rate_delta_vs_median: -0.15 }) }));
+    expect(below).toContain("↓ 15pp fail vs median");
+    expect(below).toContain("color:#23a55a");
+    const above = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ failure_rate_delta_vs_median: 0.15 }) }));
+    expect(above).toContain("↑ 15pp fail vs median");
+    expect(above).toContain("color:var(--status-danger, #ed4245)");
+  });
+
+  it("does not render a stray plus/minus sign next to the arrow (arrow carries direction)", () => {
+    const html = renderToStaticMarkup(createElement(TaskHealthLine, { report: report({ cost_delta_vs_median: 0.87 }) }));
+    expect(html).not.toContain("+$0.870");
+    expect(html).not.toContain("−$0.870");
   });
 
   it("omits the delta when hideDelta is set (no baseline siblings)", () => {

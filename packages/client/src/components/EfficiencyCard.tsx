@@ -26,10 +26,10 @@ function deltaColor(delta: number | null): string | null {
 function Delta({ delta, format }: { delta: number | null; format: (v: number) => string }) {
   if (delta === null) return <span style={{ color: MUTED }}>— vs median</span>;
   const color = deltaColor(delta);
-  const sign = delta > 0 ? "+" : "";
+  const arrow = delta > 0 ? "↑" : "↓";
   return (
     <span style={{ color: color ?? MUTED, fontWeight: 600 }}>
-      {sign}{format(delta)} vs median
+      {arrow} {format(Math.abs(delta))} vs median
     </span>
   );
 }
