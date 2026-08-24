@@ -319,4 +319,43 @@ describe("CoveUsageCollector (agent_end source)", () => {
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
     expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 500, output_tokens: 200 });
   });
+
+  it("persists sessionIds and detects rotation across a simulated restart (#588)", async () => {
+    // #588 restart gap: sessionIds is memory-only, so after a gateway restart
+    // the collector could not detect that the session had rotated — the first
+    // agent_end after restart diffed the new session's small cumulative totals
+    // against the pre-rotation baseline and dropped the run. The session id
+    // map must survive restarts via the state file.
+    const record = vi.fn().mockResolvedValue(undefined);
+    const sessionKey = "agent:kagura:cove:direct:thread-1";
+    const b = () => bridge({
+      runForSession: () => "cove-run-1",
+      restForSession: () => ({ recordRunUsage: record }) as any,
+    });
+
+    // Pre-restart: old session id, silent baseline.
+    const c1 = new CoveUsageCollector(b(), { warn: vi.fn() }, TEST_STATE);
+    c1.onAgentEnd({ runId: "r1", messages: [usageMsg(300000, 50000, 0, 1.5)], success: true }, { sessionKey, sessionId: "old-session-aaa" });
+    expect(record).not.toHaveBeenCalled();
+
+    // Simulated restart: new collector instance loads the persisted state
+    // (including sessionIds) and sees the rotation — reports full totals.
+    const c2 = new CoveUsageCollector(b(), { warn: vi.fn() }, TEST_STATE);
+    c2.onAgentEnd({ runId: "r2", messages: [usageMsg(15000, 4000, 0, 0.08)], success: true }, { sessionKey, sessionId: "new-session-bbb" });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 15000, output_tokens: 4000, cost: 0.08 });
+  });
+
+  it("loads legacy v1 state (bare baselines map) without sessionIds (#588 compat)", async () => {
+    // Upgrade path: the state file existed as a bare baselines map before this
+    // change. Loading must not crash and must keep the delta path working.
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(TEST_STATE, JSON.stringify({ "agent:kagura:cove:direct:1": { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0, cost: 0.05, hasCost: true } }), { mode: 0o600 });
+    const record = vi.fn().mockResolvedValue(undefined);
+    const collector = newCollector(record);
+    const sessionKey = "agent:kagura:cove:direct:1";
+    collector.onAgentEnd({ runId: "r1", messages: [usageMsg(1000, 500, 0, 0.05), usageMsg(5000, 2000, 0, 0.2)], success: true }, { sessionKey });
+    await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
+    expect(record.mock.calls[0][1]).toMatchObject({ input_tokens: 5000, output_tokens: 2000 });
+  });
 });
