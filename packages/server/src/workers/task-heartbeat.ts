@@ -8,8 +8,8 @@ const VISIBLE_TEXT = "Task execution check";
 
 const STATUS_ACTIONS: Record<Task["status"], string> = {
   open: "若任务可开始，先将其设为 in_progress，然后执行第一项工作。",
-  in_progress: "执行下一项未阻塞工作；仅在任务完成、等待外部输入，或存在已验证 blocker 时停止。",
-  in_review: "核验交付物、评审或审批、相关检查和讨论。有反馈或失败时立即处理；若所有检查通过且仅等待他人审批或外部结果，记录等待条件后停止，不要制造无意义改动。",
+  in_progress: "执行下一项未阻塞工作；仅在任务完成、等待外部输入，或存在已验证 blocker 时停止。注意：等待外部输入 ≠ 任务完成——保持 in_progress/in_review，不要标 done。",
+  in_review: "核验交付物、评审或审批、相关检查和讨论。有反馈或失败时立即处理；若所有检查通过且仅等待他人审批或外部结果，记录等待条件后停止（保持 in_review，不要标 done——等待外部结果 ≠ 任务完成），不要制造无意义改动。仅当交付物已实际合并/批准/关闭，且已核验证据（如 PR state=MERGED、审批通过、交付物验收）后，才可把 task 置 done。",
   done: "此状态不应收到执行心跳。不要继续改动；只在发现需要重新打开任务的明确证据时报告。",
   cancelled: "此状态不应收到执行心跳。不要继续改动；只在发现需要重新打开任务的明确证据时报告。",
 };

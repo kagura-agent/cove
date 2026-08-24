@@ -143,6 +143,30 @@ describe("createTaskOccurrence", () => {
     expect(content).toContain("不要制造无意义改动");
   });
 
+  it("forbids marking an in-review task done while waiting on external results", () => {
+    const content = buildTaskHeartbeatContent({
+      seq: 14,
+      title: "PR 跟进: agents-exist/story#25 org journal",
+      status: "in_review",
+      description: "PR: https://github.com/agents-exist/story/pull/25\n等 maintainer review。merged → done。",
+    });
+
+    expect(content).toContain("保持 in_review，不要标 done——等待外部结果 ≠ 任务完成");
+    expect(content).toContain("仅当交付物已实际合并/批准/关闭");
+    expect(content).toContain("已核验证据（如 PR state=MERGED、审批通过、交付物验收）");
+  });
+
+  it("forbids marking an in-progress task done while blocked on external input", () => {
+    const content = buildTaskHeartbeatContent({
+      seq: 15,
+      title: "Implement feature",
+      status: "in_progress",
+      description: "Waiting on reviewer feedback.",
+    });
+
+    expect(content).toContain("等待外部输入 ≠ 任务完成——保持 in_progress/in_review，不要标 done");
+  });
+
   it("starts an open task before doing its first action", () => {
     const content = buildTaskHeartbeatContent({
       seq: 8,
