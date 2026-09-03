@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
-import { requireChannelPermission, unknownMessage } from "./helpers.js";
+import { requireChannelPermission } from "./helpers.js";
+import { invalidEmoji, unknownMessage } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 
 export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
@@ -15,7 +16,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const emoji = c.req.param("emoji");
 
     if (!emoji || emoji.length > 64) {
-      return c.json({ message: "Invalid emoji" }, 400);
+      return invalidEmoji(c);
     }
     const user = c.get("botUser");
 
@@ -43,7 +44,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const emoji = c.req.param("emoji");
 
     if (!emoji || emoji.length > 64) {
-      return c.json({ message: "Invalid emoji" }, 400);
+      return invalidEmoji(c);
     }
     const user = c.get("botUser");
 
@@ -68,7 +69,7 @@ export function reactionRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const emoji = c.req.param("emoji");
 
     if (!emoji || emoji.length > 64) {
-      return c.json({ message: "Invalid emoji" }, 400);
+      return invalidEmoji(c);
     }
     const user = c.get("botUser");
 

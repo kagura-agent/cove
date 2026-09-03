@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { AppEnv } from "../auth.js";
 import { parseJsonBody, validationError } from "../validation.js";
-import { requireChannelPermission, unknownChannel } from "./helpers.js";
+import { requireChannelPermission } from "./helpers.js";
+import { missingPermissions, unknownChannel } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import { computePermissions } from "../permissions/compute.js";
 
@@ -57,7 +58,7 @@ export function permissionRoutes(repos: Repos): Hono<AppEnv> {
     const callerPerms = computePermissions(member, channel, guild, roles, overwrites);
 
     if ((allow & ~callerPerms) !== 0n || (deny & ~callerPerms) !== 0n) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      return missingPermissions(c);
     }
 
     repos.permissions.upsert(channelId, targetId, body.type, body.allow, body.deny);

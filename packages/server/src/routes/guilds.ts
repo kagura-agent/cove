@@ -4,7 +4,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { unknownGuild } from "./helpers.js";
+import { missingPermissions, unknownGuild } from "./errors.js";
 import { generateSnowflake, PermissionBits, DEFAULT_EVERYONE_PERMISSIONS, type Role, type Channel } from "@cove/shared";
 import { computeBasePermissions } from "../permissions/compute.js";
 
@@ -81,7 +81,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       const roles = repos.roles.listByGuild(guildId);
       const perms = computeBasePermissions(member, guild, roles);
       if ((perms & PermissionBits.MANAGE_GUILD) === 0n) {
-        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+        return missingPermissions(c);
       }
     }
 
@@ -116,7 +116,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     // Bot principals cannot invite agents
     if (user.bot) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      return missingPermissions(c);
     }
 
     const guild = repos.guilds.getById(guildId);
@@ -131,7 +131,7 @@ export function guildRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
       const roles = repos.roles.listByGuild(guildId);
       const perms = computeBasePermissions(member, guild, roles);
       if ((perms & PermissionBits.MANAGE_GUILD) === 0n) {
-        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+        return missingPermissions(c);
       }
     }
 

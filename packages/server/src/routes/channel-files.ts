@@ -3,6 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { AppEnv } from "../auth.js";
 import { parseJsonBody, validationError } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
+import { unknownFile } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 
@@ -33,7 +34,7 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
       return validationError(c, "Invalid filename");
     }
     const file = repos.channelFiles.get(channelId, filename);
-    if (!file) return c.json({ message: "Unknown File", code: 10014 }, 404);
+    if (!file) return unknownFile(c);
 
     return c.json(file);
   });
@@ -87,7 +88,7 @@ export function channelFilesRoutes(repos: Repos, dispatcher?: GatewayDispatcher)
       return validationError(c, "Invalid filename");
     }
     const deleted = repos.channelFiles.delete(channelId, filename);
-    if (!deleted) return c.json({ message: "Unknown File", code: 10014 }, 404);
+    if (!deleted) return unknownFile(c);
 
     if (dispatcher) {
       dispatcher.channelFileDelete(channelId, filename);

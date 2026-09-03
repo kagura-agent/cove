@@ -4,6 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
+import { threadArchived, threadLocked, unknownChannel } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import type { IncomingMessageRequest } from "@cove/shared";
 
@@ -47,13 +48,13 @@ export function incomingRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
       const thread = repos.channels.getById(body.thread_id);
       if (!thread || ![10, 11, 12].includes(thread.type) || thread.parent_id !== channelId) {
-        return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+        return unknownChannel(c);
       }
       if (thread.thread_metadata?.archived) {
-        return c.json({ message: "This thread is archived", code: 50083 }, 403);
+        return threadArchived(c);
       }
       if (thread.thread_metadata?.locked) {
-        return c.json({ message: "This thread is locked", code: 50083 }, 403);
+        return threadLocked(c);
       }
       targetChannelId = body.thread_id;
     }
