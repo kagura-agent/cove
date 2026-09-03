@@ -3,7 +3,8 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireChannelPermission, unknownChannel } from "./helpers.js";
+import { requireChannelPermission } from "./helpers.js";
+import { threadInsideThread, unknownChannel, unknownGuild, unknownMember, unknownMessage } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import { computePermissions } from "../permissions/compute.js";
 
@@ -18,7 +19,7 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.CREATE_PUBLIC_THREADS | PermissionBits.VIEW_CHANNEL);
     if (channel.type === 11) {
-      return c.json({ message: 'Cannot create a thread inside a thread', code: 50035 }, 400);
+      return threadInsideThread(c);
     }
 
     const body = await parseJsonBody<{ name: string; auto_archive_duration?: number }>(c);
@@ -37,7 +38,7 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
     // Verify message exists in this channel
     const msg = repos.messages.getById(channelId, messageId);
     if (!msg) {
-      return c.json({ message: "Unknown Message", code: 10008 }, 404);
+      return unknownMessage(c);
     }
 
     // Verify no thread already exists for that message
@@ -67,7 +68,7 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const channel = await requireChannelPermission(repos, channelId, user.id, PermissionBits.CREATE_PUBLIC_THREADS | PermissionBits.VIEW_CHANNEL);
     if (channel.type === 11) {
-      return c.json({ message: 'Cannot create a thread inside a thread', code: 50035 }, 400);
+      return threadInsideThread(c);
     }
 
     const body = await parseJsonBody<{ name: string; auto_archive_duration?: number }>(c);
@@ -125,11 +126,11 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     const guild = repos.guilds.getById(guildId);
     if (!guild) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
     const member = repos.members.get(guildId, user.id);
     if (!member) {
-      return c.json({ message: "Unknown Guild", code: 10004 }, 404);
+      return unknownGuild(c);
     }
 
     const roles = repos.roles.listByGuild(guildId);
@@ -189,7 +190,7 @@ export function threadRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono
 
     // Verify target user exists in the guild
     if (!repos.members.exists(thread.guild_id, userId)) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     const added = repos.threads.addMember(threadId, userId);

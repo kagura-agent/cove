@@ -4,6 +4,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import { parseJsonBody, validateString, validationError } from "../validation.js";
 import { requireChannelPermission } from "./helpers.js";
+import { missingPermissions, unknownMember, unknownRecurringTask } from "./errors.js";
 import { PermissionBits, type RecurringCatchUp, type RecurringTaskOccurrenceMode } from "@cove/shared";
 import { createRecurringTaskOccurrence, validateInterval, validateOccurrenceMode } from "../services/task-recurrence.js";
 import { validateCatchUp, validateCronExpression } from "../services/recurrence-schedule.js";
@@ -46,7 +47,7 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
     if (occurrenceModeError) return validationError(c, occurrenceModeError);
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") return validationError(c, "enabled must be a boolean");
     const assigneeId = body.assignee_id ?? null;
-    if (assigneeId && !repos.members.exists(channel.guild_id, assigneeId)) return c.json({ message: "Unknown Member", code: 10007 }, 404);
+    if (assigneeId && !repos.members.exists(channel.guild_id, assigneeId)) return unknownMember(c);
 
     const result = repos.db.transaction(() => createRecurringTaskOccurrence(repos, {
       channel,
@@ -81,14 +82,14 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
 
   app.get("/recurring-tasks/:id", async (c) => {
     const recurringTask = repos.recurringTasks.getById(c.req.param("id"));
-    if (!recurringTask) return c.json({ message: "Unknown Recurring Task", code: 10080 }, 404);
+    if (!recurringTask) return unknownRecurringTask(c);
     await requireChannelPermission(repos, recurringTask.channel_id, c.get("botUser").id, PermissionBits.VIEW_CHANNEL);
     return c.json(recurringTask);
   });
 
   app.patch("/recurring-tasks/:id", async (c) => {
     const recurringTask = repos.recurringTasks.getById(c.req.param("id"));
-    if (!recurringTask) return c.json({ message: "Unknown Recurring Task", code: 10080 }, 404);
+    if (!recurringTask) return unknownRecurringTask(c);
     const user = c.get("botUser");
     await requireChannelPermission(repos, recurringTask.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
 
@@ -119,7 +120,7 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
     }
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") return validationError(c, "enabled must be a boolean");
     if (body.assignee_id !== undefined && body.assignee_id !== null && !repos.members.exists(recurringTask.guild_id, body.assignee_id)) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     const updated = repos.recurringTasks.update(recurringTask.id, {
@@ -142,14 +143,14 @@ export function recurringTaskRoutes(repos: Repos, dispatcher?: GatewayDispatcher
 
   app.delete("/recurring-tasks/:id", async (c) => {
     const recurringTask = repos.recurringTasks.getById(c.req.param("id"));
-    if (!recurringTask) return c.json({ message: "Unknown Recurring Task", code: 10080 }, 404);
+    if (!recurringTask) return unknownRecurringTask(c);
     const user = c.get("botUser");
     await requireChannelPermission(repos, recurringTask.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
     if (recurringTask.created_by !== user.id) {
       try {
         await requireChannelPermission(repos, recurringTask.channel_id, user.id, PermissionBits.MANAGE_CHANNELS);
       } catch {
-        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+        return missingPermissions(c);
       }
     }
     const result = repos.db.transaction(() => {

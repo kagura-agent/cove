@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import type { Context } from "hono";
 import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
@@ -7,17 +6,9 @@ import type { Role } from "@cove/shared";
 import { PermissionBits } from "@cove/shared";
 import { computeBasePermissions } from "../permissions/compute.js";
 import { parseJsonBody, validationError } from "../validation.js";
-import { unknownGuild } from "./helpers.js";
+import { missingPermissions, unknownGuild, unknownMember, unknownRole } from "./errors.js";
 
 const MANAGE_ROLES = PermissionBits.MANAGE_ROLES;
-
-function missingPermissions(c: Context) {
-  return c.json({ message: "Missing Permissions", code: 50013 }, 403);
-}
-
-function unknownRole(c: Context) {
-  return c.json({ message: "Unknown Role", code: 10011 }, 404);
-}
 
 /** Returns the highest position among the member's assigned roles. */
 function getHighestPosition(memberRoles: string[], allRoles: Role[]): number {
@@ -328,7 +319,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     const targetMember = repos.members.get(guildId, targetUserId);
     if (!targetMember) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     // Idempotent: if already has role, return 204 without event
@@ -391,7 +382,7 @@ export function roleRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     const targetMember = repos.members.get(guildId, targetUserId);
     if (!targetMember) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     // Idempotent: if doesn't have role, return 204 without event

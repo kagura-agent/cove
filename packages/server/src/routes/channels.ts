@@ -3,7 +3,8 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validateFiniteNumber, validationError, parseJsonBody } from "../validation.js";
-import { requireChannelPermission, requireGuildPermission, unknownGuild, unknownChannel } from "./helpers.js";
+import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
+import { missingPermissions, unknownGuild, unknownChannel } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import { computePermissions } from "../permissions/compute.js";
 
@@ -93,7 +94,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
 
     // Peek at channel type first — threads need lower permission for archive/unarchive
     const peek = repos.channels.getById(id);
-    if (!peek) return c.json({ message: "Unknown Channel", code: 10003 }, 404);
+    if (!peek) return unknownChannel(c);
 
     const requiredPerm = peek.type === 11 ? PermissionBits.SEND_MESSAGES : PermissionBits.MANAGE_CHANNELS;
     const channel = await requireChannelPermission(repos, id, user.id, requiredPerm);
@@ -135,7 +136,7 @@ export function channelRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hon
         try {
           await requireChannelPermission(repos, id, user.id, PermissionBits.MANAGE_CHANNELS);
         } catch {
-          return c.json({ message: 'Missing Permissions', code: 50013 }, 403);
+          return missingPermissions(c);
         }
       }
       let threadUpdated: import("@cove/shared").Channel | null = null;

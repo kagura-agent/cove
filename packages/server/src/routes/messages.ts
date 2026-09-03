@@ -3,7 +3,8 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
-import { requireChannelPermission, unknownMessage } from "./helpers.js";
+import { requireChannelPermission } from "./helpers.js";
+import { missingPermissions, threadArchived, threadLocked, unknownMessage } from "./errors.js";
 import { generateSnowflake, type Attachment, API_PREFIX, PermissionBits } from "@cove/shared";
 import { storeAttachment, getAttachmentPath } from "../attachment-storage.js";
 import { unlink } from "fs/promises";
@@ -86,10 +87,10 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     if (channel.type === 11 && channel.thread_metadata) {
       const meta = channel.thread_metadata;
       if (meta.archived) {
-        return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+        return threadArchived(c);
       }
       if (meta.locked) {
-        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
+        return threadLocked(c);
       }
     }
 
@@ -118,7 +119,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
       if (payload.message_reference?.message_id) {
         const refMsg = repos.messages.getById(channelId, payload.message_reference.message_id);
-        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        if (!refMsg) return unknownMessage(c, 400);
         referencedMessageId = payload.message_reference.message_id;
       }
 
@@ -168,7 +169,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
           return validationError(c, 'message_reference.message_id must be a string');
         }
         const refMsg = repos.messages.getById(channelId, body.message_reference.message_id);
-        if (!refMsg) return c.json({ message: 'Unknown Message', code: 10008 }, 400);
+        if (!refMsg) return unknownMessage(c, 400);
         referencedMessageId = body.message_reference.message_id;
       }
     }
@@ -250,7 +251,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
 
     // Only the message author can edit their own message
     if (existing.author.id !== user.id) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      return missingPermissions(c);
     }
 
     const body = await parseJsonBody<{ content: string }>(c);
@@ -447,7 +448,7 @@ export function messagesRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Ho
     const channelId = c.req.param("id");
     const targetUserId = c.req.param("targetUserId");
     const bot = c.get("botUser");
-    if (bot.id !== targetUserId || !bot.bot) return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+    if (bot.id !== targetUserId || !bot.bot) return missingPermissions(c);
     await requireChannelPermission(repos, channelId, bot.id, PermissionBits.SEND_MESSAGES);
     const body = await parseJsonBody<{ status?: "aborted" | "denied" | "failed" }>(c);
     if (!body || !["aborted", "denied", "failed"].includes(body.status ?? "")) return validationError(c, "invalid status");

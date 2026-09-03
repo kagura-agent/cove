@@ -3,7 +3,7 @@ import type { Repos } from "../repos/index.js";
 import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validateDisplayName, validationError, parseJsonBody } from "../validation.js";
-import { unknownGuild } from "./helpers.js";
+import { missingPermissions, unknownGuild, unknownMember, unknownUser } from "./errors.js";
 
 export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -39,12 +39,12 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     // Only the user themselves can regenerate their token
     if (id !== actorId) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      return missingPermissions(c);
     }
 
     const token = repos.users.regenerateToken(id!);
     if (!token) {
-      return c.json({ message: "Unknown User", code: 10013 }, 404);
+      return unknownUser(c);
     }
     return c.json({ token });
   });
@@ -54,7 +54,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     if (id === "@me") return next();
     const user = repos.users.getById(id);
     if (!user) {
-      return c.json({ message: "Unknown User", code: 10013 }, 404);
+      return unknownUser(c);
     }
     return c.json(user);
   });
@@ -66,11 +66,11 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
 
     // Only the user themselves can update their profile
     if (id !== actorId) {
-      return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+      return missingPermissions(c);
     }
 
     if (!repos.users.exists(id!)) {
-      return c.json({ message: "Unknown User", code: 10013 }, 404);
+      return unknownUser(c);
     }
 
     const body = await parseJsonBody<{
@@ -117,15 +117,15 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     if (id !== actor.id) {
       const target = repos.users.getById(id!);
       if (!target) {
-        return c.json({ message: "Unknown User", code: 10013 }, 404);
+        return unknownUser(c);
       }
       if (!target.bot) {
-        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+        return missingPermissions(c);
       }
     }
 
     if (!repos.users.delete(id!)) {
-      return c.json({ message: "Unknown User", code: 10013 }, 404);
+      return unknownUser(c);
     }
     dispatcher?.removeUser(id!);
     return c.body(null, 204);
@@ -164,7 +164,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     }
 
     if (!repos.users.exists(userId)) {
-      return c.json({ message: "Unknown User", code: 10013 }, 404);
+      return unknownUser(c);
     }
 
     const existing = repos.members.get(guildId, userId);
@@ -193,7 +193,7 @@ export function agentRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<
     }
 
     if (!repos.members.exists(guildId, userId)) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     repos.members.remove(guildId, userId);

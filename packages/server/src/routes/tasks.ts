@@ -4,6 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
+import { missingPermissions, unknownMember, unknownTask } from "./errors.js";
 import {
   PermissionBits,
   TASK_STATUSES,
@@ -49,7 +50,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
 
     const assigneeId = body.assignee_id ?? null;
     if (assigneeId && !repos.members.exists(channel.guild_id, assigneeId)) {
-      return c.json({ message: "Unknown Member", code: 10007 }, 404);
+      return unknownMember(c);
     }
 
     const result = repos.db.transaction(() => {
@@ -156,7 +157,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
   app.get("/tasks/:taskId", async (c) => {
     const taskId = c.req.param("taskId");
     const task = repos.tasks.getById(taskId);
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
+    if (!task) return unknownTask(c);
 
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
@@ -167,7 +168,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
   app.patch("/tasks/:taskId", async (c) => {
     const taskId = c.req.param("taskId");
     const task = repos.tasks.getById(taskId);
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
+    if (!task) return unknownTask(c);
 
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.SEND_MESSAGES | PermissionBits.VIEW_CHANNEL);
@@ -187,7 +188,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
     if (body.assignee_id !== undefined && body.assignee_id !== null) {
       const channel = repos.channels.getById(task.channel_id);
       if (channel && !repos.members.exists(channel.guild_id, body.assignee_id)) {
-        return c.json({ message: "Unknown Member", code: 10007 }, 404);
+        return unknownMember(c);
       }
     }
 
@@ -303,7 +304,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
   app.delete("/tasks/:taskId", async (c) => {
     const taskId = c.req.param("taskId");
     const task = repos.tasks.getById(taskId);
-    if (!task) return c.json({ message: "Unknown Task", code: 10080 }, 404);
+    if (!task) return unknownTask(c);
 
     const user = c.get("botUser");
     await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.VIEW_CHANNEL);
@@ -312,7 +313,7 @@ export function taskRoutes(repos: Repos, dispatcher?: GatewayDispatcher): Hono<A
       try {
         await requireChannelPermission(repos, task.channel_id, user.id, PermissionBits.MANAGE_CHANNELS);
       } catch {
-        return c.json({ message: "Missing Permissions", code: 50013 }, 403);
+        return missingPermissions(c);
       }
     }
 

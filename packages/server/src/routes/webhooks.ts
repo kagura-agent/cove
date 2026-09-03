@@ -4,6 +4,7 @@ import type { GatewayDispatcher } from "../ws/dispatcher.js";
 import type { AppEnv } from "../auth.js";
 import { validateString, validationError, parseJsonBody } from "../validation.js";
 import { requireChannelPermission, requireGuildPermission } from "./helpers.js";
+import { threadArchived, threadLocked, unknownChannel, unknownWebhook } from "./errors.js";
 import { PermissionBits } from "@cove/shared";
 import { WebhookType } from "../repos/webhooks.js";
 
@@ -56,7 +57,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
     if (!webhook || webhook.type === WebhookType.INTERNAL) {
-      return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+      return unknownWebhook(c);
     }
 
     await requireChannelPermission(repos, webhook.channel_id, user.id, PermissionBits.MANAGE_WEBHOOKS);
@@ -68,7 +69,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const user = c.get("botUser");
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
-    if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    if (!webhook) return unknownWebhook(c);
 
     if (webhook.type === WebhookType.INTERNAL) {
       return c.json({ message: "Cannot modify internal webhook", code: 50013 }, 403);
@@ -93,7 +94,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
       name: body.name,
       avatar: body.avatar,
     });
-    if (!updated) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    if (!updated) return unknownWebhook(c);
 
     return c.json(stripToken(updated));
   });
@@ -102,7 +103,7 @@ export function webhookRoutes(repos: Repos): Hono<AppEnv> {
     const user = c.get("botUser");
     const webhookId = c.req.param("webhookId");
     const webhook = repos.webhooks.findById(webhookId);
-    if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    if (!webhook) return unknownWebhook(c);
 
     if (webhook.type === WebhookType.INTERNAL) {
       return c.json({ message: "Cannot delete internal webhook", code: 50013 }, 403);
@@ -130,7 +131,7 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     const webhookToken = c.req.param("webhookToken");
 
     const webhook = repos.webhooks.findByIdAndToken(webhookId, webhookToken);
-    if (!webhook) return c.json({ message: "Unknown Webhook", code: 10015 }, 404);
+    if (!webhook) return unknownWebhook(c);
 
     // Parse query parameters
     const wait = c.req.query('wait') === 'true';
@@ -141,13 +142,13 @@ export function webhookExecuteRoutes(repos: Repos, dispatcher?: GatewayDispatche
     if (threadId) {
       const thread = repos.channels.getById(threadId);
       if (!thread || ![10, 11, 12].includes(thread.type) || thread.parent_id !== webhook.channel_id) {
-        return c.json({ message: 'Unknown Channel', code: 10003 }, 404);
+        return unknownChannel(c);
       }
       if (thread.thread_metadata?.archived) {
-        return c.json({ message: 'This thread is archived', code: 50083 }, 403);
+        return threadArchived(c);
       }
       if (thread.thread_metadata?.locked) {
-        return c.json({ message: 'This thread is locked', code: 50083 }, 403);
+        return threadLocked(c);
       }
       targetChannelId = threadId;
     }
