@@ -6,6 +6,7 @@ dist/
 *.db-shm
 *.db-wal
 server-bundle.js
+/packages/plugin/bundle.js
 .claude/worktrees/
 *.tsbuildinfo
 package-lock.json
